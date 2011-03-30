@@ -20,7 +20,7 @@ EXTRA_PROGRAMS = wirecheck
 # mount only finds helpers in /sbin
 rootsbin_PROGRAMS = mount.lustre
 sbin_PROGRAMS = mkfs.lustre tunefs.lustre lctl wiretest \
-	l_getidentity llverfs llverdev \
+	l_getidentity l_adsidentity llverfs llverdev \
 	llog_reader lr_reader lshowmount lustre_rsync \
 	ll_recover_lost_found_objs ltrack_stats ll_decode_filter_fid
 if LIBPTHREAD
@@ -109,8 +109,12 @@ tunefs_lustre_LDADD := $(mkfs_lustre_LDADD)
 tunefs_lustre_DEPENDENCIES := $(mkfs_lustre_DEPENDENCIES)
 
 l_getidentity_SOURCES = l_getidentity.c
-l_getidentity_LDADD := $(LIBPTLCTL)
+l_getidentity_LDADD := $(LIBPTLCTL) 
 l_getidentity_DEPENDENCIES := $(LIBPTLCTL)
+
+l_adsidentity_SOURCES = l_adsidentity.c
+l_adsidentity_LDADD := $(LIBPTLCTL) -lldap
+l_adsidentity_DEPENDENCIES := $(LIBPTLCTL)
 
 ltrack_stats_SOURCES = ltrack_stats.c
 
