@@ -1592,16 +1592,6 @@ LB_LINUX_TRY_COMPILE([
 ])
 ])
 
-# 2.6.23 has new shrinker API
-AC_DEFUN([LC_REGISTER_SHRINKER],
-[LB_CHECK_SYMBOL_EXPORT([register_shrinker],
-[mm/vmscan.c],[
-        AC_DEFINE(HAVE_REGISTER_SHRINKER, 1,
-                  [kernel exports register_shrinker])
-],[
-])
-])
-
 # 2.6.23 add code to wait other users to complete before removing procfs entry
 AC_DEFUN([LC_PROCFS_USERS],
 [AC_MSG_CHECKING([if kernel has pde_users member in procfs entry struct])
@@ -1917,16 +1907,16 @@ LB_LINUX_TRY_COMPILE([
 #
 # 2.6.27 sles11 move the quotaio_v1{2}.h from include/linux to fs
 # 2.6.32 move the quotaio_v1{2}.h from fs to fs/quota
-AC_DEFUN([LC_HAVE_QUOTAIO_V1_H],
-[LB_CHECK_FILE([$LINUX/include/linux/quotaio_v1.h],[
-        AC_DEFINE(HAVE_QUOTAIO_V1_H, 1,
-                [kernel has include/linux/quotaio_v1.h])
-],[LB_CHECK_FILE([$LINUX/fs/quotaio_v1.h],[
-               AC_DEFINE(HAVE_FS_QUOTAIO_V1_H, 1,
+AC_DEFUN([LC_HAVE_QUOTAIO_H],
+[LB_CHECK_FILE([$LINUX/include/linux/quotaio_v2.h],[
+        AC_DEFINE(HAVE_QUOTAIO_H, 1,
+                [kernel has include/linux/quotaio_v2.h])
+],[LB_CHECK_FILE([$LINUX/fs/quotaio_v2.h],[
+               AC_DEFINE(HAVE_FS_QUOTAIO_H, 1,
                 [kernel has fs/quotaio_v1.h])
-],[LB_CHECK_FILE([$LINUX/fs/quota/quotaio_v1.h],[
-               AC_DEFINE(HAVE_FS_QUOTA_QUOTAIO_V1_H, 1,
-                [kernel has fs/quota/quotaio_v1.h])
+],[LB_CHECK_FILE([$LINUX/fs/quota/quotaio_v2.h],[
+               AC_DEFINE(HAVE_FS_QUOTA_QUOTAIO_H, 1,
+                [kernel has fs/quota/quotaio_v2.h])
 ],[
         AC_MSG_RESULT([no])
 ])
@@ -2138,14 +2128,14 @@ EXTRA_KCFLAGS="-I$LINUX/fs"
         LB_LINUX_TRY_COMPILE([
                 #include <linux/kernel.h>
                 #include <linux/fs.h>
-                #ifdef HAVE_QUOTAIO_V1_H
+                #ifdef HAVE_QUOTAIO_H
                 # include <linux/quotaio_v2.h>
                 int versions[] = V2_INITQVERSIONS_R1;
                 struct v2_disk_dqblk_r1 dqblk_r1;
-                #elif defined(HAVE_FS_QUOTA_QUOTAIO_V1_H)
+                #elif defined(HAVE_FS_QUOTA_QUOTAIO_H)
                 # include <quota/quotaio_v2.h>
                 struct v2r1_disk_dqblk dqblk_r1;
-                #elif defined(HAVE_FS_QUOTAIO_V1_H)
+                #elif defined(HAVE_FS_QUOTAIO_H)
                 # include <quotaio_v2.h>
                 struct v2r1_disk_dqblk dqblk_r1;
                 #else
@@ -2160,6 +2150,7 @@ EXTRA_KCFLAGS="-I$LINUX/fs"
                         AC_MSG_ERROR([You have got no 64-bit kernel quota support.])
                 ],[])
                 AC_MSG_RESULT([no])
+        ])
         ])
 EXTRA_KCFLAGS=$tmp_flags
 ])
@@ -2192,12 +2183,6 @@ LB_LINUX_TRY_COMPILE([
 #
 AC_DEFUN([LC_PROG_LINUX],
          [LC_LUSTRE_VERSION_H
-         if test x$enable_server = xyes ; then
-             AC_DEFINE(HAVE_SERVER_SUPPORT, 1, [support server])
-             LC_FUNC_DEV_SET_RDONLY
-             LC_STACK_SIZE
-             LC_CONFIG_BACKINGFS
-         fi
          LC_CONFIG_PINGER
          LC_CONFIG_CHECKSUM
          LC_CONFIG_LIBLUSTRE_RECOVERY
@@ -2302,7 +2287,6 @@ AC_DEFUN([LC_PROG_LINUX],
          LC_KERNEL_SENDFILE
          LC_HAVE_EXPORTFS_H
          LC_VM_OP_FAULT
-         LC_REGISTER_SHRINKER
          LC_PROCFS_USERS
          LC_EXPORTFS_DECODE_FH
   
@@ -2332,7 +2316,7 @@ AC_DEFUN([LC_PROG_LINUX],
 
          # 2.6.27.15-2 sles11
          LC_BI_HW_SEGMENTS
-         LC_HAVE_QUOTAIO_V1_H
+         LC_HAVE_QUOTAIO_H
          LC_VFS_SYMLINK_5ARGS
          LC_SB_ANY_QUOTA_ACTIVE
          LC_SB_HAS_QUOTA_ACTIVE
@@ -2351,9 +2335,11 @@ AC_DEFUN([LC_PROG_LINUX],
 
          #
          if test x$enable_server = xyes ; then
-                if test x$enable_quota_module = xyes ; then
-                        LC_QUOTA64    # must after LC_HAVE_QUOTAIO_V1_H
-                fi
+             AC_DEFINE(HAVE_SERVER_SUPPORT, 1, [support server])
+             LC_FUNC_DEV_SET_RDONLY
+             LC_STACK_SIZE
+             LC_CONFIG_BACKINGFS
+             LC_QUOTA64
          fi
 ])
 

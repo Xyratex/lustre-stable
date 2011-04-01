@@ -159,16 +159,52 @@ extern int cfs_mem_is_in_cache(const void *addr, const cfs_mem_cache_t *kmem);
 /*
  * Shrinker
  */
+#define cfs_shrinker    shrinker
 
-#ifndef HAVE_REGISTER_SHRINKER
-/* Shrinker callback */
-typedef shrinker_t cfs_shrinker_t;
-#define cfs_set_shrinker(seeks, shrinker) set_shrinker(seeks, shrinker)
-#define cfs_remove_shrinker(shrinker)     remove_shrinker(shrinker)
-#endif /* !HAVE_REGISTER_SHRINKER */
+#ifdef HAVE_SHRINKER_WANT_SHRINK_PTR
+#define KERN_SHRINKER(name) int name(struct shrinker *shrinker, int nr, gfp_t gfp_mask)
+#else
+#define KERN_SHRINKER(name) int name(int nr, gfp_t gfp_mask)
+#endif
 
-/* struct shrinker */
-#define cfs_shrinker shrinker
+#ifdef HAVE_REGISTER_SHRINKER
+#ifdef HAVE_SHRINKER_WANT_SHRINK_PTR
+typedef int (*cfs_shrinker_t)(struct shrinker *, int nr_to_scan, gfp_t gfp_mask);
+#else
+typedef int (*cfs_shrinker_t)(int nr_to_scan, gfp_t gfp_mask);
+#endif
+
+static inline
+struct cfs_shrinker *cfs_set_shrinker(int seek, cfs_shrinker_t func)
+{
+        struct shrinker *s;
+
+        s = kmalloc(sizeof(*s), GFP_KERNEL);
+        if (s == NULL)
+                return (NULL);
+
+        s->shrink = func;
+        s->seeks = seek;
+
+        register_shrinker(s);
+
+        return s;
+}
+
+static inline
+void cfs_remove_shrinker(struct cfs_shrinker *shrinker)
+{
+        if (shrinker == NULL)
+                return;
+
+        unregister_shrinker(shrinker);
+        kfree(shrinker);
+}
+#else
+typedef shrinker_t              cfs_shrinker_t;
+#define cfs_set_shrinker(s, f)  set_shrinker(s, f)
+#define cfs_remove_shrinker(s)  remove_shrinker(s)
+#endif
 
 #define CFS_DEFAULT_SEEKS                 DEFAULT_SEEKS
 #endif /* __LINUX_CFS_MEM_H__ */

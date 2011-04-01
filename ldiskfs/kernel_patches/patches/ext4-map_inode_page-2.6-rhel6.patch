@@ -70,18 +70,3 @@ Index: linux-2.6.32-el6-beta/fs/ext4/inode.c
 +	ext4_journal_stop(handle);
 +	return rc;
 +}
-Index: linux-2.6.32-el6-beta/fs/ext4/super.c
-===================================================================
---- linux-2.6.32-el6-beta.orig/fs/ext4/super.c
-+++ linux-2.6.32-el6-beta/fs/ext4/super.c
-@@ -4084,6 +4084,10 @@ static void __exit exit_ext4_fs(void)
- 	exit_ext4_system_zone();
- }
- 
-+int ext4_map_inode_page(struct inode *inode, struct page *page,
-+			unsigned long *blocks, int *created, int create);
-+EXPORT_SYMBOL(ext4_map_inode_page);
-+
- MODULE_AUTHOR("Remy Card, Stephen Tweedie, Andrew Morton, Andreas Dilger, Theodore Ts'o and others");
- MODULE_DESCRIPTION("Fourth Extended Filesystem");
- MODULE_LICENSE("GPL");
