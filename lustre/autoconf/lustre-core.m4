@@ -2151,7 +2151,6 @@ EXTRA_KCFLAGS="-I$LINUX/fs"
                 ],[])
                 AC_MSG_RESULT([no])
         ])
-        ])
 EXTRA_KCFLAGS=$tmp_flags
 ])
 

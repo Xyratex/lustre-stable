@@ -71,3 +71,18 @@ Index: linux-2.6.18.i386/fs/ext4/inode.c
 +	return rc;
 +}
 +EXPORT_SYMBOL(ext4_map_inode_page);
+Index: linux-2.6.18.i386/fs/ext4/super.c
+===================================================================
+--- linux-2.6.18.i386.orig/fs/ext4/super.c
++++ linux-2.6.18.i386/fs/ext4/super.c
+@@ -3498,6 +3498,10 @@ static void __exit exit_ext4_fs(void)
+ 	__free_page(ext4_zero_page);
+ }
+ 
++int ext4_map_inode_page(struct inode *inode, struct page *page,
++			unsigned long *blocks, int *created, int create);
++EXPORT_SYMBOL(ext4_map_inode_page);
++
+ MODULE_AUTHOR("Remy Card, Stephen Tweedie, Andrew Morton, Andreas Dilger, Theodore Ts'o and others");
+ MODULE_DESCRIPTION("Fourth Extended Filesystem with extents");
+ MODULE_LICENSE("GPL");
