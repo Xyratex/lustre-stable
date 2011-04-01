@@ -3286,7 +3286,7 @@ AM_CONDITIONAL(GSS_SSK, test x$enable_ssk = xyes)
 AM_CONDITIONAL(LIBPTHREAD, test x$enable_libpthread = xyes)
 AM_CONDITIONAL(HAVE_SYSTEMD, test "x$with_systemdsystemunitdir" != "xno")
 AM_CONDITIONAL(XATTR_HANDLER, test "x$lb_cv_compile_xattr_handler_flags" = xyes)
-AM_CONDITIONAL(LDAP_BUILD, test x$LDAP != "")
+AM_CONDITIONAL(LDAP_BUILD, test x$LDAP != x)
 ]) # LC_CONDITIONALS
 
 #
