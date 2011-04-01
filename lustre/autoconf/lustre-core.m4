@@ -2742,7 +2742,7 @@ AM_CONDITIONAL(GSS_KEYRING, test x$enable_gss_keyring = xyes)
 AM_CONDITIONAL(GSS_PIPEFS, test x$enable_gss_pipefs = xyes)
 AM_CONDITIONAL(LIBPTHREAD, test x$enable_libpthread = xyes)
 AM_CONDITIONAL(LLITE_LLOOP, test x$enable_llite_lloop_module = xyes)
-AM_CONDITIONAL(LDAP_BUILD, test x$LDAP != "")
+AM_CONDITIONAL(LDAP_BUILD, test x$LDAP != x)
 ])
 
 #
