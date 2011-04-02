@@ -2073,23 +2073,6 @@ LB_LINUX_TRY_COMPILE([
 ])
 ])
 
-# 2.6.32-71 adds an argument to shrink callback
-AC_DEFUN([LC_SHRINK_3ARGS],
-[AC_MSG_CHECKING([if shrink has 3 arguments])
-LB_LINUX_TRY_COMPILE([
-        #include <linux/mm.h>
-],[
-        struct shrinker s;
-        return s.shrink(NULL, 0, 0);
-],[
-        AC_MSG_RESULT(yes)
-        AC_DEFINE(HAVE_SHRINK_3ARGS, 1,
-                  [shrink has 3 arguments])
-],[
-        AC_MSG_RESULT(no)
-])
-])
-
 #
 # LC_EXT4_SINGLEDATA_TRANS_BLOCKS_SB
 #
@@ -2329,7 +2312,6 @@ AC_DEFUN([LC_PROG_LINUX],
          LC_SB_BDI
          LC_BLK_QUEUE_MAX_SECTORS
          LC_BLK_QUEUE_MAX_SEGMENTS
-         LC_SHRINK_3ARGS
          LC_EXT4_SINGLEDATA_TRANS_BLOCKS_SB
 
          #
