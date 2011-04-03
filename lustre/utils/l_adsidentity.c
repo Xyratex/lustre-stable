@@ -26,6 +26,8 @@
 #define ADSCONF_PATHNAME  "/etc/lustre/ads.conf"
 #define NO_OF_PARAMS_REQD 4
 #define STRING_MAX_SIZE   256
+/** */
+#define FILE_LINE_BUF_SIZE 1024
 
 /*
  * permission file format is like this:
@@ -65,9 +67,9 @@ static void usage(void)
                 progname);
 }
 
-static int compare_u32(const void *v1, const void *v2)
+static int compare_gid_t(const void *v1, const void *v2)
 {
-        return (*(__u32 *)v1 - *(__u32 *)v2);
+        return (*(gid_t*)v1 - *(gid_t*)v2);
 }
 
 static void errlog(const char *fmt, ...)
@@ -96,21 +98,20 @@ static inline int comment_line(char *line)
 
 int getindex(char *str, char params[][2][STRING_MAX_SIZE])
 {
-        int index = 0;
+        int index;
+        int len = strlen(str);
 
-        while (index < NO_OF_PARAMS_REQD) {
+        for (index = 0; index < NO_OF_PARAMS_REQD; index++) {
                 /* return the appropriate index. */
-                if (strncmp(str, params[index][0], strlen(str)) == 0)
-                return index;
-
-                index++;
+                if (strncmp(str, params[index][0], len) == 0)
+                        return index;
         }
         return -1;
 }
 
 int get_params(FILE *fp, char params[][2][STRING_MAX_SIZE])
 {
-        char line[1024];
+        char line[FILE_LINE_BUF_SIZE];
         char desc[STRING_MAX_SIZE];
         char value[STRING_MAX_SIZE];
         int  num_params = 0;
@@ -119,7 +120,7 @@ int get_params(FILE *fp, char params[][2][STRING_MAX_SIZE])
         memset(desc, 0, sizeof(desc));
         memset(value, 0, sizeof(value));
 
-        while (fgets(line, 1024, fp)) {
+        while (fgets(line, FILE_LINE_BUF_SIZE, fp)) {
                 if (comment_line(line))
                         continue;
 
@@ -141,14 +142,14 @@ int ldap_connect(LDAP **ld, char params[][2][STRING_MAX_SIZE])
 
         index = getindex("uri", params);
         if (index == -1) {
-                errlog("\n Please provide proper config file");
+                errlog("Please provide proper config file\n");
                 return -1;
         }
 
         /* open a connection */
         ret = ldap_initialize(ld, params[index][1]);
         if (ret != LDAP_SUCCESS) {
-                ldap_err2string(ret);
+                errlog("%s\n", ldap_err2string(ret));
                 return -1;
         }
 
@@ -159,19 +160,19 @@ int ldap_connect(LDAP **ld, char params[][2][STRING_MAX_SIZE])
 
         ret = ldap_set_option(*ld, LDAP_OPT_PROTOCOL_VERSION, &proto);
         if (ret != LDAP_OPT_SUCCESS) {
-                ldap_err2string(ret);
+                errlog("%s\n", ldap_err2string(ret));
                 return -1;
         }
 
         ret = ldap_set_option(*ld, LDAP_OPT_REFERRALS, 0);
         if (ret != LDAP_OPT_SUCCESS) {
-                ldap_err2string(ret);
+                errlog("%s\n", ldap_err2string(ret));
                 return -1;
         }
 
         index = getindex("credentials", params);
         if (index == -1) {
-                errlog("\n Please provide proper config file");
+                errlog("Please provide proper config file\n");
                 return -1;
         }
         credentials.bv_len = strlen(params[index][1]);
@@ -179,14 +180,14 @@ int ldap_connect(LDAP **ld, char params[][2][STRING_MAX_SIZE])
 
         index = getindex("binddn", params);
         if (index == -1) {
-                errlog("\nPlease provide proper config file");
+                errlog("Please provide proper config file\n");
                 return -1;
         }
 
         ret = ldap_sasl_bind_s(*ld, params[index][1], LDAP_SASL_SIMPLE,
                                &credentials, NULL, NULL, NULL);
         if (ret != LDAP_SUCCESS) {
-                ldap_err2string(ret);
+                errlog("%s\n", ldap_err2string(ret));
                 return -1;
         }
 
@@ -219,7 +220,7 @@ int get_ads_userinfo(LDAP **ld, struct adspasswd *adspwuid, uid_t uid,
         ret = ldap_search_ext_s(*ld, base, LDAP_SCOPE_SUBTREE, str, attrs, 0,
                                 NULL, NULL, NULL, 0, &res);
         if (ret != LDAP_SUCCESS ) {
-                errlog("%s", ldap_err2string(ret));
+                errlog("%s\n", ldap_err2string(ret));
                 return -1;
         }
 
@@ -259,7 +260,7 @@ int get_ads_userinfo(LDAP **ld, struct adspasswd *adspwuid, uid_t uid,
                                         strncpy(adspwuid->cn, bers[i]->bv_val,
                                                 sizeof(bers[i]->bv_val));
                                 } else {
-                                        errlog("\n Invalid entries");
+                                        errlog("Invalid entries\n");
                                         return -1;
                                 }
                         }
@@ -328,7 +329,7 @@ int get_ads_groupinfo(LDAP *ld, struct adspasswd *adspwuid, gid_t *gid,
 
                                         gid[ngroups++] = atoi(bers[i]->bv_val);
                                 } else {
-                                        errlog("\n Invalid entries");
+                                        errlog("Invalid entries\n");
                                         return -1;
                                 }
                         }
@@ -338,7 +339,7 @@ int get_ads_groupinfo(LDAP *ld, struct adspasswd *adspwuid, gid_t *gid,
                                 break;
                 }
         }
-        qsort(gid, ngroups, sizeof(*gid), compare_u32);
+        qsort(gid, ngroups, sizeof(*gid), compare_gid_t);
 
         return ngroups;
 }
@@ -377,21 +378,24 @@ int get_groups_ads(struct identity_downcall_data *data)
         if (ads_fp == NULL) {
                 errlog("open %s failed: %s\n",
                 ADSCONF_PATHNAME, strerror(errno));
-                errlog("\nPlease provide ADS configuration in"
-                       "/etc/lustre/ads.config");
+                errlog("Please provide ADS configuration in"
+                       "/etc/lustre/ads.config\n");
+                data->idd_err = errno;
                 return -1;
         }
 
         memset(params, 0, sizeof(params));
 
         if (get_params(ads_fp, params) < NO_OF_PARAMS_REQD) {
-                errlog("\nPlease specify all parameters in config file");
+                errlog("Please specify all parameters in config file\n");
+                data->idd_err = EINVAL;
                 return -1;
         }
         fclose(ads_fp);
 
         if (ldap_connect(&ld, params) != 0) {
-                errlog("\nldap setup failed");
+                errlog("ldap setup failed\n");
+                data->idd_err = EPROTO;
                 return -1;
         }
 
@@ -400,7 +404,8 @@ int get_groups_ads(struct identity_downcall_data *data)
         i = getindex("base", params);
 
         if (get_ads_userinfo(&ld, &pw, data->idd_uid, params[i][1]) != 0) {
-                errlog("\nFailed to get user info");
+                errlog("Failed to get user info\n");
+                data->idd_err = EPROTO;
                 return -1;
         }
 
@@ -416,31 +421,33 @@ int get_groups_ads(struct identity_downcall_data *data)
         memset(pw_name, 0, namelen);
         strncpy(pw_name, pw.pw_name, namelen - 1);
 
-        if (!strcmp(pw.pw_name, "")) {
+        if (strlen(pw.pw_name) == 0) {
                 errlog("no such user %u\n", data->idd_uid);
-                data->idd_err = errno ? errno : EIDRM;
-                return -1;
+                data->idd_err = EIDRM;
+                goto out;
         }
 
         groups = data->idd_groups;
 
         ngroups = get_ads_groupinfo(ld, &pw, groups, params[i][1]);
         if (ngroups <= 0) {
-                errlog("\nFailed to get group info");
-                return -1;
+                errlog("Failed to get group info\n");
+                data->idd_err = EIDRM;
+                goto out;
         }
         data->idd_ngroups = ngroups;
 
         if (ldap_disconnect(ld) != 0) {
-                errlog("\nldap disconnect failed");
-                return -1;
+                errlog("ldap disconnect failed\n");
+                data->idd_err = EPROTO;
+                goto out;
         }
 
-        qsort(groups, ngroups, sizeof(*groups), compare_u32);
+        qsort(groups, ngroups, sizeof(*groups), compare_gid_t);
         data->idd_ngroups = ngroups;
-
+out:
         free(pw_name);
-        return 0;
+        return data->idd_err != 0 ? -1 : 0;
 }
 
 static inline int match_uid(uid_t uid, const char *str)
@@ -617,9 +624,9 @@ int parse_perm_line(struct identity_downcall_data *data, char *line)
 
 int get_perms(FILE *fp, struct identity_downcall_data *data)
 {
-        char line[1024];
+        char line[FILE_LINE_BUF_SIZE];
 
-        while (fgets(line, 1024, fp)) {
+        while (fgets(line, FILE_LINE_BUF_SIZE, fp)) {
                 if (comment_line(line))
                         continue;
 
@@ -675,8 +682,9 @@ int main(int argc, char **argv)
                 return 1;
         }
 
+        errno = 0;
         uid = strtoul(argv[2], &end, 0);
-        if (*end) {
+        if (errno) {
                 errlog("%s: invalid uid '%s'\n", progname, argv[2]);
                 usage();
                 return 1;
