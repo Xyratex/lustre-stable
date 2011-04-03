@@ -1408,9 +1408,7 @@ LB_LINUX_TRY_COMPILE([
         #include <linux/mm.h>
         #include <linux/page-flags.h>
 ],[
-        #ifndef PG_constant
-        #error "Have no raid5 zcopy patch"
-        #endif
+        unsigned bit = PG_constant;
 ],[
         AC_MSG_RESULT(yes)
         AC_DEFINE(HAVE_PAGE_CONSTANT, 1, [kernel have PageConstant supported])
