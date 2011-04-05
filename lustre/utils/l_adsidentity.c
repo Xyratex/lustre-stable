@@ -22,10 +22,12 @@
 #include <linux/lustre/lustre_user.h>
 #include <linux/lustre/lustre_idl.h>
 
-#define PERM_PATHNAME     "/etc/lustre/perm.conf"
-#define ADSCONF_PATHNAME  "/etc/lustre/ads.conf"
-#define NO_OF_PARAMS_REQD 4
-#define STRING_MAX_SIZE   256
+#define PERM_PATHNAME      "/etc/lustre/perm.conf"
+#define ADSCONF_PATHNAME   "/etc/lustre/ads.conf"
+#define NO_OF_PARAMS_REQD  4
+#define STRING_MAX_SIZE    256
+#define PROC_NAME_MAX_SIZE 1024
+#define PERM_NAME_MAX_SIZE 64
 /** */
 #define FILE_LINE_BUF_SIZE 1024
 
@@ -307,7 +309,7 @@ int get_ads_groupinfo(LDAP *ld, struct adspasswd *adspwuid, gid_t *gid,
         ret = ldap_search_ext_s(ld, base, LDAP_SCOPE_SUBTREE, str, grattrs, 0,
                                 NULL, NULL, NULL, 0, &res);
         if (ret != LDAP_SUCCESS) {
-                ldap_err2string(ret);
+                errlog("%s\n", ldap_err2string(ret));
                 return -1;
         }
 
@@ -351,7 +353,7 @@ int ldap_disconnect(LDAP *ld)
         /* close and free connection resources */
         ret = ldap_unbind_ext_s(ld, NULL, NULL);
         if (ret != LDAP_SUCCESS) {
-                ldap_err2string(ret);
+                errlog("%s\n", ldap_err2string(ret));
                 return -1;
         } else {
                 return 0;
@@ -490,8 +492,9 @@ static perm_type_t noperm_types[] = {
 
 int parse_perm(__u32 *perm, __u32 *noperm, char *str)
 {
-        char *start, *end;
-        char name[64];
+        char        *start;
+        char        *end;
+        char         name[PERM_NAME_MAX_SIZE];
         perm_type_t *pt;
 
         *perm = 0;
@@ -533,10 +536,14 @@ int parse_perm(__u32 *perm, __u32 *noperm, char *str)
 
 int parse_perm_line(struct identity_downcall_data *data, char *line)
 {
-        char uid_str[256], nid_str[256], perm_str[256];
+        char       uid_str[STRING_MAX_SIZE];
+        char       nid_str[STRING_MAX_SIZE];
+        char       perm_str[STRING_MAX_SIZE];
+        int        rc;
+        int        i;
         lnet_nid_t nid;
-        __u32 perm, noperm;
-        int rc, i;
+        __u32      perm;
+        __u32      noperm;
 
         if (data->idd_nperms >= N_PERMS_MAX) {
                 errlog("permission count %d > max %d\n",
@@ -670,7 +677,7 @@ int main(int argc, char **argv)
         struct         identity_downcall_data *data;
         FILE          *perms_fp;
         char          *end;
-        char           procname[1024];
+        char           procname[PROC_NAME_MAX_SIZE];
         unsigned long  uid;
         int            fd;
         int            rc;
@@ -684,7 +691,7 @@ int main(int argc, char **argv)
 
         errno = 0;
         uid = strtoul(argv[2], &end, 0);
-        if (errno) {
+        if ((end == argv[2]) || strcmp(end, "") || errno) {
                 errlog("%s: invalid uid '%s'\n", progname, argv[2]);
                 usage();
                 return 1;
