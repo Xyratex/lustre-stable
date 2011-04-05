@@ -242,7 +242,8 @@ int get_ads_userinfo(LDAP **ld, struct adspasswd *adspwuid, uid_t uid,
                                 } else if (!strncmp(attrib, "msSFU30UidNumber",
                                            strlen(attrib))) {
                                         id = strtoul(bers[i]->bv_val, &end, 0);
-                                        if (*end) {
+                                        if ((end == bers[i]->bv_val) || *end ||
+                                            errno) {
                                                 errlog("invalid uid '%s'\n",
                                                         bers[i]->bv_val);
                                                 return -1;
@@ -251,7 +252,8 @@ int get_ads_userinfo(LDAP **ld, struct adspasswd *adspwuid, uid_t uid,
                                 } else if (!strncmp(attrib, "msSFU30GidNumber",
                                            strlen(attrib))) {
                                         id = strtoul(bers[i]->bv_val, &end, 0);
-                                        if (*end) {
+                                        if ((end == bers[i]->bv_val) || *end ||
+                                            errno) {
                                                 errlog("invalid uid '%s'\n",
                                                         bers[i]->bv_val);
                                                 return -1;
@@ -393,7 +395,10 @@ int get_groups_ads(struct identity_downcall_data *data)
                 data->idd_err = EINVAL;
                 return -1;
         }
-        fclose(ads_fp);
+
+        if (fclose(ads_fp))
+                errlog("close failed %s: %s\n",
+                       ADSCONF_PATHNAME, strerror(errno));
 
         if (ldap_connect(&ld, params) != 0) {
                 errlog("ldap setup failed\n");
@@ -461,7 +466,7 @@ static inline int match_uid(uid_t uid, const char *str)
                 return -1;
 
         uid2 = strtoul(str, &end, 0);
-        if (*end)
+        if ((end == str) || *end || errno)
                 return 0;
 
         return (uid == uid2);
@@ -691,13 +696,13 @@ int main(int argc, char **argv)
 
         errno = 0;
         uid = strtoul(argv[2], &end, 0);
-        if ((end == argv[2]) || strcmp(end, "") || errno) {
+        if ((end == argv[2]) || *end || errno) {
                 errlog("%s: invalid uid '%s'\n", progname, argv[2]);
                 usage();
                 return 1;
         }
 
-        data = malloc(sizeof(*data));
+        data = malloc(sizeof(*data) + NGROUPS_MAX * sizeof(gid_t));
         if (!data) {
                 errlog("malloc identity downcall data(%d) failed!\n",
                        sizeof(*data));
@@ -715,33 +720,50 @@ int main(int argc, char **argv)
         /* read permission database */
         perms_fp = fopen(PERM_PATHNAME, "r");
         if (perms_fp) {
-                get_perms(perms_fp, data);
-                fclose(perms_fp);
+                if (get_perms(perms_fp, data)) {
+                        data->idd_err = errno ? errno : EIDRM;
+                }
+
+                if (fclose(perms_fp))
+                        errlog("close failed %s: %s\n",
+                               PERM_PATHNAME, strerror(errno));
         } else if (errno != ENOENT) {
                 errlog("open %s failed: %s\n",
                        PERM_PATHNAME, strerror(errno));
         }
 
 downcall:
-        if (getenv("L_ADSIDENTITY_TEST")) {
-                show_result(data);
-                return 0;
-        }
+        do {
+                if (getenv("L_ADSIDENTITY_TEST")) {
+                        show_result(data);
+                        rc = 0;
+                        break;
+                }
 
-        snprintf(procname, sizeof(procname),
-                 "/proc/fs/lustre/mdt/%s/identity_info", argv[1]);
-        fd = open(procname, O_WRONLY);
-        if (fd < 0) {
-                errlog("can't open file %s: %s\n", procname, strerror(errno));
-                return 1;
-        }
+                snprintf(procname, sizeof(procname),
+                         "/proc/fs/lustre/mdt/%s/identity_info", argv[1]);
+                fd = open(procname, O_WRONLY);
+                if (fd < 0) {
+                        errlog("can't open file %s: %s\n",
+                               procname, strerror(errno));
+                        rc = 1;
+                        break;
+                }
 
-        rc = write(fd, data, sizeof(*data));
-        close(fd);
-        if (rc != sizeof(*data)) {
-                errlog("partial write ret %d: %s\n", rc, strerror(errno));
-                return 1;
-        }
+                rc = write(fd, data, sizeof(*data));
 
-        return 0;
+                if (close(fd))
+                        errlog("close failed %s: %s\n",
+                               procname, strerror(errno));
+                if (rc != sizeof(*data)) {
+                        errlog("partial write ret %d: %s\n",
+                               rc, strerror(errno));
+                        rc = 1;
+                        break;
+                }
+                rc = 0;
+        } while (0);
+
+        free(data);
+        return rc;
 }
