@@ -8,7 +8,7 @@ The identity_upcall file contains the path to an executable file that,
 when properly installed, is invoked to resolve a numeric UID to an
 Active Directory(AD) groups membership list. This utility should complete the identity_downcall_data structure and write it to the 
 /proc/fs/lustre/mdt/${FSNAME}-MDT{xxxx}/identity_info pseudo-file.
-        
+
 The l_adsidentity utility is the reference implementation of the user
 or group cache upcall.
 
@@ -21,11 +21,13 @@ line. This test lists out the all the user permissions and AD groups
 membership details on to console.
 .SH FILES
 /proc/fs/lustre/mdt/${FSNAME}-MDT{xxxx}/identity_upcall
+/etc/lustre/ads.conf
+/etc/lustre/perm.conf
 .SH EXAMPLES
         #l_adsidentity lustre-MDT0000 10001
         uid=10001 gid=10002,10003
         permissions:
           nid                   perm
-          0xffffffffffffffff    0xf        
+          0xffffffffffffffff    0xf
 .SH SEE ALSO
 Lustre Programming Interfaces section of Lustre Operations Manual.
