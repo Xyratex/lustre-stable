@@ -49,14 +49,33 @@
 /*
  * adspasswd structure is simulation of passwd structure.
  */
-struct adspasswd
-{
+struct adspasswd {
         char  pw_name[STRING_MAX_SIZE]; /* username */
         char  cn[STRING_MAX_SIZE];      /* cn       */
         uid_t pw_uid;                   /* user ID  */
         gid_t pw_gid;                   /* group ID */
 };
 
+typedef enum {
+        FALSE = 0,
+        TRUE  = 1
+} bool;
+
+struct conf_params {
+        char *desc;      /* conf parameter */
+        bool  isvisited; /* already read?  */
+};
+
+/*
+ * Maintaining required ad conf parameters in a list.
+ */
+struct conf_params reqd_params[] = {
+        { "uri"        , FALSE },
+        { "base"       , FALSE },
+        { "binddn"     , FALSE },
+        { "credentials", FALSE },
+        { 0 }
+};
 
 static char *progname;
 
@@ -104,11 +123,11 @@ int getindex(char *str, char params[][2][STRING_MAX_SIZE])
         int len = strlen(str);
 
         for (index = 0; index < NO_OF_PARAMS_REQD; index++) {
-                /* return the appropriate index. */
+                /* get the appropriate index. */
                 if (strncmp(str, params[index][0], len) == 0)
-                        return index;
+                        break;
         }
-        return -1;
+        return index;
 }
 
 int get_params(FILE *fp, char params[][2][STRING_MAX_SIZE])
@@ -117,6 +136,7 @@ int get_params(FILE *fp, char params[][2][STRING_MAX_SIZE])
         char desc[STRING_MAX_SIZE];
         char value[STRING_MAX_SIZE];
         int  num_params = 0;
+        int  i;
 
         memset(line, 0, sizeof(line));
         memset(desc, 0, sizeof(desc));
@@ -127,9 +147,18 @@ int get_params(FILE *fp, char params[][2][STRING_MAX_SIZE])
                         continue;
 
                 sscanf(line, "%s %s", desc, value);
-                strncpy(params[num_params][0], desc, sizeof(desc));
-                strncpy(params[num_params][1], value, sizeof(value));
-                num_params++;
+                for (i = 0; i < NO_OF_PARAMS_REQD; i++) {
+                        if (reqd_params[i].isvisited == FALSE &&
+                            !strcmp(reqd_params[i].desc, desc)) {
+                                strncpy(params[num_params][0], desc,
+                                        STRING_MAX_SIZE - 1);
+                                strncpy(params[num_params][1], value,
+                                        STRING_MAX_SIZE - 1);
+                                num_params++;
+                                reqd_params[i].isvisited = TRUE;
+                                break;
+                        }
+                }
         }
         return num_params;
 }
@@ -143,10 +172,6 @@ int ldap_connect(LDAP **ld, char params[][2][STRING_MAX_SIZE])
         int    index              = 0;
 
         index = getindex("uri", params);
-        if (index == -1) {
-                errlog("Please provide proper config file\n");
-                return -1;
-        }
 
         /* open a connection */
         ret = ldap_initialize(ld, params[index][1]);
@@ -166,25 +191,18 @@ int ldap_connect(LDAP **ld, char params[][2][STRING_MAX_SIZE])
                 return -1;
         }
 
-        ret = ldap_set_option(*ld, LDAP_OPT_REFERRALS, 0);
+        ret = ldap_set_option(*ld, LDAP_OPT_REFERRALS, LDAP_OPT_OFF);
         if (ret != LDAP_OPT_SUCCESS) {
                 errlog("%s\n", ldap_err2string(ret));
                 return -1;
         }
 
         index = getindex("credentials", params);
-        if (index == -1) {
-                errlog("Please provide proper config file\n");
-                return -1;
-        }
+
         credentials.bv_len = strlen(params[index][1]);
         credentials.bv_val = params[index][1];
 
         index = getindex("binddn", params);
-        if (index == -1) {
-                errlog("Please provide proper config file\n");
-                return -1;
-        }
 
         ret = ldap_sasl_bind_s(*ld, params[index][1], LDAP_SASL_SIMPLE,
                                &credentials, NULL, NULL, NULL);
@@ -200,11 +218,11 @@ int ldap_connect(LDAP **ld, char params[][2][STRING_MAX_SIZE])
  * Get only user's info from ADS server.
  */
 int get_ads_userinfo(LDAP **ld, struct adspasswd *adspwuid, uid_t uid,
-                    char *base)
+                     char *base)
 {
         char*           attrs[]  = {"msSFU30UidNumber", "msSFU30Name",
                                     "msSFU30GidNumber", "cn", NULL};
-        char            str[100];
+        char            str[STRING_MAX_SIZE];
         char*           end;
         int             ret      = 0;
         unsigned long   id       = 0; /* For temp uid and gid. */
@@ -238,7 +256,7 @@ int get_ads_userinfo(LDAP **ld, struct adspasswd *adspwuid, uid_t uid,
                                              strlen(attrib))) {
                                         strncpy(adspwuid->pw_name,
                                                 bers[i]->bv_val,
-                                                sizeof(bers[i]->bv_val));
+                                                STRING_MAX_SIZE - 1);
                                 } else if (!strncmp(attrib, "msSFU30UidNumber",
                                            strlen(attrib))) {
                                         id = strtoul(bers[i]->bv_val, &end, 0);
@@ -246,6 +264,7 @@ int get_ads_userinfo(LDAP **ld, struct adspasswd *adspwuid, uid_t uid,
                                             errno) {
                                                 errlog("invalid uid '%s'\n",
                                                         bers[i]->bv_val);
+                                                ldap_msgfree( res );
                                                 return -1;
                                         }
                                         adspwuid->pw_uid = id;
@@ -254,17 +273,19 @@ int get_ads_userinfo(LDAP **ld, struct adspasswd *adspwuid, uid_t uid,
                                         id = strtoul(bers[i]->bv_val, &end, 0);
                                         if ((end == bers[i]->bv_val) || *end ||
                                             errno) {
-                                                errlog("invalid uid '%s'\n",
+                                                errlog("invalid gid '%s'\n",
                                                         bers[i]->bv_val);
+                                                ldap_msgfree( res );
                                                 return -1;
                                         }
                                         adspwuid->pw_gid = id;
                                 } else if(!strncmp(attrib, "cn",
                                                    strlen(attrib))) {
                                         strncpy(adspwuid->cn, bers[i]->bv_val,
-                                                sizeof(bers[i]->bv_val));
+                                                STRING_MAX_SIZE - 1);
                                 } else {
                                         errlog("Invalid entries\n");
+                                        ldap_msgfree( res );
                                         return -1;
                                 }
                         }
@@ -281,7 +302,7 @@ int get_ads_userinfo(LDAP **ld, struct adspasswd *adspwuid, uid_t uid,
  * Get only groups list info from ADS server.
  */
 int get_ads_groupinfo(LDAP *ld, struct adspasswd *adspwuid, gid_t *gid,
-                     char *base)
+                      char *base)
 {
 
         LDAPMessage         *entry;
@@ -393,6 +414,7 @@ int get_groups_ads(struct identity_downcall_data *data)
         if (get_params(ads_fp, params) < NO_OF_PARAMS_REQD) {
                 errlog("Please specify all parameters in config file\n");
                 data->idd_err = EINVAL;
+                fclose(ads_fp);
                 return -1;
         }
 
@@ -425,14 +447,14 @@ int get_groups_ads(struct identity_downcall_data *data)
                 data->idd_err = errno;
                 return -1;
         }
-        memset(pw_name, 0, namelen);
-        strncpy(pw_name, pw.pw_name, namelen - 1);
 
         if (strlen(pw.pw_name) == 0) {
                 errlog("no such user %u\n", data->idd_uid);
                 data->idd_err = EIDRM;
                 goto out;
         }
+        memset(pw_name, 0, namelen);
+        strncpy(pw_name, pw.pw_name, namelen - 1);
 
         groups = data->idd_groups;
 
@@ -442,7 +464,6 @@ int get_groups_ads(struct identity_downcall_data *data)
                 data->idd_err = EIDRM;
                 goto out;
         }
-        data->idd_ngroups = ngroups;
 
         if (ldap_disconnect(ld) != 0) {
                 errlog("ldap disconnect failed\n");
@@ -686,10 +707,17 @@ int main(int argc, char **argv)
         unsigned long  uid;
         int            fd;
         int            rc;
+        size_t         datasize;
 
         progname = basename(argv[0]);
 
         if (argc != 3) {
+                usage();
+                return 1;
+        }
+
+        if (!*argv[1]) {
+                errlog("%s: mdtname should not be NULL\n", progname);
                 usage();
                 return 1;
         }
@@ -702,13 +730,13 @@ int main(int argc, char **argv)
                 return 1;
         }
 
-        data = malloc(sizeof(*data) + NGROUPS_MAX * sizeof(gid_t));
+        datasize = sizeof(*data) + NGROUPS_MAX * sizeof(gid_t);
+        data = (struct identity_downcall_data *) malloc(datasize);
         if (!data) {
-                errlog("malloc identity downcall data(%d) failed!\n",
-                       sizeof(*data));
+                errlog("malloc identity downcall data(%d) failed!\n", datasize);
                 return 1;
         }
-        memset(data, 0, sizeof(*data));
+        memset(data, 0, datasize);
         data->idd_magic = IDENTITY_DOWNCALL_MAGIC;
         data->idd_uid = uid;
 
@@ -750,12 +778,12 @@ downcall:
                         break;
                 }
 
-                rc = write(fd, data, sizeof(*data));
+                rc = write(fd, data, datasize);
 
                 if (close(fd))
                         errlog("close failed %s: %s\n",
                                procname, strerror(errno));
-                if (rc != sizeof(*data)) {
+                if (rc != datasize) {
                         errlog("partial write ret %d: %s\n",
                                rc, strerror(errno));
                         rc = 1;
