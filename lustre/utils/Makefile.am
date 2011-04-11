@@ -125,7 +125,7 @@ endif
 
 ltrack_stats_SOURCES = ltrack_stats.c
 
-EXTRA_DIST = $(sbin_scripts) $(bin_scripts)
+EXTRA_DIST = $(sbin_scripts) $(bin_scripts) $(CONFDIR_DATA)
 
 # NOTE: this should only be run on i386.
 newwiretest: wirehdr.c wirecheck
