@@ -1431,14 +1431,15 @@ static int lfs_quotaoff(int argc, char **argv)
 
         rc = llapi_quotactl(mnt, &qctl);
         if (rc) {
-                if (errno == EALREADY) {
+                rc = errno;
+                if (rc == EALREADY) {
                         rc = 0;
                 } else {
                         if (*obd_type)
                                 fprintf(stderr, "%s %s ", obd_type,
                                         obd_uuid2str(&qctl.obd_uuid));
                         fprintf(stderr, "quotaoff failed: %s\n",
-                                strerror(errno));
+                                strerror(rc));
                 }
         }
 
