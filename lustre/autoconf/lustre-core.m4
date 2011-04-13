@@ -2616,6 +2616,18 @@ AC_CHECK_LIB([z],
 )
 AC_SUBST(ZLIB)
 
+LDAP=""
+AC_CHECK_LIB([ldap],
+             [ldap_sasl_bind_s],
+             [AC_CHECK_HEADERS([ldap.h],
+                               [LDAP="-lldap"
+                                AC_DEFINE([HAVE_LDAP], 1,
+                                          [support alder32 checksum type])],
+                               [AC_MSG_WARN([No ldap-devel package found])])],
+             [AC_MSG_WARN([No ldap package found])]
+)
+AC_SUBST(LDAP)
+
 # Super safe df
 AC_ARG_ENABLE([mindf],
       AC_HELP_STRING([--enable-mindf],
@@ -2695,6 +2707,7 @@ AM_CONDITIONAL(GSS_KEYRING, test x$enable_gss_keyring = xyes)
 AM_CONDITIONAL(GSS_PIPEFS, test x$enable_gss_pipefs = xyes)
 AM_CONDITIONAL(LIBPTHREAD, test x$enable_libpthread = xyes)
 AM_CONDITIONAL(LLITE_LLOOP, test x$enable_llite_lloop_module = xyes)
+AM_CONDITIONAL(LDAP_BUILD, test x$LDAP != x)
 ])
 
 #
