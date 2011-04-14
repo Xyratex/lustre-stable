@@ -1,0 +1,21 @@
+Index: linux-2.6.32.i386/fs/ext4/super.c
+===================================================================
+--- linux-2.6.32.i386.orig/fs/ext4/super.c	2010-03-19 15:43:54.000000000 +0530
++++ linux-2.6.32.i386/fs/ext4/super.c	2010-04-06 23:31:34.000000000 +0530
+@@ -4039,6 +4039,9 @@
+ 	err = register_filesystem(&ext4_fs_type);
+ 	if (err)
+ 		goto out;
++
++	printk(KERN_INFO "ldiskfs created from ""ext""4-2.6-rhel6\n");
++
+ 	return 0;
+ out:
+ 	destroy_inodecache();
+Index: linux-2.6.32.i386/fs/ext4/fiemap.h
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ linux-2.6.32.i386/fs/ext4/fiemap.h	2010-04-06 23:30:39.000000000 +0530
+@@ -0,0 +1,2 @@
++
++#include_next <fiemap.h>
