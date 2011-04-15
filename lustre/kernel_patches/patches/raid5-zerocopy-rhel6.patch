@@ -1,0 +1,220 @@
+diff --git a/drivers/md/raid5.c b/drivers/md/raid5.c
+index 9cd137e..6d1a32d 100644
+--- a/drivers/md/raid5.c
++++ b/drivers/md/raid5.c
+@@ -192,6 +192,25 @@ static int stripe_operations_active(struct stripe_head *sh)
+ 	       test_bit(STRIPE_COMPUTE_RUN, &sh->state);
+ }
+ 
++static struct page *zero_copy_data(struct bio *bio, sector_t sector)
++{
++	sector_t bi_sector = bio->bi_sector;
++	struct page *page = NULL;
++	struct bio_vec *bvl;
++	int i;
++
++	bio_for_each_segment(bvl, bio, i) {
++		if (sector == bi_sector && bvl->bv_len == STRIPE_SIZE) {
++			page = bvl->bv_page;
++			if (PageConstant(page))
++				return page;
++			return NULL;
++		}
++		bi_sector += bvl->bv_len >> 9;
++	}
++	return NULL;
++}
++
+ static void __release_stripe(raid5_conf_t *conf, struct stripe_head *sh)
+ {
+ 	if (atomic_dec_and_test(&sh->count)) {
+@@ -491,6 +513,14 @@ static void ops_run_io(struct stripe_head *sh, struct stripe_head_state *s)
+ 				set_bit(STRIPE_DEGRADED, &sh->state);
+ 			pr_debug("skip op %ld on disc %d for sector %llu\n",
+ 				bi->bi_rw, i, (unsigned long long)sh->sector);
++
++			if (test_bit(R5_Direct, &sh->dev[i].flags)) {
++				struct page *page = bio_iovec_idx(&sh->dev[i].req, 0)->bv_page;
++				BUG_ON(page == sh->dev[i].page);
++				bio_iovec_idx(&sh->dev[i].req, 0)->bv_page = sh->dev[i].page;
++				kunmap(page);
++			}
++
+ 			clear_bit(R5_LOCKED, &sh->dev[i].flags);
+ 			set_bit(STRIPE_HANDLE, &sh->state);
+ 		}
+@@ -937,6 +965,36 @@ ops_run_prexor(struct stripe_head *sh, struct raid5_percpu *percpu,
+ 	return tx;
+ }
+ 
++static int try_reuse_data_page(struct r5dev *dev)
++{
++	struct bio *wbi = dev->written;
++	struct page *page;
++	sector_t sector = dev->sector;
++
++	BUG_ON(!test_bit(R5_LOCKED, &dev->flags));
++	BUG_ON(test_bit(R5_Direct, &dev->flags));
++
++	/* check if it's covered by a single page
++	   and the whole stripe is written at once.
++	 * in this case we can avoid memcpy() */
++	if (wbi && !wbi->bi_next && test_bit(R5_OVERWRITE, &dev->flags) &&
++	    test_bit(R5_Insync, &dev->flags)) {
++		page = zero_copy_data(wbi, sector);
++		if (page) {
++			/* The pointer must be restored whenever the LOCKED
++			 * gets cleared. */
++			kmap(page); /* for sync_xor on 32-bit systems */
++			bio_iovec_idx(&dev->req, 0)->bv_page = page;
++			set_bit(R5_Direct, &dev->flags);
++			clear_bit(R5_UPTODATE, &dev->flags);
++			clear_bit(R5_OVERWRITE, &dev->flags);
++			return 1;
++		}
++	}
++
++	return 0;
++}
++
+ static struct dma_async_tx_descriptor *
+ ops_run_biodrain(struct stripe_head *sh, struct dma_async_tx_descriptor *tx)
+ {
+@@ -960,6 +1017,11 @@ ops_run_biodrain(struct stripe_head *sh, struct dma_async_tx_descriptor *tx)
+ 			wbi = dev->written = chosen;
+ 			spin_unlock(&sh->lock);
+ 
++			if (try_reuse_data_page(dev)) {
++				atomic_inc(&sh->raid_conf->writes_zcopy);
++				continue;
++			}
++
+ 			while (wbi && wbi->bi_sector <
+ 				dev->sector + STRIPE_SECTORS) {
+ 				tx = async_copy_data(1, wbi, dev->page,
+@@ -1560,6 +1620,7 @@ static void raid5_end_read_request(struct bio * bi, int error)
+ 		}
+ 	}
+ 	rdev_dec_pending(conf->disks[i].rdev, conf->mddev);
++	BUG_ON(bio_iovec_idx(&sh->dev[i].req, 0)->bv_page != sh->dev[i].page);
+ 	clear_bit(R5_LOCKED, &sh->dev[i].flags);
+ 	set_bit(STRIPE_HANDLE, &sh->state);
+ 	release_stripe(sh);
+@@ -1589,6 +1650,14 @@ static void raid5_end_write_request(struct bio *bi, int error)
+ 
+ 	rdev_dec_pending(conf->disks[i].rdev, conf->mddev);
+ 	
++	if (test_bit(R5_Direct, &sh->dev[i].flags)) {
++		struct page *page = bio_iovec_idx(&sh->dev[i].req, 0)->bv_page;
++		BUG_ON(page == sh->dev[i].page);
++		bio_iovec_idx(&sh->dev[i].req, 0)->bv_page = sh->dev[i].page;
++		kunmap(page);
++	} else {
++		BUG_ON(bio_iovec_idx(&sh->dev[i].req, 0)->bv_page != sh->dev[i].page);
++	}
+ 	clear_bit(R5_LOCKED, &sh->dev[i].flags);
+ 	set_bit(STRIPE_HANDLE, &sh->state);
+ 	release_stripe(sh);
+@@ -2434,7 +2501,8 @@ static void handle_stripe_clean_event(raid5_conf_t *conf,
+ 		if (sh->dev[i].written) {
+ 			dev = &sh->dev[i];
+ 			if (!test_bit(R5_LOCKED, &dev->flags) &&
+-				test_bit(R5_UPTODATE, &dev->flags)) {
++				(test_bit(R5_UPTODATE, &dev->flags) ||
++				 test_bit(R5_Direct, &dev->flags))) {
+ 				/* We can return any write requests */
+ 				struct bio *wbi, *wbi2;
+ 				int bitmap_end = 0;
+@@ -2442,6 +2510,7 @@ static void handle_stripe_clean_event(raid5_conf_t *conf,
+ 				spin_lock_irq(&conf->device_lock);
+ 				wbi = dev->written;
+ 				dev->written = NULL;
++				clear_bit(R5_Direct, &dev->flags);
+ 				while (wbi && wbi->bi_sector <
+ 					dev->sector + STRIPE_SECTORS) {
+ 					wbi2 = r5_next_bio(wbi, dev->sector);
+@@ -3052,6 +3121,7 @@ static void handle_stripe5(struct stripe_head *sh)
+ 	 * is safe, or on a failed drive
+ 	 */
+ 	dev = &sh->dev[sh->pd_idx];
++
+ 	if ( s.written &&
+ 	     ((test_bit(R5_Insync, &dev->flags) &&
+ 	       !test_bit(R5_LOCKED, &dev->flags) &&
+@@ -5092,7 +5162,7 @@ static int run(mddev_t *mddev)
+ 	mddev->queue->unplug_fn = raid5_unplug_device;
+ 	mddev->queue->backing_dev_info.congested_data = mddev;
+ 	mddev->queue->backing_dev_info.congested_fn = raid5_congested;
+-
++	mddev->queue->backing_dev_info.capabilities |= BDI_CAP_PAGE_CONSTANT_WRITE;
+ 	md_set_array_sectors(mddev, raid5_size(mddev, 0, 0));
+ 
+ 	blk_queue_merge_bvec(mddev->queue, raid5_mergeable_bvec);
+diff --git a/drivers/md/raid5.h b/drivers/md/raid5.h
+index dd70835..972ac47 100644
+--- a/drivers/md/raid5.h
++++ b/drivers/md/raid5.h
+@@ -275,6 +275,8 @@ struct r6_state {
+ 				    * filling
+ 				    */
+ #define R5_Wantdrain	13 /* dev->towrite needs to be drained */
++
++#define	R5_Direct	14	/* Use the pages in bio to do the write directly. */
+ /*
+  * Write method
+  */
+diff --git a/include/linux/backing-dev.h b/include/linux/backing-dev.h
+index aa61872..856225c 100644
+--- a/include/linux/backing-dev.h
++++ b/include/linux/backing-dev.h
+@@ -230,6 +230,7 @@ int bdi_set_max_ratio(struct backing_dev_info *bdi, unsigned int max_ratio);
+ #define BDI_CAP_EXEC_MAP	0x00000040
+ #define BDI_CAP_NO_ACCT_WB	0x00000080
+ #define BDI_CAP_SWAP_BACKED	0x00000100
++#define BDI_CAP_PAGE_CONSTANT_WRITE	0x00000200	/* Zcopy write - for raid5 */
+ 
+ #define BDI_CAP_VMFLAGS \
+ 	(BDI_CAP_READ_MAP | BDI_CAP_WRITE_MAP | BDI_CAP_EXEC_MAP)
+@@ -304,6 +305,11 @@ static inline bool bdi_cap_swap_backed(struct backing_dev_info *bdi)
+ 	return bdi->capabilities & BDI_CAP_SWAP_BACKED;
+ }
+ 
++static inline bool bdi_cap_page_constant_write(struct backing_dev_info *bdi)
++{
++	return bdi->capabilities & BDI_CAP_PAGE_CONSTANT_WRITE;
++}
++
+ static inline bool bdi_cap_flush_forker(struct backing_dev_info *bdi)
+ {
+ 	return bdi == &default_backing_dev_info;
+@@ -324,6 +330,10 @@ static inline bool mapping_cap_swap_backed(struct address_space *mapping)
+ 	return bdi_cap_swap_backed(mapping->backing_dev_info);
+ }
+ 
++static inline bool mapping_cap_page_constant_write(struct address_space *mapping) {
++	return bdi_cap_page_constant_write(mapping->backing_dev_info);
++}
++
+ static inline int bdi_sched_wait(void *word)
+ {
+ 	schedule();
+diff --git a/include/linux/page-flags.h b/include/linux/page-flags.h
+index 9bc5b82..bda70a3 100644
+--- a/include/linux/page-flags.h
++++ b/include/linux/page-flags.h
+@@ -111,6 +111,7 @@ enum pageflags {
+ #ifdef CONFIG_TRANSPARENT_HUGEPAGE
+ 	PG_compound_lock,
+ #endif
++	PG_constant,
+ 	__NR_PAGEFLAGS,
+ 
+ 	/* Filesystems */
+@@ -214,6 +215,7 @@ PAGEFLAG(Pinned, pinned) TESTSCFLAG(Pinned, pinned)	/* Xen */
+ PAGEFLAG(SavePinned, savepinned);			/* Xen */
+ PAGEFLAG(Reserved, reserved) __CLEARPAGEFLAG(Reserved, reserved)
+ PAGEFLAG(SwapBacked, swapbacked) __CLEARPAGEFLAG(SwapBacked, swapbacked)
++PAGEFLAG(Constant, constant)
+ 
+ __PAGEFLAG(SlobFree, slob_free)
+ 
