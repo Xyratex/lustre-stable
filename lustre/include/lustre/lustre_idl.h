@@ -914,8 +914,8 @@ static inline int lustre_handle_is_used(struct lustre_handle *lh)
         return lh->cookie != 0ull;
 }
 
-static inline int lustre_handle_equal(struct lustre_handle *lh1,
-                                      struct lustre_handle *lh2)
+static inline int lustre_handle_equal(const struct lustre_handle *lh1,
+                                      const struct lustre_handle *lh2)
 {
         return lh1->cookie == lh2->cookie;
 }
@@ -1861,7 +1861,8 @@ enum {
         MDS_PERM_BYPASS   = 1 << 3,
         MDS_SOM           = 1 << 4,
         MDS_QUOTA_IGNORE  = 1 << 5,
-        MDS_CLOSE_CLEANUP = 1 << 6
+        MDS_CLOSE_CLEANUP = 1 << 6,
+        MDS_KEEP_ORPHAN   = 1 << 7
 };
 
 /* instance of mdt_reint_rec */
