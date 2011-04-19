@@ -16,7 +16,7 @@ Index: linux-2.6.32-71.7.1.el6.x86_64/drivers/md/raid5.c
  		conf->max_degraded = 1;
  	conf->algorithm = mddev->new_layout;
 -	conf->max_nr_stripes = NR_STRIPES;
-+	conf->max_nr_stripes = nr_stripes;
++	conf->max_nr_stripes = raid5_nr_stripes;
  	conf->reshape_progress = mddev->reshape_position;
  	if (conf->reshape_progress != MaxSector) {
  		conf->prev_chunk_sectors = mddev->chunk_sectors;
