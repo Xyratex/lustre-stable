@@ -8,10 +8,10 @@ Index: linux-2.6.32-71.7.1.el6.x86_64/drivers/md/raid5.c
  			 (conf->raid_disks - conf->max_degraded));
 -
 +	{
-+	int stripe_size = conf->chunk_size * (conf->previous_raid_disks - conf->max_degraded);
++	int stripe_size = conf->chunk_sectors * (conf->previous_raid_disks - conf->max_degraded);
 +	 
-+	blk_queue_max_hw_sectors(mddev->queue, stripe_size >> 9);
-+	blk_queue_max_segments(mddev->queue, stripe_size >> 9); 
++	blk_queue_max_hw_sectors(mddev->queue, stripe_size);
++	blk_queue_max_segments(mddev->queue, stripe_size);
 +        }
  	list_for_each_entry(rdev, &mddev->disks, same_set)
  		disk_stack_limits(mddev->gendisk, rdev->bdev,
