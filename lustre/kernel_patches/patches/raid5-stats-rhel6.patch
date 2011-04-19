@@ -93,12 +93,13 @@ index c0d4dae..b3dacc5 100644
  		}
  	} else
  		blk_plug_device(conf->mddev->queue);
-@@ -3875,7 +3895,7 @@ static int chunk_aligned_read(mddev_t *mddev, struct bio * raid_bio)
+@@ -3875,7 +3895,8 @@ static int chunk_aligned_read(mddev_t *mddev, struct bio * raid_bio)
  				    conf->device_lock, /* nothing */);
  		atomic_inc(&conf->active_aligned_reads);
  		spin_unlock_irq(&conf->device_lock);
 -
 +		atomic_inc(&conf->out_reqs_in_queue);
++		atomic_inc(&conf->reads_out);
  		generic_make_request(align_bi);
  		return 1;
  	} else {
@@ -111,18 +112,18 @@ index c0d4dae..b3dacc5 100644
  	if (unlikely(bio_rw_flagged(bi, BIO_RW_BARRIER))) {
  		/* Drain all pending writes.  We only really need
  		 * to ensure they have been submitted, but this is
-@@ -3966,6 +3988,11 @@ static int make_request(mddev_t *mddev, struct bio * bi)
- 	     chunk_aligned_read(mddev,bi))
- 		return 0;
+@@ -3889,6 +3985,11 @@ static int make_request(mddev_t *mddev, struct bio * bi)
+ 
+ 	md_write_start(mddev, bi);
  
 +	if (rw == WRITE)
 +		atomic_inc(&conf->writes_in);
 +	else
 +		atomic_inc(&conf->reads_in);
 +
- 	logical_sector = bi->bi_sector & ~((sector_t)STRIPE_SECTORS-1);
- 	last_sector = bi->bi_sector + (bi->bi_size>>9);
- 	bi->bi_next = NULL;
+ 	if (rw == READ &&
+ 		mddev->reshape_position == MaxSector &&
+ 		chunk_aligned_read(mddev,bi))
 @@ -4092,7 +4119,7 @@ static int make_request(mddev_t *mddev, struct bio * bi)
  
  		if ( rw == WRITE )
