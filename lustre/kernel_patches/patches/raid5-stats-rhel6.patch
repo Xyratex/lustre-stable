@@ -76,6 +76,30 @@ index c0d4dae..b3dacc5 100644
  	for (i=0 ; i<disks; i++)
  		if (bi == &sh->dev[i].req)
  			break;
+@@ -2604,6 +2604,7 @@ static void handle_stripe_dirtying5(raid5_conf_t *conf,
+ 					set_bit(R5_LOCKED, &dev->flags);
+ 					set_bit(R5_Wantread, &dev->flags);
+ 					s->locked++;
++					atomic_inc(&conf->reads_for_rmw);
+ 				} else {
+ 					set_bit(STRIPE_DELAYED, &sh->state);
+ 					set_bit(STRIPE_HANDLE, &sh->state);
+@@ -2627,6 +2628,7 @@ static void handle_stripe_dirtying5(raid5_conf_t *conf,
+ 					set_bit(R5_LOCKED, &dev->flags);
+ 					set_bit(R5_Wantread, &dev->flags);
+ 					s->locked++;
++					atomic_inc(&conf->reads_for_rсw);
+ 				} else {
+ 					set_bit(STRIPE_DELAYED, &sh->state);
+ 					set_bit(STRIPE_HANDLE, &sh->state);
+@@ -2677,6 +2679,7 @@ static void handle_stripe_dirtying6(raid5_conf_t *conf,
+ 				set_bit(R5_LOCKED, &dev->flags);
+ 				set_bit(R5_Wantread, &dev->flags);
+ 				s->locked++;
++				atomic_inc(&conf->reads_for_rсw);
+ 			} else {
+ 				pr_debug("Request delayed stripe %llu "
+ 					"block %d for Reconstruct\n",
 @@ -3027,6 +3044,8 @@ static void handle_stripe5(struct stripe_head *sh)
  	clear_bit(STRIPE_HANDLE, &sh->state);
  	clear_bit(STRIPE_DELAYED, &sh->state);
