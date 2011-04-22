@@ -88,7 +88,7 @@ index c0d4dae..b3dacc5 100644
  					set_bit(R5_LOCKED, &dev->flags);
  					set_bit(R5_Wantread, &dev->flags);
  					s->locked++;
-+					atomic_inc(&conf->reads_for_rсw);
++					atomic_inc(&conf->reads_for_rcw);
  				} else {
  					set_bit(STRIPE_DELAYED, &sh->state);
  					set_bit(STRIPE_HANDLE, &sh->state);
@@ -96,11 +96,20 @@ index c0d4dae..b3dacc5 100644
  				set_bit(R5_LOCKED, &dev->flags);
  				set_bit(R5_Wantread, &dev->flags);
  				s->locked++;
-+				atomic_inc(&conf->reads_for_rсw);
++				atomic_inc(&conf->reads_for_rcw);
  			} else {
  				pr_debug("Request delayed stripe %llu "
  					"block %d for Reconstruct\n",
 @@ -3027,6 +3044,8 @@ static void handle_stripe5(struct stripe_head *sh)
+ 	clear_bit(STRIPE_HANDLE, &sh->state);
+ 	clear_bit(STRIPE_DELAYED, &sh->state);
+ 
++	atomic_inc(&conf->handle_called);
++
+ 	s.syncing = test_bit(STRIPE_SYNCING, &sh->state);
+ 	s.expanding = test_bit(STRIPE_EXPAND_SOURCE, &sh->state);
+ 	s.expanded = test_bit(STRIPE_EXPAND_READY, &sh->state);
+@@ -3331,6 +3334,8 @@ static void handle_stripe6(struct stripe_head *sh)
  	clear_bit(STRIPE_HANDLE, &sh->state);
  	clear_bit(STRIPE_DELAYED, &sh->state);
  
