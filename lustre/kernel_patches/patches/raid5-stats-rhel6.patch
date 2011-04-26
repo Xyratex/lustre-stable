@@ -1,8 +1,8 @@
 diff --git a/drivers/md/raid5.c b/drivers/md/raid5.c
-index c0d4dae..b3dacc5 100644
+index 9cd137e..890c96c 100644
 --- a/drivers/md/raid5.c
 +++ b/drivers/md/raid5.c
-@@ -223,10 +223,12 @@ static void __release_stripe(raid5_conf_t *conf, struct stripe_head *sh)
+@@ -201,10 +201,12 @@ static void __release_stripe(raid5_conf_t *conf, struct stripe_head *sh)
  			if (test_bit(STRIPE_DELAYED, &sh->state)) {
  				list_add_tail(&sh->lru, &conf->delayed_list);
  				blk_plug_device(conf->mddev->queue);
@@ -15,7 +15,7 @@ index c0d4dae..b3dacc5 100644
  			} else {
  				clear_bit(STRIPE_BIT_DELAY, &sh->state);
  				list_add_tail(&sh->lru, &conf->handle_list);
-@@ -409,6 +411,7 @@ get_active_stripe(raid5_conf_t *conf, sector_t sector,
+@@ -387,6 +389,7 @@ get_active_stripe(raid5_conf_t *conf, sector_t sector,
  			if (noblock && sh == NULL)
  				break;
  			if (!sh) {
@@ -23,7 +23,7 @@ index c0d4dae..b3dacc5 100644
  				conf->inactive_blocked = 1;
  				wait_event_lock_irq(conf->wait_for_stripe,
  						    !list_empty(&conf->inactive_list) &&
-@@ -432,6 +435,10 @@ get_active_stripe(raid5_conf_t *conf, sector_t sector,
+@@ -410,6 +413,10 @@ get_active_stripe(raid5_conf_t *conf, sector_t sector,
  				    !test_bit(STRIPE_EXPANDING, &sh->state))
  					BUG();
  				list_del_init(&sh->lru);
@@ -34,7 +34,7 @@ index c0d4dae..b3dacc5 100644
  			}
  		}
  	} while (sh == NULL);
-@@ -469,10 +476,13 @@ static void ops_run_io(struct stripe_head *sh, struct stripe_head_state *s)
+@@ -447,10 +454,13 @@ static void ops_run_io(struct stripe_head *sh, struct stripe_head_state *s)
  		bi = &sh->dev[i].req;
  
  		bi->bi_rw = rw;
@@ -50,7 +50,7 @@ index c0d4dae..b3dacc5 100644
  
  		rcu_read_lock();
  		rdev = rcu_dereference(conf->disks[i].rdev);
-@@ -507,6 +517,7 @@ static void ops_run_io(struct stripe_head *sh, struct stripe_head_state *s)
+@@ -485,6 +495,7 @@ static void ops_run_io(struct stripe_head *sh, struct stripe_head_state *s)
  			    test_bit(R5_ReWrite, &sh->dev[i].flags))
  				atomic_add(STRIPE_SECTORS,
  					&rdev->corrected_errors);
@@ -58,7 +58,7 @@ index c0d4dae..b3dacc5 100644
  			generic_make_request(bi);
  		} else {
  			if (rw == WRITE)
-@@ -1553,6 +1566,8 @@ static void raid5_end_read_request(struct bio * bi, int error)
+@@ -1493,6 +1504,8 @@ static void raid5_end_read_request(struct bio * bi, int error)
  	mdk_rdev_t *rdev;
  
  
@@ -67,7 +67,7 @@ index c0d4dae..b3dacc5 100644
  	for (i=0 ; i<disks; i++)
  		if (bi == &sh->dev[i].req)
  			break;
-@@ -1633,6 +1648,8 @@ static void raid5_end_write_request(struct bio *bi, int error)
+@@ -1572,6 +1585,8 @@ static void raid5_end_write_request(struct bio *bi, int error)
  	int disks = sh->disks, i;
  	int uptodate = test_bit(BIO_UPTODATE, &bi->bi_flags);
  
@@ -76,7 +76,31 @@ index c0d4dae..b3dacc5 100644
  	for (i=0 ; i<disks; i++)
  		if (bi == &sh->dev[i].req)
  			break;
-@@ -3027,6 +3044,8 @@ static void handle_stripe5(struct stripe_head *sh)
+@@ -2514,6 +2529,7 @@ static void handle_stripe_dirtying5(raid5_conf_t *conf,
+ 					set_bit(R5_LOCKED, &dev->flags);
+ 					set_bit(R5_Wantread, &dev->flags);
+ 					s->locked++;
++					atomic_inc(&conf->reads_for_rmw);
+ 				} else {
+ 					set_bit(STRIPE_DELAYED, &sh->state);
+ 					set_bit(STRIPE_HANDLE, &sh->state);
+@@ -2537,6 +2553,7 @@ static void handle_stripe_dirtying5(raid5_conf_t *conf,
+ 					set_bit(R5_LOCKED, &dev->flags);
+ 					set_bit(R5_Wantread, &dev->flags);
+ 					s->locked++;
++					atomic_inc(&conf->reads_for_rcw);
+ 				} else {
+ 					set_bit(STRIPE_DELAYED, &sh->state);
+ 					set_bit(STRIPE_HANDLE, &sh->state);
+@@ -2587,6 +2604,7 @@ static void handle_stripe_dirtying6(raid5_conf_t *conf,
+ 				set_bit(R5_LOCKED, &dev->flags);
+ 				set_bit(R5_Wantread, &dev->flags);
+ 				s->locked++;
++				atomic_inc(&conf->reads_for_rcw);
+ 			} else {
+ 				pr_debug("Request delayed stripe %llu "
+ 					"block %d for Reconstruct\n",
+@@ -2956,6 +2974,8 @@ static void handle_stripe5(struct stripe_head *sh)
  	clear_bit(STRIPE_HANDLE, &sh->state);
  	clear_bit(STRIPE_DELAYED, &sh->state);
  
@@ -85,7 +109,16 @@ index c0d4dae..b3dacc5 100644
  	s.syncing = test_bit(STRIPE_SYNCING, &sh->state);
  	s.expanding = test_bit(STRIPE_EXPAND_SOURCE, &sh->state);
  	s.expanded = test_bit(STRIPE_EXPAND_READY, &sh->state);
-@@ -3602,6 +3621,7 @@ static void raid5_activate_delayed(raid5_conf_t *conf)
+@@ -3238,6 +3258,8 @@ static void handle_stripe6(struct stripe_head *sh)
+ 	clear_bit(STRIPE_HANDLE, &sh->state);
+ 	clear_bit(STRIPE_DELAYED, &sh->state);
+ 
++	atomic_inc(&conf->handle_called);
++
+ 	s.syncing = test_bit(STRIPE_SYNCING, &sh->state);
+ 	s.expanding = test_bit(STRIPE_EXPAND_SOURCE, &sh->state);
+ 	s.expanded = test_bit(STRIPE_EXPAND_READY, &sh->state);
+@@ -3530,6 +3552,7 @@ static void raid5_activate_delayed(raid5_conf_t *conf)
  			if (!test_and_set_bit(STRIPE_PREREAD_ACTIVE, &sh->state))
  				atomic_inc(&conf->preread_active_stripes);
  			list_add_tail(&sh->lru, &conf->hold_list);
@@ -93,16 +126,17 @@ index c0d4dae..b3dacc5 100644
  		}
  	} else
  		blk_plug_device(conf->mddev->queue);
-@@ -3875,7 +3895,7 @@ static int chunk_aligned_read(mddev_t *mddev, struct bio * raid_bio)
+@@ -3803,7 +3826,8 @@ static int chunk_aligned_read(mddev_t *mddev, struct bio * raid_bio)
  				    conf->device_lock, /* nothing */);
  		atomic_inc(&conf->active_aligned_reads);
  		spin_unlock_irq(&conf->device_lock);
 -
 +		atomic_inc(&conf->out_reqs_in_queue);
++		atomic_inc(&conf->reads_out);
  		generic_make_request(align_bi);
  		return 1;
  	} else {
-@@ -3948,6 +3968,8 @@ static int make_request(mddev_t *mddev, struct bio * bi)
+@@ -3876,6 +3900,8 @@ static int make_request(mddev_t *mddev, struct bio * bi)
  	const int rw = bio_data_dir(bi);
  	int remaining;
  
@@ -111,19 +145,19 @@ index c0d4dae..b3dacc5 100644
  	if (unlikely(bio_rw_flagged(bi, BIO_RW_BARRIER))) {
  		/* Drain all pending writes.  We only really need
  		 * to ensure they have been submitted, but this is
-@@ -3966,6 +3988,11 @@ static int make_request(mddev_t *mddev, struct bio * bi)
- 	     chunk_aligned_read(mddev,bi))
- 		return 0;
+@@ -3889,6 +3915,11 @@ static int make_request(mddev_t *mddev, struct bio * bi)
+ 
+ 	md_write_start(mddev, bi);
  
 +	if (rw == WRITE)
 +		atomic_inc(&conf->writes_in);
 +	else
 +		atomic_inc(&conf->reads_in);
 +
- 	logical_sector = bi->bi_sector & ~((sector_t)STRIPE_SECTORS-1);
- 	last_sector = bi->bi_sector + (bi->bi_size>>9);
- 	bi->bi_next = NULL;
-@@ -4092,7 +4119,7 @@ static int make_request(mddev_t *mddev, struct bio * bi)
+ 	if (rw == READ &&
+ 	     mddev->reshape_position == MaxSector &&
+ 	     chunk_aligned_read(mddev,bi))
+@@ -4020,7 +4051,7 @@ static int make_request(mddev_t *mddev, struct bio * bi)
  
  		if ( rw == WRITE )
  			md_write_end(mddev);
@@ -132,7 +166,7 @@ index c0d4dae..b3dacc5 100644
  		bio_endio(bi, 0);
  	}
  
-@@ -4532,6 +4559,7 @@ static void raid5d(mddev_t *mddev)
+@@ -4458,6 +4489,7 @@ static void raid5d(mddev_t *mddev)
  		spin_unlock_irq(&conf->device_lock);
  		
  		handled++;
@@ -140,7 +174,7 @@ index c0d4dae..b3dacc5 100644
  		handle_stripe(sh);
  		release_stripe(sh);
  		cond_resched();
-@@ -5256,6 +5284,22 @@ static void status(struct seq_file *seq, mddev_t *mddev)
+@@ -5182,6 +5214,22 @@ static void status(struct seq_file *seq, mddev_t *mddev)
  			       conf->disks[i].rdev &&
  			       test_bit(In_sync, &conf->disks[i].rdev->flags) ? "U" : "_");
  	seq_printf (seq, "]");
@@ -164,10 +198,10 @@ index c0d4dae..b3dacc5 100644
  	seq_printf (seq, "\n");
  	printall(seq, conf);
 diff --git a/drivers/md/raid5.h b/drivers/md/raid5.h
-index 972ac47..30d1492 100644
+index dd70835..62fefbc 100644
 --- a/drivers/md/raid5.h
 +++ b/drivers/md/raid5.h
-@@ -434,6 +434,25 @@ struct raid5_private_data {
+@@ -432,6 +432,25 @@ struct raid5_private_data {
  	 * the new thread here until we fully activate the array.
  	 */
  	struct mdk_thread_s	*thread;

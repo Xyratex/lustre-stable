@@ -1364,14 +1364,14 @@ static struct vfsmount *server_kernel_mount(struct super_block *sb)
 
         /* Glom up mount options */
         memset(options, 0, CFS_PAGE_SIZE);
-        if (IS_MDT(ldd)) {
+//        if (IS_MDT(ldd)) {
                 /* enable 64bithash for MDS by force */
-                strcpy(options, "64bithash,");
-                len = CFS_PAGE_SIZE - strlen(options) - 2;
-                strncat(options, ldd->ldd_mount_opts, len);
-        } else {
+//                strcpy(options, "64bithash,");
+//                len = CFS_PAGE_SIZE - strlen(options) - 2;
+//                strncat(options, ldd->ldd_mount_opts, len);
+//        } else {
                 strncpy(options, ldd->ldd_mount_opts, CFS_PAGE_SIZE - 2);
-        }
+//        }
 
         /* Add in any mount-line options */
         if (lmd->lmd_opts && (*(lmd->lmd_opts) != 0)) {
