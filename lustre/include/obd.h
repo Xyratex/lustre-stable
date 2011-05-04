@@ -904,7 +904,10 @@ enum obd_notify_event {
         /* Configuration event */
         OBD_NOTIFY_CONFIG,
         /* Trigger quota recovery */
-        OBD_NOTIFY_QUOTA
+        OBD_NOTIFY_QUOTA,
+        /* Administratively deactivate/activate event */
+        OBD_NOTIFY_DEACTIVATE,
+        OBD_NOTIFY_ACTIVATE
 };
 
 /* bit-mask flags for config events */
@@ -983,13 +986,19 @@ struct obd_device {
         struct obd_type        *obd_type;
         __u32                   obd_magic;
 
+        int                     obd_minor;
+        cfs_hlist_node_t        obd_minor_node; /** < find by minor */
+
+        cfs_list_t              obd_list;
         /* common and UUID name of this device */
         char                    obd_name[MAX_OBD_NAME];
+        cfs_hlist_node_t        obd_name_node; /** < find by name */
+
         struct obd_uuid         obd_uuid;
+        cfs_hlist_node_t        obd_uuid_node; /** < find by uuid */
 
         struct lu_device       *obd_lu_dev;
 
-        int                     obd_minor;
         /* bitfield modification is protected by obd_dev_lock */
         unsigned long obd_attached:1,      /* finished attach */
                       obd_set_up:1,        /* finished setup */

@@ -152,7 +152,11 @@ static void mdd_lockdep_pd_acquire(struct mdd_object *obj,
 
 static void mdd_lockdep_pd_release(struct mdd_object *obj)
 {
+#ifdef HAVE_LOCK_MAP_ACQUIRE
+        lock_map_release(&obj->dep_map);
+#else
         lock_release(&obj->dep_map, 0, RETIP);
+#endif
 }
 
 #else /* !CONFIG_LOCKDEP */

@@ -225,24 +225,18 @@ static int lprocfs_wr_identity_upcall(struct file *file, const char *buffer,
         struct obd_device *obd = data;
         struct mdt_device *mdt = mdt_dev(obd->obd_lu_dev);
         struct upcall_cache *hash = mdt->mdt_identity_cache;
+        int rc;
         char *kernbuf;
 
         if (count >= UC_CACHE_UPCALL_MAXPATH) {
                 CERROR("%s: identity upcall too long\n", obd->obd_name);
                 return -EINVAL;
         }
-
         OBD_ALLOC(kernbuf, count + 1);
         if (kernbuf == NULL)
-                return -ENOMEM;
-
-        if (cfs_copy_from_user(kernbuf, buffer,
-                               min_t(unsigned long, count,
-                                     UC_CACHE_UPCALL_MAXPATH - 1)))
-        {
-                OBD_FREE(kernbuf, count + 1);
-                return -EFAULT;
-        }
+                GOTO(failed, rc = -ENOMEM);
+        if (cfs_copy_from_user(kernbuf, buffer, count))
+                GOTO(failed, rc = -EFAULT);
 
         /* Remove any extraneous bits from the upcall (e.g. linefeeds) */
         cfs_write_lock(&hash->uc_upcall_rwlock);
@@ -259,7 +253,12 @@ static int lprocfs_wr_identity_upcall(struct file *file, const char *buffer,
 
         CWARN("%s: identity upcall set to %s\n", obd->obd_name, hash->uc_upcall);
         OBD_FREE(kernbuf, count + 1);
-        return count;
+        RETURN(count);
+
+ failed:
+        if (kernbuf)
+                OBD_FREE(kernbuf, count + 1);
+        RETURN(rc);
 }
 
 static int lprocfs_wr_identity_flush(struct file *file, const char *buffer,

@@ -848,9 +848,13 @@ static int mdt_getattr_name_lock(struct mdt_thread_info *info,
                 if (namelen == 0) {
                         reqbody = req_capsule_client_get(info->mti_pill,
                                                          &RMF_MDT_BODY);
-                        LASSERT(fid_is_sane(&reqbody->fid2));
-                        name = NULL;
+                        if (unlikely(reqbody == NULL))
+                                RETURN(err_serious(-EFAULT));
 
+                        if (unlikely(!fid_is_sane(&reqbody->fid2)))
+                                RETURN(err_serious(-EINVAL));
+
+                        name = NULL;
                         CDEBUG(D_INODE, "getattr with lock for "DFID"/"DFID", "
                                "ldlm_rep = %p\n",
                                PFID(mdt_object_fid(parent)), PFID(&reqbody->fid2),
@@ -5139,8 +5143,11 @@ static int mdt_export_cleanup(struct obd_export *exp)
                         ma->ma_need = 0;
                         /* It is not for setattr, just tell MDD to send
                          * DESTROY RPC to OSS if needed */
-                        ma->ma_attr_flags = MDS_CLOSE_CLEANUP;
                         ma->ma_valid = MA_FLAGS;
+                        ma->ma_attr_flags = MDS_CLOSE_CLEANUP;
+                        /* Don't unlink orphan on failover umount, LU-184 */
+                        if (exp->exp_flags & OBD_OPT_FAILOVER)
+                                ma->ma_attr_flags |= MDS_KEEP_ORPHAN;
                         mdt_mfd_close(info, mfd);
                 }
                 OBD_FREE_LARGE(ma->ma_cookie, cookie_size);
@@ -5153,7 +5160,7 @@ out_lmm:
         info->mti_mdt = NULL;
         /* cleanup client slot early */
         /* Do not erase record for recoverable client. */
-        if (!obd->obd_fail || exp->exp_failed)
+        if (!(exp->exp_flags & OBD_OPT_FAILOVER) || exp->exp_failed)
                 mdt_client_del(&env, mdt);
         lu_env_fini(&env);
 
