@@ -7,3 +7,4 @@ blkdev_tunables-2.6-rhel6.patch
 export-2.6.32-vanilla.patch
 jbd2-jcberr-2.6-rhel6.patch
 jbd2-commit-timer-no-jiffies-rounding-rhel6.patch
+titan_sas_table_to_table.patch
