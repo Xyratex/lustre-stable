@@ -1,0 +1,56 @@
+--- linux-2.6.32-44.2.el6/include/scsi/sas.h	2009-12-02 22:51:21.000000000 -0500
++++ linux-2.6.32-44.2.el6/include/scsi/sas.h.new	2010-11-16 15:58:43.000000000 -0500
+@@ -341,7 +341,10 @@
+ 
+ 	u8      conf_route_table:1;
+ 	u8      configuring:1;
+ 	u8      _r_b:6;
++/*	u8      _r_b:5; */
++/*	u8      table_to_table:1; */
++#define TABLE_TO_TABLE(x) (((x)->_r_b & 0b100000) != 0)
+ 
+ 	u8      _r_c;
+ 
+@@ -528,7 +531,10 @@
+ 	u8      _r_a;
+ 	u8      num_phys;
+ 
+ 	u8      _r_b:6;
++/*	u8      table_to_table:1; */
++/*	u8      _r_b:5; */
++#define TABLE_TO_TABLE(x) (((x)->_r_b & 0b100000) != 0)
+ 	u8      configuring:1;
+ 	u8      conf_route_table:1;
+ 
+--- linux-2.6.32-44.2.el6/include/scsi/libsas.h	2010-11-15 22:35:29.000000000 -0500
++++ linux-2.6.32-44.2.el6/include/scsi/libsas.h.new	2010-11-16 15:58:04.000000000 -0500
+@@ -143,6 +143,7 @@
+ 	u8     num_phys;
+ 	u8     configuring:1;
+ 	u8     conf_route_table:1;
++	u8     table_to_table:1;
+ 	u8     enclosure_logical_id[8];
+ 
+ 	struct ex_phy *ex_phy;
+--- linux-2.6.32-44.2.el6/drivers/scsi/libsas/sas_expander.c	2009-12-02 22:51:21.000000000 -0500
++++ linux-2.6.32-44.2.el6/drivers/scsi/libsas/sas_expander.c.new	2010-11-15 14:01:10.000000000 -0500
+@@ -322,6 +322,8 @@
+ 	dev->ex_dev.num_phys = min(rg->num_phys, (u8)MAX_EXPANDER_PHYS);
+ 	dev->ex_dev.conf_route_table = rg->conf_route_table;
+ 	dev->ex_dev.configuring = rg->configuring;
++/*	dev->ex_dev.table_to_table = rg->table_to_table; */
++	dev->ex_dev.table_to_table = TABLE_TO_TABLE(rg);
+ 	memcpy(dev->ex_dev.enclosure_logical_id, rg->enclosure_logical_id, 8);
+ }
+ 
+@@ -1227,7 +1228,9 @@
+ 					res = -ENODEV;
+ 				}
+ 			} else if (parent_phy->routing_attr == TABLE_ROUTING &&
+-				   child_phy->routing_attr != SUBTRACTIVE_ROUTING) {
++				   child_phy->routing_attr != SUBTRACTIVE_ROUTING &&
++				   (child_ex->table_to_table == 0 ||
++				    child_phy->routing_attr != TABLE_ROUTING)) {
+ 				sas_print_parent_topology_bug(child, parent_phy, child_phy);
+ 				res = -ENODEV;
+ 			}
