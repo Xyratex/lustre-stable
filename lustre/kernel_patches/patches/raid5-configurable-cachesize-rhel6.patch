@@ -1,0 +1,30 @@
+Index: linux-2.6.32-71.7.1.el6.x86_64/drivers/md/raid5.c
+===================================================================
+--- linux-2.6.32-71.7.1.el6.x86_64.orig/drivers/md/raid5.c	2011-01-05 03:58:56.000000000 +0200
++++ linux-2.6.32-71.7.1.el6.x86_64/drivers/md/raid5.c	2011-01-05 04:04:49.000000000 +0200
+@@ -59,7 +59,7 @@
+  * Stripe cache
+  */
+ 
+-#define NR_STRIPES		256
++static int raid5_nr_stripes = 256 * 8;
+ #define STRIPE_SIZE		PAGE_SIZE
+ #define STRIPE_SHIFT		(PAGE_SHIFT - 9)
+ #define STRIPE_SECTORS		(STRIPE_SIZE>>9)
+@@ -4836,7 +4836,7 @@ static raid5_conf_t *setup_conf(mddev_t 
+ 	else
+ 		conf->max_degraded = 1;
+ 	conf->algorithm = mddev->new_layout;
+-	conf->max_nr_stripes = NR_STRIPES;
++	conf->max_nr_stripes = raid5_nr_stripes;
+ 	conf->reshape_progress = mddev->reshape_position;
+ 	if (conf->reshape_progress != MaxSector) {
+ 		conf->prev_chunk_sectors = mddev->chunk_sectors;
+@@ -5950,6 +5950,7 @@ static void raid5_exit(void)
+ 
+ module_init(raid5_init);
+ module_exit(raid5_exit);
++module_param(raid5_nr_stripes, int, 0644);
+ MODULE_LICENSE("GPL");
+ MODULE_DESCRIPTION("RAID4/5/6 (striping with parity) personality for MD");
+ MODULE_ALIAS("md-personality-4"); /* RAID5 */

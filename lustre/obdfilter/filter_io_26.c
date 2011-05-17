@@ -358,6 +358,10 @@ int filter_do_bio(struct obd_export *exp, struct inode *inode,
                          * It will then make sure the corresponding device
                          * cache of raid5 will be overwritten by this page.
                          * - jay */
+                        if (printk_ratelimit())
+			    printk("c? %d %d %d\n", (rw == OBD_BRW_WRITE),
+                            (nblocks == blocks_per_page),
+                            mapping_cap_page_constant_write(inode->i_mapping));
                         if ((rw == OBD_BRW_WRITE) &&
                             (nblocks == blocks_per_page) &&
                             mapping_cap_page_constant_write(inode->i_mapping))
