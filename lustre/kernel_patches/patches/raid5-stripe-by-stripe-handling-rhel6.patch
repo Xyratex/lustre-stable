@@ -1,0 +1,88 @@
+diff --git a/drivers/md/raid5.c b/drivers/md/raid5.c
+index 291569c..848bd5d 100644
+--- a/drivers/md/raid5.c
++++ b/drivers/md/raid5.c
+@@ -3971,10 +3971,11 @@ static int make_request(mddev_t *mddev, struct bio * bi)
+ 	raid5_conf_t *conf = mddev->private;
+ 	int dd_idx;
+ 	sector_t new_sector;
+-	sector_t logical_sector, last_sector;
+-	struct stripe_head *sh;
++	sector_t logical_sector, start_sector, last_sector, sectors;
++	struct stripe_head *sh, *prev_sh = NULL;
+ 	const int rw = bio_data_dir(bi);
+ 	int remaining;
++	int ochunk_sectors;
+ 
+ 	atomic_inc(&conf->in_reqs_in_queue);
+ 
+@@ -4001,12 +4002,24 @@ static int make_request(mddev_t *mddev, struct bio * bi)
+ 	     chunk_aligned_read(mddev,bi))
+ 		return 0;
+ 
+-	logical_sector = bi->bi_sector & ~((sector_t)STRIPE_SECTORS-1);
+-	last_sector = bi->bi_sector + (bi->bi_size>>9);
++	start_sector = bi->bi_sector & ~((sector_t)STRIPE_SECTORS-1);
++	sectors = bi->bi_size>>9;
++	last_sector = bi->bi_sector + sectors;
+ 	bi->bi_next = NULL;
+ 	bi->bi_phys_segments = 1;	/* over-loaded to count active stripes */
+ 
+-	for (;logical_sector < last_sector; logical_sector += STRIPE_SECTORS) {
++	ochunk_sectors = conf->chunk_sectors;
++	spin_lock_irq(&conf->device_lock);
++	if (mddev->delta_disks < 0
++	    ? start_sector < conf->reshape_progress
++	    : start_sector >= conf->reshape_progress) {
++		ochunk_sectors = conf->prev_chunk_sectors;
++	}
++	spin_unlock_irq(&conf->device_lock);
++
++	BUG_ON(ochunk_sectors == 0);
++
++	for (logical_sector = start_sector;;) {
+ 		DEFINE_WAIT(w);
+ 		int disks, data_disks;
+ 		int previous;
+@@ -4052,6 +4065,10 @@ static int make_request(mddev_t *mddev, struct bio * bi)
+ 
+ 		sh = get_active_stripe(conf, new_sector, previous,
+ 				       (bi->bi_rw&RWA_MASK), 0);
++		if (prev_sh) {
++			release_stripe(prev_sh);
++			prev_sh = NULL;
++		}
+ 		if (sh) {
+ 			if (unlikely(previous)) {
+ 				/* expansion might have moved on while waiting for a
+@@ -4111,15 +4128,28 @@ static int make_request(mddev_t *mddev, struct bio * bi)
+ 			if (mddev->barrier && 
+ 			    !test_and_set_bit(STRIPE_PREREAD_ACTIVE, &sh->state))
+ 				atomic_inc(&conf->preread_active_stripes);
+-			release_stripe(sh);
++			/* release_stripe(sh); */
++			prev_sh = sh;
+ 		} else {
+ 			/* cannot get stripe for read-ahead, just give-up */
+ 			clear_bit(BIO_UPTODATE, &bi->bi_flags);
+ 			finish_wait(&conf->wait_for_overlap, &w);
+ 			break;
+ 		}
+-			
++		if ((logical_sector += ochunk_sectors) >= last_sector) {
++			logical_sector = ((int)(logical_sector - start_sector)) % ochunk_sectors +
++					 start_sector + STRIPE_SECTORS;
++			if (sectors <= ochunk_sectors) {
++				if (logical_sector >= last_sector)
++					break;
++			} else {
++				if (logical_sector == start_sector)
++					break;
++			}
++		}
+ 	}
++	if (prev_sh)
++		release_stripe(prev_sh);
+ 	spin_lock_irq(&conf->device_lock);
+ 	remaining = raid5_dec_bi_phys_segments(bi);
+ 	spin_unlock_irq(&conf->device_lock);
