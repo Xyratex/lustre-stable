@@ -539,7 +539,7 @@ int ll_file_open(struct inode *inode, struct file *file)
                  * dentry_open after call to open_namei that checks permissions.
                  * Only nfsd_open call dentry_open directly without checking
                  * permissions and because of that this code below is safe. */
-                if (oit.it_flags & FMODE_WRITE)
+                if (oit.it_flags & (FMODE_WRITE | FMODE_READ))
                         oit.it_flags |= MDS_OPEN_OWNEROVERRIDE;
 
                 /* We do not want O_EXCL here, presumably we opened the file
@@ -1952,27 +1952,32 @@ int ll_fsync(struct file *file, struct dentry *dentry, int data)
                 ptlrpc_req_finished(req);
 
         if (data && lsm) {
-                struct obdo *oa;
+                struct obd_info *oinfo;
 
-                OBDO_ALLOC(oa);
-                if (!oa)
+                OBD_ALLOC_PTR(oinfo);
+                if (!oinfo)
                         RETURN(rc ? rc : -ENOMEM);
-
-                oa->o_id = lsm->lsm_object_id;
-                oa->o_seq = lsm->lsm_object_seq;
-                oa->o_valid = OBD_MD_FLID | OBD_MD_FLGROUP;
-                obdo_from_inode(oa, inode, &ll_i2info(inode)->lli_fid,
+                OBDO_ALLOC(oinfo->oi_oa);
+                if (!oinfo->oi_oa) {
+                        OBD_FREE_PTR(oinfo);
+                        RETURN(rc ? rc : -ENOMEM);
+                }
+                oinfo->oi_oa->o_id = lsm->lsm_object_id;
+                oinfo->oi_oa->o_seq = lsm->lsm_object_seq;
+                oinfo->oi_oa->o_valid = OBD_MD_FLID | OBD_MD_FLGROUP;
+                obdo_from_inode(oinfo->oi_oa, inode, &ll_i2info(inode)->lli_fid,
                                 OBD_MD_FLTYPE | OBD_MD_FLATIME |
                                 OBD_MD_FLMTIME | OBD_MD_FLCTIME |
                                 OBD_MD_FLGROUP);
-
-                oc = ll_osscapa_get(inode, CAPA_OPC_OSS_WRITE);
-                err = obd_sync(ll_i2sbi(inode)->ll_dt_exp, oa, lsm,
-                               0, OBD_OBJECT_EOF, oc);
-                capa_put(oc);
+                oinfo->oi_md = lsm;
+                oinfo->oi_capa = ll_osscapa_get(inode, CAPA_OPC_OSS_WRITE);
+                err = obd_sync_rqset(ll_i2sbi(inode)->ll_dt_exp, oinfo, 0,
+                                     OBD_OBJECT_EOF);
+                capa_put(oinfo->oi_capa);
                 if (!rc)
                         rc = err;
-                OBDO_FREE(oa);
+                OBDO_FREE(oinfo->oi_oa);
+                OBD_FREE_PTR(oinfo);
                 lli->lli_write_rc = err < 0 ? : 0;
         }
 
@@ -1988,7 +1993,7 @@ int ll_file_flock(struct file *file, int cmd, struct file_lock *file_lock)
                                            .ei_cbdata = file_lock };
         struct md_op_data *op_data;
         struct lustre_handle lockh = {0};
-        ldlm_policy_data_t flock;
+        ldlm_policy_data_t flock = {{0}};
         int flags = 0;
         int rc;
         ENTRY;
@@ -2000,13 +2005,18 @@ int ll_file_flock(struct file *file, int cmd, struct file_lock *file_lock)
 
         if (file_lock->fl_flags & FL_FLOCK) {
                 LASSERT((cmd == F_SETLKW) || (cmd == F_SETLK));
-                /* set missing params for flock() calls */
-                file_lock->fl_end = OFFSET_MAX;
-                file_lock->fl_pid = current->tgid;
+                /* flocks are whole-file locks */
+                flock.l_flock.end = OFFSET_MAX;
+                /* For flocks owner is determined by the local file desctiptor*/
+                flock.l_flock.owner = (unsigned long)file_lock->fl_file;
+        } else if (file_lock->fl_flags & FL_POSIX) {
+                flock.l_flock.owner = (unsigned long)file_lock->fl_owner;
+                flock.l_flock.start = file_lock->fl_start;
+                flock.l_flock.end = file_lock->fl_end;
+        } else {
+                RETURN(-EINVAL);
         }
         flock.l_flock.pid = file_lock->fl_pid;
-        flock.l_flock.start = file_lock->fl_start;
-        flock.l_flock.end = file_lock->fl_end;
 
         switch (file_lock->fl_type) {
         case F_RDLCK:

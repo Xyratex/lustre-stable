@@ -232,6 +232,8 @@ ssize_t ll_direct_rw_pages(const struct lu_env *env, struct cl_io *io,
         int page_count      = pv->ldp_nr;
         struct page **pages = pv->ldp_pages;
         long page_size      = cl_page_size(obj);
+        bool do_io;
+        int  io_pages       = 0;
         ENTRY;
 
         queue = &io->ci_queue;
@@ -239,6 +241,7 @@ ssize_t ll_direct_rw_pages(const struct lu_env *env, struct cl_io *io,
         for (i = 0; i < page_count; i++) {
                 if (pv->ldp_offsets)
                     file_offset = pv->ldp_offsets[i];
+
                 LASSERT(!(file_offset & (page_size - 1)));
                 clp = cl_page_find(env, obj, cl_index(obj, file_offset),
                                    pv->ldp_pages[i], CPT_TRANSIENT);
@@ -247,14 +250,17 @@ ssize_t ll_direct_rw_pages(const struct lu_env *env, struct cl_io *io,
                         break;
                 }
 
+                rc = cl_page_own(env, io, clp);
+                if (rc) {
+                        LASSERT(clp->cp_state == CPS_FREEING);
+                        cl_page_put(env, clp);
+                        break;
+                }
+
+                do_io = true;
+
                 /* check the page type: if the page is a host page, then do
                  * write directly */
-                /*
-                 * Very rare case that the host pages can be found for
-                 * directIO case, since linux kernel truncated all covered
-                 * pages before getting here. So, to make the OST happy(to
-                 * write a contiguous region), all pages are issued
-                 * here. -jay */
                 if (clp->cp_type == CPT_CACHEABLE) {
                         cfs_page_t *vmpage = cl_page_vmpage(env, clp);
                         cfs_page_t *src_page;
@@ -275,43 +281,41 @@ ssize_t ll_direct_rw_pages(const struct lu_env *env, struct cl_io *io,
                          * cl_io_submit()->...->vvp_page_prep_write(). */
                         if (rw == WRITE)
                                 set_page_dirty(vmpage);
+
+                        if (rw == READ) {
+                                /* do not issue the page for read, since it
+                                 * may reread a ra page which has NOT uptodate
+                                 * bit set. */
+                                cl_page_disown(env, io, clp);
+                                do_io = false;
+                        }
+                }
+
+                if (likely(do_io)) {
+                        cl_2queue_add(queue, clp);
+
                         /*
-                         * If direct-io read finds up-to-date page in the
-                         * cache, just copy it to the user space. Page will be
-                         * filtered out by vvp_page_prep_read(). This
-                         * preserves an invariant, that page is read at most
-                         * once, see cl_page_flags::CPF_READ_COMPLETED.
+                         * Set page clip to tell transfer formation engine
+                         * that page has to be sent even if it is beyond KMS.
                          */
+                        cl_page_clip(env, clp, 0, min(size, page_size));
+
+                        ++io_pages;
                 }
 
-                rc = cl_page_own(env, io, clp);
-                if (rc) {
-                        LASSERT(clp->cp_state == CPS_FREEING);
-                        cl_page_put(env, clp);
-                        break;
-                }
-
-                cl_2queue_add(queue, clp);
-
-                /* drop the reference count for cl_page_find, so that the page
-                 * will be freed in cl_2queue_fini. */
+                /* drop the reference count for cl_page_find */
                 cl_page_put(env, clp);
-                /*
-                 * Set page clip to tell transfer formation engine that page
-                 * has to be sent even if it is beyond KMS.
-                 */
-                cl_page_clip(env, clp, 0, min(size, page_size));
                 size -= page_size;
                 file_offset += page_size;
         }
 
-        if (rc == 0) {
+        if (rc == 0 && io_pages) {
                 rc = cl_io_submit_sync(env, io,
                                        rw == READ ? CRT_READ : CRT_WRITE,
                                        queue, CRP_NORMAL, 0);
-                if (rc == 0)
-                        rc = pv->ldp_size;
         }
+        if (rc == 0)
+                rc = pv->ldp_size;
 
         cl_2queue_discard(env, io, queue);
         cl_2queue_disown(env, io, queue);
@@ -507,6 +511,15 @@ static int ll_write_end(struct file *file, struct address_space *mapping,
 }
 #endif
 
+#ifdef CONFIG_MIGRATION
+int ll_migratepage(struct address_space *mapping,
+                   struct page *newpage, struct page *page)
+{
+        /* Always fail page migration until we have a proper implementation */
+        return -EIO;
+}
+#endif
+
 struct address_space_operations ll_aops = {
         .readpage       = ll_readpage,
 //        .readpages      = ll_readpages,
@@ -524,5 +537,8 @@ struct address_space_operations ll_aops = {
 #endif
         .invalidatepage = ll_invalidatepage,
         .releasepage    = (void *)ll_releasepage,
+#ifdef CONFIG_MIGRATION
+        .migratepage    = ll_migratepage,
+#endif
         .bmap           = NULL
 };

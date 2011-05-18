@@ -8,7 +8,7 @@
 # e.g. ONLY="22 23" or ONLY="`seq 32 39`" or EXCEPT="31"
 set -e
 
-# bug number for skipped test: 13297 2108 9789 3637 9789 3561 12622 12653 12653 5188 16260 19742 
+# bug number for skipped test: 13297 2108 9789 3637 9789 3561 12622 12653 12653 5188 16260 19742
 ALWAYS_EXCEPT="                27u   42a  42b  42c  42d  45   51d   65a   65e   68b  $SANITY_EXCEPT"
 # bug number for skipped test: 2108 9789 3637 9789 3561 5188/5749 1443
 #ALWAYS_EXCEPT=${ALWAYS_EXCEPT:-"27m 42a 42b 42c 42d 45 68 76"}
@@ -1328,6 +1328,8 @@ check_seq_oid()
                 local group=${lmm[$((j+3))]}
                 local dev=$(ostdevname $devnum)
                 local dir=${MOUNT%/*}/ost$devnum
+
+                stop ost$devnum
                 do_facet ost$devnum mount -t $FSTYPE $dev $dir $OST_MOUNT_OPTS ||
                         { error "mounting $dev as $FSTYPE failed"; return 3; }
 
@@ -1346,6 +1348,7 @@ check_seq_oid()
 
                 echo -e "\t\tost $obdidx, objid $objid, group $group"
                 do_facet ost$devnum umount -d $dev
+                start ost$devnum $dev $OST_MOUNT_OPTS
         done
 }
 
@@ -2067,15 +2070,26 @@ run_test 36f "utime on file racing with OST BRW write =========="
 
 test_36g() {
 	remote_ost_nodsh && skip "remote OST with nodsh" && return
+	local fmd_max_age
+	local fmd_before
+	local fmd_after
 
 	mkdir -p $DIR/$tdir
-	export FMD_MAX_AGE=`do_facet ost1 lctl get_param -n obdfilter.*.client_cache_seconds 2> /dev/null | head -n 1`
-	FMD_BEFORE="`awk '/ll_fmd_cache/ { print $2 }' /proc/slabinfo`"
+	fmd_max_age=$(do_facet ost1 \
+		"lctl get_param -n obdfilter.*.client_cache_seconds 2> /dev/null | \
+		head -n 1")
+
+	fmd_before=$(do_facet ost1 \
+		"awk '/ll_fmd_cache/ {print \\\$2}' /proc/slabinfo")
 	touch $DIR/$tdir/$tfile
-	sleep $((FMD_MAX_AGE + 12))
-	FMD_AFTER="`awk '/ll_fmd_cache/ { print $2 }' /proc/slabinfo`"
-	[ "$FMD_AFTER" -gt "$FMD_BEFORE" ] && \
-		echo "AFTER : $FMD_AFTER > BEFORE $FMD_BEFORE" && \
+	sleep $((fmd_max_age + 12))
+	fmd_after=$(do_facet ost1 \
+		"awk '/ll_fmd_cache/ {print \\\$2}' /proc/slabinfo")
+
+	echo "fmd_before: $fmd_before"
+	echo "fmd_after: $fmd_after"
+	[ "$fmd_after" -gt "$fmd_before" ] && \
+		echo "AFTER: $fmd_after > BEFORE: $fmd_before" && \
 		error "fmd didn't expire after ping" || true
 }
 run_test 36g "filter mod data cache expiry ====================="
@@ -2225,7 +2239,7 @@ test_39e() {
 	local mtime1=`stat -c %Y $DIR1/$tfile`
 
 	touch -m -d @$TEST_39_MTIME $DIR1/$tfile
-	
+
 	for (( i=0; i < 2; i++ )) ; do
 		local mtime2=`stat -c %Y $DIR1/$tfile`
 		[ $mtime2 = $TEST_39_MTIME ] || \
@@ -2263,7 +2277,7 @@ test_39g() {
 
 	sleep 2
 	chmod o+r $DIR1/$tfile
- 
+
 	for (( i=0; i < 2; i++ )) ; do
 		local mtime2=`stat -c %Y $DIR1/$tfile`
 		[ "$mtime1" = "$mtime2" ] || \
@@ -2358,7 +2372,7 @@ test_39k() {
 
 	kill -USR1 $multipid
 	wait $multipid || error "multiop close failed"
-		
+
 	for (( i=0; i < 2; i++ )) ; do
 		local mtime2=`stat -c %Y $DIR1/$tfile`
 
@@ -2438,8 +2452,6 @@ test_39m() {
 		cancel_lru_locks osc
 		if [ $i = 0 ] ; then echo "repeat after cancel_lru_locks"; fi
 	done
-
-	
 }
 run_test 39m "test atime and mtime before 1970"
 
@@ -3184,7 +3196,7 @@ test_54e() {
 }
 run_test 54e "console/tty device works in lustre ======================"
 
-#The test_55 used to be iopen test and it was removed by bz#24037. 
+#The test_55 used to be iopen test and it was removed by bz#24037.
 #run_test 55 "check iopen_connect_dentry() ======================"
 
 test_56a() {	# was test_56
@@ -3436,7 +3448,7 @@ run_test 56q "check lfs find -gid and ! -gid ==============================="
 test_56r() {
 	setup_56 $NUMFILES $NUMDIRS
 	TDIR=$DIR/${tdir}g
-	
+
 	EXPECTED=12
 	NUMS=`$LFIND -size 0 -t f $TDIR | wc -l`
 	[ $NUMS -eq $EXPECTED ] || \
@@ -3850,7 +3862,7 @@ cleanup_68() {
 	if [ ! -z "$LLITELOOPLOAD" ]; then
 		rmmod llite_lloop
 		unset LLITELOOPLOAD
-	fi 
+	fi
 	rm -f $DIR/f68*
 }
 
@@ -5088,6 +5100,14 @@ test_105d() { # bug 15924
         flocks_test 2 $DIR/$tdir
 }
 run_test 105d "flock race (should not freeze) ========"
+
+test_105e() { # bug 22660 && 22040
+	[ -z "`mount | grep \"$DIR.*flock\" | grep -v noflock`" ] && \
+		skip "mount w/o flock enabled" && return
+	touch $DIR/$tfile
+	flocks_test 3 $DIR/$tfile
+}
+run_test 105e "Two conflicting flocks from same process ======="
 
 test_106() { #bug 10921
 	mkdir -p $DIR/$tdir
@@ -6828,8 +6848,17 @@ test_155_load() {
     local list=$(comma_list $(osts_nodes))
     local big=$(do_nodes $list grep "cache" /proc/cpuinfo | \
         awk '{sum+=$4} END{print sum}')
+    local min_avail=$(lctl get_param -n osc.*[oO][sS][cC]-[^M]*.kbytesavail | \
+        sort -n | head -1)
+    local large_file_size=$((big * 2))
 
-    log big is $big K
+    log "cache size on OSS is $big KB"
+    log "large file size is $large_file_size KB"
+    log "min available OST size is $min_avail KB"
+
+    [ $min_avail -le $large_file_size ] && \
+        skip "the minimum available OST size needs > $large_file_size KB" && \
+        return 0
 
     dd if=/dev/urandom of=$temp bs=6096 count=1 || \
         error "dd of=$temp bs=6096 count=1 failed"
@@ -6849,14 +6878,14 @@ test_155_load() {
     echo "12345" >>$file
     cmp $temp $file || error "$temp $file differ (append2)"
 
-    dd if=/dev/urandom of=$temp bs=$((big*2)) count=1k || \
-        error "dd of=$temp bs=$((big*2)) count=1k failed"
+    dd if=/dev/urandom of=$temp bs=$large_file_size count=1k || \
+        error "dd of=$temp bs=$large_file_size count=1k failed"
     cp $temp $file
     ls -lh $temp $file
     cancel_lru_locks osc
     cmp $temp $file || error "$temp $file differ"
 
-    rm -f $temp
+    rm -f $temp $file
     true
 }
 
@@ -7297,9 +7326,12 @@ test_171() { # bug20592
 #define OBD_FAIL_PTLRPC_DUMP_LOG         0x50e
         $LCTL set_param fail_loc=0x50e
         $LCTL set_param fail_val=3000
-        multiop_bg_pause $DIR/$tfile Os || true
+        multiop_bg_pause $DIR/$tfile O_s || true
+        local MULTIPID=$!
+        kill -USR1 $MULTIPID
         # cause log dump
         sleep 3
+        wait $MULTIPID
         if dmesg | grep "recursive fault"; then
                 error "caught a recursive fault"
         fi
@@ -7356,15 +7388,15 @@ test_180a() {
         local rmmod_local=0
 
         if ! module_loaded obdecho; then
-            load_module obdecho/obdecho 
-            rmmod_local=1           
+            load_module obdecho/obdecho
+            rmmod_local=1
         fi
 
         local osc=$($LCTL dl | grep -v mdt | awk '$3 == "osc" {print $4; exit}')
         local host=$(awk '/current_connection:/ {print $2}' /proc/fs/lustre/osc/$osc/import)
         local target=$(awk '/target:/ {print $2}' /proc/fs/lustre/osc/$osc/import)
         target=${target%_UUID}
-        
+
         [[ -n $target ]]  && { setup_obdecho_osc $host $target || rc=1; } || rc=1
         [ $rc -eq 0 ] && { obdecho_create_test ${target}_osc client || rc=2; }
         [[ -n $target ]] && cleanup_obdecho_osc $target
@@ -7386,6 +7418,25 @@ test_180b() {
         return $rc
 }
 run_test 180b "test obdecho directly on obdfilter"
+
+test_181() { # bug 22177
+	mkdir -p $DIR/$tdir || error "creating dir $DIR/$tdir"
+	# create enough files to index the directory
+	createmany -o $DIR/$tdir/foobar 4000
+	# print attributes for debug purpose
+	lsattr -d .
+	# open dir
+	multiop_bg_pause $DIR/$tdir D_Sc || return 1
+	MULTIPID=$!
+	# remove the files & current working dir
+	unlinkmany $DIR/$tdir/foobar 4000
+	rmdir $DIR/$tdir
+	kill -USR1 $MULTIPID
+	wait $MULTIPID
+	stat $DIR/$tdir && error "open-unlinked dir was not removed!"
+	return 0
+}
+run_test 181 "Test open-unlinked dir ========================"
 
 # OST pools tests
 POOL=${POOL:-cea1}
@@ -7552,8 +7603,8 @@ run_test 201b "Remove all targets from a pool =========================="
 test_201c() {
 	remote_mgs_nodsh && skip "remote MGS with nodsh" && return
 	do_facet mgs $LCTL pool_destroy $FSNAME.$POOL
-	
-	sleep 2                        
+
+	sleep 2
     # striping on an empty/nonexistant pool should fall back to "pool of everything"
 	touch ${POOL_DIR}/$tfile || error "failed to use fallback striping for missing pool"
 	# setstripe on an empty pool should fail
@@ -7822,4 +7873,4 @@ check_and_cleanup_lustre
 if [ "$I_MOUNTED" != "yes" ]; then
 	lctl set_param debug="$OLDDEBUG" 2> /dev/null || true
 fi
-exit_status 
+exit_status

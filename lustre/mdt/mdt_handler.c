@@ -848,9 +848,13 @@ static int mdt_getattr_name_lock(struct mdt_thread_info *info,
                 if (namelen == 0) {
                         reqbody = req_capsule_client_get(info->mti_pill,
                                                          &RMF_MDT_BODY);
-                        LASSERT(fid_is_sane(&reqbody->fid2));
-                        name = NULL;
+                        if (unlikely(reqbody == NULL))
+                                RETURN(err_serious(-EFAULT));
 
+                        if (unlikely(!fid_is_sane(&reqbody->fid2)))
+                                RETURN(err_serious(-EINVAL));
+
+                        name = NULL;
                         CDEBUG(D_INODE, "getattr with lock for "DFID"/"DFID", "
                                "ldlm_rep = %p\n",
                                PFID(mdt_object_fid(parent)), PFID(&reqbody->fid2),
@@ -5023,6 +5027,9 @@ static int mdt_obd_connect(const struct lu_env *env,
         rc = mdt_connect_check_sptlrpc(mdt, lexp, req);
         if (rc)
                 GOTO(out, rc);
+
+        if (OBD_FAIL_CHECK(OBD_FAIL_TGT_RCVG_FLAG))
+                lustre_msg_add_op_flags(req->rq_repmsg, MSG_CONNECT_RECOVERING);
 
         rc = mdt_connect_internal(lexp, mdt, data);
         if (rc == 0) {
