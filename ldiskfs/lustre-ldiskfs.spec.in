@@ -7,6 +7,10 @@
 # as an alternative to this implementation we could simply "make -C $kdir kernelversion"
 %{!?kversion: %define kversion %(if test -s %kobjdir/include/linux/utsrelease.h ; then LINUXRELEASEHEADER=utsrelease.h; else LINUXRELEASEHEADER=version.h; fi; sed -ne '/^#define UTS_RELEASE/s/.*"\\(.*\\)"$/\\1/p' %kobjdir/include/linux/$LINUXRELEASEHEADER)}
 
+# for those uses that don't want the -smp/-bigsmp (or the .arch) on the end
+# of %kversion
+%define krequires %(bash -c "echo %{kversion} | sed -e 's/\.x86_64$//' -e 's/\.i[3456]86$//' -e 's/-smp$//' -e 's/-bigsmp$
+
 %{!?downstream_release: %define downstream_release "@DOWNSTREAM_RELEASE@"}
 
 %define buildid %(if [ -n "@BUILDID@" ]; then echo "_@BUILDID@"; fi)
@@ -26,7 +30,7 @@ Source: lustre-ldiskfs-%{version}.tar.gz
 URL: http://www.sun.com/software/products/lustre/index.xml
 BuildRoot: %{_tmppath}/lustre-ldiskfs-%{version}-root
 Requires: modutils >= 2.4.10, ldiskfsprogs >= 1.41.12.2.ora1
-Requires: kernel = %{kversion}
+Requires: kernel = %{krequires}
 Provides: lustre-backend-fs
 
 %description
