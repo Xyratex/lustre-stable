@@ -1,8 +1,10 @@
 diff --git a/drivers/md/raid5.c b/drivers/md/raid5.c
 index 9cd137e..6d1a32d 100644
---- a/drivers/md/raid5.c
-+++ b/drivers/md/raid5.c
-@@ -192,6 +192,25 @@ static int stripe_operations_active(struct stripe_head *sh)
+Index: linux-2.6.32-131.0.15.el6.x86_64/drivers/md/raid5.c
+===================================================================
+--- linux-2.6.32-131.0.15.el6.x86_64.orig/drivers/md/raid5.c	2011-05-19 20:57:16.000000000 +0300
++++ linux-2.6.32-131.0.15.el6.x86_64/drivers/md/raid5.c	2011-05-19 21:08:10.000000000 +0300
+@@ -193,6 +193,25 @@ static int stripe_operations_active(stru
  	       test_bit(STRIPE_COMPUTE_RUN, &sh->state);
  }
  
@@ -28,7 +30,7 @@ index 9cd137e..6d1a32d 100644
  static void __release_stripe(raid5_conf_t *conf, struct stripe_head *sh)
  {
  	if (atomic_dec_and_test(&sh->count)) {
-@@ -491,6 +513,14 @@ static void ops_run_io(struct stripe_head *sh, struct stripe_head_state *s)
+@@ -563,6 +582,14 @@ static void ops_run_io(struct stripe_hea
  				set_bit(STRIPE_DEGRADED, &sh->state);
  			pr_debug("skip op %ld on disc %d for sector %llu\n",
  				bi->bi_rw, i, (unsigned long long)sh->sector);
@@ -43,7 +45,7 @@ index 9cd137e..6d1a32d 100644
  			clear_bit(R5_LOCKED, &sh->dev[i].flags);
  			set_bit(STRIPE_HANDLE, &sh->state);
  		}
-@@ -937,6 +965,36 @@ ops_run_prexor(struct stripe_head *sh, struct raid5_percpu *percpu,
+@@ -1009,6 +1036,36 @@ ops_run_prexor(struct stripe_head *sh, s
  	return tx;
  }
  
@@ -80,7 +82,7 @@ index 9cd137e..6d1a32d 100644
  static struct dma_async_tx_descriptor *
  ops_run_biodrain(struct stripe_head *sh, struct dma_async_tx_descriptor *tx)
  {
-@@ -960,6 +1017,11 @@ ops_run_biodrain(struct stripe_head *sh, struct dma_async_tx_descriptor *tx)
+@@ -1032,6 +1089,11 @@ ops_run_biodrain(struct stripe_head *sh,
  			wbi = dev->written = chosen;
  			spin_unlock(&sh->lock);
  
@@ -91,8 +93,8 @@ index 9cd137e..6d1a32d 100644
 +
  			while (wbi && wbi->bi_sector <
  				dev->sector + STRIPE_SECTORS) {
- 				tx = async_copy_data(1, wbi, dev->page,
-@@ -1560,6 +1620,7 @@ static void raid5_end_read_request(struct bio * bi, int error)
+ 				if (wbi->bi_rw & REQ_FUA)
+@@ -1644,6 +1706,7 @@ static void raid5_end_read_request(struc
  		}
  	}
  	rdev_dec_pending(conf->disks[i].rdev, conf->mddev);
@@ -100,7 +102,7 @@ index 9cd137e..6d1a32d 100644
  	clear_bit(R5_LOCKED, &sh->dev[i].flags);
  	set_bit(STRIPE_HANDLE, &sh->state);
  	release_stripe(sh);
-@@ -1589,6 +1650,14 @@ static void raid5_end_write_request(struct bio *bi, int error)
+@@ -1673,6 +1736,14 @@ static void raid5_end_write_request(stru
  
  	rdev_dec_pending(conf->disks[i].rdev, conf->mddev);
  	
@@ -115,7 +117,7 @@ index 9cd137e..6d1a32d 100644
  	clear_bit(R5_LOCKED, &sh->dev[i].flags);
  	set_bit(STRIPE_HANDLE, &sh->state);
  	release_stripe(sh);
-@@ -2434,7 +2501,8 @@ static void handle_stripe_clean_event(raid5_conf_t *conf,
+@@ -2515,7 +2586,8 @@ static void handle_stripe_clean_event(ra
  		if (sh->dev[i].written) {
  			dev = &sh->dev[i];
  			if (!test_bit(R5_LOCKED, &dev->flags) &&
@@ -125,7 +127,7 @@ index 9cd137e..6d1a32d 100644
  				/* We can return any write requests */
  				struct bio *wbi, *wbi2;
  				int bitmap_end = 0;
-@@ -2442,6 +2510,7 @@ static void handle_stripe_clean_event(raid5_conf_t *conf,
+@@ -2523,6 +2595,7 @@ static void handle_stripe_clean_event(ra
  				spin_lock_irq(&conf->device_lock);
  				wbi = dev->written;
  				dev->written = NULL;
@@ -133,7 +135,7 @@ index 9cd137e..6d1a32d 100644
  				while (wbi && wbi->bi_sector <
  					dev->sector + STRIPE_SECTORS) {
  					wbi2 = r5_next_bio(wbi, dev->sector);
-@@ -3052,6 +3121,7 @@ static void handle_stripe5(struct stripe_head *sh)
+@@ -3142,6 +3215,7 @@ static void handle_stripe5(struct stripe
  	 * is safe, or on a failed drive
  	 */
  	dev = &sh->dev[sh->pd_idx];
@@ -141,33 +143,32 @@ index 9cd137e..6d1a32d 100644
  	if ( s.written &&
  	     ((test_bit(R5_Insync, &dev->flags) &&
  	       !test_bit(R5_LOCKED, &dev->flags) &&
-@@ -5092,7 +5162,7 @@ static int run(mddev_t *mddev)
- 	mddev->queue->unplug_fn = raid5_unplug_device;
- 	mddev->queue->backing_dev_info.congested_data = mddev;
- 	mddev->queue->backing_dev_info.congested_fn = raid5_congested;
--
-+	mddev->queue->backing_dev_info.capabilities |= BDI_CAP_PAGE_CONSTANT_WRITE;
- 	md_set_array_sectors(mddev, raid5_size(mddev, 0, 0));
+@@ -5209,6 +5283,7 @@ static int run(mddev_t *mddev)
  
- 	blk_queue_merge_bvec(mddev->queue, raid5_mergeable_bvec);
-diff --git a/drivers/md/raid5.h b/drivers/md/raid5.h
-index dd70835..972ac47 100644
---- a/drivers/md/raid5.h
-+++ b/drivers/md/raid5.h
-@@ -275,6 +275,8 @@ struct r6_state {
- 				    * filling
+ 		mddev->queue->backing_dev_info.congested_data = mddev;
+ 		mddev->queue->backing_dev_info.congested_fn = raid5_congested;
++		mddev->queue->backing_dev_info.capabilities |= BDI_CAP_PAGE_CONSTANT_WRITE;
+ 		mddev->queue->unplug_fn = raid5_unplug_queue;
+ 
+ 		chunk_size = mddev->chunk_sectors << 9;
+Index: linux-2.6.32-131.0.15.el6.x86_64/drivers/md/raid5.h
+===================================================================
+--- linux-2.6.32-131.0.15.el6.x86_64.orig/drivers/md/raid5.h	2011-05-10 21:38:34.000000000 +0300
++++ linux-2.6.32-131.0.15.el6.x86_64/drivers/md/raid5.h	2011-05-19 21:08:39.000000000 +0300
+@@ -276,6 +276,8 @@ struct r6_state {
  				    */
  #define R5_Wantdrain	13 /* dev->towrite needs to be drained */
+ #define R5_WantFUA	14	/* Write should be FUA */
++#define	R5_Direct	31	/* Use the pages in bio to do the write directly. */
 +
-+#define	R5_Direct	14	/* Use the pages in bio to do the write directly. */
  /*
   * Write method
   */
-diff --git a/include/linux/backing-dev.h b/include/linux/backing-dev.h
-index aa61872..856225c 100644
---- a/include/linux/backing-dev.h
-+++ b/include/linux/backing-dev.h
-@@ -230,6 +230,7 @@ int bdi_set_max_ratio(struct backing_dev_info *bdi, unsigned int max_ratio);
+Index: linux-2.6.32-131.0.15.el6.x86_64/include/linux/backing-dev.h
+===================================================================
+--- linux-2.6.32-131.0.15.el6.x86_64.orig/include/linux/backing-dev.h	2011-05-10 21:37:43.000000000 +0300
++++ linux-2.6.32-131.0.15.el6.x86_64/include/linux/backing-dev.h	2011-05-19 21:06:31.000000000 +0300
+@@ -230,6 +230,7 @@ int bdi_set_max_ratio(struct backing_dev
  #define BDI_CAP_EXEC_MAP	0x00000040
  #define BDI_CAP_NO_ACCT_WB	0x00000080
  #define BDI_CAP_SWAP_BACKED	0x00000100
@@ -175,7 +176,7 @@ index aa61872..856225c 100644
  
  #define BDI_CAP_VMFLAGS \
  	(BDI_CAP_READ_MAP | BDI_CAP_WRITE_MAP | BDI_CAP_EXEC_MAP)
-@@ -304,6 +305,11 @@ static inline bool bdi_cap_swap_backed(struct backing_dev_info *bdi)
+@@ -304,6 +305,11 @@ static inline bool bdi_cap_swap_backed(s
  	return bdi->capabilities & BDI_CAP_SWAP_BACKED;
  }
  
@@ -187,7 +188,7 @@ index aa61872..856225c 100644
  static inline bool bdi_cap_flush_forker(struct backing_dev_info *bdi)
  {
  	return bdi == &default_backing_dev_info;
-@@ -324,6 +330,10 @@ static inline bool mapping_cap_swap_backed(struct address_space *mapping)
+@@ -324,6 +330,10 @@ static inline bool mapping_cap_swap_back
  	return bdi_cap_swap_backed(mapping->backing_dev_info);
  }
  
@@ -198,10 +199,10 @@ index aa61872..856225c 100644
  static inline int bdi_sched_wait(void *word)
  {
  	schedule();
-diff --git a/include/linux/page-flags.h b/include/linux/page-flags.h
-index 9bc5b82..bda70a3 100644
---- a/include/linux/page-flags.h
-+++ b/include/linux/page-flags.h
+Index: linux-2.6.32-131.0.15.el6.x86_64/include/linux/page-flags.h
+===================================================================
+--- linux-2.6.32-131.0.15.el6.x86_64.orig/include/linux/page-flags.h	2011-05-10 21:37:57.000000000 +0300
++++ linux-2.6.32-131.0.15.el6.x86_64/include/linux/page-flags.h	2011-05-19 21:06:31.000000000 +0300
 @@ -111,6 +111,7 @@ enum pageflags {
  #ifdef CONFIG_TRANSPARENT_HUGEPAGE
  	PG_compound_lock,
@@ -210,7 +211,7 @@ index 9bc5b82..bda70a3 100644
  	__NR_PAGEFLAGS,
  
  	/* Filesystems */
-@@ -214,6 +215,7 @@ PAGEFLAG(Pinned, pinned) TESTSCFLAG(Pinned, pinned)	/* Xen */
+@@ -214,6 +215,7 @@ PAGEFLAG(Pinned, pinned) TESTSCFLAG(Pinn
  PAGEFLAG(SavePinned, savepinned);			/* Xen */
  PAGEFLAG(Reserved, reserved) __CLEARPAGEFLAG(Reserved, reserved)
  PAGEFLAG(SwapBacked, swapbacked) __CLEARPAGEFLAG(SwapBacked, swapbacked)
