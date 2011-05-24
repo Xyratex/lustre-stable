@@ -22,11 +22,14 @@ EXTRA_PROGRAMS = wirecheck
 # mount only finds helpers in /sbin
 rootsbin_PROGRAMS = mount.lustre
 sbin_PROGRAMS = mkfs.lustre tunefs.lustre lctl wiretest \
-	l_getidentity l_adsidentity llverfs llverdev \
+	l_getidentity llverfs llverdev \
 	llog_reader lr_reader lshowmount lustre_rsync \
 	ll_recover_lost_found_objs ltrack_stats ll_decode_filter_fid
 if LIBPTHREAD
 sbin_PROGRAMS += loadgen
+endif
+if LDAP_BUILD
+sbin_PROGRAMS += l_adsidentity
 endif
 bin_PROGRAMS = lfs req_layout
 bin_SCRIPTS = $(bin_scripts)
