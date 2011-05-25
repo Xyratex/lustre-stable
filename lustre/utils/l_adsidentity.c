@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <ctype.h>
 #include <errno.h>
 #include <string.h>
 #include <fcntl.h>
@@ -32,6 +33,7 @@
 #define FILE_LINE_BUF_SIZE 1024
 
 static char *progname;
+static char *fs_name;
 
 static void errlog(const char *fmt, ...)
 {
@@ -334,15 +336,30 @@ static int compare_gid_t(const void *v1, const void *v2)
 }
 
 
-static inline int comment_line(char *line)
+static int comment_line(char *line)
 {
-        char *p = line;
-
-        while (*p && (*p == ' ' || *p == '\t')) p++;
-
-        if (!*p || *p == '\n' || *p == '#')
+        if (!*line || *line == '\n' || *line == '#')
                 return 1;
         return 0;
+}
+
+static bool section_start = FALSE;
+
+static bool conf_section(char *line, char *sec_name)
+{
+        char *start;
+        char *end;
+        int len;
+
+        start = strchr(line, '[');
+        end = strrchr(line, ']');
+        /* skip all non section lines */
+        if ((start == NULL) || (end == NULL))
+                goto end;
+        len = strlen(sec_name);
+        section_start = strncasecmp(start + 1, sec_name, len) == 0 ? TRUE : FALSE;
+end:
+        return section_start;
 }
 
 int getindex(const char *str, char params[][2][STRING_MAX_SIZE])
@@ -361,6 +378,7 @@ int getindex(const char *str, char params[][2][STRING_MAX_SIZE])
 int get_params(FILE *fp, char params[][2][STRING_MAX_SIZE])
 {
         char line[FILE_LINE_BUF_SIZE];
+        char *ln;
         char desc[STRING_MAX_SIZE];
         char value[STRING_MAX_SIZE];
         int  num_params = 0;
@@ -371,10 +389,20 @@ int get_params(FILE *fp, char params[][2][STRING_MAX_SIZE])
         memset(value, 0, sizeof(value));
 
         while (fgets(line, FILE_LINE_BUF_SIZE, fp)) {
-                if (comment_line(line))
+                ln = &line[0];
+
+                /* trim spaces */
+                while (*ln && (isspace(*ln))) ln++;
+
+                if (comment_line(ln))
                         continue;
 
-                sscanf(line, "%s %s", desc, value);
+                if (!conf_section(ln, fs_name))
+                        continue;
+
+                i = sscanf(ln, "%s %s", desc, value);
+                if (i != 2)
+                        continue;
                 for (i = 0; i < NO_OF_PARAMS_REQD; i++) {
                         if (reqd_params[i].isvisited == FALSE &&
                             !strcmp(reqd_params[i].desc, desc)) {
@@ -908,6 +936,7 @@ int main(int argc, char **argv)
                 usage();
                 return 1;
         }
+        fs_name = argv[1];
 
         errno = 0;
         uid = strtoul(argv[2], &end, 0);
