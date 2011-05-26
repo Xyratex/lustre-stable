@@ -25,7 +25,6 @@
 
 #define PERM_PATHNAME      "/etc/lustre/perm.conf"
 #define ADSCONF_PATHNAME   "/etc/lustre/ads.conf"
-#define NO_OF_PARAMS_REQD  5
 #define STRING_MAX_SIZE    256
 #define PROC_NAME_MAX_SIZE 1024
 #define PERM_NAME_MAX_SIZE 64
@@ -164,7 +163,7 @@ int ldap_uid_get(void *data, char *ldap_data)
         long id;
 
         id = strtoul(ldap_data, &end, 0);
-        if (*end || errno) {
+        if ((ldap_data == end) || *end || errno) {
                 errlog("invalid uid '%s'\n", ldap_data);
                 return -1;
         }
@@ -181,7 +180,7 @@ int ldap_gid_get(void *data, char *ldap_data)
         long id;
 
         id = strtoul(ldap_data, &end, 0);
-        if (*end || errno) {
+        if ((ldap_data == end) || *end || errno) {
                 errlog("invalid uid '%s'\n", ldap_data);
                 return -1;
         }
@@ -198,7 +197,7 @@ int ldap_gids_get(void *data, char *ldap_data)
         int i;
 
         id = strtoul(ldap_data, &end, 0);
-        if (*end || errno) {
+        if ((ldap_data == end) || *end || errno) {
                 errlog("invalid uid '%s'\n", ldap_data);
                 return -1;
         }
@@ -288,12 +287,17 @@ struct ldap_attr sfu_gid[] = {
 enum {
         SCH_UID = 0,
         SCH_GID = 1,
-        SCH_SFU = 0,
-        SCH_POSIX = 1,
+};
+
+enum ldap_schemes {
+        LDAP_SCH_SFU    = 0,
+        LDAP_SCH_POSIX  = 1,
+        LDAP_SCH_CUSTOM = 2,
+        LDAP_SCH_MAX
 };
 
 struct ldap_scheme {
-        struct ldap_attr *ls_attr[2];
+        struct ldap_attr *ls_attr[LDAP_SCH_MAX];
 } ldap_sch[] = {
         {
         .ls_attr = { sfu_uid, sfu_gid}
@@ -302,17 +306,25 @@ struct ldap_scheme {
         }
 };
 
-struct ldap_scheme *ldap_active = &ldap_sch[SCH_SFU];
+struct ldap_scheme *ldap_active = &ldap_sch[LDAP_SCH_SFU];
 
 /*
  * Maintaining required ad conf parameters in a list.
  */
+enum conf_params_id {
+        CONF_URI        = 0,
+        CONF_BASE       = 1,
+        CONF_BINDDN     = 2,
+        CONF_CRED       = 3,
+        CONF_SCHEME     = 4,
+        CONF_MAX
+};
 const char param_uri[] = "uri";
 const char param_base[] = "base";
 const char param_binddn[] = "binddn";
 const char param_cred[] = "credentials";
 const char param_scheme[] = "scheme";
-struct conf_params reqd_params[NO_OF_PARAMS_REQD] = {
+struct conf_params reqd_params[CONF_MAX] = {
         { param_uri    , FALSE },
         { param_base   , FALSE },
         { param_binddn , FALSE },
@@ -362,20 +374,7 @@ end:
         return section_start;
 }
 
-int getindex(const char *str, char params[][2][STRING_MAX_SIZE])
-{
-        int index;
-        int len = strlen(str);
-
-        for (index = 0; index < NO_OF_PARAMS_REQD; index++) {
-                /* get the appropriate index. */
-                if (strncmp(str, params[index][0], len) == 0)
-                        break;
-        }
-        return index;
-}
-
-int get_params(FILE *fp, char params[][2][STRING_MAX_SIZE])
+int get_params(FILE *fp, char params[][STRING_MAX_SIZE])
 {
         char line[FILE_LINE_BUF_SIZE];
         char *ln;
@@ -403,12 +402,10 @@ int get_params(FILE *fp, char params[][2][STRING_MAX_SIZE])
                 i = sscanf(ln, "%s %s", desc, value);
                 if (i != 2)
                         continue;
-                for (i = 0; i < NO_OF_PARAMS_REQD; i++) {
+                for (i = 0; i < CONF_MAX; i++) {
                         if (reqd_params[i].isvisited == FALSE &&
                             !strcmp(reqd_params[i].desc, desc)) {
-                                strncpy(params[i][0], desc,
-                                        STRING_MAX_SIZE - 1);
-                                strncpy(params[i][1], value,
+                                strncpy(params[i], value,
                                         STRING_MAX_SIZE - 1);
                                 num_params++;
                                 reqd_params[i].isvisited = TRUE;
@@ -417,38 +414,34 @@ int get_params(FILE *fp, char params[][2][STRING_MAX_SIZE])
                 }
         }
 
-        if (num_params < NO_OF_PARAMS_REQD)
+        if (num_params < CONF_MAX)
                 return -1;
 
-        i = getindex(param_scheme, params);
         while (1) {
-                if (strcasecmp(params[i][1], "sfu") == 0) {
-                        ldap_active = &ldap_sch[SCH_SFU];
+                if (strcasecmp(params[CONF_SCHEME], "sfu") == 0) {
+                        ldap_active = &ldap_sch[LDAP_SCH_SFU];
                         break;
                 }
-                if (strcasecmp(params[i][1], "posix") == 0) {
-                        ldap_active = &ldap_sch[SCH_POSIX];
+                if (strcasecmp(params[CONF_SCHEME], "posix") == 0) {
+                        ldap_active = &ldap_sch[LDAP_SCH_POSIX];
                         break;
                 }
 
                 num_params = -1;
                 break;
         }
-        return NO_OF_PARAMS_REQD;
+        return CONF_MAX;
 }
 
-int ldap_connect(LDAP **ld, char params[][2][STRING_MAX_SIZE])
+int ldap_connect(LDAP **ld, char params[][STRING_MAX_SIZE])
 {
         /* Read from the config file. */
         struct berval credentials;
         int    proto              = 0;
         int    ret                = 0;
-        int    index              = 0;
-
-        index = getindex(param_uri, params);
 
         /* open a connection */
-        ret = ldap_initialize(ld, params[index][1]);
+        ret = ldap_initialize(ld, params[CONF_URI]);
         if (ret != LDAP_SUCCESS) {
                 errlog("%s\n", ldap_err2string(ret));
                 return -1;
@@ -471,14 +464,10 @@ int ldap_connect(LDAP **ld, char params[][2][STRING_MAX_SIZE])
                 return -1;
         }
 
-        index = getindex(param_cred, params);
+        credentials.bv_len = strlen(params[CONF_CRED]);
+        credentials.bv_val = params[CONF_CRED];
 
-        credentials.bv_len = strlen(params[index][1]);
-        credentials.bv_val = params[index][1];
-
-        index = getindex(param_binddn, params);
-
-        ret = ldap_sasl_bind_s(*ld, params[index][1], LDAP_SASL_SIMPLE,
+        ret = ldap_sasl_bind_s(*ld, params[CONF_BINDDN], LDAP_SASL_SIMPLE,
                                &credentials, NULL, NULL, NULL);
         if (ret != LDAP_SUCCESS) {
                 errlog("%s\n", ldap_err2string(ret));
@@ -499,7 +488,6 @@ int ldap_get_info(LDAP *ld, char *base, char *filter,
         char           *attrib;
         int             ret;
         int             i;
-        int             rc;
         struct ldap_attr *tmp;
 
         ldap_attr2arr(scheme, attrs);
@@ -520,9 +508,9 @@ int ldap_get_info(LDAP *ld, char *base, char *filter,
                         for (i = 0; bers[i] != NULL; i++) {
                                 tmp = ldap_by_name(scheme, attrib);
                                 if (tmp != NULL) {
-                                        rc = tmp->la_hand(data, bers[i]->bv_val);
+                                        ret = tmp->la_hand(data, bers[i]->bv_val);
                                 }
-                                if ((tmp == NULL) || (rc < 0)) {
+                                if ((tmp == NULL) || (ret < 0)) {
                                         errlog("Invalid attribute %s\n", attrib);
                                         ldap_msgfree( res );
                                         return -1;
@@ -607,10 +595,7 @@ int get_groups_ads(struct identity_downcall_data *data)
         LDAP               *ld;
         FILE               *ads_fp;
         gid_t              *groups;
-        char                params[NO_OF_PARAMS_REQD][2][STRING_MAX_SIZE];
-        char               *pw_name;
-        int                 namelen;
-        int                 i;
+        char                params[CONF_MAX][STRING_MAX_SIZE];
         int                 rc;
 
         /* Read config file */
@@ -626,7 +611,7 @@ int get_groups_ads(struct identity_downcall_data *data)
 
         memset(params, 0, sizeof(params));
 
-        if (get_params(ads_fp, params) < NO_OF_PARAMS_REQD) {
+        if (get_params(ads_fp, params) < 0) {
                 errlog("Please specify all parameters in config file\n");
                 data->idd_err = EINVAL;
                 fclose(ads_fp);
@@ -645,35 +630,15 @@ int get_groups_ads(struct identity_downcall_data *data)
 
         memset(&pw, 0, sizeof(pw));
 
-        i = getindex(param_base, params);
-
-        if (get_ads_userinfo(ld, &pw, data->idd_uid, params[i][1]) != 0) {
+        if (get_ads_userinfo(ld, &pw, data->idd_uid, params[CONF_BASE]) != 0) {
                 errlog("Failed to get user info\n");
                 data->idd_err = EPROTO;
                 return -1;
         }
 
-        namelen = sysconf(_SC_LOGIN_NAME_MAX);
-        if (namelen < _POSIX_LOGIN_NAME_MAX)
-                namelen = _POSIX_LOGIN_NAME_MAX;
-        pw_name = (char *)malloc(namelen);
-        if (!pw_name) {
-                errlog("malloc error\n");
-                data->idd_err = errno;
-                return -1;
-        }
+        groups = &data->idd_groups[0];
 
-        if (strlen(pw.pw_name) == 0) {
-                errlog("no such user %u\n", data->idd_uid);
-                data->idd_err = EIDRM;
-                goto out;
-        }
-        memset(pw_name, 0, namelen);
-        strncpy(pw_name, pw.pw_name, namelen - 1);
-
-        groups = data->idd_groups;
-
-        rc = get_ads_groupinfo(ld, &pw, groups, params[i][1]);
+        rc = get_ads_groupinfo(ld, &pw, groups, params[CONF_BASE]);
         if (rc < 0) {
                 errlog("Failed to get group info\n");
                 data->idd_err = EIDRM;
@@ -689,7 +654,6 @@ int get_groups_ads(struct identity_downcall_data *data)
         data->idd_ngroups = count_groups(groups);
         qsort(groups, data->idd_ngroups, sizeof(*groups), compare_gid_t);
 out:
-        free(pw_name);
         return data->idd_err != 0 ? -1 : 0;
 }
 
@@ -873,13 +837,19 @@ int parse_perm_line(struct identity_downcall_data *data, char *line)
 int get_perms(FILE *fp, struct identity_downcall_data *data)
 {
         char line[FILE_LINE_BUF_SIZE];
+        char *ln;
 
         while (fgets(line, FILE_LINE_BUF_SIZE, fp)) {
-                if (comment_line(line))
+                ln = line;
+
+                /* trim spaces */
+                while (*ln && (isspace(*ln))) ln++;
+
+                if (comment_line(ln))
                         continue;
 
-                if (parse_perm_line(data, line)) {
-                        errlog("parse line %s failed!\n", line);
+                if (parse_perm_line(data, ln)) {
+                        errlog("parse line %s failed!\n", ln);
                         return -1;
                 }
         }
