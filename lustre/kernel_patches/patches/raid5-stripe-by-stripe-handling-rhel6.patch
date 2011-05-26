@@ -1,10 +1,8 @@
 diff --git a/drivers/md/raid5.c b/drivers/md/raid5.c
 index 291569c..848bd5d 100644
-Index: linux-2.6.32-131.0.15.el6.x86_64/drivers/md/raid5.c
-===================================================================
---- linux-2.6.32-131.0.15.el6.x86_64.orig/drivers/md/raid5.c	2011-05-19 21:23:31.000000000 +0300
-+++ linux-2.6.32-131.0.15.el6.x86_64/drivers/md/raid5.c	2011-05-19 21:23:58.000000000 +0300
-@@ -4085,10 +4085,11 @@ static int make_request(mddev_t *mddev, 
+--- a/drivers/md/raid5.c
++++ b/drivers/md/raid5.c
+@@ -3971,10 +3971,11 @@ static int make_request(mddev_t *mddev, struct bio * bi)
  	raid5_conf_t *conf = mddev->private;
  	int dd_idx;
  	sector_t new_sector;
@@ -18,7 +16,7 @@ Index: linux-2.6.32-131.0.15.el6.x86_64/drivers/md/raid5.c
  
  	atomic_inc(&conf->in_reqs_in_queue);
  
-@@ -4109,12 +4110,24 @@ static int make_request(mddev_t *mddev, 
+@@ -4001,12 +4002,24 @@ static int make_request(mddev_t *mddev, struct bio * bi)
  	     chunk_aligned_read(mddev,bi))
  		return 0;
  
@@ -46,7 +44,7 @@ Index: linux-2.6.32-131.0.15.el6.x86_64/drivers/md/raid5.c
  		DEFINE_WAIT(w);
  		int disks, data_disks;
  		int previous;
-@@ -4160,6 +4173,10 @@ static int make_request(mddev_t *mddev, 
+@@ -4052,6 +4065,10 @@ static int make_request(mddev_t *mddev, struct bio * bi)
  
  		sh = get_active_stripe(conf, new_sector, previous,
  				       (bi->bi_rw&RWA_MASK), 0);
@@ -57,8 +55,8 @@ Index: linux-2.6.32-131.0.15.el6.x86_64/drivers/md/raid5.c
  		if (sh) {
  			if (unlikely(previous)) {
  				/* expansion might have moved on while waiting for a
-@@ -4219,15 +4236,28 @@ static int make_request(mddev_t *mddev, 
- 			if (bio_rw_flagged(bi, BIO_RW_SYNCIO) &&
+@@ -4111,15 +4128,28 @@ static int make_request(mddev_t *mddev, struct bio * bi)
+ 			if (mddev->barrier && 
  			    !test_and_set_bit(STRIPE_PREREAD_ACTIVE, &sh->state))
  				atomic_inc(&conf->preread_active_stripes);
 -			release_stripe(sh);
