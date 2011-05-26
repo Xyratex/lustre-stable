@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <ctype.h>
 #include <errno.h>
 #include <string.h>
 #include <fcntl.h>
@@ -24,12 +25,27 @@
 
 #define PERM_PATHNAME      "/etc/lustre/perm.conf"
 #define ADSCONF_PATHNAME   "/etc/lustre/ads.conf"
-#define NO_OF_PARAMS_REQD  4
 #define STRING_MAX_SIZE    256
 #define PROC_NAME_MAX_SIZE 1024
 #define PERM_NAME_MAX_SIZE 64
 /** */
 #define FILE_LINE_BUF_SIZE 1024
+
+static char *progname;
+static char *fs_name;
+
+static void errlog(const char *fmt, ...)
+{
+        va_list args;
+
+        openlog(progname, LOG_PERROR | LOG_PID, LOG_AUTHPRIV);
+
+        va_start(args, fmt);
+        vsyslog(LOG_NOTICE, fmt, args);
+        va_end(args);
+
+        closelog();
+}
 
 /*
  * permission file format is like this:
@@ -62,22 +78,260 @@ typedef enum {
 } bool;
 
 struct conf_params {
-        char *desc;      /* conf parameter */
-        bool  isvisited; /* already read?  */
+        const char *desc; /* conf parameter */
+        bool  isvisited;  /* already read?  */
 };
+
+
+enum attr_id {
+        LDAP_ATTR_NONE,
+        LDAP_ATTR_UID,
+        LDAP_ATTR_GID,
+        LDAP_ATTR_USER,
+        LDAP_ATTR_CN,
+        LDAP_ATTR_MAX,
+};
+
+typedef int (*ldap_handle)(void *data, char *ldap_data);
+
+struct ldap_attr {
+        const char    *la_name;
+        enum attr_id   la_id;
+        ldap_handle    la_hand;
+};
+
+struct ldap_attr *ldap_by_name(struct ldap_attr *attrs, char *name)
+{
+        int i = 0;
+
+        while (attrs[i].la_name != NULL) {
+                if (strcasecmp(attrs[i].la_name, name) == 0)
+                        return &attrs[i];
+                i ++;
+        }
+
+        return NULL;
+}
+
+struct ldap_attr *ldap_by_id(struct ldap_attr *attrs, enum attr_id id)
+{
+        int i = 0;
+
+        while (attrs[i].la_name != NULL) {
+                if (attrs[i].la_id == id)
+                        return &attrs[i];
+                i ++;
+        }
+
+        return NULL;
+}
+
+void ldap_attr2arr(struct ldap_attr *attrs, char **data)
+{
+        int i = 0;
+
+        memset(data, 0, sizeof(void *) * LDAP_ATTR_MAX);
+        while (attrs[i].la_name != NULL) {
+                data[i] = (char *)attrs[i].la_name;
+                i ++;
+        }
+}
+
+int ldap_name_get(void *data, char *ldap_data)
+{
+        struct adspasswd *adspwuid = data;
+
+        strncpy(adspwuid->pw_name, ldap_data, STRING_MAX_SIZE - 1);
+
+        return 0;
+}
+
+int ldap_cn_get(void *data, char *ldap_data)
+{
+        struct adspasswd *adspwuid = data;
+
+        strncpy(adspwuid->cn, ldap_data, STRING_MAX_SIZE - 1);
+
+        return 0;
+}
+
+
+int ldap_uid_get(void *data, char *ldap_data)
+{
+        struct adspasswd *adspwuid = data;
+        char *end;
+        long id;
+
+        id = strtoul(ldap_data, &end, 0);
+        if ((ldap_data == end) || *end || errno) {
+                errlog("invalid uid '%s'\n", ldap_data);
+                return -1;
+        }
+        adspwuid->pw_uid = id;
+
+        return 0;
+}
+
+
+int ldap_gid_get(void *data, char *ldap_data)
+{
+        struct adspasswd *adspwuid = data;
+        char *end;
+        long id;
+
+        id = strtoul(ldap_data, &end, 0);
+        if ((ldap_data == end) || *end || errno) {
+                errlog("invalid uid '%s'\n", ldap_data);
+                return -1;
+        }
+        adspwuid->pw_gid = id;
+
+        return 0;
+}
+
+int ldap_gids_get(void *data, char *ldap_data)
+{
+        gid_t *gids = data;
+        char *end;
+        long id;
+        int i;
+
+        id = strtoul(ldap_data, &end, 0);
+        if ((ldap_data == end) || *end || errno) {
+                errlog("invalid uid '%s'\n", ldap_data);
+                return -1;
+        }
+
+        /* check for dups */
+        for (i = 0; i < NGROUPS_MAX; i++) {
+                if (gids[i] == 0) {
+                        /* not found dup - add */
+                        gids[i] = id;
+                        break;
+                }
+                /* found dup - skip it */
+                if (gids[i] == id)
+                        break;
+        }
+
+        return 0;
+}
+
+/** POSIX schema attributes */
+
+struct ldap_attr posix_uid[] = {
+        {
+         .la_name = "uidNumber",
+         .la_id = LDAP_ATTR_UID,
+         .la_hand = ldap_uid_get,
+        } , {
+        .la_name = "gidNumber",
+        .la_id = LDAP_ATTR_GID,
+        .la_hand  = ldap_gid_get,
+        } , {
+        .la_name = "uid",
+        .la_id = LDAP_ATTR_USER,
+        .la_hand = ldap_name_get,
+        } , {
+        .la_name = "cn",
+        .la_id = LDAP_ATTR_CN,
+        .la_hand = ldap_cn_get,
+        },{
+        .la_name = NULL
+        }
+};
+
+
+struct ldap_attr posix_gid[] = {
+        {
+        .la_name = "gidNumber",
+        .la_id = LDAP_ATTR_GID,
+        .la_hand  = ldap_gids_get,
+        } , {
+        .la_name = NULL
+        }
+};
+
+
+/** SFU */
+struct ldap_attr sfu_uid[] = {
+        {
+         .la_name = "msSFU30UidNumber",
+         .la_id = LDAP_ATTR_UID,
+         .la_hand = ldap_uid_get,
+        } , {
+        .la_name = "msSFU30GidNumber",
+        .la_id = LDAP_ATTR_GID,
+        .la_hand  = ldap_gid_get,
+        } , {
+        .la_name = "msSFU30Name",
+        .la_id = LDAP_ATTR_USER,
+        .la_hand = ldap_name_get,
+        } , {
+        .la_name = "cn",
+        .la_id = LDAP_ATTR_CN,
+        .la_hand = ldap_cn_get,
+        },{
+        .la_name = NULL}
+};
+
+struct ldap_attr sfu_gid[] = {
+        {
+        .la_name = "msSFU30GidNumber",
+        .la_id = LDAP_ATTR_GID,
+        .la_hand  = ldap_gids_get,
+        },
+        {.la_name = NULL}
+};
+
+enum {
+        SCH_UID = 0,
+        SCH_GID = 1,
+};
+
+enum ldap_schemes {
+        LDAP_SCH_SFU    = 0,
+        LDAP_SCH_POSIX  = 1,
+        LDAP_SCH_CUSTOM = 2,
+        LDAP_SCH_MAX
+};
+
+struct ldap_scheme {
+        struct ldap_attr *ls_attr[LDAP_SCH_MAX];
+} ldap_sch[] = {
+        {
+        .ls_attr = { sfu_uid, sfu_gid}
+        },{
+        .ls_attr = { posix_uid, posix_gid }
+        }
+};
+
+struct ldap_scheme *ldap_active = &ldap_sch[LDAP_SCH_SFU];
 
 /*
  * Maintaining required ad conf parameters in a list.
  */
-struct conf_params reqd_params[] = {
-        { "uri"        , FALSE },
-        { "base"       , FALSE },
-        { "binddn"     , FALSE },
-        { "credentials", FALSE },
-        { 0 }
+enum conf_params_id {
+        CONF_URI        = 0,
+        CONF_BASE       = 1,
+        CONF_BINDDN     = 2,
+        CONF_CRED       = 3,
+        CONF_SCHEME     = 4,
+        CONF_MAX
+};
+const char param_uri[] = "uri";
+const char param_base[] = "base";
+const char param_binddn[] = "binddn";
+const char param_cred[] = "credentials";
+const char param_scheme[] = "scheme";
+struct conf_params reqd_params[CONF_MAX] = {
+        { param_uri    , FALSE },
+        { param_base   , FALSE },
+        { param_binddn , FALSE },
+        { param_cred   , FALSE },
+        { param_scheme , FALSE }
 };
 
-static char *progname;
 
 static void usage(void)
 {
@@ -93,46 +347,37 @@ static int compare_gid_t(const void *v1, const void *v2)
         return (*(gid_t*)v1 - *(gid_t*)v2);
 }
 
-static void errlog(const char *fmt, ...)
+
+static int comment_line(char *line)
 {
-        va_list args;
-
-        openlog(progname, LOG_PERROR | LOG_PID, LOG_AUTHPRIV);
-
-        va_start(args, fmt);
-        vsyslog(LOG_NOTICE, fmt, args);
-        va_end(args);
-
-        closelog();
-}
-
-static inline int comment_line(char *line)
-{
-        char *p = line;
-
-        while (*p && (*p == ' ' || *p == '\t')) p++;
-
-        if (!*p || *p == '\n' || *p == '#')
+        if (!*line || *line == '\n' || *line == '#')
                 return 1;
         return 0;
 }
 
-int getindex(char *str, char params[][2][STRING_MAX_SIZE])
-{
-        int index;
-        int len = strlen(str);
+static bool section_start = FALSE;
 
-        for (index = 0; index < NO_OF_PARAMS_REQD; index++) {
-                /* get the appropriate index. */
-                if (strncmp(str, params[index][0], len) == 0)
-                        break;
-        }
-        return index;
+static bool conf_section(char *line, char *sec_name)
+{
+        char *start;
+        char *end;
+        int len;
+
+        start = strchr(line, '[');
+        end = strrchr(line, ']');
+        /* skip all non section lines */
+        if ((start == NULL) || (end == NULL))
+                goto end;
+        len = strlen(sec_name);
+        section_start = strncasecmp(start + 1, sec_name, len) == 0 ? TRUE : FALSE;
+end:
+        return section_start;
 }
 
-int get_params(FILE *fp, char params[][2][STRING_MAX_SIZE])
+int get_params(FILE *fp, char params[][STRING_MAX_SIZE])
 {
         char line[FILE_LINE_BUF_SIZE];
+        char *ln;
         char desc[STRING_MAX_SIZE];
         char value[STRING_MAX_SIZE];
         int  num_params = 0;
@@ -143,16 +388,24 @@ int get_params(FILE *fp, char params[][2][STRING_MAX_SIZE])
         memset(value, 0, sizeof(value));
 
         while (fgets(line, FILE_LINE_BUF_SIZE, fp)) {
-                if (comment_line(line))
+                ln = &line[0];
+
+                /* trim spaces */
+                while (*ln && (isspace(*ln))) ln++;
+
+                if (comment_line(ln))
                         continue;
 
-                sscanf(line, "%s %s", desc, value);
-                for (i = 0; i < NO_OF_PARAMS_REQD; i++) {
+                if (!conf_section(ln, fs_name))
+                        continue;
+
+                i = sscanf(ln, "%s %s", desc, value);
+                if (i != 2)
+                        continue;
+                for (i = 0; i < CONF_MAX; i++) {
                         if (reqd_params[i].isvisited == FALSE &&
                             !strcmp(reqd_params[i].desc, desc)) {
-                                strncpy(params[num_params][0], desc,
-                                        STRING_MAX_SIZE - 1);
-                                strncpy(params[num_params][1], value,
+                                strncpy(params[i], value,
                                         STRING_MAX_SIZE - 1);
                                 num_params++;
                                 reqd_params[i].isvisited = TRUE;
@@ -160,21 +413,35 @@ int get_params(FILE *fp, char params[][2][STRING_MAX_SIZE])
                         }
                 }
         }
-        return num_params;
+
+        if (num_params < CONF_MAX)
+                return -1;
+
+        while (1) {
+                if (strcasecmp(params[CONF_SCHEME], "sfu") == 0) {
+                        ldap_active = &ldap_sch[LDAP_SCH_SFU];
+                        break;
+                }
+                if (strcasecmp(params[CONF_SCHEME], "posix") == 0) {
+                        ldap_active = &ldap_sch[LDAP_SCH_POSIX];
+                        break;
+                }
+
+                num_params = -1;
+                break;
+        }
+        return CONF_MAX;
 }
 
-int ldap_connect(LDAP **ld, char params[][2][STRING_MAX_SIZE])
+int ldap_connect(LDAP **ld, char params[][STRING_MAX_SIZE])
 {
         /* Read from the config file. */
         struct berval credentials;
         int    proto              = 0;
         int    ret                = 0;
-        int    index              = 0;
-
-        index = getindex("uri", params);
 
         /* open a connection */
-        ret = ldap_initialize(ld, params[index][1]);
+        ret = ldap_initialize(ld, params[CONF_URI]);
         if (ret != LDAP_SUCCESS) {
                 errlog("%s\n", ldap_err2string(ret));
                 return -1;
@@ -197,14 +464,10 @@ int ldap_connect(LDAP **ld, char params[][2][STRING_MAX_SIZE])
                 return -1;
         }
 
-        index = getindex("credentials", params);
+        credentials.bv_len = strlen(params[CONF_CRED]);
+        credentials.bv_val = params[CONF_CRED];
 
-        credentials.bv_len = strlen(params[index][1]);
-        credentials.bv_val = params[index][1];
-
-        index = getindex("binddn", params);
-
-        ret = ldap_sasl_bind_s(*ld, params[index][1], LDAP_SASL_SIMPLE,
+        ret = ldap_sasl_bind_s(*ld, params[CONF_BINDDN], LDAP_SASL_SIMPLE,
                                &credentials, NULL, NULL, NULL);
         if (ret != LDAP_SUCCESS) {
                 errlog("%s\n", ldap_err2string(ret));
@@ -214,30 +477,21 @@ int ldap_connect(LDAP **ld, char params[][2][STRING_MAX_SIZE])
         return 0;
 }
 
-/*
- * Get only user's info from ADS server.
- */
-int get_ads_userinfo(LDAP **ld, struct adspasswd *adspwuid, uid_t uid,
-                     char *base)
+int ldap_get_info(LDAP *ld, char *base, char *filter,
+                   struct ldap_attr *scheme, void *data)
 {
-        char*           attrs[]  = {"msSFU30UidNumber", "msSFU30Name",
-                                    "msSFU30GidNumber", "cn", NULL};
-        char            str[STRING_MAX_SIZE];
-        char*           end;
-        int             ret      = 0;
-        unsigned long   id       = 0; /* For temp uid and gid. */
-        int             i        = 0;
+        char *          attrs[LDAP_ATTR_MAX];
         struct berval **bers     = NULL;
         LDAPMessage    *entry;
         LDAPMessage    *res;
         BerElement     *bptr;
         char           *attrib;
+        int             ret;
+        int             i;
+        struct ldap_attr *tmp;
 
-        memset(str, 0, sizeof(str));
-        /* Form a filter. */
-        sprintf(str, "(msSFU30UidNumber=%hu)", uid);
-
-        ret = ldap_search_ext_s(*ld, base, LDAP_SCOPE_SUBTREE, str, attrs, 0,
+        ldap_attr2arr(scheme, attrs);
+        ret = ldap_search_ext_s(ld, base, LDAP_SCOPE_SUBTREE, filter, attrs, 0,
                                 NULL, NULL, NULL, 0, &res);
         if (ret != LDAP_SUCCESS ) {
                 errlog("%s\n", ldap_err2string(ret));
@@ -245,46 +499,19 @@ int get_ads_userinfo(LDAP **ld, struct adspasswd *adspwuid, uid_t uid,
         }
 
         /* step through each entry returned */
-        for (entry = ldap_first_entry(*ld, res); entry != NULL;
-             entry = ldap_next_entry(*ld, entry) ) {
-                for (attrib = ldap_first_attribute(*ld, entry, &bptr);
+        for (entry = ldap_first_entry(ld, res); entry != NULL;
+             entry = ldap_next_entry(ld, entry) ) {
+                for (attrib = ldap_first_attribute(ld, entry, &bptr);
                      attrib != NULL;
-                     attrib = ldap_next_attribute(*ld, entry, bptr)) {
-                        bers = ldap_get_values_len( *ld, entry, attrib );
+                     attrib = ldap_next_attribute(ld, entry, bptr)) {
+                        bers = ldap_get_values_len(ld, entry, attrib );
                         for (i = 0; bers[i] != NULL; i++) {
-                                if (!strncmp(attrib, "msSFU30Name",
-                                             strlen(attrib))) {
-                                        strncpy(adspwuid->pw_name,
-                                                bers[i]->bv_val,
-                                                STRING_MAX_SIZE - 1);
-                                } else if (!strncmp(attrib, "msSFU30UidNumber",
-                                           strlen(attrib))) {
-                                        id = strtoul(bers[i]->bv_val, &end, 0);
-                                        if ((end == bers[i]->bv_val) || *end ||
-                                            errno) {
-                                                errlog("invalid uid '%s'\n",
-                                                        bers[i]->bv_val);
-                                                ldap_msgfree( res );
-                                                return -1;
-                                        }
-                                        adspwuid->pw_uid = id;
-                                } else if (!strncmp(attrib, "msSFU30GidNumber",
-                                           strlen(attrib))) {
-                                        id = strtoul(bers[i]->bv_val, &end, 0);
-                                        if ((end == bers[i]->bv_val) || *end ||
-                                            errno) {
-                                                errlog("invalid gid '%s'\n",
-                                                        bers[i]->bv_val);
-                                                ldap_msgfree( res );
-                                                return -1;
-                                        }
-                                        adspwuid->pw_gid = id;
-                                } else if(!strncmp(attrib, "cn",
-                                                   strlen(attrib))) {
-                                        strncpy(adspwuid->cn, bers[i]->bv_val,
-                                                STRING_MAX_SIZE - 1);
-                                } else {
-                                        errlog("Invalid entries\n");
+                                tmp = ldap_by_name(scheme, attrib);
+                                if (tmp != NULL) {
+                                        ret = tmp->la_hand(data, bers[i]->bv_val);
+                                }
+                                if ((tmp == NULL) || (ret < 0)) {
+                                        errlog("Invalid attribute %s\n", attrib);
                                         ldap_msgfree( res );
                                         return -1;
                                 }
@@ -299,74 +526,41 @@ int get_ads_userinfo(LDAP **ld, struct adspasswd *adspwuid, uid_t uid,
 }
 
 /*
+ * Get only user's info from ADS server.
+ */
+int get_ads_userinfo(LDAP *ld, struct adspasswd *adspwuid, uid_t uid,
+                     char *base)
+{
+        char            str[STRING_MAX_SIZE];
+        struct          ldap_attr *tmp;
+
+        memset(str, 0, sizeof(str));
+        tmp = ldap_by_id(ldap_active->ls_attr[SCH_UID], LDAP_ATTR_UID);
+        if (tmp == NULL)
+                return -EINVAL;
+        /* Form a filter. */
+        sprintf(str, "(%s=%hu)", tmp->la_name, uid);
+
+        return ldap_get_info(ld, base, str, ldap_active->ls_attr[SCH_UID],
+                             adspwuid);
+}
+
+
+/*
  * Get only groups list info from ADS server.
  */
 int get_ads_groupinfo(LDAP *ld, struct adspasswd *adspwuid, gid_t *gid,
                       char *base)
 {
-
-        LDAPMessage         *entry;
-        LDAPMessage         *res;
-        BerElement          *ptr;
-        struct      berval **bers      = NULL;
-        char*                grattrs[] = {"msSFU30GidNumber", NULL};
-        int                  ngroups   = 0;
-        int                  maxgroups = 0;
-        int                  ret       = 0;
-        int                  i         = 0;
         char                 str[STRING_MAX_SIZE];
-        char                *attrib;
 
         /* Get the groups info. */
         memset(str, 0, sizeof(str));
         sprintf(str, "(&(objectClass=Group)(objectCategory=Group)"
                        "(member=CN=%s, CN=Users,%s))", adspwuid->cn, base);
 
-        maxgroups = sysconf(_SC_NGROUPS_MAX);
-        if (maxgroups > NGROUPS_MAX)
-                maxgroups = NGROUPS_MAX;
-
-        gid[ngroups++] = adspwuid->pw_gid;
-
-        /* For groups */
-        ret = ldap_search_ext_s(ld, base, LDAP_SCOPE_SUBTREE, str, grattrs, 0,
-                                NULL, NULL, NULL, 0, &res);
-        if (ret != LDAP_SUCCESS) {
-                errlog("%s\n", ldap_err2string(ret));
-                return -1;
-        }
-
-        /* step through each entry returned */
-        for (entry = ldap_first_entry( ld, res); entry != NULL;
-             entry = ldap_next_entry(ld, entry)) {
-                for (attrib = ldap_first_attribute(ld, entry, &ptr);
-                     attrib != NULL;
-                     attrib = ldap_next_attribute(ld, entry, ptr)) {
-                        bers = ldap_get_values_len(ld, entry, attrib);
-                        for (i = 0; bers[i] != NULL; i++) {
-                                if (!strncmp(attrib, "msSFU30GidNumber",
-                                             strlen(attrib))) {
-                                        if (atoi(bers[i]->bv_val) == gid[0])
-                                                continue;
-
-                                        if (ngroups == maxgroups)
-                                                break;
-
-                                        gid[ngroups++] = atoi(bers[i]->bv_val);
-                                } else {
-                                        errlog("Invalid entries\n");
-                                        return -1;
-                                }
-                        }
-                        ldap_value_free_len(bers);
-
-                        if (ngroups == maxgroups)
-                                break;
-                }
-        }
-        qsort(gid, ngroups, sizeof(*gid), compare_gid_t);
-
-        return ngroups;
+        gid[0] = adspwuid->pw_gid;
+        return ldap_get_info(ld, base, str, ldap_active->ls_attr[SCH_GID], gid);
 }
 
 int ldap_disconnect(LDAP *ld)
@@ -383,20 +577,26 @@ int ldap_disconnect(LDAP *ld)
         }
 }
 
+int count_groups(gid_t *gids)
+{
+        int i;
+
+        for(i = 0; i < NGROUPS_MAX; i++)
+                if (gids[i] == 0)
+                        break;
+        return i;
+}
 /*
  * Get particular user info and its groups list info from ADS server.
  */
 int get_groups_ads(struct identity_downcall_data *data)
 {
         struct   adspasswd  pw;
-        unsigned int        ngroups = 0;
         LDAP               *ld;
         FILE               *ads_fp;
         gid_t              *groups;
-        char                params[NO_OF_PARAMS_REQD][2][STRING_MAX_SIZE];
-        char               *pw_name;
-        int                 namelen;
-        int                 i;
+        char                params[CONF_MAX][STRING_MAX_SIZE];
+        int                 rc;
 
         /* Read config file */
         ads_fp = fopen(ADSCONF_PATHNAME, "r");
@@ -411,7 +611,7 @@ int get_groups_ads(struct identity_downcall_data *data)
 
         memset(params, 0, sizeof(params));
 
-        if (get_params(ads_fp, params) < NO_OF_PARAMS_REQD) {
+        if (get_params(ads_fp, params) < 0) {
                 errlog("Please specify all parameters in config file\n");
                 data->idd_err = EINVAL;
                 fclose(ads_fp);
@@ -430,36 +630,16 @@ int get_groups_ads(struct identity_downcall_data *data)
 
         memset(&pw, 0, sizeof(pw));
 
-        i = getindex("base", params);
-
-        if (get_ads_userinfo(&ld, &pw, data->idd_uid, params[i][1]) != 0) {
+        if (get_ads_userinfo(ld, &pw, data->idd_uid, params[CONF_BASE]) != 0) {
                 errlog("Failed to get user info\n");
                 data->idd_err = EPROTO;
                 return -1;
         }
 
-        namelen = sysconf(_SC_LOGIN_NAME_MAX);
-        if (namelen < _POSIX_LOGIN_NAME_MAX)
-                namelen = _POSIX_LOGIN_NAME_MAX;
-        pw_name = (char *)malloc(namelen);
-        if (!pw_name) {
-                errlog("malloc error\n");
-                data->idd_err = errno;
-                return -1;
-        }
+        groups = &data->idd_groups[0];
 
-        if (strlen(pw.pw_name) == 0) {
-                errlog("no such user %u\n", data->idd_uid);
-                data->idd_err = EIDRM;
-                goto out;
-        }
-        memset(pw_name, 0, namelen);
-        strncpy(pw_name, pw.pw_name, namelen - 1);
-
-        groups = data->idd_groups;
-
-        ngroups = get_ads_groupinfo(ld, &pw, groups, params[i][1]);
-        if (ngroups <= 0) {
+        rc = get_ads_groupinfo(ld, &pw, groups, params[CONF_BASE]);
+        if (rc < 0) {
                 errlog("Failed to get group info\n");
                 data->idd_err = EIDRM;
                 goto out;
@@ -471,10 +651,9 @@ int get_groups_ads(struct identity_downcall_data *data)
                 goto out;
         }
 
-        qsort(groups, ngroups, sizeof(*groups), compare_gid_t);
-        data->idd_ngroups = ngroups;
+        data->idd_ngroups = count_groups(groups);
+        qsort(groups, data->idd_ngroups, sizeof(*groups), compare_gid_t);
 out:
-        free(pw_name);
         return data->idd_err != 0 ? -1 : 0;
 }
 
@@ -658,13 +837,19 @@ int parse_perm_line(struct identity_downcall_data *data, char *line)
 int get_perms(FILE *fp, struct identity_downcall_data *data)
 {
         char line[FILE_LINE_BUF_SIZE];
+        char *ln;
 
         while (fgets(line, FILE_LINE_BUF_SIZE, fp)) {
-                if (comment_line(line))
+                ln = line;
+
+                /* trim spaces */
+                while (*ln && (isspace(*ln))) ln++;
+
+                if (comment_line(ln))
                         continue;
 
-                if (parse_perm_line(data, line)) {
-                        errlog("parse line %s failed!\n", line);
+                if (parse_perm_line(data, ln)) {
+                        errlog("parse line %s failed!\n", ln);
                         return -1;
                 }
         }
@@ -721,6 +906,7 @@ int main(int argc, char **argv)
                 usage();
                 return 1;
         }
+        fs_name = argv[1];
 
         errno = 0;
         uid = strtoul(argv[2], &end, 0);
