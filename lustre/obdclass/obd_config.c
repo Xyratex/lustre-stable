@@ -235,19 +235,42 @@ int class_parse_net(char *buf, __u32 *net, char **endh)
         return class_parse_value(buf, CLASS_PARSE_NET, (void *)net, endh);
 }
 
-int class_match_net(char *buf, lnet_nid_t nid)
+/* 1 param contains key and match
+ * 0 param contains key and not match
+ * -1 param does not contain key
+ */
+int class_match_nid(char *buf, char *key, lnet_nid_t nid)
 {
-        __u32 net;
+        lnet_nid_t tmp;
+        int   rc = -1;
 
-        while (class_find_param(buf, PARAM_NETWORK, &buf) == 0) {
+        while (class_find_param(buf, key, &buf) == 0) {
                 /* please restrict to the nids pertaining to
-                 * the specified networks */
-                while (class_parse_net(buf, &net, &buf) == 0) {
-                        if (LNET_NIDNET(nid) == net)
+                 * the specified nids */
+                while (class_parse_nid(buf, &tmp, &buf) == 0) {
+                        if (tmp == nid)
                                 return 1;
                 }
+                rc = 0;
         }
-        return 0;
+        return rc;
+}
+
+int class_match_net(char *buf, char *key, __u32 net)
+{
+        __u32 tmp;
+        int   rc = -1;
+
+        while (class_find_param(buf, key, &buf) == 0) {
+                /* please restrict to the nids pertaining to
+                 * the specified networks */
+                while (class_parse_net(buf, &tmp, &buf) == 0) {
+                        if (tmp == net)
+                                return 1;
+                }
+                rc = 0;
+        }
+        return rc;
 }
 
 EXPORT_SYMBOL(class_find_param);
@@ -255,6 +278,7 @@ EXPORT_SYMBOL(class_get_next_param);
 EXPORT_SYMBOL(class_match_param);
 EXPORT_SYMBOL(class_parse_nid);
 EXPORT_SYMBOL(class_parse_net);
+EXPORT_SYMBOL(class_match_nid);
 EXPORT_SYMBOL(class_match_net);
 
 /********************** class fns **********************/
@@ -267,7 +291,7 @@ int class_attach(struct lustre_cfg *lcfg)
 {
         struct obd_device *obd = NULL;
         char *typename, *name, *uuid;
-        int rc;
+        int rc, len;
         ENTRY;
 
         if (!LUSTRE_CFG_BUFLEN(lcfg, 1)) {
@@ -288,16 +312,10 @@ int class_attach(struct lustre_cfg *lcfg)
         }
         uuid = lustre_cfg_string(lcfg, 2);
 
-        if (strlen(uuid) >= sizeof(obd->obd_uuid)) {
-                CERROR("uuid must be < %d bytes long\n",
-                       (int)sizeof(obd->obd_uuid));
-                RETURN(-EINVAL);
-        }
-
         CDEBUG(D_IOCTL, "attach type %s name: %s uuid: %s\n",
                MKSTR(typename), MKSTR(name), MKSTR(uuid));
 
-        obd = class_newdev(typename, name, uuid);
+        obd = class_newdev(typename, name);
         if (IS_ERR(obd)) {
                 /* Already exists or out of obds */
                 rc = PTR_ERR(obd);
@@ -306,7 +324,6 @@ int class_attach(struct lustre_cfg *lcfg)
                        name, typename, rc);
                 GOTO(out, rc);
         }
-
         LASSERTF(obd != NULL, "Cannot get obd device %s of type %s\n",
                  name, typename);
         LASSERTF(obd->obd_magic == OBD_DEVICE_MAGIC,
@@ -345,6 +362,14 @@ int class_attach(struct lustre_cfg *lcfg)
         CFS_INIT_LIST_HEAD(&obd->obd_evict_list);
 
         llog_group_init(&obd->obd_olg, FID_SEQ_LLOG);
+
+        len = strlen(uuid);
+        if (len >= sizeof(obd->obd_uuid)) {
+                CERROR("uuid must be < %d bytes long\n",
+                       (int)sizeof(obd->obd_uuid));
+                GOTO(out, rc = -EINVAL);
+        }
+        memcpy(obd->obd_uuid.uuid, uuid, len);
 
         /* do the attach */
         if (OBP(obd, attach)) {
@@ -635,7 +660,10 @@ void class_decref(struct obd_device *obd, const char *scope, const void *source)
         int err;
         int refs;
 
-        refs = cfs_atomic_dec_return(&obd->obd_refcount);
+        cfs_spin_lock(&obd->obd_dev_lock);
+        cfs_atomic_dec(&obd->obd_refcount);
+        refs = cfs_atomic_read(&obd->obd_refcount);
+        cfs_spin_unlock(&obd->obd_dev_lock);
         lu_ref_del(&obd->obd_reference, scope, source);
 
         CDEBUG(D_INFO, "Decref %s (%p) now %d\n", obd->obd_name, obd, refs);

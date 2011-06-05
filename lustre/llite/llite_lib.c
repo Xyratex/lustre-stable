@@ -61,8 +61,13 @@ cfs_mem_cache_t *ll_file_data_slab;
 CFS_LIST_HEAD(ll_super_blocks);
 cfs_spinlock_t ll_sb_lock = CFS_SPIN_LOCK_UNLOCKED;
 
+#ifndef MS_HAS_NEW_AOPS
 extern struct address_space_operations ll_aops;
 extern struct address_space_operations ll_dir_aops;
+#else
+extern struct address_space_operations_ext ll_aops;
+extern struct address_space_operations_ext ll_dir_aops;
+#endif
 
 #ifndef log2
 #define log2(n) cfs_ffz(~(n))
@@ -197,7 +202,8 @@ static int client_common_fill_super(struct super_block *sb, char *md, char *dt)
                                   OBD_CONNECT_OSS_CAPA | OBD_CONNECT_CANCELSET|
                                   OBD_CONNECT_FID      | OBD_CONNECT_AT |
                                   OBD_CONNECT_LOV_V3 | OBD_CONNECT_RMT_CLIENT |
-                                  OBD_CONNECT_VBR      | OBD_CONNECT_FULL20;
+                                  OBD_CONNECT_VBR      | OBD_CONNECT_FULL20 |
+                                  OBD_CONNECT_64BITHASH;
 
         if (sbi->ll_flags & LL_SBI_SOM_PREVIEW)
                 data->ocd_connect_flags |= OBD_CONNECT_SOM;
@@ -220,6 +226,9 @@ static int client_common_fill_super(struct super_block *sb, char *md, char *dt)
 #ifdef HAVE_MS_FLOCK_LOCK
         /* force vfs to use lustre handler for flock() calls - bug 10743 */
         sb->s_flags |= MS_FLOCK_LOCK;
+#endif
+#ifdef MS_HAS_NEW_AOPS
+        sb->s_flags |= MS_HAS_NEW_AOPS;
 #endif
 
         if (sbi->ll_flags & LL_SBI_FLOCK)
@@ -452,7 +461,7 @@ static int client_common_fill_super(struct super_block *sb, char *md, char *dt)
         }
 
         LASSERT(fid_is_sane(&sbi->ll_root_fid));
-        root = ll_iget(sb, cl_fid_build_ino(&sbi->ll_root_fid), &lmd);
+        root = ll_iget(sb, cl_fid_build_ino(&sbi->ll_root_fid, 0), &lmd);
         md_free_lustre_md(sbi->ll_md_exp, &lmd);
         ptlrpc_req_finished(request);
 
@@ -935,8 +944,7 @@ void ll_put_super(struct super_block *sb)
         struct lustre_sb_info *lsi = s2lsi(sb);
         struct ll_sb_info *sbi = ll_s2sbi(sb);
         char *profilenm = get_profile_name(sb);
-        int force = 1;
-        struct obd_device *prev;
+        int force = 1, next;
         ENTRY;
 
         CDEBUG(D_VFSTRACE, "VFS Op: sb %p - %s\n", sb, profilenm);
@@ -956,9 +964,9 @@ void ll_put_super(struct super_block *sb)
         /* We need to set force before the lov_disconnect in
            lustre_common_put_super, since l_d cleans up osc's as well. */
         if (force) {
-                prev = NULL;
+                next = 0;
                 while ((obd = class_devices_in_group(&sbi->ll_sb_uuid,
-                                                     &prev)) != NULL) {
+                                                     &next)) != NULL) {
                         obd->obd_force = force;
                 }
         }
@@ -968,8 +976,8 @@ void ll_put_super(struct super_block *sb)
                 client_common_put_super(sb);
         }
 
-        prev = NULL;
-        while ((obd = class_devices_in_group(&sbi->ll_sb_uuid, &prev)) !=NULL) {
+        next = 0;
+        while ((obd = class_devices_in_group(&sbi->ll_sb_uuid, &next)) !=NULL) {
                 class_manual_cleanup(obd);
         }
 
@@ -1544,7 +1552,7 @@ void ll_update_inode(struct inode *inode, struct lustre_md *md)
                 cfs_spin_unlock(&lli->lli_lock);
         }
 #endif
-        inode->i_ino = cl_fid_build_ino(&body->fid1);
+        inode->i_ino = cl_fid_build_ino(&body->fid1, 0);
         inode->i_generation = cl_fid_build_gen(&body->fid1);
 
         if (body->valid & OBD_MD_FLATIME) {
@@ -1688,12 +1696,12 @@ void ll_read_inode2(struct inode *inode, void *opaque)
                 struct ll_sb_info *sbi = ll_i2sbi(inode);
                 inode->i_op = &ll_file_inode_operations;
                 inode->i_fop = sbi->ll_fop;
-                inode->i_mapping->a_ops = &ll_aops;
+                inode->i_mapping->a_ops = (struct address_space_operations *)&ll_aops;
                 EXIT;
         } else if (S_ISDIR(inode->i_mode)) {
                 inode->i_op = &ll_dir_inode_operations;
                 inode->i_fop = &ll_dir_operations;
-                inode->i_mapping->a_ops = &ll_dir_aops;
+                inode->i_mapping->a_ops = (struct address_space_operations *)&ll_dir_aops;
                 EXIT;
         } else if (S_ISLNK(inode->i_mode)) {
                 inode->i_op = &ll_fast_symlink_inode_operations;
@@ -1969,7 +1977,7 @@ int ll_prep_inode(struct inode **inode,
                  */
                 LASSERT(fid_is_sane(&md.body->fid1));
 
-                *inode = ll_iget(sb, cl_fid_build_ino(&md.body->fid1), &md);
+                *inode = ll_iget(sb, cl_fid_build_ino(&md.body->fid1, 0), &md);
                 if (*inode == NULL || IS_ERR(*inode)) {
                         if (md.lsm)
                                 obd_free_memmd(sbi->ll_dt_exp, &md.lsm);

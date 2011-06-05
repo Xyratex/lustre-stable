@@ -190,6 +190,7 @@ setup() {
 	start_mds || error "MDT start failed"
 	start_ost || error "OST start failed"
 	mount_client $MOUNT || error "client start failed"
+	client_up || error "client_up failed"
 }
 
 setup_noconfig() {
@@ -722,6 +723,8 @@ test_21d() {
         stop_ost2
         stop_mds
         stop_mgs
+        #writeconf to remove all ost2 traces for subsequent tests
+        writeconf
 }
 run_test 21d "start mgs then ost and then mds"
 
@@ -2170,6 +2173,8 @@ test_50c() {
  	umount_client $MOUNT || error "Unable to unmount client"
 	stop_ost2 || error "Unable to stop OST2"
 	stop_mds || error "Unable to stop MDS"
+	#writeconf to remove all ost2 traces for subsequent tests
+	writeconf
 }
 run_test 50c "lazystatfs one server down =========================="
 
@@ -2190,6 +2195,8 @@ test_50d() {
  	umount_client $MOUNT || error "Unable to unmount client"
 	stop_ost2 || error "Unable to stop OST2"
 	stop_mds || error "Unable to stop MDS"
+	#writeconf to remove all ost2 traces for subsequent tests
+	writeconf
 }
 run_test 50d "lazystatfs client/server conn race =========================="
 
@@ -2321,6 +2328,8 @@ test_51() {
 	wait $pid
 	stop_ost2 || return 3
 	cleanup
+	#writeconf to remove all ost2 traces for subsequent tests
+	writeconf
 }
 run_test 51 "Verify that mdt_reint handles RMF_MDT_MD correctly when an OST is added"
 
@@ -2637,20 +2646,51 @@ test_56() {
 }
 run_test 56 "check big indexes"
 
-test_57() { # bug 22656
+test_57a() { # bug 22656
 	local NID=$(do_facet ost1 "$LCTL get_param nis" | tail -1 | awk '{print $1}')
 	writeconf
 	do_facet ost1 "$TUNEFS --failnode=$NID `ostdevname 1`" || error "tunefs failed"
 	start_mgsmds
 	start_ost && error "OST registration from failnode should fail"
-	stop_mds
 	reformat
 }
-run_test 57 "initial registration from failnode should fail (should return errs)"
+run_test 57a "initial registration from failnode should fail (should return errs)"
+
+test_57b() {
+	local NID=$(do_facet ost1 "$LCTL get_param nis" | tail -1 | awk '{print $1}')
+	writeconf
+	do_facet ost1 "$TUNEFS --servicenode=$NID `ostdevname 1`" || error "tunefs failed"
+	start_mgsmds
+	start_ost || error "OST registration from servicenode should not fail"
+	reformat
+}
+run_test 57b "initial registration from servicenode should not fail"
 
 count_osts() {
         do_facet mgs $LCTL get_param mgs.MGS.live.$FSNAME | grep OST | wc -l
 }
+
+test_58() { # bug 22658
+        [ "$FSTYPE" != "ldiskfs" ] && skip "not supported for $FSTYPE" && return
+	setup
+	mkdir -p $DIR/$tdir
+	createmany -o $DIR/$tdir/$tfile-%d 100
+	# make sure that OSTs do not cancel llog cookies before we unmount the MDS
+#define OBD_FAIL_OBD_LOG_CANCEL_NET      0x601
+	do_facet mds "lctl set_param fail_loc=0x601"
+	unlinkmany $DIR/$tdir/$tfile-%d 100
+	stop mds
+	local MNTDIR=$(facet_mntpt mds)
+	# remove all files from the OBJECTS dir
+	do_facet mds "mount -t ldiskfs $MDSDEV $MNTDIR"
+	do_facet mds "find $MNTDIR/OBJECTS -type f -delete"
+	do_facet mds "umount $MNTDIR"
+	# restart MDS with missing llog files
+	start_mds
+	do_facet mds "lctl set_param fail_loc=0"
+	reformat
+}
+run_test 58 "missing llog files must not prevent MDT from mounting"
 
 test_59() {
 	start_mgsmds >> /dev/null
@@ -2679,31 +2719,10 @@ test_59() {
 	[ $C4 -eq 2 ] || error "OST2 writeconf should add log"
 	stop_ost2 >> /dev/null
 	cleanup_nocli >> /dev/null
+	#writeconf to remove all ost2 traces for subsequent tests
+	writeconf
 }
 run_test 59 "writeconf mount option"
-
-
-test_58() { # bug 22658
-        [ "$FSTYPE" != "ldiskfs" ] && skip "not supported for $FSTYPE" && return
-	setup
-	mkdir -p $DIR/$tdir
-	createmany -o $DIR/$tdir/$tfile-%d 100
-	# make sure that OSTs do not cancel llog cookies before we unmount the MDS
-#define OBD_FAIL_OBD_LOG_CANCEL_NET      0x601
-	do_facet mds "lctl set_param fail_loc=0x601"
-	unlinkmany $DIR/$tdir/$tfile-%d 100
-	stop mds
-	local MNTDIR=$(facet_mntpt mds)
-	# remove all files from the OBJECTS dir
-	do_facet mds "mount -t ldiskfs $MDSDEV $MNTDIR"
-	do_facet mds "find $MNTDIR/OBJECTS -type f -delete"
-	do_facet mds "umount $MNTDIR"
-	# restart MDS with missing llog files
-	start_mds
-	do_facet mds "lctl set_param fail_loc=0"
-	reformat
-}
-run_test 58 "missing llog files must not prevent MDT from mounting"
 
 if ! combined_mgs_mds ; then
 	stop mgs

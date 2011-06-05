@@ -8,7 +8,7 @@ set -e
 
 export REFORMAT=${REFORMAT:-""}
 export WRITECONF=${WRITECONF:-""}
-export VERBOSE=false
+export VERBOSE=${VERBOSE:-false}
 export CATASTROPHE=${CATASTROPHE:-/proc/sys/lnet/catastrophe}
 export GSS=false
 export GSS_KRB5=false
@@ -141,16 +141,16 @@ init_test_env() {
     fi
     export HOSTNAME=${HOSTNAME:-`hostname`}
     if ! echo $PATH | grep -q $LUSTRE/utils; then
-        export PATH=$PATH:$LUSTRE/utils
+        export PATH=$LUSTRE/utils:$PATH
     fi
     if ! echo $PATH | grep -q $LUSTRE/utils/gss; then
-        export PATH=$PATH:$LUSTRE/utils/gss
+        export PATH=$LUSTRE/utils/gss:$PATH
     fi
     if ! echo $PATH | grep -q $LUSTRE/tests; then
         export PATH=$LUSTRE/tests:$PATH
     fi
     if ! echo $PATH | grep -q $LUSTRE/../lustre-iokit/sgpdd-survey; then
-        export PATH=$PATH:$LUSTRE/../lustre-iokit/sgpdd-survey
+        export PATH=$LUSTRE/../lustre-iokit/sgpdd-survey:$PATH
     fi
     export LST=${LST:-"$LUSTRE/../lnet/utils/lst"}
     [ ! -f "$LST" ] && export LST=$(which lst)
@@ -165,7 +165,7 @@ init_test_env() {
         export PATH=$LUSTRE/tests/racer:$PATH:
     fi
     if ! echo $PATH | grep -q $LUSTRE/tests/mpi; then
-        export PATH=$PATH:$LUSTRE/tests/mpi
+        export PATH=$LUSTRE/tests/mpi:$PATH
     fi
     export RSYNC_RSH=${RSYNC_RSH:-rsh}
     export LCTL=${LCTL:-"$LUSTRE/utils/lctl"}
@@ -265,7 +265,7 @@ esac
 
 
 module_loaded () {
-   /sbin/lsmod | grep -q $1
+   /sbin/lsmod | grep -q "^\<$1\>"
 }
 
 # Load a module on the system where this is running.
@@ -381,7 +381,10 @@ load_modules_local() {
     $LCTL modules > $OGDB/ogdb-$HOSTNAME
 
     # 'mount' doesn't look in $PATH, just sbin
-    [ -f $LUSTRE/utils/mount.lustre ] && cp $LUSTRE/utils/mount.lustre /sbin/. || true
+    local bindmount=$(mount | grep "/sbin/mount.lustre")
+    if [ -f $LUSTRE/utils/mount.lustre ] && [ "x$bindmount" == "x" ]; then
+	    mount --bind $LUSTRE/utils/mount.lustre /sbin/mount.lustre || true
+    fi
 }
 
 load_modules () {
@@ -422,6 +425,8 @@ unload_modules() {
             do_rpc_nodes $list check_mem_leak
         fi
     fi
+
+    umount /sbin/mount.lustre
 
     check_mem_leak || return 254
 
@@ -1029,14 +1034,14 @@ check_progs_installed () {
 }
 
 # recovery-scale functions
-client_var_name() {
-    echo __$(echo $1 | tr '-' 'X')
+node_var_name() {
+    echo __$(echo $1 | tr '-' '_' | tr '.' '_')
 }
 
 start_client_load() {
     local client=$1
     local load=$2
-    local var=$(client_var_name $client)_load
+    local var=$(node_var_name $client)_load
     eval export ${var}=$load
 
     do_node $client "PATH=$PATH MOUNT=$MOUNT ERRORS_OK=$ERRORS_OK \
@@ -1067,7 +1072,7 @@ start_client_loads () {
 # only for remote client 
 check_client_load () {
     local client=$1
-    local var=$(client_var_name $client)_load
+    local var=$(node_var_name $client)_load
     local TESTLOAD=run_${!var}.sh
 
     ps auxww | grep -v grep | grep $client | grep -q "$TESTLOAD" || return 1
@@ -1141,7 +1146,7 @@ restart_client_loads () {
         check_client_load $client
         rc=${PIPESTATUS[0]}
         if [ "$rc" != 0 -a "$expectedfail" ]; then
-            local var=$(client_var_name $client)_load
+            local var=$(node_var_name $client)_load
             start_client_load $client ${!var}
             echo "Restarted client load ${!var}: on $client. Checking ..."
             check_client_load $client
@@ -1676,7 +1681,7 @@ do_node() {
     fi
     if $VERBOSE; then
         echo "CMD: $HOST $@" >&2
-        $myPDSH $HOST $LCTL mark "$@" > /dev/null 2>&1 || :
+        $myPDSH $HOST "$LCTL mark \"$@\"" > /dev/null 2>&1 || :
     fi
 
     if [ "$myPDSH" = "rsh" ]; then
@@ -1750,7 +1755,7 @@ do_nodes() {
 
     if $VERBOSE; then
         echo "CMD: $rnodes $@" >&2
-        $myPDSH $rnodes $LCTL mark "$@" > /dev/null 2>&1 || :
+        $myPDSH $rnodes "$LCTL mark \"$@\"" > /dev/null 2>&1 || :
     fi
 
     # do not replace anything from pdsh output if -N is used

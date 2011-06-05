@@ -980,12 +980,17 @@ static int server_sb2mti(struct super_block *sb, struct mgs_target_info *mti)
                 if (LNET_NETTYP(LNET_NIDNET(id.nid)) == LOLND)
                         continue;
 
-                if (class_find_param(ldd->ldd_params,
-                                     PARAM_NETWORK, NULL) == 0 &&
-                    !class_match_net(ldd->ldd_params, id.nid)) {
-                        /* can't match specified network */
+                /* server use --servicenode param, only allow specified
+                 * nids be registered */
+                if ((ldd->ldd_flags & LDD_F_NO_PRIMNODE) != 0 &&
+                    class_match_nid(ldd->ldd_params,
+                                    PARAM_FAILNODE, id.nid) < 1)
                         continue;
-                }
+
+                /* match specified network */
+                if (!class_match_net(ldd->ldd_params,
+                                     PARAM_NETWORK, LNET_NIDNET(id.nid)))
+                        continue;
 
                 mti->mti_nids[mti->mti_nid_count] = id.nid;
                 mti->mti_nid_count++;
@@ -1311,7 +1316,6 @@ static struct vfsmount *server_kernel_mount(struct super_block *sb)
         unsigned long page, s_flags;
         struct page *__page;
         int rc;
-        int len;
         ENTRY;
 
         OBD_ALLOC(ldd, sizeof(*ldd));
@@ -1364,18 +1368,11 @@ static struct vfsmount *server_kernel_mount(struct super_block *sb)
 
         /* Glom up mount options */
         memset(options, 0, CFS_PAGE_SIZE);
-//        if (IS_MDT(ldd)) {
-                /* enable 64bithash for MDS by force */
-//                strcpy(options, "64bithash,");
-//                len = CFS_PAGE_SIZE - strlen(options) - 2;
-//                strncat(options, ldd->ldd_mount_opts, len);
-//        } else {
-                strncpy(options, ldd->ldd_mount_opts, CFS_PAGE_SIZE - 2);
-//        }
+        strncpy(options, ldd->ldd_mount_opts, CFS_PAGE_SIZE - 2);
 
         /* Add in any mount-line options */
         if (lmd->lmd_opts && (*(lmd->lmd_opts) != 0)) {
-                len = CFS_PAGE_SIZE - strlen(options) - 2;
+                int len = CFS_PAGE_SIZE - strlen(options) - 2;
                 if (*options != 0)
                         strcat(options, ",");
                 strncat(options, lmd->lmd_opts, len);
@@ -1432,7 +1429,7 @@ static void server_wait_finished(struct vfsmount *mnt)
                                       waited);
                /* Cannot use l_event_wait() for an interruptible sleep. */
                waited += 3;
-               blocked = l_w_e_set_sigs(sigmask(SIGKILL));
+               blocked = cfs_block_sigsinv(sigmask(SIGKILL));
                cfs_waitq_wait_event_interruptible_timeout(
                        waitq,
                        (atomic_read(&mnt->mnt_count) == 1),
