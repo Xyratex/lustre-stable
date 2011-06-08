@@ -9,7 +9,7 @@
 
 # for those uses that don't want the -smp/-bigsmp (or the .arch) on the end
 # of %kversion
-%define krequires %(bash -c "echo %{kversion} | sed -e 's/\.x86_64$//' -e 's/\.i[3456]86$//' -e 's/-smp$//' -e 's/-bigsmp$
+%define krequires %(bash -c "echo %{kversion} | sed -e 's/\.x86_64$//' -e 's/\.i[3456]86$//' -e 's/-smp$//' -e 's/-bigsmp$//' -e 's/-ppc64$//' -e 's/-default$//'")
 
 %{!?downstream_release: %define downstream_release "@DOWNSTREAM_RELEASE@"}
 
