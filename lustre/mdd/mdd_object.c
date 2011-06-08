@@ -608,6 +608,14 @@ int mdd_get_default_md(struct mdd_object *mdd_obj, struct lov_mds_md *lmm)
         RETURN(sizeof(*lum));
 }
 
+static int is_rootdir(struct mdd_object *mdd_obj)
+{
+        const struct mdd_device *mdd_dev = mdd_obj2mdd_dev(mdd_obj);
+        const struct lu_fid *fid = mdo2fid(mdd_obj);
+
+        return lu_fid_eq(&mdd_dev->mdd_root_fid, fid);
+}
+
 /* get lov EA only */
 static int __mdd_lmm_get(const struct lu_env *env,
                          struct mdd_object *mdd_obj, struct md_attr *ma)
@@ -620,7 +628,7 @@ static int __mdd_lmm_get(const struct lu_env *env,
 
         rc = mdd_get_md(env, mdd_obj, ma->ma_lmm, &ma->ma_lmm_size,
                         XATTR_NAME_LOV);
-        if (rc == 0 && (ma->ma_need & MA_LOV_DEF))
+        if (rc == 0 && (ma->ma_need & MA_LOV_DEF) && is_rootdir(mdd_obj))
                 rc = mdd_get_default_md(mdd_obj, ma->ma_lmm);
         if (rc > 0) {
                 ma->ma_lmm_size = rc;
@@ -2337,7 +2345,7 @@ static int __mdd_readpage(const struct lu_env *env, struct mdd_object *obj,
                 /*
                  * end of directory.
                  */
-                hash_end = DIR_END_OFF;
+                hash_end = MDS_DIR_END_OFF;
                 rc = 0;
         }
         if (rc == 0) {
@@ -2394,7 +2402,7 @@ int mdd_readpage(const struct lu_env *env, struct md_object *obj,
                 dp = (struct lu_dirpage*)cfs_kmap(pg);
                 memset(dp, 0 , sizeof(struct lu_dirpage));
                 dp->ldp_hash_start = cpu_to_le64(rdpg->rp_hash);
-                dp->ldp_hash_end   = cpu_to_le64(DIR_END_OFF);
+                dp->ldp_hash_end   = cpu_to_le64(MDS_DIR_END_OFF);
                 dp->ldp_flags |= LDF_EMPTY;
                 dp->ldp_flags = cpu_to_le32(dp->ldp_flags);
                 cfs_kunmap(pg);
