@@ -1,4 +1,3 @@
-ext4-version-2.6-rhel6.patch
 ext4-wantedi-2.6-rhel6.patch
 ext4-map_inode_page-2.6.18-rhel5.patch
 export-ext4-2.6-rhel5.patch
@@ -23,7 +22,7 @@ ext4-dynlocks-common-rhel6.patch
 ext4-hash-indexed-dir-dotdot-update-rhel5.patch
 ext4-kill-dx_root-rhel6.patch
 ext4-extents-mount-option-rhel6.patch
-ext4-fiemap-2.6-rhel5.patch
+ext4-fiemap-2.6-rhel6.patch
 ext4-mballoc-pa_free-mismatch-rhel6.patch
 ext4_data_in_dirent-rhel6.patch
 ext4-disable-mb-cache-rhel6.patch
