@@ -114,8 +114,13 @@ static struct inode *search_inode_for_lustre(struct super_block *sb,
         RETURN(inode);
 }
 
-static struct dentry *ll_iget_for_nfs(struct super_block *sb,
-                                      const struct lu_fid *fid)
+struct lustre_nfs_fid {
+        struct lu_fid   lnf_child;
+        struct lu_fid   lnf_parent;
+};
+
+static struct dentry *
+ll_iget_for_nfs(struct super_block *sb, struct lu_fid *fid, struct lu_fid *parent)
 {
         struct inode  *inode;
         struct dentry *result;
@@ -131,15 +136,26 @@ static struct dentry *ll_iget_for_nfs(struct super_block *sb,
 
         if (is_bad_inode(inode)) {
                 /* we didn't find the right inode.. */
-                CERROR("can't get inode by fid "DFID"\n",
-                       PFID(fid));
                 iput(inode);
                 RETURN(ERR_PTR(-ESTALE));
         }
 
+        /**
+         * It is an anonymous dentry without OST objects created yet.
+         * We have to find the parent to tell MDS how to init lov objects.
+         */
+        if (S_ISREG(inode->i_mode) && ll_i2info(inode)->lli_smd == NULL &&
+            parent != NULL) {
+                struct ll_inode_info *lli = ll_i2info(inode);
+
+                cfs_spin_lock(&lli->lli_lock);
+                lli->lli_pfid = *parent;
+                cfs_spin_unlock(&lli->lli_lock);
+        }
+
         result = d_obtain_alias(inode);
-        if (!result)
-                RETURN(ERR_PTR(-ENOMEM));
+        if (IS_ERR(result))
+                RETURN(result);
 
         ll_dops_init(result, 1, 0);
 
@@ -147,11 +163,6 @@ static struct dentry *ll_iget_for_nfs(struct super_block *sb,
 }
 
 #define LUSTRE_NFS_FID          0x97
-
-struct lustre_nfs_fid {
-        struct lu_fid   lnf_child;
-        struct lu_fid   lnf_parent;
-};
 
 /**
  * \a connectable - is nfsd will connect himself or this should be done
@@ -217,7 +228,8 @@ static int ll_get_name(struct dentry *dentry, char *name,
         if (!dir->i_fop)
                 GOTO(out, rc = -EINVAL);
 
-        filp = ll_dentry_open(dget(dentry), NULL, O_RDONLY, current_cred());
+        filp = ll_dentry_open(dget(dentry), mntget(ll_i2sbi(dir)->ll_mnt),
+                              O_RDONLY, current_cred());
         if (IS_ERR(filp))
                 GOTO(out, rc = PTR_ERR(filp));
 
@@ -250,7 +262,7 @@ static struct dentry *ll_fh_to_dentry(struct super_block *sb, struct fid *fid,
         if (fh_type != LUSTRE_NFS_FID)
                 RETURN(ERR_PTR(-EPROTO));
 
-        RETURN(ll_iget_for_nfs(sb, &nfs_fid->lnf_child));
+        RETURN(ll_iget_for_nfs(sb, &nfs_fid->lnf_child, &nfs_fid->lnf_parent));
 }
 
 static struct dentry *ll_fh_to_parent(struct super_block *sb, struct fid *fid,
@@ -261,7 +273,7 @@ static struct dentry *ll_fh_to_parent(struct super_block *sb, struct fid *fid,
         if (fh_type != LUSTRE_NFS_FID)
                 RETURN(ERR_PTR(-EPROTO));
 
-        RETURN(ll_iget_for_nfs(sb, &nfs_fid->lnf_parent));
+        RETURN(ll_iget_for_nfs(sb, &nfs_fid->lnf_parent, NULL));
 }
 
 #else
@@ -293,11 +305,10 @@ static struct dentry *ll_decode_fh(struct super_block *sb, __u32 *fh, int fh_len
 
 static struct dentry *ll_get_dentry(struct super_block *sb, void *data)
 {
-        struct lustre_nfs_fid *fid = data;
-        struct dentry      *entry;
+        struct dentry *entry;
         ENTRY;
 
-        entry = ll_iget_for_nfs(sb, &fid->lnf_child);
+        entry = ll_iget_for_nfs(sb, data, NULL);
         RETURN(entry);
 }
 #endif
@@ -338,7 +349,7 @@ static struct dentry *ll_get_parent(struct dentry *dchild)
         CDEBUG(D_INFO, "parent for "DFID" is "DFID"\n",
                 PFID(ll_inode2fid(dir)), PFID(&body->fid1));
 
-        result = ll_iget_for_nfs(dir->i_sb, &body->fid1);
+        result = ll_iget_for_nfs(dir->i_sb, &body->fid1, NULL);
 
         ptlrpc_req_finished(req);
         RETURN(result);
