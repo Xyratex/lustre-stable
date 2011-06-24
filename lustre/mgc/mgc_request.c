@@ -1133,10 +1133,11 @@ static int mgc_llog_is_empty(struct obd_device *obd, struct llog_ctxt *ctxt,
         int rc = 0;
 
         push_ctxt(&saved, &obd->obd_lvfs_ctxt, NULL);
-        rc = llog_create(ctxt, &llh, NULL, name);
+        rc = llog_create(ctxt, &llh, NULL, name, LLOG_CREATE_RO);
         if (rc == 0) {
-                llog_init_handle(llh, LLOG_F_IS_PLAIN, NULL);
-                rc = llog_get_size(llh);
+                rc = llog_init_handle(llh, LLOG_F_IS_PLAIN, NULL);
+                if (rc == 0)
+                        rc = llog_get_size(llh);
                 llog_close(llh);
         }
         pop_ctxt(&saved, &obd->obd_lvfs_ctxt, NULL);
@@ -1186,7 +1187,7 @@ static int mgc_copy_llog(struct obd_device *obd, struct llog_ctxt *rctxt,
         sprintf(temp_log, "%sT", logname);
 
         /* Make sure there's no old temp log */
-        rc = llog_create(lctxt, &local_llh, NULL, temp_log);
+        rc = llog_create(lctxt, &local_llh, NULL, temp_log, LLOG_CREATE_RW);
         if (rc)
                 GOTO(out, rc);
         rc = llog_init_handle(local_llh, LLOG_F_IS_PLAIN, NULL);
@@ -1198,7 +1199,7 @@ static int mgc_copy_llog(struct obd_device *obd, struct llog_ctxt *rctxt,
                 GOTO(out, rc);
 
         /* open local log */
-        rc = llog_create(lctxt, &local_llh, NULL, temp_log);
+        rc = llog_create(lctxt, &local_llh, NULL, temp_log, LLOG_CREATE_RW);
         if (rc)
                 GOTO(out, rc);
 
@@ -1211,7 +1212,7 @@ static int mgc_copy_llog(struct obd_device *obd, struct llog_ctxt *rctxt,
                 GOTO(out_closel, rc);
 
         /* open remote log */
-        rc = llog_create(rctxt, &remote_llh, NULL, logname);
+        rc = llog_create(rctxt, &remote_llh, NULL, logname, LLOG_CREATE_RO);
         if (rc)
                 GOTO(out_closel, rc);
         rc = llog_init_handle(remote_llh, LLOG_F_IS_PLAIN, NULL);

@@ -576,7 +576,7 @@ static struct file *llog_filp_open(char *dir, char *name, int flags, int mode)
                 filp = ERR_PTR(-ENAMETOOLONG);
         } else {
                 filp = l_filp_open(logname, flags, mode);
-                if (IS_ERR(filp))
+                if (IS_ERR(filp) && PTR_ERR(filp) != -ENOENT)
                         CERROR("logfile creation %s: %ld\n", logname,
                                PTR_ERR(filp));
         }
@@ -587,21 +587,22 @@ static struct file *llog_filp_open(char *dir, char *name, int flags, int mode)
 /* This is a callback from the llog_* functions.
  * Assumes caller has already pushed us into the kernel context. */
 static int llog_lvfs_create(struct llog_ctxt *ctxt, struct llog_handle **res,
-                            struct llog_logid *logid, char *name)
+                            struct llog_logid *logid, char *name, int flags)
 {
         struct llog_handle *handle;
         struct obd_device *obd;
         struct l_dentry *dchild = NULL;
         struct obdo *oa = NULL;
         int rc = 0;
-        int open_flags = O_RDWR | O_CREAT | O_LARGEFILE;
+        int open_flags;
         ENTRY;
 
         handle = llog_alloc_handle();
         if (handle == NULL)
                 RETURN(-ENOMEM);
         *res = handle;
-
+        open_flags = flags == LLOG_CREATE_RO ?  O_RDONLY :
+                                                O_RDWR | O_CREAT | O_LARGEFILE;
         LASSERT(ctxt);
         LASSERT(ctxt->loc_exp);
         obd = ctxt->loc_exp->exp_obd;
@@ -627,7 +628,7 @@ static int llog_lvfs_create(struct llog_ctxt *ctxt, struct llog_handle **res,
 
                 /* l_dentry_open will call dput(dchild) if there is an error */
                 handle->lgh_file = l_dentry_open(&obd->obd_lvfs_ctxt, dchild,
-                                                    O_RDWR | O_LARGEFILE);
+                                                 open_flags);
                 if (IS_ERR(handle->lgh_file)) {
                         rc = PTR_ERR(handle->lgh_file);
                         CERROR("error opening logfile "LPX64"0x%x: rc %d\n",
@@ -914,7 +915,7 @@ static int llog_lvfs_prev_block(struct llog_handle *loghandle,
 }
 
 static int llog_lvfs_create(struct llog_ctxt *ctxt, struct llog_handle **res,
-                            struct llog_logid *logid, char *name)
+                            struct llog_logid *logid, char *name, int flags)
 {
         LBUG();
         return 0;

@@ -2602,6 +2602,7 @@ enum llogd_rpc_ops {
 struct llogd_body {
         struct llog_logid  lgd_logid;
         __u32 lgd_ctxt_idx;
+#define lgd_open_flags lgd_llh_flags
         __u32 lgd_llh_flags;
         __u32 lgd_index;
         __u32 lgd_saved_index;

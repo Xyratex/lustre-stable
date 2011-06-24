@@ -278,18 +278,22 @@ static int mgs_get_fsdb_from_llog(struct obd_device *obd, struct fs_db *fsdb)
         name_create(&logname, fsdb->fsdb_name, "-client");
         cfs_down(&fsdb->fsdb_sem);
         push_ctxt(&saved, &obd->obd_lvfs_ctxt, NULL);
-        rc = llog_create(ctxt, &loghandle, NULL, logname);
-        if (rc)
+        rc = llog_create(ctxt, &loghandle, NULL, logname, LLOG_CREATE_RO);
+        if (rc) {
+                if (rc == -ENOENT) {
+                        cfs_set_bit(FSDB_LOG_EMPTY, &fsdb->fsdb_flags);
+                        rc = 0;
+                }
                 GOTO(out_pop, rc);
-
+        }
         rc = llog_init_handle(loghandle, LLOG_F_IS_PLAIN, NULL);
         if (rc)
                 GOTO(out_close, rc);
 
         if (llog_get_size(loghandle) <= 1)
                 cfs_set_bit(FSDB_LOG_EMPTY, &fsdb->fsdb_flags);
-
-        rc = llog_process(loghandle, mgs_fsdb_handler, (void *) &d, NULL);
+        else 
+                rc = llog_process(loghandle, mgs_fsdb_handler, (void *) &d, NULL);
         CDEBUG(D_INFO, "get_db = %d\n", rc);
 out_close:
         rc2 = llog_close(loghandle);
@@ -678,7 +682,7 @@ static int mgs_modify(struct obd_device *obd, struct fs_db *fsdb,
 
         ctxt = llog_get_context(obd, LLOG_CONFIG_ORIG_CTXT);
         LASSERT(ctxt != NULL);
-        rc = llog_create(ctxt, &loghandle, NULL, logname);
+        rc = llog_create(ctxt, &loghandle, NULL, logname, LLOG_CREATE_RW);
         if (rc)
                 GOTO(out_pop, rc);
 
@@ -919,9 +923,9 @@ static int record_start_log(struct obd_device *obd,
                 GOTO(out, rc = -ENODEV);
 
         push_ctxt(&saved, &obd->obd_lvfs_ctxt, NULL);
-        rc = llog_create(ctxt, llh, NULL, name);
+        rc = llog_create(ctxt, llh, NULL, name, LLOG_CREATE_RW);
         if (rc == 0)
-                llog_init_handle(*llh, LLOG_F_IS_PLAIN, &cfg_uuid);
+                rc = llog_init_handle(*llh, LLOG_F_IS_PLAIN, &cfg_uuid);
         else
                 *llh = NULL;
 
@@ -959,10 +963,11 @@ static int mgs_log_is_empty(struct obd_device *obd, char *name)
         ctxt = llog_get_context(obd, LLOG_CONFIG_ORIG_CTXT);
         LASSERT(ctxt != NULL);
         push_ctxt(&saved, &obd->obd_lvfs_ctxt, NULL);
-        rc = llog_create(ctxt, &llh, NULL, name);
+        rc = llog_create(ctxt, &llh, NULL, name, LLOG_CREATE_RO);
         if (rc == 0) {
-                llog_init_handle(llh, LLOG_F_IS_PLAIN, NULL);
-                rc = llog_get_size(llh);
+                rc = llog_init_handle(llh, LLOG_F_IS_PLAIN, NULL);
+                if (rc == 0)
+                        rc = llog_get_size(llh);
                 llog_close(llh);
         }
         pop_ctxt(&saved, &obd->obd_lvfs_ctxt, NULL);
@@ -1243,7 +1248,7 @@ static int mgs_steal_llog_for_mdt_from_client(struct obd_device *obd,
 
         push_ctxt(&saved, &obd->obd_lvfs_ctxt, NULL);
 
-        rc = llog_create(ctxt, &loghandle, NULL, client_name);
+        rc = llog_create(ctxt, &loghandle, NULL, client_name, LLOG_CREATE_RW);
         if (rc)
                 GOTO(out_pop, rc);
 
@@ -2348,9 +2353,12 @@ int mgs_get_fsdb_srpc_from_llog(struct obd_device *obd,
 
         push_ctxt(&saved, &obd->obd_lvfs_ctxt, NULL);
 
-        rc = llog_create(ctxt, &llh, NULL, logname);
-        if (rc)
+        rc = llog_create(ctxt, &llh, NULL, logname, LLOG_CREATE_RO);
+        if (rc) {
+                if (rc == -ENOENT)
+                        rc = 0;
                 GOTO(out_pop, rc);
+        }
 
         rc = llog_init_handle(llh, LLOG_F_IS_PLAIN, NULL);
         if (rc)
@@ -2864,15 +2872,16 @@ int mgs_erase_log(struct obd_device *obd, char *name)
         LASSERT(ctxt != NULL);
 
         push_ctxt(&saved, &obd->obd_lvfs_ctxt, NULL);
-        rc = llog_create(ctxt, &llh, NULL, name);
+        rc = llog_create(ctxt, &llh, NULL, name, LLOG_CREATE_RO);
         if (rc == 0) {
-                llog_init_handle(llh, LLOG_F_IS_PLAIN, NULL);
                 rc = llog_destroy(llh);
                 llog_free_handle(llh);
         }
         pop_ctxt(&saved, &obd->obd_lvfs_ctxt, NULL);
         llog_ctxt_put(ctxt);
 
+        if (rc == -ENOENT)
+                rc = 0;
         if (rc)
                 CERROR("failed to clear log %s: %d\n", name, rc);
 

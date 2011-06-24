@@ -104,13 +104,15 @@ static int llog_test_1(struct obd_device *obd, char *name)
         CWARN("1a: create a log with name: %s\n", name);
         LASSERT(ctxt);
 
-        rc = llog_create(ctxt, &llh, NULL, name);
+        rc = llog_create(ctxt, &llh, NULL, name, LLOG_CREATE_RW);
         if (rc) {
                 CERROR("1a: llog_create with name %s failed: %d\n", name, rc);
                 llog_ctxt_put(ctxt);
                 RETURN(rc);
         }
-        llog_init_handle(llh, LLOG_F_IS_PLAIN, &uuid);
+        rc = llog_init_handle(llh, LLOG_F_IS_PLAIN, &uuid);
+        if (rc != 0)
+                GOTO(out, rc);
 
         if ((rc = verify_handle("1", llh, 1)))
                 GOTO(out, rc);
@@ -136,7 +138,7 @@ static int llog_test_2(struct obd_device *obd, char *name,
         ENTRY;
 
         CWARN("2a: re-open a log with name: %s\n", name);
-        rc = llog_create(ctxt, llh, NULL, name);
+        rc = llog_create(ctxt, llh, NULL, name, LLOG_CREATE_RW);
         if (rc) {
                 CERROR("2a: re-open log with name %s failed: %d\n", name, rc);
                 GOTO(out, rc);
@@ -147,7 +149,7 @@ static int llog_test_2(struct obd_device *obd, char *name,
                 GOTO(out, rc);
 #if 0
         CWARN("2b: create a log without specified NAME & LOGID\n");
-        rc = llog_create(ctxt, &loghandle, NULL, NULL);
+        rc = llog_create(ctxt, &loghandle, NULL, NULL, LLOG_CREATE_RW);
         if (rc) {
                 CERROR("2b: create log failed\n");
                 GOTO(out, rc);
@@ -157,7 +159,7 @@ static int llog_test_2(struct obd_device *obd, char *name,
         llog_close(loghandle);
 
         CWARN("2b: re-open the log by LOGID\n");
-        rc = llog_create(ctxt, &loghandle, &logid, NULL);
+        rc = llog_create(ctxt, &loghandle, &logid, NULL, LLOG_CREATE_RW);
         if (rc) {
                 CERROR("2b: re-open log by LOGID failed\n");
                 GOTO(out, rc);
@@ -295,7 +297,7 @@ static int llog_test_4(struct obd_device *obd)
 
         sprintf(name, "%x", llog_test_rand+1);
         CWARN("4a: create a catalog log with name: %s\n", name);
-        rc = llog_create(ctxt, &cath, NULL, name);
+        rc = llog_create(ctxt, &cath, NULL, name, LLOG_CREATE_RW);
         if (rc) {
                 CERROR("1a: llog_create with name %s failed: %d\n", name, rc);
                 GOTO(out, rc);
@@ -434,7 +436,7 @@ static int llog_test_5(struct obd_device *obd)
         lmr.lmr_hdr.lrh_type = 0xf00f00;
 
         CWARN("5a: re-open catalog by id\n");
-        rc = llog_create(ctxt, &llh, &cat_logid, NULL);
+        rc = llog_create(ctxt, &llh, &cat_logid, NULL, LLOG_CREATE_RW);
         if (rc) {
                 CERROR("5a: llog_create with logid failed: %d\n", rc);
                 GOTO(out, rc);
@@ -526,7 +528,7 @@ static int llog_test_6(struct obd_device *obd, char *name)
         }
 
         nctxt = llog_get_context(mgc_obd, LLOG_CONFIG_REPL_CTXT);
-        rc = llog_create(nctxt, &llh, NULL, name);
+        rc = llog_create(nctxt, &llh, NULL, name, LLOG_CREATE_RO);
         if (rc) {
                 CERROR("6: llog_create failed %d\n", rc);
                 llog_ctxt_put(nctxt);
@@ -571,7 +573,7 @@ static int llog_test_7(struct obd_device *obd)
         CWARN("7: create a log with name: %s\n", name);
         LASSERT(ctxt);
 
-        rc = llog_create(ctxt, &llh, NULL, name);
+        rc = llog_create(ctxt, &llh, NULL, name, LLOG_CREATE_RW);
         if (rc) {
                 CERROR("7: llog_create with name %s failed: %d\n", name, rc);
                 GOTO(ctxt_release, rc);

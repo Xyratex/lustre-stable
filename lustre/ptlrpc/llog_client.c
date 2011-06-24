@@ -85,7 +85,7 @@
 /* This is a callback from the llog_* functions.
  * Assumes caller has already pushed us into the kernel context. */
 static int llog_client_create(struct llog_ctxt *ctxt, struct llog_handle **res,
-                              struct llog_logid *logid, char *name)
+                              struct llog_logid *logid, char *name, int flags)
 {
         struct obd_import     *imp;
         struct llogd_body     *body;

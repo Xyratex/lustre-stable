@@ -244,7 +244,7 @@ struct llog_operations {
         int (*lop_prev_block)(struct llog_handle *h,
                               int prev_idx, void *buf, int len);
         int (*lop_create)(struct llog_ctxt *ctxt, struct llog_handle **,
-                          struct llog_logid *logid, char *name);
+                          struct llog_logid *logid, char *name, int flag);
         int (*lop_close)(struct llog_handle *handle);
         int (*lop_read_header)(struct llog_handle *handle);
 
@@ -642,8 +642,12 @@ static inline int llog_prev_block(struct llog_handle *loghandle,
         RETURN(rc);
 }
 
+enum {
+	LLOG_CREATE_RW,
+	LLOG_CREATE_RO
+};
 static inline int llog_create(struct llog_ctxt *ctxt, struct llog_handle **res,
-                              struct llog_logid *logid, char *name)
+                              struct llog_logid *logid, char *name, int flags)
 {
         struct llog_operations *lop;
         int raised, rc;
@@ -658,7 +662,7 @@ static inline int llog_create(struct llog_ctxt *ctxt, struct llog_handle **res,
         raised = cfs_cap_raised(CFS_CAP_SYS_RESOURCE);
         if (!raised)
                 cfs_cap_raise(CFS_CAP_SYS_RESOURCE);
-        rc = lop->lop_create(ctxt, res, logid, name);
+        rc = lop->lop_create(ctxt, res, logid, name, flags);
         if (!raised)
                 cfs_cap_lower(CFS_CAP_SYS_RESOURCE);
         RETURN(rc);

@@ -1041,7 +1041,7 @@ int sptlrpc_target_local_copy_conf(struct obd_device *obd,
         }
 
         /* erase the old tmp log */
-        rc = llog_create(ctxt, &llh, NULL, LOG_SPTLRPC_TMP);
+        rc = llog_create(ctxt, &llh, NULL, LOG_SPTLRPC_TMP, LLOG_CREATE_RO);
         if (rc == 0) {
                 rc = llog_init_handle(llh, LLOG_F_IS_PLAIN, NULL);
                 if (rc == 0) {
@@ -1050,6 +1050,9 @@ int sptlrpc_target_local_copy_conf(struct obd_device *obd,
                 } else {
                         llog_close(llh);
                 }
+        } else {
+                if (rc == -ENOENT)
+                        rc = 0;
         }
 
         if (rc) {
@@ -1059,7 +1062,7 @@ int sptlrpc_target_local_copy_conf(struct obd_device *obd,
         }
 
         /* write temporary log */
-        rc = llog_create(ctxt, &llh, NULL, LOG_SPTLRPC_TMP);
+        rc = llog_create(ctxt, &llh, NULL, LOG_SPTLRPC_TMP, LLOG_CREATE_RW);
         if (rc)
                 GOTO(out_dput, rc);
         rc = llog_init_handle(llh, LLOG_F_IS_PLAIN, NULL);
@@ -1137,7 +1140,7 @@ int sptlrpc_target_local_read_conf(struct obd_device *obd,
 
         push_ctxt(&saved, &obd->obd_lvfs_ctxt, NULL);
 
-        rc = llog_create(ctxt, &llh, NULL, LOG_SPTLRPC);
+        rc = llog_create(ctxt, &llh, NULL, LOG_SPTLRPC, LLOG_CREATE_RO);
         if (rc)
                 GOTO(out_pop, rc);
 

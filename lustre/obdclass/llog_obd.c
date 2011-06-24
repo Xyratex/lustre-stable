@@ -370,9 +370,9 @@ int llog_obd_origin_setup(struct obd_device *obd, struct obd_llog_group *olg,
                 RETURN(-ENODEV);
 
         if (logid && logid->lgl_oid) {
-                rc = llog_create(ctxt, &handle, logid, NULL);
+                rc = llog_create(ctxt, &handle, logid, NULL, LLOG_CREATE_RW);
         } else {
-                rc = llog_create(ctxt, &handle, NULL, (char *)name);
+                rc = llog_create(ctxt, &handle, NULL, (char *)name, LLOG_CREATE_RW);
                 if (!rc && logid)
                         *logid = handle->lgh_id;
         }

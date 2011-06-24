@@ -85,7 +85,7 @@ static struct llog_handle *llog_cat_new_log(struct llog_handle *cathandle)
         if (OBD_FAIL_CHECK(OBD_FAIL_MDS_LLOG_CREATE_FAILED))
                 RETURN(ERR_PTR(-ENOSPC));
 
-        rc = llog_create(cathandle->lgh_ctxt, &loghandle, NULL, NULL);
+        rc = llog_create(cathandle->lgh_ctxt, &loghandle, NULL, NULL, LLOG_CREATE_RW);
         if (rc)
                 RETURN(ERR_PTR(rc));
 
@@ -168,7 +168,7 @@ int llog_cat_id2handle(struct llog_handle *cathandle, struct llog_handle **res,
                 }
         }
 
-        rc = llog_create(cathandle->lgh_ctxt, &loghandle, logid, NULL);
+        rc = llog_create(cathandle->lgh_ctxt, &loghandle, logid, NULL, LLOG_CREATE_RW);
         if (rc) {
                 CERROR("error opening log id "LPX64":%x: rc %d\n",
                        logid->lgl_oid, logid->lgl_ogen, rc);
@@ -468,7 +468,7 @@ int llog_cat_process_thread(void *data)
         cfs_daemonize_ctxt("ll_log_process");
 
         logid = *(struct llog_logid *)(args->lpca_arg);
-        rc = llog_create(ctxt, &llh, &logid, NULL);
+        rc = llog_create(ctxt, &llh, &logid, NULL, LLOG_CREATE_RW);
         if (rc) {
                 CERROR("llog_create() failed %d\n", rc);
                 GOTO(out, rc);

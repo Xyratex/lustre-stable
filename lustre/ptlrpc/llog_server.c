@@ -95,7 +95,7 @@ int llog_origin_handle_create(struct ptlrpc_request *req)
         disk_obd = ctxt->loc_exp->exp_obd;
         push_ctxt(&saved, &disk_obd->obd_lvfs_ctxt, NULL);
 
-        rc = llog_create(ctxt, &loghandle, logid, name);
+        rc = llog_create(ctxt, &loghandle, logid, name, LLOG_CREATE_RW);
         if (rc)
                 GOTO(out_pop, rc);
 
@@ -145,9 +145,12 @@ int llog_origin_handle_destroy(struct ptlrpc_request *req)
         disk_obd = ctxt->loc_exp->exp_obd;
         push_ctxt(&saved, &disk_obd->obd_lvfs_ctxt, NULL);
 
-        rc = llog_create(ctxt, &loghandle, logid, NULL);
-        if (rc)
+        rc = llog_create(ctxt, &loghandle, logid, NULL, LLOG_CREATE_RO);
+        if (rc) {
+                if (rc == -ENOENT)
+                        rc = 0;
                 GOTO(out_pop, rc);
+        }
 
         rc = req_capsule_server_pack(&req->rq_pill);
         if (rc)
@@ -203,7 +206,8 @@ int llog_origin_handle_next_block(struct ptlrpc_request *req)
         disk_obd = ctxt->loc_exp->exp_obd;
         push_ctxt(&saved, &disk_obd->obd_lvfs_ctxt, NULL);
 
-        rc = llog_create(ctxt, &loghandle, &body->lgd_logid, NULL);
+        rc = llog_create(ctxt, &loghandle, &body->lgd_logid, NULL,
+                         LLOG_CREATE_RO);
         if (rc)
                 GOTO(out_pop, rc);
 
@@ -274,7 +278,8 @@ int llog_origin_handle_prev_block(struct ptlrpc_request *req)
         disk_obd = ctxt->loc_exp->exp_obd;
         push_ctxt(&saved, &disk_obd->obd_lvfs_ctxt, NULL);
 
-        rc = llog_create(ctxt, &loghandle, &body->lgd_logid, NULL);
+        rc = llog_create(ctxt, &loghandle, &body->lgd_logid, NULL,
+                         LLOG_CREATE_RO);
         if (rc)
                 GOTO(out_pop, rc);
 
@@ -339,7 +344,8 @@ int llog_origin_handle_read_header(struct ptlrpc_request *req)
         disk_obd = ctxt->loc_exp->exp_obd;
         push_ctxt(&saved, &disk_obd->obd_lvfs_ctxt, NULL);
 
-        rc = llog_create(ctxt, &loghandle, &body->lgd_logid, NULL);
+        rc = llog_create(ctxt, &loghandle, &body->lgd_logid, NULL,
+                         LLOG_CREATE_RO);
         if (rc)
                 GOTO(out_pop, rc);
 
@@ -481,7 +487,7 @@ static int llog_catinfo_config(struct obd_device *obd, char *buf, int buf_len,
 
         for (i = 0; i < 4; i++) {
                 int index, uncanceled = 0;
-                rc = llog_create(ctxt, &handle, NULL, name[i]);
+                rc = llog_create(ctxt, &handle, NULL, name[i], LLOG_CREATE_RO);
                 if (rc)
                         GOTO(out_pop, rc);
                 rc = llog_init_handle(handle, 0, NULL);
@@ -549,7 +555,7 @@ static int llog_catinfo_cb(struct llog_handle *cat,
 
         lir = (struct llog_logid_rec *)rec;
         logid = &lir->lid_id;
-        rc = llog_create(ctxt, &handle, logid, NULL);
+        rc = llog_create(ctxt, &handle, logid, NULL, LLOG_CREATE_RO);
         if (rc)
                 RETURN(-EINVAL);
         rc = llog_init_handle(handle, 0, NULL);
@@ -618,7 +624,8 @@ static int llog_catinfo_deletions(struct obd_device *obd, char *buf,
         for (i = 0; i < count; i++) {
                 int l, index, uncanceled = 0;
 
-                rc = llog_create(ctxt, &handle, &idarray[i].lci_logid, NULL);
+                rc = llog_create(ctxt, &handle, &idarray[i].lci_logid, NULL,
+                                 LLOG_CREATE_RO);
                 if (rc)
                         GOTO(out_pop, rc);
                 rc = llog_init_handle(handle, 0, NULL);
