@@ -1802,7 +1802,7 @@ int llapi_file_lookup(int dirfd, const char *name)
  * sign), 1st column is the answer for the MDS value, the 2nd is for the OST:
  * --------------------------------------
  * 1 | file > limit; sign > 0 | -1 / -1 |
- * 2 | file = limit; sign > 0 | -1 / -1 |
+ * 2 | file = limit; sign > 0 |  ? /  1 |
  * 3 | file < limit; sign > 0 |  ? /  1 |
  * 4 | file > limit; sign = 0 | -1 / -1 |
  * 5 | file = limit; sign = 0 |  ? /  1 |  <- (see the Note below)
@@ -1817,18 +1817,17 @@ static int find_value_cmp(unsigned int file, unsigned int limit, int sign,
                           int negopt, unsigned long long margin, int mds)
 {
         int ret = -1;
-
+        
         if (sign > 0) {
-                /* Drop the fraction of margin (of days). */
-                if (file + margin <= limit)
+                if (file <= limit)
                         ret = mds ? 0 : 1;
         } else if (sign == 0) {
-                if (file <= limit && file + margin > limit)
+                if (file <= limit && file + margin >= limit)
                         ret = mds ? 0 : 1;
                 else if (file + margin <= limit)
                         ret = mds ? 0 : -1;
         } else if (sign < 0) {
-                if (file > limit)
+                if (file >= limit)
                         ret = 1;
                 else if (mds)
                         ret = 0;
@@ -1900,8 +1899,7 @@ static int cb_find_init(char *path, DIR *parent, DIR *dir,
 
         LASSERT(parent != NULL || dir != NULL);
 
-        if (param->have_fileinfo == 0)
-                param->lmd->lmd_lmm.lmm_stripe_count = 0;
+        param->lmd->lmd_lmm.lmm_stripe_count = 0;
 
         /* If a regular expression is presented, make the initial decision */
         if (param->pattern != NULL) {
@@ -1927,18 +1925,14 @@ static int cb_find_init(char *path, DIR *parent, DIR *dir,
         }
 
 
+        /* If a time or OST should be checked, the decision is not taken yet. */
+        if (param->atime || param->ctime || param->mtime || param->obduuid ||
+            param->check_size)
+                decision = 0;
+
         ret = 0;
-
-        /* Request MDS for the stat info if some of these parameters need
-         * to be compared. */
-        if (param->obduuid    || param->check_uid || param->check_gid ||
-            param->check_pool || param->atime     || param->ctime     ||
-            param->mtime      || param->check_size)
-                decision = 0;
-        if (param->type && checked_type == 1)
-                decision = 0;
-
-        if (param->have_fileinfo == 0 && decision == 0) {
+        /* Request MDS for the stat info. */
+        if (param->have_fileinfo == 0) {
                 if (dir) {
                         /* retrieve needed file info */
                         ret = ioctl(dirfd(dir), LL_IOC_MDC_GETINFO,
@@ -2046,17 +2040,15 @@ static int cb_find_init(char *path, DIR *parent, DIR *dir,
                                             lmm_objects[i].l_ost_idx) {
                                                 if (param->exclude_obd)
                                                         goto decided;
-                                                break;
+                                                goto obd_matches;
                                         }
                                 }
-                                /* If an OBD matches, just break */
-                                if (j != param->num_obds)
-                                        break;
                         }
 
                         if (i == param->lmd->lmd_lmm.lmm_stripe_count) {
-                                if (!param->exclude_obd)
-                                        goto decided;
+                                if (param->exclude_obd)
+                                        goto obd_matches;
+                                goto decided;
                         }
                 }
         }
@@ -2101,32 +2093,22 @@ static int cb_find_init(char *path, DIR *parent, DIR *dir,
         }
 
         /* Check the time on mds. */
-        decision = 1;
-        if (param->atime || param->ctime || param->mtime) {
+        if (!decision) {
                 int for_mds;
 
                 for_mds = lustre_fs ? (S_ISREG(st->st_mode) &&
                                        param->lmd->lmd_lmm.lmm_stripe_count)
                                     : 0;
                 decision = find_time_check(st, param, for_mds);
-                if (decision == -1)
-                        goto decided;
         }
 
+obd_matches:
         /* If file still fits the request, ask ost for updated info.
            The regular stat is almost of the same speed as some new
            'glimpse-size-ioctl'. */
-
-        if (param->check_size && S_ISREG(st->st_mode) &&
-            param->lmd->lmd_lmm.lmm_stripe_count)
-                decision = 0;
-
-        while (!decision) {
-                /* For regular files with the stripe the decision may have not
-                 * been taken yet if *time or size is to be checked. */
-                LASSERT(S_ISREG(st->st_mode) &&
-                        param->lmd->lmd_lmm.lmm_stripe_count);
-
+        if (!decision && S_ISREG(st->st_mode) &&
+            param->lmd->lmd_lmm.lmm_stripe_count &&
+            (param->check_size ||param->atime || param->mtime || param->ctime)) {
                 if (param->obdindex != OBD_NOT_FOUND) {
                         /* Check whether the obd is active or not, if it is
                          * not active, just print the object affected by this
@@ -2148,7 +2130,7 @@ static int cb_find_init(char *path, DIR *parent, DIR *dir,
                                              "obd_uuid: %s failed %s ",
                                              param->obduuid->uuid,
                                              strerror(errno));
-                                break;
+                                goto print_path;
                         }
                 }
                 if (dir) {
@@ -2177,8 +2159,6 @@ static int cb_find_init(char *path, DIR *parent, DIR *dir,
                 decision = find_time_check(st, param, 0);
                 if (decision == -1)
                         goto decided;
-
-                break;
         }
 
         if (param->check_size)
@@ -2186,6 +2166,7 @@ static int cb_find_init(char *path, DIR *parent, DIR *dir,
                                           param->size_sign, param->exclude_size,
                                           param->size_units, 0);
 
+print_path:
         if (decision != -1) {
                 llapi_printf(LLAPI_MSG_NORMAL, "%s", path);
                 if (param->zeroend)
