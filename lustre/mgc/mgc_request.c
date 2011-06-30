@@ -129,18 +129,25 @@ static void config_log_put(struct config_llog_data *cld)
         ENTRY;
         CDEBUG(D_INFO, "log %s refs %d\n", cld->cld_logname,
                atomic_read(&cld->cld_refcount));
-        if (atomic_dec_and_test(&cld->cld_refcount)) {
-                CDEBUG(D_MGC, "dropping config log %s\n", cld->cld_logname);
-                class_export_put(cld->cld_mgcexp);
-                spin_lock(&config_list_lock);
+        LASSERT(atomic_read(&cld->cld_refcount) > 0);
+
+        /* spinlock to make sure no item with 0 refcount in the list */
+        spin_lock(&config_list_lock);
+        if (unlikely(atomic_dec_and_test(&cld->cld_refcount))) {
                 list_del(&cld->cld_list_chain);
                 spin_unlock(&config_list_lock);
+
+                CDEBUG(D_MGC, "dropping config log %s\n", cld->cld_logname);
+                class_export_put(cld->cld_mgcexp);
                 OBD_FREE(cld->cld_logname, strlen(cld->cld_logname) + 1);
                 if (cld->cld_cfg.cfg_instance != NULL)
                         OBD_FREE(cld->cld_cfg.cfg_instance,
                                  strlen(cld->cld_cfg.cfg_instance) + 1);
                 OBD_FREE(cld, sizeof(*cld));
+        } else {
+                cfs_spin_unlock(&config_list_lock);
         }
+
         EXIT;
 }
 
@@ -268,10 +275,32 @@ static cfs_waitq_t rq_waitq;
 static int mgc_process_log(struct obd_device *mgc,
                            struct config_llog_data *cld);
 
+static void do_requeue(struct config_llog_data *cld)
+{
+        LASSERT(cfs_atomic_read(&cld->cld_refcount) > 0);
+
+        /* Do not run mgc_process_log on a disconnected export or an
+           export which is being disconnected. Take the client
+           semaphore to make the check non-racy. */
+        down_read(&cld->cld_mgcexp->exp_obd->u.cli.cl_sem);
+        if (cld->cld_mgcexp->exp_obd->u.cli.cl_conn_count != 0) {
+                CDEBUG(D_MGC, "updating log %s\n", cld->cld_logname);
+                mgc_process_log(cld->cld_mgcexp->exp_obd, cld);
+        } else {
+                CDEBUG(D_MGC, "disconnecting, won't update log %s\n",
+                       cld->cld_logname);
+        }
+        up_read(&cld->cld_mgcexp->exp_obd->u.cli.cl_sem);
+
+        /* Whether we enqueued again or not in mgc_process_log, we're done
+         * with the ref from the old enqueue */
+        config_log_put(cld);
+}
+
 static int mgc_requeue_thread(void *data)
 {
         struct l_wait_info lwi_now, lwi_later;
-        struct config_llog_data *cld, *n;
+        struct config_llog_data *cld, *cld_next, *cld_prev;
         char name[] = "ll_cfg_requeue";
         int rc = 0;
         ENTRY;
@@ -297,24 +326,41 @@ static int mgc_requeue_thread(void *data)
                                       NULL, NULL);
                 l_wait_event(rq_waitq, rq_state & RQ_STOP, &lwi_now);
 
+                /*
+                 * iterate & processing through the list.
+                 *
+                 * it's guaranteed any item in the list must have
+                 * reference > 0; and if cld_lostlock is set, at
+                 * least one reference is taken by the previous enqueue.
+                 *
+                 * Note: releasing a cld might lead to itself unlinked
+                 * from the list. to safely iterate we need to take a reference
+                 * on next cld before processing.
+                 */
+                cld_prev = NULL;
+
                 spin_lock(&config_list_lock);
-                list_for_each_entry_safe(cld, n, &config_llog_list,
+                list_for_each_entry_safe(cld, cld_next, &config_llog_list,
                                          cld_list_chain) {
-                        spin_unlock(&config_list_lock);
+
+                        if (cld->cld_list_chain.next != &config_llog_list)
+                                cfs_atomic_inc(&cld_next->cld_refcount);
 
                         if (cld->cld_lostlock) {
-                                CDEBUG(D_MGC, "updating log %s\n",
-                                       cld->cld_logname);
                                 cld->cld_lostlock = 0;
-                                rc = mgc_process_log(cld->cld_mgcexp->exp_obd,
-                                                     cld);
-                                /* Whether we enqueued again or not in
-                                   mgc_process_log, we're done with the ref
-                                   from the old enqueue */
-                                config_log_put(cld);
+
+                                spin_unlock(&config_list_lock);
+                                do_requeue(cld);
+                                spin_lock(&config_list_lock);
                         }
 
-                        spin_lock(&config_list_lock);
+                        if (cld_prev) {
+                                spin_unlock(&config_list_lock);
+                                config_log_put(cld_prev);
+                                spin_lock(&config_list_lock);
+                        }
+
+                        cld_prev = cld_next;
                 }
                 spin_unlock(&config_list_lock);
 
