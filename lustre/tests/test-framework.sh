@@ -16,6 +16,10 @@ export GSS_PIPEFS=false
 export IDENTITY_UPCALL=default
 export QUOTA_AUTO=1
 
+# LOAD_LLOOP: LU-409: only load llite_lloop module if kernel < 2.6.32 or
+#             LOAD_LLOOP is true. LOAD_LLOOP is false by default.
+export LOAD_LLOOP=${LOAD_LLOOP:-false}
+
 #export PDSH="pdsh -S -Rssh -w"
 
 # function used by scripts run on remote nodes
@@ -120,6 +124,10 @@ init_test_env() {
 
     export LFSCK_ALWAYS=${LFSCK_ALWAYS:-"no"} # check fs after each test suite
     export FSCK_MAX_ERR=4   # File system errors left uncorrected
+
+    # This is used by a small number of tests to share state between the client
+    # running the tests, or in some cases between the servers (e.g. lfsck.sh).
+    # It needs to be a non-lustre filesystem that is available on all the nodes.
     export SHARED_DIRECTORY=${SHARED_DIRECTORY:-"/tmp"}
     export MDSDB=${MDSDB:-$SHARED_DIRECTORY/mdsdb}
     export OSTDB=${OSTDB:-$SHARED_DIRECTORY/ostdb}
@@ -365,8 +373,21 @@ load_modules_local() {
         load_module obdfilter/obdfilter
     fi
 
+    load_module_llite_lloop() {
+        local n1=$(uname -r | cut -d. -f1)
+        local n2=$(uname -r | cut -d. -f2)
+        local n3=$(uname -r | cut -d- -f1 | cut -d. -f3)
+
+    # load the llite_lloop module for < 2.6.32 kernels
+        if [[ $n1 -lt 2 ]] || [[ $n1 -eq 2 && $n2 -lt 6 ]] || \
+            [[ $n1 -eq 2 && $n2 -eq 6 && $n3 -lt 32 ]] || \
+            $LOAD_LLOOP; then
+                load_module llite/llite_lloop
+        fi
+    }
+
     load_module llite/lustre
-#    load_module llite/llite_lloop
+    load_module_llite_lloop
     [ -d /r ] && OGDB=${OGDB:-"/r/tmp"}
     OGDB=${OGDB:-$TMP}
     rm -f $OGDB/ogdb-$HOSTNAME
@@ -3570,7 +3591,8 @@ inodes_available () {
 }
 
 mdsrate_inodes_available () {
-    echo $(($(inodes_available) - 1))
+    local min_inodes=$(inodes_available)
+    echo $((min_inodes * 99 / 100))
 }
 
 # reset llite stat counters
