@@ -1922,12 +1922,14 @@ int lov_prep_async_page(struct obd_export *exp, struct lov_stripe_md *lsm,
                         void *data, void **res, int flags,
                         struct lustre_handle *lockh)
 {
-        struct lov_obd *lov = &exp->exp_obd->u.lov;
+        struct obd_device *obddev = class_exp2obd(exp);
+        struct lov_obd *lov = &obddev->u.lov;
         struct lov_async_page *lap;
         struct lov_lock_handles *lov_lockh = NULL;
         int rc = 0;
         ENTRY;
 
+        obd_getref(obddev);
         if (!page) {
                 int i = 0;
                 /* Find an existing osc so we can get it's stupid sizeof(*oap).
@@ -1936,13 +1938,16 @@ int lov_prep_async_page(struct obd_export *exp, struct lov_stripe_md *lsm,
                 while (!lov->lov_tgts || !lov->lov_tgts[i] ||
                        !lov->lov_tgts[i]->ltd_exp) {
                         i++;
-                        if (i >= lov->desc.ld_tgt_count)
+                        if (i >= lov->desc.ld_tgt_count) {
+                                obd_putref(obddev);
                                 RETURN(-ENOMEDIUM);
+                        }
                 }
                 rc = size_round(sizeof(*lap)) +
                         obd_prep_async_page(lov->lov_tgts[i]->ltd_exp, NULL,
                                             NULL, NULL, 0, NULL, NULL, NULL, 0,
                                             NULL);
+                obd_putref(obddev);
                 RETURN(rc);
         }
         ASSERT_LSM_MAGIC(lsm);
@@ -1957,6 +1962,13 @@ int lov_prep_async_page(struct obd_export *exp, struct lov_stripe_md *lsm,
         lap->lap_stripe = lov_stripe_number(lsm, offset);
         lov_stripe_offset(lsm, offset, lap->lap_stripe, &lap->lap_sub_offset);
         loi = lsm->lsm_oinfo[lap->lap_stripe];
+
+        LASSERT(loi != NULL);
+        if (!lov->lov_tgts[loi->loi_ost_idx] ||
+            !lov->lov_tgts[loi->loi_ost_idx]->ltd_exp) {
+                obd_putref(obddev);
+                RETURN(-EIO);
+        }
 
         /* so the callback doesn't need the lsm */
         lap->lap_loi_id = loi->loi_id;
@@ -1975,6 +1987,7 @@ int lov_prep_async_page(struct obd_export *exp, struct lov_stripe_md *lsm,
                                  lsm, loi, page, lap->lap_sub_offset,
                                  &lov_async_page_ops, lap,
                                  &lap->lap_sub_cookie, flags, lockh);
+        obd_putref(obddev);
         if (lov_lockh)
                 lov_llh_put(lov_lockh);
         if (rc)
