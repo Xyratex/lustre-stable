@@ -186,8 +186,10 @@ static void check_obd_connect_data(void)
         CHECK_MEMBER(obd_connect_data, ocd_index);
         CHECK_MEMBER(obd_connect_data, ocd_brw_size);
         CHECK_MEMBER(obd_connect_data, ocd_ibits_known);
-        CHECK_MEMBER(obd_connect_data, ocd_nllu);
-        CHECK_MEMBER(obd_connect_data, ocd_nllg);
+        CHECK_MEMBER(obd_connect_data, ocd_blocksize);
+        CHECK_MEMBER(obd_connect_data, ocd_inodespace);
+        CHECK_MEMBER(obd_connect_data, ocd_grant_extent);
+        CHECK_MEMBER(obd_connect_data, ocd_unused);
         CHECK_MEMBER(obd_connect_data, ocd_transno);
         CHECK_MEMBER(obd_connect_data, ocd_group);
         CHECK_MEMBER(obd_connect_data, ocd_cksum_types);
@@ -238,6 +240,9 @@ static void check_obd_connect_data(void)
         CHECK_CDEFINE(OBD_CONNECT_64BITHASH);
         CHECK_CDEFINE(OBD_CONNECT_MAXBYTES);
 	CHECK_CDEFINE(OBD_CONNECT_SHORTIO);
+        CHECK_CDEFINE(OBD_CONNECT_JOBSTATS);
+        CHECK_CDEFINE(OBD_CONNECT_GRANT_PARAM);
+        CHECK_CDEFINE(OBD_CONNECT_EINPROGRESS);
 }
 
 static void
@@ -270,7 +275,7 @@ check_obdo(void)
         CHECK_MEMBER(obdo, o_lcookie);
         CHECK_MEMBER(obdo, o_uid_h);
         CHECK_MEMBER(obdo, o_gid_h);
-        CHECK_MEMBER(obdo, o_padding_3);
+        CHECK_MEMBER(obdo, o_data_version);
         CHECK_MEMBER(obdo, o_padding_4);
         CHECK_MEMBER(obdo, o_padding_5);
         CHECK_MEMBER(obdo, o_padding_6);
@@ -330,6 +335,7 @@ check_obdo(void)
         CHECK_CVALUE(OBD_CKSUM_CRC32);
         CHECK_CVALUE(OBD_CKSUM_ADLER);
         CHECK_CVALUE(OBD_CKSUM_CRC32C);
+        CHECK_CDEFINE(OBD_MD_FLDATAVERSION);
 }
 
 static void
