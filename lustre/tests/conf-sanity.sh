@@ -782,10 +782,12 @@ test_23a() {	# was test_23
 	echo mount pid is ${MOUNT_PID}, mount.lustre pid is ${MOUNT_LUSTRE_PID}
 	ps --ppid $MOUNT_PID
 	ps --ppid $MOUNT_LUSTRE_PID
-	# FIXME why o why can't I kill these? Manual "ctrl-c" works...
-	kill -TERM $MOUNT_LUSTRE_PID
 	echo "waiting for mount to finish"
 	ps -ef | grep mount
+	# "ctrl-c" sends SIGINT but it usually (in script) does not work on child process
+	# SIGTERM works but it does not spread to offspring processses
+	kill -s TERM $MOUNT_PID
+	kill -s TERM $MOUNT_LUSTRE_PID
 	# we can not wait $MOUNT_PID because it is not a child of this shell
 	local PID1
 	local PID2
@@ -2723,6 +2725,23 @@ test_59() {
 	writeconf
 }
 run_test 59 "writeconf mount option"
+
+test_60() { # LU-471
+	add mds1 $MDS_MKFS_OPTS --mkfsoptions='\" -E stride=64 -O ^uninit_bg\"' --reformat $(mdsdevname 1)
+
+	dump=$(do_facet $SINGLEMDS dumpe2fs $(mdsdevname 1))
+	rc=${PIPESTATUS[0]}
+	[ $rc -eq 0 ] || error "dumpe2fs $(mdsdevname 1) failed"
+
+	# MDT default has dirdata feature
+	echo $dump | grep dirdata > /dev/null || error "dirdata is not set"
+	# we disable uninit_bg feature
+	echo $dump | grep uninit_bg > /dev/null && error "uninit_bg is set"
+	# we set stride extended options
+	echo $dump | grep stride > /dev/null || error "stride is not set"
+	reformat
+}
+run_test 60 "check mkfs.lustre --mkfsoptions -E -O options setting"
 
 if ! combined_mgs_mds ; then
 	stop mgs

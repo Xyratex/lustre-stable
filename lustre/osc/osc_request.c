@@ -1625,7 +1625,7 @@ static int osc_brw_fini_request(struct ptlrpc_request *req, int rc)
                 if (server_cksum == ~0 && rc > 0) {
                         CERROR("Protocol error: server %s set the 'checksum' "
                                "bit, but didn't send a checksum.  Not fatal, "
-                               "but please notify on http://bugzilla.lustre.org/\n",
+                               "but please notify on http://bugs.whamcloud.com/\n",
                                libcfs_nid2str(peer->nid));
                 } else if (server_cksum != client_cksum) {
                         LCONSOLE_ERROR_MSG(0x133, "%s: BAD READ CHECKSUM: from "
@@ -1709,7 +1709,7 @@ restart_bulk:
         ptlrpc_req_finished(req);
         if (osc_recoverable_error(rc)) {
                 resends++;
-                if (!osc_should_resend(resends, &exp->exp_obd->u.cli)) {
+                if (!client_should_resend(resends, &exp->exp_obd->u.cli)) {
                         CERROR("too many resend retries, returning error\n");
                         RETURN(-EIO);
                 }
@@ -1733,7 +1733,7 @@ int osc_brw_redo_request(struct ptlrpc_request *request,
         int rc = 0;
         ENTRY;
 
-        if (!osc_should_resend(aa->aa_resends, aa->aa_cli)) {
+        if (!client_should_resend(aa->aa_resends, aa->aa_cli)) {
                 CERROR("too many resent retries, returning error\n");
                 RETURN(-EIO);
         }
@@ -2958,28 +2958,18 @@ int osc_prep_async_page(struct obd_export *exp, struct lov_stripe_md *lsm,
         RETURN(0);
 }
 
-struct osc_async_page *oap_from_cookie(void *cookie)
-{
-        struct osc_async_page *oap = cookie;
-        if (oap->oap_magic != OAP_MAGIC)
-                return ERR_PTR(-EINVAL);
-        return oap;
-};
-
-int osc_queue_async_io(const struct lu_env *env,
-                       struct obd_export *exp, struct lov_stripe_md *lsm,
-                       struct lov_oinfo *loi, void *cookie,
-                       int cmd, obd_off off, int count,
-                       obd_flag brw_flags, enum async_flags async_flags)
+int osc_queue_async_io(const struct lu_env *env, struct obd_export *exp,
+                       struct lov_stripe_md *lsm, struct lov_oinfo *loi,
+                       struct osc_async_page *oap, int cmd, obd_off off,
+                       int count, obd_flag brw_flags,
+                       enum async_flags async_flags)
 {
         struct client_obd *cli = &exp->exp_obd->u.cli;
-        struct osc_async_page *oap;
         int rc = 0;
         ENTRY;
 
-        oap = oap_from_cookie(cookie);
-        if (IS_ERR(oap))
-                RETURN(PTR_ERR(oap));
+        if (oap->oap_magic != OAP_MAGIC)
+                RETURN(-EINVAL);
 
         if (cli->cl_import == NULL || cli->cl_import->imp_invalid)
                 RETURN(-EIO);
@@ -3091,19 +3081,16 @@ int osc_set_async_flags_base(struct client_obd *cli,
         RETURN(0);
 }
 
-int osc_teardown_async_page(struct obd_export *exp,
-                            struct lov_stripe_md *lsm,
-                            struct lov_oinfo *loi, void *cookie)
+int osc_teardown_async_page(struct obd_export *exp, struct lov_stripe_md *lsm,
+                            struct lov_oinfo *loi, struct osc_async_page *oap)
 {
         struct client_obd *cli = &exp->exp_obd->u.cli;
         struct loi_oap_pages *lop;
-        struct osc_async_page *oap;
         int rc = 0;
         ENTRY;
 
-        oap = oap_from_cookie(cookie);
-        if (IS_ERR(oap))
-                RETURN(PTR_ERR(oap));
+        if (oap->oap_magic != OAP_MAGIC)
+                RETURN(-EINVAL);
 
         if (loi == NULL)
                 loi = lsm->lsm_oinfo[0];
@@ -4503,6 +4490,16 @@ static int osc_precleanup(struct obd_device *obd, enum obd_cleanup_stage stage)
                 break;
         }
         case OBD_CLEANUP_EXPORTS: {
+                /* LU-464
+                 * for echo client, export may be on zombie list, wait for
+                 * zombie thread to cull it, because cli.cl_import will be
+                 * cleared in client_disconnect_export():
+                 *   class_export_destroy() -> obd_cleanup() ->
+                 *   echo_device_free() -> echo_client_cleanup() ->
+                 *   obd_disconnect() -> osc_disconnect() ->
+                 *   client_disconnect_export()
+                 */
+                obd_zombie_barrier();
                 /* If we set up but never connected, the
                    client import will not have been cleaned. */
                 if (obd->u.cli.cl_import) {

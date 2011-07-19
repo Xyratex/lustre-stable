@@ -30,6 +30,9 @@
  * Use is subject to license terms.
  */
 /*
+ * Copyright (c) 2011 Whamcloud, Inc.
+ */
+/*
  * This file is part of Lustre, http://www.lustre.org/
  * Lustre is a trademark of Sun Microsystems, Inc.
  */
@@ -154,14 +157,13 @@ int  osc_oap_interrupted(const struct lu_env *env, struct osc_async_page *oap);
 void loi_list_maint(struct client_obd *cli, struct lov_oinfo *loi);
 void osc_check_rpcs(const struct lu_env *env, struct client_obd *cli);
 
-int osc_queue_async_io(const struct lu_env *env,
-                       struct obd_export *exp, struct lov_stripe_md *lsm,
-                       struct lov_oinfo *loi, void *cookie,
-                       int cmd, obd_off off, int count,
-                       obd_flag brw_flags, enum async_flags async_flags);
-int osc_teardown_async_page(struct obd_export *exp,
-                            struct lov_stripe_md *lsm,
-                            struct lov_oinfo *loi, void *cookie);
+int osc_queue_async_io(const struct lu_env *env, struct obd_export *exp,
+                       struct lov_stripe_md *lsm, struct lov_oinfo *loi,
+                       struct osc_async_page *oap, int cmd, obd_off off,
+                       int count, obd_flag brw_flags,
+                       enum async_flags async_flags);
+int osc_teardown_async_page(struct obd_export *exp, struct lov_stripe_md *lsm,
+                            struct lov_oinfo *loi, struct osc_async_page *oap);
 int osc_process_config_base(struct obd_device *obd, struct lustre_cfg *cfg);
 int osc_set_async_flags_base(struct client_obd *cli,
                              struct lov_oinfo *loi, struct osc_async_page *oap,
@@ -192,13 +194,6 @@ extern struct lu_device_type osc_device_type;
 static inline int osc_recoverable_error(int rc)
 {
         return (rc == -EIO || rc == -EROFS || rc == -ENOMEM || rc == -EAGAIN);
-}
-
-/* return 1 if osc should be resend request */
-static inline int osc_should_resend(int resend, struct client_obd *cli)
-{
-        return cfs_atomic_read(&cli->cl_resends) ?
-               cfs_atomic_read(&cli->cl_resends) > resend : 1;
 }
 
 #ifndef min_t
