@@ -1,6 +1,5 @@
 #!/bin/bash
 #set -x
-set -e
 
 LUSTRE=${LUSTRE:-`dirname $0`/..}
 . $LUSTRE/tests/test-framework.sh
@@ -55,8 +54,9 @@ obdflter_survey_targets () {
 
 	case $case in
 		disk)    targets=$(get_targets);;
-		netdisk) targets=$(get_targets);;
-		network) targets="$(osts_nodes)";;
+		netdisk) targets="";;
+		# use ost1 host as a default target for case=network
+		network) targets=$(facet_host ost1);;
 		*) error "unknown obdflter-survey case!" ;;
 	esac
 	echo $targets
@@ -64,16 +64,20 @@ obdflter_survey_targets () {
 
 obdflter_survey_run () {
 	local case=$1
+	local targets=${2:-$(obdflter_survey_targets $case)}
+	local rc=0
 
 	rm -f ${TMP}/obdfilter_survey*
 
-	local targets=$(obdflter_survey_targets $case)
-	local cmd="NETTYPE=$NETTYPE thrlo=$thrlo nobjhi=$nobjhi thrhi=$thrhi size=$size case=$case rslt_loc=${TMP} targets=\"$targets\" $OBDSURVEY"
+	local cmd="NETTYPE=$NETTYPE thrlo=$thrlo thrhi=$thrhi nobjhi=$nobjhi size=$size case=$case rslt_loc=${TMP} targets=\"$targets\" $OBDSURVEY"
 	echo + $cmd
 	eval $cmd
 
+	rc=${PIPESTATUS[0]}
 	cat ${TMP}/obdfilter_survey*
+	return $rc
 }
+
 test_1a () {
 	obdflter_survey_run disk
 }
@@ -136,7 +140,10 @@ test_1b () {
 	save_lustre_params $(comma_list $(osts_nodes)) "obdfilter.${FSNAME}-*.sync_journal" >$param_file
 	do_nodesv $(comma_list $(osts_nodes)) lctl set_param obdfilter.${FSNAME}-*.sync_journal=0
 
+	local rc=0
 	thrlo=4 nobjhi=1 thrhi=4 obdflter_survey_run disk
+	rc=$?
+	[[ $rc -eq 0 ]] || return $rc
 
 	check_jbd_values_facets $(get_facets OST) 4 || rc=$((rc+$?))
 
@@ -164,7 +171,10 @@ test_2b () {
 	save_lustre_params $(comma_list $(osts_nodes)) "obdfilter.${FSNAME}-*.sync_journal" >$param_file
 	do_nodesv $(comma_list $(osts_nodes)) lctl set_param obdfilter.${FSNAME}-*.sync_journal=0
 
+	local rc=0
 	thrlo=4 nobjhi=1 thrhi=4 obdflter_survey_run netdisk
+	rc=$?
+	[[ $rc -eq 0 ]] || return $rc
 
 	check_jbd_values_facets $(get_facets OST) 4 || rc=$((rc+$?))
 
@@ -180,13 +190,18 @@ run_test 2b "Stripe F/S over the Network, async journal"
 test_3a () {
 	remote_servers || { skip "Local servers" && return 0; }
 
-	# The Network survey test needs:
-	# Start lctl and check for the device list. The device list must be empty.
+	# cleanup all, because obdfilter=survey case=network test requires
+	# the empty device list on the client node
 	cleanupall
 
-	obdflter_survey_run network
-
+	# run the test for each oss
+	local oss
+	rc=0
+	for oss in $(osts_nodes); do
+		obdflter_survey_run network $oss || rc=$((rc + $?))
+	done
 	setupall
+	return $rc
 }
 run_test 3a "Network survey"
 

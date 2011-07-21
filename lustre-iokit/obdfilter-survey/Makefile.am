@@ -1,3 +1,3 @@
-bin_SCRIPTS = obdfilter-survey libecho plot-obdfilter
+bin_SCRIPTS = obdfilter-survey plot-obdfilter
 CLEANFILE = $(bin_SCRIPTS)
-EXTRA_DIST = README.obdfilter-survey obdfilter-survey libecho plot-obdfilter
+EXTRA_DIST = README.obdfilter-survey obdfilter-survey plot-obdfilter

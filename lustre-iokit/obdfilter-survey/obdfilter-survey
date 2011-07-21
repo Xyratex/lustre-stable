@@ -1,56 +1,35 @@
 #!/bin/bash
-
+#set -x
 ######################################################################
-# customize per survey
+# Please refer to the Lustre operations manual or the
+# README.obdfilter-survey file which accompanies this script for the
+# most up-to-date instructions for using this script
 
-# specify obd instances to exercise
-# these can be either...
-# obdfilter instances (set 'ost_names')
-# ...or...
-# echo_client instances (set 'client_names')
-# ... use 'host:name' for obd instances on other nodes.
-# allow these to be passed in via string...
-# OR
-# one can specify only case=disk or case=network or case=netdisk through 
-# command line.
+# Customisation variables
+#####################################################################
+# One can change variable values in this section as per requirements
+# The variables can be set in the environment, or on the command line
 
-# Perquisite: For "disk" case and "netdisk" case you need to have lustre setup
-#             with one or more ost's. For "network" case  you need to have all
-#             modules (those llmount.sh loades) loaded in kernel. And the 
-#             'lctl dl' output must be blank.
-
-# How to run test:
-# case 1 (local disk):
-#   $ nobjhi=2 thrhi=2 size=1024 case=disk sh obdfilter-survey
-#   one can also run test with user defined targets as follows,
-#   $ nobjhi=2 thrhi=2 size=1024 targets="lustre-OST0000 lustre-OST0001 ..." sh obdfilter-survey
-# case 2 (network):
-#   $ nobjhi=2 thrhi=2 size=1024 targets="<name/ip_of_server>" case=network sh obdfilter-survey
-#   where, targets is name or ip address of system, which you want to 
-#   set as server.
-# case 3 (network and disk):
-#   $ nobjhi=2 thrhi=2 size=1024 case=netdisk sh obdfilter-survey
-#   one can also run test with user defined targets as follows,
-#   $ nobjhi=2 thrhi=2 size=1024 targets="<osc_name> ..." sh obdfilter-survey
-#[ NOTE: It is advised to have automated login (passwordless entry) between server and 
-#  client systems on which this test runs.]
-
-# include library 
-source libecho
-
-# The following variables can be set in the environment, or on the
-# command line
+# Summary, detail and working files are stored in this directory
+results_dir=${results_dir:-"/tmp"}
 # result file prefix (date/time + hostname makes unique)
-# NB ensure path to it exists
-rslt_loc=${rslt_loc:-"/tmp"}
-rslt=${rslt:-"$rslt_loc/obdfilter_survey_`date +%F@%R`_`uname -n`"}
+default_prefix="obdfilter_survey_$(date +%F@%R)_$(uname -n)"
+result_prefix=${result_prefix:-"$default_prefix"}
 
-# Set this true to check file contents
+# Set this to '1' to check file contents
 verify=${verify:-0}
 
 # total size (MBytes) per obd instance
-# large enough to avoid cache effects 
+# large enough to avoid cache effects
 # and to make test startup/shutdown overhead insignificant
+# If size is too small you could get a "SHORT" warning message.
+# This message means that "lctl --threads <dev>" command has completed
+# early than it was ready to print the status (which is prining
+# every $snap seconds).
+# So, to avoid a "SHORT" warning message you need to enlarge the "size"
+# or decrease the "snap" value.
+# For cases "disk" and "netdisk" you will get ENOSPC error if you set
+# the "size" value > than the kbytes available on the OST.
 size=${size:-16384}
 
 # record size (KBytes) ( 7168 max)
@@ -59,36 +38,414 @@ rszhi=${rszhi:-1024}
 
 # number of objects per OST
 nobjlo=${nobjlo:-1}
-#was nobjhi=${nobjhi:-512}
 nobjhi=${nobjhi:-16}
 
-# threads per OST (1024 max)
+# number of threads per OST (1024 max)
 thrlo=${thrlo:-1}
 thrhi=${thrhi:-16}
 
+# One of "disk", "network" or "netdisk"
+case=${case:-"disk"}
+
+# For case=disk targets are OSTs, use hostname:OST format if OST is not local
+# e.g. targets="lustre-OST0000 oss01:lustre-OST0001"
+# For case=network target is the hostname/ip-address of the server node
+# e.g. targets="10.10.29.1" OR targets="oss01"
+# For case=network 'targets' needs to be parse-able by lctl add_uuid
+# For case=netdisk targets are a list of local OSCs.
+# e.g. targets="lustre-OST0000-osc-ffa3123 lustre-OST0001-osc-ka231jf"
+# targets is mandatory for case=network and optional for the other two cases
+targets=${targets:-""}
+
+# what tests to run (first must be write)
+# Tests supported: write, rewrite, read
+tests_str=${tests_str:-""}
+
+# maximum buffer memory (total_threads * buffer size)
+# (to avoid lctl ENOMEM problems)
+max_buffer_mem=$((1024 * 1024))
+
+# print "lctl --threads" status every $snap secs
+# This sets verbose=$snap in lctl call:
+# lctl --threads <threads> <verbose> <devno> <command [args ...]>"}
+snap=${snap:-1}
+
+# Root directory for the lustre installation. Typically left blank.
+lustre_root=${lustre_root:-""}
+
+if [ -z "$lustre_root" ]; then
+    LCTL=${LCTL:-$(which lctl 2>/dev/null)}
+else
+    LCTL=${LCTL:-${lustre_root}/utils/lctl}
+fi
+
+# Specify the distributed shell to use. Can also specify options for your shell
+# e.g. DSH="ssh -q"
+# Supported shells: ssh, rsh
+DSH=${DSH:-"ssh"}
+
+# Lustre interconnect network type
+NETTYPE=${NETTYPE:-tcp}
+
+# Customisation variables ends here.
+#####################################################################
+
+LSMOD="$(which lsmod 2>/dev/null)"
+[ -z "$LSMOD" ] && LSMOD="/sbin/lsmod"
+
+MODPROBE="$(which modprobe 2>/dev/null)"
+[ -z "$MODPROBE" ] && MODPROBE="/sbin/modprobe"
+
+INSMOD="$(which insmod 2>/dev/null)"
+[ -z "$INSMOD" ] && INSMOD="/sbin/insmod"
+
+RMMOD="$(which rmmod 2>/dev/null)"
+[ -z "$RMMOD" ] && RMMOD="/sbin/rmmod"
+if [ $(uname -r | cut -c 3) -eq 4 ]; then
+    RMMOD="${MODPROBE} -r"
+fi
+
+# Ensure awk scripts work with whatever locale is set in user environment
 export LC_ALL=POSIX
 
-# End of variables
+function unique_list() {
+    local list=($@)
 
-# create a set of objects, check there are 'n' contiguous ones and
-# return the first or 'ERROR'
-# parameter: 1. hostname
-#	     2. device number
-#	     3. number of object to be created (specified by user)
-#	     4. tempfile name
-create_objects () {
+    local ulist=( $(echo "${list[@]}" | xargs -n1 echo | sort -u) )
+    echo ${ulist[@]}
+}
+
+function is_list_unique() {
+    local list=($@)
+
+    local ulist
+
+    local ulist=( $(unique_list ${list[@]}) )
+#echo ${ulist[@]}
+    [[ ${#list[@]} -eq ${#ulist[@]} ]]
+}
+
+function verify_osc_devs() {
+    local list=($@)
+
+    is_list_unique ${list[@]//-osc-*/}
+}
+
+function setup_for_disk() {
+    local local_obdfilter_names=${1:-$(get_local_obdfilter_names)}
+
+    if [ -z "${local_obdfilter_names}" ]; then
+        echo "Can't find any local obdfilter instances."\
+             "Please set targets."
+        return 1
+    fi
+
+    local count=0
+    for name in ${local_obdfilter_names}; do
+        if [[ $name == *:* ]]; then
+            ec_hosts[$count]=$(echo $name | sed 's/:.*$//')
+            ost_names[$count]=$(echo $name | sed 's/^.*://')
+        else
+            ec_hosts[$count]=localhost
+            ost_names[$count]=$name
+        fi
+        ec_names[$count]=${ost_names[$count]}_ecc
+        ec_uuids[$count]=${ec_names[$count]}_UUID
+        count=$((count+1))
+    done
+    return 0
+}
+
+function get_local_obdfilter_names() {
+    $LCTL dl | awk '$3 == "obdfilter" && $2 == "UP" {print $4}'
+}
+
+function setup_for_netdisk() {
+    local local_osc_names=${1:-$(get_local_osc_names)}
+    if [ -z "${local_osc_names}" ]; then
+        echo "Can't find any local osc."\
+              "Please set targets."
+        return 1
+    fi
+
+    if ! $(verify_osc_devs $local_osc_names); then
+        echo "$local_osc_names"
+        echo "Please make sure that there is only one lustre client."
+        return 1
+    fi
+
+    local ec_prefix=""
+    local count=0
+    for name in ${local_osc_names}; do
+        osc_names[$count]=${name}
+        # Strip everything _after_ '-osc'
+        ec_prefix=$(echo $name | sed 's/\(^.*-osc\)-.*$/\1/')
+        ec_names[$count]=${ec_prefix}_ecc
+        ec_uuids[$count]=${ec_names[$count]}_UUID
+        ec_hosts[$count]=localhost
+        count=$((count+1))
+    done
+}
+
+function get_local_osc_names() {
+    $LCTL dl 2>/dev/null | awk '!/mdt/ && ($3 == "osc" && $2 == "UP") {print $4}'
+}
+
+function setup_for_network() {
+    local server_nid="$1"
+    if [ -z "$server_nid" -a "$case" == "network" ]; then
+        echo "For case=$case must specify hostname or ip-address of server" \
+             "in 'targets' variable."
+        return 1
+    fi
+
+    local local_osc_names=$(get_local_osc_names)
+    if [ -n "$local_osc_names" ]; then
+        echo "The existing setup must be cleaned. Found local oscs:"
+        echo "$local_osc_names"
+        return 1
+    fi
+
+    load_obdecho $server_nid || return ${PIPESTATUS[0]}
+
+    local server_name="echo_srv"
+    local server_uuid="${server_name}_UUID"
+    attach_server "obdecho" $server_nid $server_name $server_uuid
+    if ! $(check_remote_dl root@$server_nid obdecho); then
+        echo "Failed to start obdecho server on $server_nid"
+        return 1
+    fi
+    OBDECHO_SERVER_NAME="$server_name"
+    OBDECHO_SERVER_HOST="$server_nid"
+
+    if ! $(check_remote_dl root@$server_nid OSS); then
+        OSS_NAME="OSS"
+        OSS_HOST="$server_nid"
+        attach_server "ost" $OSS_HOST $OSS_NAME ${OSS_NAME}_UUID
+    fi
+
+    if ! $(check_remote_dl root@$server_nid ost); then
+        echo "There is no OST setup on $server_nid"
+        return 1
+    fi
+
+    oss_nids=( "$server_nid" )
+    ost_uuids=( "$server_uuid" )
+    new_uuids=( "echo_UUID" )
+    osc_names=( "echotmp" )
+    osc_uuids=( "${osc_names[0]}_UUID" )
+    ec_names=( "${osc_names[0]}_ecc" )
+    ec_uuids=( "${osc_uuids[0]}" )
+    ec_hosts=( "localhost" )
+}
+
+function check_remote_dl() {
+    local host=$1
+    local pattern=$2
+    remote_shell $host "$LCTL dl" | grep -q -w $pattern
+}
+
+function attach_server() {
+    local srv_type="$1"
+    local server_nid="$2"
+    local server_name="$3"
+    local server_UUID="$4"
+    remote_shell "root@$server_nid" "$LCTL <<EOF
+        attach $srv_type $server_name $server_UUID
+        cfg_device $server_name
+        setup
+EOF"
+}
+
+function load_obdecho() {
+    local host="$1"
+    local load_cmd="lsmod | grep -q obdecho || "
+    if [ -z "$lustre_root" ]; then
+        load_cmd+="$MODPROBE obdecho"
+    elif [ -f ${lustre_root}/obdecho/obdecho.ko ]; then
+        load_cmd+="$INSMOD ${lustre_root}/obdecho/obdecho.ko"
+    else
+        load_cmd+="$INSMOD ${lustre_root}/obdecho/obdecho.o"
+    fi
+    remote_shell $host $load_cmd
+    return ${PIPESTATUS[0]}
+}
+
+function load_obdecho_on_ecs() {
+    for ((i = 0; i < ${#unique_ec_hosts[@]}; i++)); do
+        load_obdecho ${unique_ec_hosts[$i]} || return ${PIPESTATUS[0]}
+    done
+    return 0
+}
+
+function attach_ecs_to_osts() {
+    local rc=0
+    for ((idx=0; idx < ${#ec_names[@]}; idx++)); do
+        remote_shell ${ec_hosts[$idx]} $LCTL <<EOF
+            attach echo_client ${ec_names[$idx]} ${ec_uuids[$idx]}
+            setup ${ost_names[$idx]}
+EOF
+        rc+=${PIPESTATUS[0]}
+    done
+    if [ $rc -ne 0 ]; then
+        echo "$FUNCNAME failed" >&2
+        echo "ec_names: ${ec_names[@]}" >&2
+        echo "ec_uuids: ${ec_uuids[@]}" >&2
+        echo "ost_names: ${ost_names[@]}" >&2
+    fi
+    return $rc
+}
+
+function add_new_uuids() {
+    local rc=0
+    for ((idx=0; idx < ${#new_uuids[@]}; idx++)); do
+        $LCTL add_uuid ${new_uuids[$idx]} ${oss_nids[$idx]}@$NETTYPE 1>/dev/null
+        rc+=${PIPESTATUS[0]}
+    done
+    if [ $rc -ne 0 ]; then
+        echo "$FUNCNAME failed" >&2
+        echo "new_uuids: ${new_uuids[@]}" >&2
+        echo "oss_nids: ${oss_nids[@]}" >&2
+        echo "NETTYPE: $NETTYPE" >&2
+    fi
+    return $rc
+}
+
+function attach_oscs() {
+    local rc=0
+    for ((idx=0; idx < ${#osc_names[@]}; idx++)); do
+        $LCTL <<EOF
+            attach osc ${osc_names[$idx]} ${osc_uuids[$idx]}
+            cfg_device ${osc_names[$idx]}
+            setup ${ost_uuids[$idx]} ${new_uuids[$idx]}
+EOF
+        rc+=${PIPESTATUS[0]}
+    done
+    if [ $rc -ne 0 ]; then
+        echo "$FUNCNAME failed."
+        echo "osc_names: ${osc_names[@]}" >&2
+        echo "osc_uuids: ${osc_uuids[@]}" >&2
+        echo "ost_uuids: ${ost_uuids[@]}" >&2
+        echo "new_uuids: ${new_uuids[@]}" >&2
+    fi
+    return $rc
+}
+
+function attach_ecs_to_oscs() {
+    local rc=0
+    for ((idx=0; idx < ${#ec_names[@]}; idx++)); do
+        $LCTL <<EOF
+            attach echo_client ${ec_names[$idx]} ${ec_uuids[$idx]}
+            cfg ${ec_names[$idx]}
+            setup ${osc_names[$idx]}
+EOF
+        rc+=${PIPESTATUS[0]}
+    done
+    if [ $rc -ne 0 ]; then
+        echo "$FUNCNAME failed" >&2
+        echo "ec_names: ${ec_names[@]}" >&2
+        echo "ec_uuids: ${ec_uuids[@]}" >&2
+        echo "osc_names: ${osc_names[@]}" >&2
+    fi
+    return $rc
+}
+
+function get_ec_devnos() {
+    for ((i=0; i < ${#ec_names[@]}; i++)); do
+        ec_devnos[$i]=$(get_devno ${ec_hosts[$i]} echo_client ${ec_names[$i]})
+        if [ -z "${ec_devnos[$i]}" ]; then
+            echo "Can't get device number for echo_client ${ec_names[$i]}" >&2
+            return 1
+        fi
+    done
+    return 0
+}
+
+function get_devno() {
+    local host=$1
+    local dev_type=$2
+    local name=$3
+    remote_shell $host $LCTL device_list | \
+    awk "{if (\$2 == \"UP\" && \$3 == \"$dev_type\" && \$4 == \"$name\") {\
+              print \$1; exit}}"
+}
+
+function populate_tests_array() {
+    local tests_str="$1"
+    if [ -n "${tests_str}" ]; then
+        local count=0
+        for name in $tests_str; do
+            tests[$count]=$name
+            count=$((count+1))
+        done
+    else
+        tests=(write rewrite read)
+    fi
+}
+
+function start_vmstat() {
+    local host
+    for ((i=0; i < ${#unique_ec_hosts[@]}; i++)); do
+        host=${unique_ec_hosts[$i]}
+        remote_shell $host "vmstat 5 >> ${per_host_vmstatfs[$i]}" &>/dev/null &
+        vmstat_pids[$i]=$!
+    done
+}
+
+function print_summary() {
+    local minusn=""
+    if [ "$1" = "-n" ]; then
+        minusn=$1
+        shift
+    fi
+    echo $minusn "$*" | tee -a $summaryf
+}
+
+function print_computed_parameters() {
+    local format="ost %2d sz %8dK rsz %4dK obj %4d thr %4d "
+    local total_nobj=$((${#ec_devnos[@]}*nobj))
+    local str=$(printf "$format" \
+                    ${#ec_devnos[@]} $total_size $actual_rsz $total_nobj $total_thr)
+    echo "=======================> $str" >> $detailf
+    print_summary -n "$str"
+}
+
+function create_the_objects() {
+    declare -a rfiles=("${!1}")
+    local host=
+    local devno=
+    local client_name=
+    for ((i = 0; i < ${#ec_devnos[@]}; i++)); do
+        host=${ec_hosts[$i]}
+        devno=${ec_devnos[$i]}
+        client_name="${host}:${ec_names[$i]}"
+        echo "=============> Create $nobj on $client_name" >> $detailf
+        create_objects_on_host $host $devno $nobj &>${rfiles[$i]}
+    done
+}
+
+function create_objects_on_host() {
     local host=$1
     local devno=$2
     local nobj=$3
-    local rfile=$4
-    remote_shell $host $lctl --device $devno create $nobj > $rfile 2>&1
-    first=0
-    prev=0
-    count=0
-    error=0
+    remote_shell $host $LCTL --device $devno create $nobj
+}
+
+function get_first_objects() {
+    declare -a rfiles=("${!1}")
+    for ((i = 0; i < ${#ec_devnos[@]}; i++)); do
+        first_objects[$i]=$(get_first_obj ${rfiles[$i]})
+    done
+}
+
+function get_first_obj() {
+    local rfile="$1"
+    local first=0
+    local prev=0
+    local count=0
+    local error=0
     while read line; do
-        echo "$line" | grep -q 'is object id'
-        if [ $?  -ne 0 ]; then
+        if [[ "$line" != *"is object id"* ]]; then
             continue
         fi
         if [ $first -eq 0 ]; then
@@ -97,446 +454,494 @@ create_objects () {
             prev=$first
             count=1
         else
-            obj=$(echo $line | awk '{print $6}') 
-            obj=$(printf "%d" $obj) 
-            diff=$((obj - (prev+1))) 
-            if [ $diff -ne 0 ]; then 
-                error=1 
-            fi 
-            prev=$obj 
-            count=$((count+1)) 
-        fi 
-    done < $rfile 
-    if [ $nobj -ne $count ]; then 
-        echo "ERROR: $nobj != $count" >&2 
-        cat $rfile >&2 
-        echo "ERROR" 
-    elif [ $error -ne 0 ]; then 
-        echo "ERROR: non contiguous objs found" >&2 
-    else 
-        echo $first 
+            obj=$(echo $line | awk '{print $6}')
+            obj=$(printf "%d" $obj)
+            diff=$((obj - (prev+1)))
+            if [ $diff -ne 0 ]; then
+                error=1
+            fi
+            prev=$obj
+            count=$((count+1))
+        fi
+    done < $rfile
+    if [ $nobj -ne $count ]; then
+        echo "$OBJ_ERROR_COUNT"
+    elif [ $error -ne 0 ]; then
+        echo "$OBJ_ERROR_CONTIGUOUS"
+    else
+        echo $first
     fi
 }
 
-# destroys all objects created in create_objects routine
-# parameter: 3. start obj id.
-destroy_objects () {
+function check_objs() {
+    declare -a objs=("${!1}")
+    for obj in ${objs[@]}; do
+        if [ "$obj" = "$OBJ_ERROR_CONTIGUOUS" ]; then
+            print_summary "created object #s on $client_name not contiguous"
+            return 1
+        elif [ "$obj" = "$OBJ_ERROR_COUNT" ]; then
+            print_summary "created less than $nobj objects"
+            return 1
+        fi
+    done
+    return 0
+}
+
+function print_per_host_vmstatf_header() {
+    local hdr="starting run for test: $test rsz:$rsz threads:$thr objects:$nobj"
+    local host
+    for ((i=0; i < ${#unique_ec_hosts[@]}; i++)); do
+        host=${unique_ec_hosts[$i]}
+        remote_shell $host "echo \"$hdr\" >> ${per_host_vmstatfs[$i]}"
+    done
+}
+
+# create the script
+# Example of script created:
+#    lctl --threads 2 -1 10 test_brw 512 wx q 256 2t1 &> <output1> &
+#    lctl --threads 2 -1 10 test_brw 512 wx q 256 2t1 &> <output2> &
+#    wait
+function create_per_host_script_files() {
+    for file in ${unique_ec_scriptfs[@]}; do
+        echo -n > $file
+    done
+    local cmd=""
+    local thr_per_obj=$((${thr}/${nobj}))
+    for ((i = 0; i < ${#ec_devnos[@]}; i++)); do
+        cmd="$LCTL --threads $thr -$snap ${ec_devnos[$i]}"
+        cmd+=" test_brw $count $(testname2type $test) q $pages"
+        cmd+=" ${thr_per_obj}t${first_objects[$i]} &> ${per_dev_tmpfs[$i]} &"
+        echo "$cmd" >> ${ec_scriptfs[$i]}
+    done
+    for file in ${unique_ec_scriptfs[@]}; do
+        echo "wait" >> $file
+    done
+}
+
+# enable or disable data check.
+# parameter: 1. read/write
+function testname2type() {
+    # 'x' disables data check
+    if ((verify)); then
+        x=""
+    else
+        x="x"
+    fi
+    case $1 in
+        *write*)  echo "w$x";;
+        *)        echo "r$x";;
+    esac
+}
+
+function start_per_host_scripts() {
+    for ((i=0; i < ${#unique_ec_hosts[@]}; i++)); do
+        remote_shell ${unique_ec_hosts[$i]} bash < ${unique_ec_scriptfs[$i]} &
+        script_pids[$i]=$!
+    done
+}
+
+function wait_for_per_host_scripts() {
+    declare -a pids=("${!1}")
+    for pid in ${pids[@]}; do
+        wait $pid
+    done
+}
+
+function rm_per_host_script_files() {
+    for file in ${unique_ec_scriptfs[@]}; do
+        rm $file
+    done
+}
+
+function print_bandwidth() {
+    local total_size=$1
+    local t0=$2
+    local t1=$3
+    str=$(awk 'BEGIN{printf("%7.2f ", '$total_size'/(('$t1'-'$t0') * 1024))}')
+    print_summary -n "$str"
+}
+
+function collect_ost_stats() {
+    local stats_file="$1"
+    local client_name=""
+    local dev_tmpf=""
+    for ((i = 0; i < ${#ec_devnos[@]}; i++)); do
+        client_name="${ec_hosts[$i]}:${ec_names[$i]}"
+        echo "=============> $test $client_name" >> $detailf
+        dev_tmpf=${per_dev_tmpfs[$i]}
+        remote_shell ${ec_hosts[$i]} cat ${dev_tmpf} > ${dev_tmpf}_local
+        cat ${dev_tmpf}_local >> $detailf
+        get_stats ${dev_tmpf}_local >> ${stats_file}
+        rm -f ${dev_tmpf} ${dev_tmpf}_local
+    done
+}
+
+function get_stats() {
+    local rfile=$1
+    awk '/^Selected device [0-9]+$/{n = 0; next;}
+        /error/{n = -1; exit;}
+        /^[0-9]+\/[0-9]+ Total: [0-9]+\.[0-9]+\/second$/{
+            n++;
+            v=strtonum($3);
+            if (n == 1 || v < min) min = v;
+            if (n == 1 || v > max) max = v;
+            next;
+        }
+        {if (n != 0) {n = -1; exit;}}
+    END {printf "%d %f %f\n", n, min, max}' $rfile
+}
+
+function get_global_stats() {
+    local rfile=$1
+    awk 'BEGIN {n = 0;}
+        {   n++;
+            if (n == 1) {
+                err = $1;
+                min = $2;
+                max = $3;
+            }
+            if (n != 1 && $1 < err) {
+                err = $1;
+                if ($2 < min) min = $2;
+                if ($3 > max) max = $3;
+            }
+        }
+        END {   if (n == 0) err = 0;
+                printf "%d %f %f\n", err, min, max;
+            }' $rfile
+}
+
+function print_global_minmax_stats() {
+    declare -a global_stats=("${!1}")
+    if ((global_stats[0] < 0)); then
+        str=$(printf "%17s " ERROR)
+    elif ((global_stats[0] == 0)); then
+        str=$(printf "%17s " SHORT)
+    else
+        str=$(awk 'BEGIN{printf("[%7.2f,%7.2f] ", \
+            ('${global_stats[1]}' * '$actual_rsz')/1024, \
+            ('${global_stats[2]}' * '$actual_rsz')/1024); exit}')
+    fi
+    print_summary -n "$str"
+}
+
+function destroy_created_objects() {
+    local host=""
+    local client_name=""
+    local devno=""
+    local first_obj=""
+    local dev_tmpf=""
+    for ((i = 0; i < ${#ec_devnos[@]}; i++)); do
+        host=${ec_hosts[$i]}
+        client_name="${host}:${ec_names[$i]}"
+        echo "=============> Destroy $nobj on $client_name" >> $detailf
+        devno=${ec_devnos[$i]}
+        first_obj=${first_objects[$i]}
+        dev_tmpf=${per_dev_tmpfs[$i]}
+        destroy_objects_on_host $host $devno $first_obj $nobj ${dev_tmpf}
+        cat ${dev_tmpf} >> $detailf
+        rm -f ${dev_tmpf}
+    done
+}
+
+function destroy_objects_on_host() {
     local host=$1
     local devno=$2
     local obj0=$3
     local nobj=$4
     local rfile=$5
-    remote_shell $host $lctl --device $devno destroy $obj0 $nobj > $rfile 2>&1
+    remote_shell $host $LCTL --device $devno destroy $obj0 $nobj > $rfile 2>&1
 }
 
-get_stats () {
-    local rfile=$1
-    gawk < $rfile \
-	'/^Selected device [0-9]+$/ {n = 0; next}\
-	/error/ {n = -1; exit}\
-	/^[0-9]+\/[0-9]+ Total: [0-9]+\.[0-9]+\/second$/ {n++; v=strtonum($3); \
-	                                                  if (n == 1 || v < min) min = v;\
-	                                                  if (n == 1 || v > max) max = v;\
-	                                                  next}\
-        {if (n != 0) {n = -1; exit}}\
-	END {printf "%d %f %f\n", n, min, max}'
-}
+function get_page_size() {
+    local page_size=4
 
-get_global_stats () {
-    local rfile=$1
-    awk < $rfile 'BEGIN {n = 0;}\
-	          {n++; if (n == 1) {err = $1; min = $2; max = $3} else\
-	                            {if ($1 < err) err = $1;\
-                                     if ($2 < min) min = $2;\
-				     if ($3 > max) max = $3}}\
-	          END {if (n == 0) err = 0;\
-		       printf "%d %f %f\n", err, min, max}'
-}
-
-# enable or disable data check.
-# parameter: 1. read/write
-testname2type () {
-    # 'x' disables data check
-    if ((verify)); then
-	x=""
-    else
-	x="x"
-    fi
-    case $1 in
-	*write*)  echo "w$x";;
-	*)        echo "r$x";;
-    esac
-}
-
-print_summary () {
-    if [ "$1" = "-n" ]; then
-        minusn=$1; shift
-    else
-        minusn=""
-    fi
-    echo $minusn "$*" >> $rsltf
-    echo $minusn "$*"
-}
-
-# Customisation variables
-#####################################################################
-# One can change variable values in this section as per requirements
-
-targets=${targets:-""}
-case=${case:-"disk"}
-if [ -n "$targets" ]; then
-    declare -a ost_names
-    declare -a client_names
-    count=0
-    for name in $targets; do
-        if [ $case == "disk" ]; then
-            ost_names[$count]=$name
-        else
-            client_names[$count]=$name
-        fi
-        count=$((count+1))
-    done
-fi
-
-# what tests to run (first must be write)
-tests_str=${tests_str:-""}
-if [ -n "$tests_str" ]; then
-    declare -a tests
-    count=0
-    for name in $tests_str; do
-        tests[$count]=$name
-        count=$((count+1))
-    done
-else
-    #tests=(write rewrite read reread rewrite_again)
-    tests=(write rewrite read)
-fi
-
-# restart from here iff all are defined
-restart_rsz=
-restart_thr=1
-restart_nobj=1
-
-# machine's page size (K)
-if [ -z "$PAGE_SIZE" ]; then
     if which python >/dev/null; then
-	PAGE_SIZE=`echo 'import resource; print resource.getpagesize()/1024;' |python`
+        pycmd="import resource; print resource.getpagesize()/1024;"
+        page_size=$(echo "${pycmd}" | python)
     fi
-fi
-PAGE_SIZE=${PAGE_SIZE:-4}
+    echo $page_size
+}
 
-# max buffer_mem (total_threads * buffer size)
-# (to avoid lctl ENOMEM problems)
-max_buffer_mem=$((1024 * 1024))
-snap=1
-clean_srv_OSS=0
-# Customisation variables ends here. 
+function cleanup_exit() {
+    local exit_code="$1"
+    shift
+    [ -n "$@" ] && echo "$@" # Optional message parameter
+    echo -n "Doing cleanup..."
+
+    [ ${#vmstat_pids[@]} -gt 0 ] && cleanup_vmstat
+
+    cleanup_ecs
+
+    cleanup_per_dev_tmpfs
+
+    [ "$case" == "network" ] && cleanup_for_network
+
+    unload_obdecho_on_ecs
+
+    echo "finished"
+    if [ -z "$exit_code" ]; then
+        echo "Obdfilter-survey was terminated early"
+    elif [ $exit_code -ne 0 ]; then
+        echo "Obdfilter-survey exited with error (rc=$exit_code)"
+    else
+        echo "Obdfilter-survey completed successfully"
+    fi
+    [ -f $detailf ] && grep ^error $detailf
+    exit $exit_code
+}
+trap cleanup_exit SIGHUP SIGINT SIGTERM
+
+function cleanup_ecs() {
+    for ((i=0; i < ${#ec_names[@]}; i++)); do
+        remote_shell ${ec_hosts[$i]} \
+            "\$($LCTL dl | grep -q ${ec_names[$i]}) && $LCTL <<EOF
+                cfg ${ec_names[$i]}
+                cleanup
+                detach
+EOF"
+    done
+}
+
+function cleanup_per_dev_tmpfs() {
+    for ((i=0; i < ${#ec_devnos[@]}; i++)); do
+        remote_shell ${ec_hosts[$i]} "rm -f ${per_dev_tmpfs[$i]}"
+    done
+}
+
+function cleanup_for_network() {
+    if [ -n "$OSS_NAME" ]; then
+        cleanup_dev $OSS_HOST $OSS_NAME
+    fi
+    if [ -n "$OBDECHO_SERVER_NAME" ]; then
+        cleanup_dev $OBDECHO_SERVER_HOST $OBDECHO_SERVER_NAME
+    fi
+    cleanup_oscs
+}
+
+function cleanup_oscs() {
+    for osc in ${osc_names[@]}; do
+        cleanup_dev localhost $osc
+    done
+}
+
+cleanup_dev () {
+    local host=$1
+    local dev=$2
+
+    remote_shell $host "$LCTL << EOF
+            cfg_device $dev
+            cleanup
+            detach
+EOF"
+}
+
+function cleanup_vmstat() {
+    local host_vmstatf
+    local local_vmstatf
+    local host
+    local cmd
+    for ((i=0; i < ${#unique_ec_hosts[@]}; i++)); do
+        host_vmstatf=${per_host_vmstatfs[$i]}
+        local_vmstatf=${host_vmstatf}_local
+        host=${unique_ec_hosts[$i]}
+        cmd="killall -q vmstat &>/dev/null"
+        cmd+=" ; cat $host_vmstatf ; rm -f $host_vmstatf &>/dev/null"
+        remote_shell $host "$cmd" > $local_vmstatf &
+        pid=$!
+        kill -term ${vmstat_pids[$i]} 2>/dev/null
+        kill -kill ${vmstat_pids[$i]} 2>/dev/null
+        wait $pid
+        mv $local_vmstatf $host_vmstatf
+    done
+}
+
+function unload_obdecho_on_ecs() {
+    local rc=0
+
+    for ((i = 0; i < ${#unique_ec_hosts[@]}; i++)); do
+        unload_obdecho ${unique_ec_hosts[$i]} || rc=$((rc + ${PIPESTATUS[0]}))
+    done
+    return $rc
+}
+
+function unload_obdecho() {
+    local host=$1
+    remote_shell $host $RMMOD obdecho
+}
+
+function dsh() {
+    local node=$1
+    local user=$2
+    shift 2
+    local command="export PATH=/sbin:/usr/sbin:\$PATH; $@"
+
+    case $DSH in
+        ssh*) [ -n "$user" ] && user="${user}@"
+            ;;
+        rsh*) [ -n "$user" ] && user="-l $user "
+            ;;
+        *)
+            echo "Unrecognized DSH=$DSH" >&2
+            return 1
+            ;;
+    esac
+    $DSH ${user}${node} "$command"
+}
+
+function remote_shell() {
+    local host=$1
+    shift
+    local cmds="$@"
+    if [ "$host" = "localhost" -o "$host" = "$(hostname)" ]; then
+        eval "$cmds"
+    else
+        local user=""
+        if [[ $host == *@* ]]; then
+            user=${host%@*}
+            host=${host#*@}
+        fi
+        dsh $host "$user" "$cmds"
+    fi
+}
+
+# End Function Definitions #
 #####################################################################
-# leave the rest of this alone unless you know what you're doing...
 
-# check and insert obdecho module
-if ! lsmod | grep obdecho > /dev/null; then
-    modprobe obdecho
+#####################################################################
+# Main program flow #
+
+OBDECHO_SERVER_NAME=""
+OBDECHO_SERVER_HOST=""
+OSS_HOST=""
+OSS_NAME=""
+OBJ_ERROR_COUNT="ERROR_COUNT"
+OBJ_ERROR_CONTIGUOUS="ERROR_CONT"
+
+PAGE_SIZE=${PAGE_SIZE:-$(get_page_size)}
+
+declare -a new_uuids
+declare -a oss_nids
+declare -a ost_uuids
+declare -a ost_names
+declare -a osc_names
+declare -a ec_hosts
+declare -a ec_names
+case $case in
+    disk)       setup_for_disk "$targets"|| exit ${PIPESTATUS[0]};;
+    netdisk)    setup_for_netdisk "$targets" || exit ${PIPESTATUS[0]};;
+    network)    setup_for_network "$targets" || exit ${PIPESTATUS[0]};;
+    *) echo "unrecognized case ($case)" >&2
+       exit 1;;
+esac
+
+unique_ec_hosts=( $(unique_list ${ec_hosts[@]}) )
+load_obdecho_on_ecs || cleanup_exit $? "failed to load obdecho"
+
+if [ "$case" == "disk" ]; then
+    attach_ecs_to_osts || cleanup_exit $? "failed to attach echo_clients"
+elif [ "$case" == "network" ]; then
+    add_new_uuids || cleanup_exit $? "failed to add uuids"
+    attach_oscs || cleanup_exit $? "failed to attach oscs"
 fi
+
+if [ "$case" != "disk" ]; then
+    attach_ecs_to_oscs || cleanup_exit $? "failed to attach echo_client to osc"
+fi
+
+declare -a ec_devnos
+get_ec_devnos || cleanup_exit ${PIPESTATUS[0]} "failed to get device numbers"
+
+if ((${#ec_devnos[@]} <= 0 || ${#ec_hosts[@]} <= 0)); then
+    cleanup_exit 1 "No devices or hosts specified"
+fi
+
+declare -a tests
+populate_tests_array "${tests_str}"
 if [ ${#tests[@]} -eq 0 -o "${tests[0]}" != "write" ]; then
     echo "tests: ${tests[@]}"
-    echo "First test must be 'write'" 1>&2
-    exit 1
+    cleanup_exit 1 "First test must be 'write'"
 fi
 
-rsltf="${rslt}.summary"
-workf="${rslt}.detail"
-cmdsf="${rslt}.script"
-vmstatf="${rslt}.vmstat"
-echo -n > $rsltf
-echo -n > $workf
+summaryf="${results_dir}/${result_prefix}.summary"
+detailf="${results_dir}/${result_prefix}.detail"
+echo -n > $summaryf
+echo -n > $detailf
 
-# hide a little trick to unset this from the command line
-if [ "$lustre_root" == " " ]; then
-    unset lustre_root
-fi
-
-if [ -z "$lustre_root" ]; then
-    lctl=lctl
-else
-    lctl=${lustre_root}/utils/lctl
-fi
-
-# split out hostnames from client/ost names
-ndevs=0
-for trgt in $targets; do
-    str=(`split_hostname $trgt`)
-    host_names[$ndevs]=${str[0]}
-    client_names[$ndevs]=${str[1]}
-    ndevs=$((ndevs+1))
+scriptf_prefix="${results_dir}/${result_prefix}.script"
+declare -a ec_scriptfs
+declare -a per_dev_tmpfs
+for ((i=0; i < ${#ec_devnos[@]}; i++)); do
+    ec_scriptfs[$i]=${scriptf_prefix}_${ec_hosts[$i]}
+    per_dev_tmpfs[$i]=${detailf}_tmp_$i
 done
-if [ $case == "disk" ]; then
-        for ((i = 0; i < $ndevs; i++)); do
-            ost_names[$i]=${client_names[$i]}
-	done
-fi
-if [ $case == "netdisk" ]; then
-        if [ "$targets" ]; then
-            for ((i = 0; i < $ndevs; i++)); do
-                setup_osc_for_remote_ost ${host_names[$i]} \
-                                         ${client_names[$i]} $i
-                osc_name=${client_names[$i]}_osc
-                ec_using_osc $osc_name
-	        cleanup_oscs="$cleanup_oscs $osc_name"
-            done
-        else
-            client_names_str=$($lctl dl | grep -v mdt | \
-                awk '{if ($2 == "UP" && $3 == "osc") {print $4} }')
-            count=0;
-            for name in $client_names_str; do
-                client_names[$count]=`echo $name | sed 's/-osc-.*$//'`
-                count=$((count+1))
-            done
+unique_ec_scriptfs=( $(unique_list ${ec_scriptfs[@]}) )
 
-            host_names_str=$($lctl dl -t | grep -v mdt | \
-                awk '{if ($2 == "UP" && $3 == "osc") {print $7} }')
-            count=0;
-            for name in $host_names_str; do
-                host_names[$count]=`echo $name | sed 's/@.*$//'`
-                count=$((count+1))
-            done
-
-            for (( i = 0; i < $count; i++ )) do
-                setup_osc_for_remote_ost ${host_names[$i]} \
-                                         ${client_names[$i]} $i
-                osc_name=${client_names[$i]}_osc
-                ec_using_osc $osc_name
-	        cleanup_oscs="$cleanup_oscs $osc_name"
-            done
-        fi
-
-        echo_clients=$($lctl dl | grep echo_client | awk "{if (\$2 == \"UP\" && \$3 == \"echo_client\") {print \$4} }")
-        cnt=0;
-        for name in $echo_clients; do
-            client_names[$cnt]=$name
-            host_names[$cnt]=localhost
-            cnt=$((cnt+1))
-        done
-        ndevs=${#client_names[@]}
-fi
-if [ $case == "network" ]; then
-    server_nid=$targets
-    if [ -z "$server_nid" ]; then
-	echo "Specify hostname or ip-address of server"
-	exit 1;
-    fi
-    # check for obdecho module on server
-    if ! dsh $server_nid root "lsmod | grep obdecho > /dev/null"; then
-        dsh $server_nid root "modprobe obdecho"
-    fi
-    # Now do the server setup
-    setup_srv_obd $server_nid "echo_srv"
-    oss_on_srv=`dsh $server_nid root "$lctl dl | grep OSS" | awk '{ print $4 }'`
-    if [ -z $oss_on_srv ]; then
-        setup_OSS $server_nid
-        clean_srv_OSS=1
-    fi
-    if ! dsh $server_nid root "$lctl dl | grep obdecho > /dev/null 2>&1"; then
-        echo "obdecho not setup on server"
-        exit 1
-    fi
-    if ! dsh $server_nid root "$lctl dl | grep ost > /dev/null 2>&1"; then
-        echo "ost not setup on server"
-        exit 1
-    fi
-    # Now start client setup
-    osc_names_str=$($lctl dl| grep osc | grep -v mdt | grep UP)
-    if [ -n "$osc_names_str" ]; then
-        echo "The existing setup must be cleaned";
-        exit 0;
-    fi
-    ec_using_srv_nid $server_nid "echotmp" "echotmp_UUID"
-    client_names[0]="echotmp_ecc"
-fi
-if [ -z "$targets" ]; then
-    if [ $case == "disk" ]; then
-	get_targets
-        ndevs=${#ost_names[@]}	
-    fi	
-fi
-# get vmstat started
-# disable portals debug and get obdecho loaded on all relevant hosts
-unique_hosts=(`unique ${host_names[@]}`)
-load_obdechos
-pidcount=0
-for host in ${unique_hosts[@]}; do
-    host_vmstatf=${vmstatf}_${host}
-    echo -n > $host_vmstatf
-    remote_shell $host "vmstat 5 >> $host_vmstatf" &> /dev/null &
-    pid=$!
-    vmstatpids[$pidcount]=$pid
-    pidcount=$((pidcount+1))
+vmstatf_prefix="${results_dir}/${result_prefix}.vmstat"
+declare -a per_host_vmstatfs
+for ((i=0; i < ${#unique_ec_hosts[@]}; i++)); do
+    per_host_vmstatfs[$i]=${vmstatf_prefix}_${unique_ec_hosts[$i]}
 done
-# get all the echo_client device numbers and names
-for ((i=0; i < $ndevs; i++)); do
-    host=${host_names[$i]}
-    devno=(`get_ec_devno $host "${client_names[$i]}" "${ost_names[$i]}"`)
-    if ((${#devno[@]} != 3)); then
-        exit 1
-    fi
-    devnos[$i]=${devno[0]}
-    client_names[$i]=${devno[1]}
-    do_teardown_ec[$i]=${devno[2]}
-done
-if (($ndevs <= 0 || ${#host_names[@]} <= 0)); then
-    echo "no devices or hosts specified"
-    cleanup 0 $clean_srv_OSS $cleanup_oscs
-fi
+declare -a vmstat_pids
+start_vmstat
+
 # Buffers will be spread out among all hosts, so allow for that
-max_buffer_mem=$(( ${max_buffer_mem} * ${#unique_hosts[@]} ))
+max_buffer_mem=$(( ${max_buffer_mem} * ${#unique_ec_hosts[@]} ))
+
 print_summary "$(date) Obdfilter-survey for case=$case from $(hostname)"
 for ((rsz = $rszlo; rsz <= $rszhi; rsz*=2)); do
-    for ((nobj = $nobjlo; nobj <= $nobjhi; nobj*=2)); do 
-	for ((thr = $thrlo; thr <= $thrhi; thr*=2)); do
-	    if ((thr % nobj)); then
-		continue
-	    fi
-	    # restart?
-	    if [ -n "$restart_rsz" -a\
-		 -n "$restart_nobj" -a\
-		 -n "$restart_thr" ]; then
-		if ((rsz < restart_rsz ||\
-		     (rsz == restart_rsz &&\
-		      (nobj < restart_nobj ||\
-		       (nobj == restart_nobj &&\
-			thr < restart_thr))))); then
-		    continue;
-		fi
-	    fi
-	    # compute parameters
-	    total_thr=$((ndevs*thr))
-	    total_nobj=$((ndevs*nobj))
-	    pages=$((rsz/PAGE_SIZE))
-	    actual_rsz=$((pages*PAGE_SIZE))
-	    count=$((size*1024/(actual_rsz*thr)))
-	    actual_size=$((actual_rsz*count*thr))
-            total_size=$((actual_size*ndevs))
-	    # show computed parameters
-	    str=`printf 'ost %2d sz %8dK rsz %4dK obj %4d thr %4d ' \
-		     $ndevs $total_size $actual_rsz $total_nobj $total_thr`
-	    echo "=======================> $str" >> $workf
-	    print_summary -n "$str"
-	    if ((total_thr * actual_rsz > max_buffer_mem)); then
-		print_summary "Too much buffer space"
-		continue
-	    fi
-	    # create the objects
-	    tmpf="${workf}_tmp"
-	    for ((idx = 0; idx < $ndevs; idx++)); do
-		host=${host_names[$idx]}
-		devno=${devnos[$idx]}
-		client_name="${host}:${client_names[$idx]}"
-		echo "=============> Create $nobj on $client_name" >> $workf
-		first_obj=`create_objects $host $devno $nobj $tmpf`
-		cat $tmpf >> $workf
-		rm $tmpf
-		if [ $first_obj = "ERROR" ]; then
-		    print_summary "created object #s on $client_name not contiguous"
-		    exit 1
-		fi
-		first_objs[$idx]=$first_obj
-	    done
-	    # run tests
-	    for test in ${tests[@]}; do
-                declare -a pidarray
-                for host in ${unique_hosts[@]}; do
-                    echo "starting run for test: $test rsz: $rsz threads: $thr objects: $nobj" >> ${vmstatf}_${host}
-                done
-		print_summary -n "$test "
-		# create per-host script files
-		for host in ${unique_hosts[@]}; do
-		    echo -n > ${cmdsf}_${host}
-		done
-		for ((idx = 0; idx < $ndevs; idx++)); do
-		    host=${host_names[$idx]}
-		    devno=${devnos[$idx]}
-		    tmpfi="${tmpf}_$idx"
-		    first_obj=${first_objs[$idx]}
-		    thr_per_obj=$((${thr}/${nobj}))
-		    echo >> ${cmdsf}_${host} \
-		        "$lctl > $tmpfi 2>&1 \\
-                         --threads $thr -$snap $devno \\
-			 test_brw $count `testname2type $test` q $pages ${thr_per_obj}t${first_obj} &"
-                done
-                pidcount=0
-                for host in ${unique_hosts[@]}; do
-                    echo "wait" >> ${cmdsf}_${host}
-                    pidarray[$pidcount]=0
-                    pidcount=$((pidcount+1))
-                done
-                # timed run of all the per-host script files
-                t0=`date +%s.%N`
-                pidcount=0
-                for host in ${unique_hosts[@]}; do
-                    remote_shell $host bash < ${cmdsf}_${host} &
-                    pidarray[$pidcount]=$!
-                    pidcount=$((pidcount+1))
-                done
-                pidcount=0
-                for host in ${unique_hosts[@]}; do
-                    wait ${pidarray[$pidcount]}
-                    pidcount=$((pidcount+1))
-                done
-                #wait
-                t1=`date +%s.%N`
-                # clean up per-host script files
-                for host in ${unique_hosts[@]}; do
-                    rm ${cmdsf}_${host}
-                done
+    for ((nobj = $nobjlo; nobj <= $nobjhi; nobj*=2)); do
+        for ((thr = $thrlo; thr <= $thrhi; thr*=2)); do
+            if ((thr % nobj)); then
+                continue
+            fi
 
-		# compute bandwidth from total data / elapsed time
-		str=`awk "BEGIN {printf \"%7.2f \",\
-		         $total_size / (( $t1 - $t0 ) * 1024)}"`
-		print_summary -n "$str"
-		# collect/check individual OST stats
-		echo -n > $tmpf
-		for ((idx = 0; idx < $ndevs; idx++)); do
-		    client_name="${host_names[$idx]}:${client_names[$idx]}"
-		    tmpfi="${tmpf}_$idx"
-		    echo "=============> $test $client_name" >> $workf
-		    host="${host_names[$idx]}"
-		    remote_shell $host cat $tmpfi > ${tmpfi}_local
-		    cat ${tmpfi}_local >> $workf
-		    get_stats ${tmpfi}_local >> $tmpf
-		    rm -f $tmpfi ${tmpfi}_local
-		done
-		# compute/display global min/max stats
-		echo "=============> $test global" >> $workf
-		cat $tmpf >> $workf
-		stats=(`get_global_stats $tmpf`)
-		rm $tmpf
-		if ((stats[0] <= 0)); then
-		    if ((stats[0] < 0)); then
-			str=`printf "%17s " ERROR`
-		    else
-			str=`printf "%17s " SHORT`
-		    fi
-		else
-		    str=`awk "BEGIN {printf \"[%7.2f,%7.2f] \",\
-			     (${stats[1]} * $actual_rsz)/1024,\
-			     (${stats[2]} * $actual_rsz)/1024; exit}"`
-		fi
-		print_summary -n "$str"
-	    done
-	    print_summary ""
-	    # destroy objects we created
-	    for ((idx = 0; idx < $ndevs; idx++)); do
-		host=${host_names[$idx]}
-		devno=${devnos[$idx]}
-		client_name="${host}:${client_names[$idx]}"
-		first_obj=${first_objs[$idx]}
-		echo "=============> Destroy $nobj on $client_name" >> $workf
-		destroy_objects $host $devno $first_obj $nobj $tmpf
-		cat $tmpf >> $workf
-		rm $tmpf
-	    done
-	done
+            # Compute parameters, primarily for the per-host scripts
+            pages=$((rsz/PAGE_SIZE))
+            actual_rsz=$((pages*PAGE_SIZE))
+            count=$((size*1024/(actual_rsz*thr)))
+            total_size=$((actual_rsz*count*thr*${#ec_devnos[@]}))
+            total_thr=$((${#ec_devnos[@]}*thr))
+            print_computed_parameters
+
+            buffer_needed=$((total_thr * actual_rsz))
+            if ((buffer_needed > max_buffer_mem)); then
+                print_summary "Insufficent buffer space. need $buffer_needed" \
+                              "max_buffer_mem: $max_buffer_mem"
+                continue
+            fi
+
+            create_the_objects per_dev_tmpfs[@]
+            declare -a first_objects
+            get_first_objects per_dev_tmpfs[@]
+            for tmpf in ${per_dev_tmpfs[@]}; do
+                cat $tmpf >> $detailf
+                rm $tmpf
+            done
+            check_objs first_objects[@] || cleanup_exit ${PIPESTATUS[0]}
+            for test in ${tests[@]}; do
+                print_per_host_vmstatf_header
+                print_summary -n "$test "
+                create_per_host_script_files
+                t0=$(date +%s.%N)
+                declare -a script_pids
+                start_per_host_scripts
+                wait_for_per_host_scripts script_pids[@]
+                t1=$(date +%s.%N)
+                rm_per_host_script_files
+                print_bandwidth $total_size $t0 $t1
+                stats_file="${detailf}_stats_tmp"
+                collect_ost_stats ${stats_file}
+                global_stats=( $(get_global_stats ${stats_file}) )
+                echo "=============> $test global" >> $detailf
+                cat ${stats_file} >> $detailf
+                rm -f ${stats_file}
+                print_global_minmax_stats global_stats[@]
+            done
+            print_summary ""
+            destroy_created_objects
+        done
     done
 done
-cleanup 0 $clean_srv_OSS $cleanup_oscs
-exit 0
+
+cleanup_exit 0
