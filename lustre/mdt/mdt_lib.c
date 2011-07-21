@@ -872,7 +872,10 @@ int mdt_close_unpack(struct mdt_thread_info *info)
         if (rc)
                 RETURN(rc);
 
-        RETURN(mdt_setattr_unpack_rec(info));
+        rc = mdt_setattr_unpack_rec(info);
+        if (rc)
+                RETURN(rc);
+        RETURN(mdt_init_ucred_reint(info));
 }
 
 static int mdt_create_unpack(struct mdt_thread_info *info)
