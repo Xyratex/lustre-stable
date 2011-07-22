@@ -1649,8 +1649,8 @@ struct mdt_body {
         __u32          max_cookiesize;
         __u32          uid_h; /* high 32-bits of uid, for FUID */
         __u32          gid_h; /* high 32-bits of gid, for FUID */
-        __u32          padding_5; /* also fix lustre_swab_mdt_body */
-        __u64          padding_6;
+        __u64          version; /* object version */
+        __u32          padding_6; /* also fix lustre_swab_mdt_body */
         __u64          padding_7;
         __u64          padding_8;
         __u64          padding_9;
@@ -2630,7 +2630,6 @@ enum llogd_rpc_ops {
 struct llogd_body {
         struct llog_logid  lgd_logid;
         __u32 lgd_ctxt_idx;
-#define lgd_open_flags lgd_llh_flags
         __u32 lgd_llh_flags;
         __u32 lgd_index;
         __u32 lgd_saved_index;
@@ -2930,8 +2929,33 @@ struct getinfo_fid2path {
         char            gf_path[0];
 } __attribute__((packed));
 
-void lustre_swab_fid2path (struct getinfo_fid2path *gf);
+void lustre_swab_fid2path(struct getinfo_fid2path *gf);
 
+struct lu_sobj {
+        struct lu_fid         so_fid;
+        __u16                 so_valid;
+        __u32                 so_mode;
+        __u64                 so_atime;
+        __u64                 so_ctime;
+        __u64                 so_mtime;
+        __u32                 so_nlink;
+        __u32                 so_rdev;
+        __u64                 so_version;
+        __u32                 so_uid;
+        __u32                 so_gid;
+        __u64                 so_size;
+        __u64                 so_blksize;
+        __u64                 so_blocks;
+        __u64                 so_recno;
+} __attribute__((packed));
+
+struct lu_triple {
+        struct lu_sobj      sd_parent;
+        struct lu_sobj      sd_child;
+        char                sd_name[NAME_MAX];
+} __attribute__((packed));
+
+void lustre_swab_get_triple(struct lu_triple *t);
 
 #endif
 /** @} lustreidl */

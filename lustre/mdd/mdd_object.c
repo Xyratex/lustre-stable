@@ -1268,18 +1268,19 @@ static int mdd_fix_attr(const struct lu_env *env, struct mdd_object *obj,
  * \param mdd_obj - mdd_object of change
  * \param handle - transacion handle
  */
-static int mdd_changelog_data_store(const struct lu_env     *env,
-                                    struct mdd_device       *mdd,
-                                    enum changelog_rec_type type,
-                                    int                     flags,
-                                    struct mdd_object       *mdd_obj,
-                                    struct thandle          *handle)
+int mdd_changelog_data_store(const struct lu_env     *env,
+                             struct mdd_device       *mdd,
+                             changelog_rec_t          type,
+                             __u32                    mode,
+                             __u64                    valid,
+                             struct md_object        *obj,
+                             struct thandle          *handle)
 {
-        const struct lu_fid *tfid = mdo2fid(mdd_obj);
+        const struct lu_fid *tfid = mdo2fid(md2mdd_obj(obj));
+        struct md_attr *ma = &mdd_env_info(env)->mti_ma;
         struct llog_changelog_rec *rec;
         struct lu_buf *buf;
-        int reclen;
-        int rc;
+        int rc, reclen;
 
         /* Not recording */
         if (!(mdd->mdd_cl.mc_flags & CLM_ON))
@@ -1287,16 +1288,13 @@ static int mdd_changelog_data_store(const struct lu_env     *env,
         if ((mdd->mdd_cl.mc_mask & (1 << type)) == 0)
                 RETURN(0);
 
-        LASSERT(handle != NULL);
-        LASSERT(mdd_obj != NULL);
-
-        if ((type >= CL_MTIME) && (type <= CL_ATIME) &&
-            cfs_time_before_64(mdd->mdd_cl.mc_starttime, mdd_obj->mod_cltime)) {
-                /* Don't need multiple updates in this log */
-                /* Don't check under lock - no big deal if we get an extra
-                   entry */
-                RETURN(0);
-        }
+        /*
+         * Handle is not needed for llog, it creates transaction if needed. 
+         * Some calls will not have transaction handle while writing the
+         * record, for example, open.
+         */
+        /*LASSERT(handle != NULL);*/
+        LASSERT(obj != NULL);
 
         reclen = llog_data_len(sizeof(*rec));
         buf = mdd_buf_alloc(env, reclen);
@@ -1304,13 +1302,68 @@ static int mdd_changelog_data_store(const struct lu_env     *env,
                 RETURN(-ENOMEM);
         rec = (struct llog_changelog_rec *)buf->lb_buf;
 
-        rec->cr.cr_flags = CLF_VERSION | (CLF_FLAGMASK & flags);
-        rec->cr.cr_type = (__u32)type;
+        memset(ma, 0, sizeof(*ma));
+        ma->ma_need = MA_INODE;
+        mo_attr_get(env, obj, ma);
+
+        rec->cr.cr_valid = 0;
+        if (valid & LA_ATIME) {
+                rec->cr.cr_atime = ma->ma_attr.la_atime;
+                rec->cr.cr_valid |= LA_ATIME;
+        }
+        if (valid & LA_CTIME) {
+                rec->cr.cr_ctime = ma->ma_attr.la_ctime;
+                rec->cr.cr_valid |= LA_CTIME;
+        }
+        if (valid & LA_MTIME) {
+                rec->cr.cr_mtime = ma->ma_attr.la_mtime;
+                rec->cr.cr_valid |= LA_MTIME;
+        }
+        if (valid & LA_SIZE) {
+                rec->cr.cr_size = ma->ma_attr.la_size;
+                rec->cr.cr_valid |= LA_SIZE;
+        }
+        if (valid & LA_BLKSIZE) {
+                rec->cr.cr_blksize = ma->ma_attr.la_blksize;
+                rec->cr.cr_valid |= LA_BLKSIZE;
+        }
+        if (valid & LA_BLOCKS) {
+                rec->cr.cr_blocks = ma->ma_attr.la_blocks;
+                rec->cr.cr_valid |= LA_BLOCKS;
+        }
+        if (valid & LA_NLINK) {
+                rec->cr.cr_nlink = ma->ma_attr.la_nlink;
+                rec->cr.cr_valid |= LA_NLINK;
+        }
+        if (valid & LA_RDEV) {
+                rec->cr.cr_rdev = ma->ma_attr.la_rdev;
+                rec->cr.cr_valid |= LA_RDEV;
+        }
+        if (valid & LA_UID) {
+                rec->cr.cr_uid = ma->ma_attr.la_uid;
+                rec->cr.cr_valid |= LA_UID;
+        }
+        if (valid & LA_GID) {
+                rec->cr.cr_gid = ma->ma_attr.la_gid;
+                rec->cr.cr_valid |= LA_GID;
+        }
+        if (valid & LA_MODE) {
+                rec->cr.cr_valid |= LA_MODE;
+                rec->cr.cr_mode = mode ? mode : ma->ma_attr.la_mode;
+        }
+
+        /* fill some fields on other levels of mds (cr_version, etc) */
+        rc = md_changelog_hook_fill(env, &mdd->mdd_md_dev, rec);
+        if (rc)
+                RETURN(rc);
+        md2mdd_obj(obj)->mod_cltime = cfs_time_current_64();
+        rec->cr.cr_flags = CLF_VERSION;
+        rec->cr.cr_type = type;
         rec->cr.cr_tfid = *tfid;
         rec->cr.cr_namelen = 0;
-        mdd_obj->mod_cltime = cfs_time_current_64();
+        rec->cr.cr_sid = 0;
 
-        rc = mdd_changelog_llog_write(mdd, rec, handle);
+        rc = mdd_changelog_llog_write(mdd, rec, reclen, handle);
         if (rc < 0) {
                 CERROR("changelog failed: rc=%d op%d t"DFID"\n",
                        rc, type, PFID(tfid));
@@ -1318,28 +1371,6 @@ static int mdd_changelog_data_store(const struct lu_env     *env,
         }
 
         return 0;
-}
-
-int mdd_changelog(const struct lu_env *env, enum changelog_rec_type type,
-                  int flags, struct md_object *obj)
-{
-        struct thandle *handle;
-        struct mdd_object *mdd_obj = md2mdd_obj(obj);
-        struct mdd_device *mdd = mdo2mdd(obj);
-        int rc;
-        ENTRY;
-
-        handle = mdd_trans_start(env, mdd);
-
-        if (IS_ERR(handle))
-                return(PTR_ERR(handle));
-
-        rc = mdd_changelog_data_store(env, mdd, type, flags, mdd_obj,
-                                      handle);
-
-        mdd_trans_stop(env, mdd, rc, handle);
-
-        RETURN(rc);
 }
 
 /**
@@ -1424,11 +1455,12 @@ static int mdd_lma_set_locked(const struct lu_env *env,
  * (ctime changes when mtime does, plus chmod/chown.
  * atime and ctime are independent.) */
 static int mdd_attr_set_changelog(const struct lu_env *env,
-                                  struct md_object *obj, struct thandle *handle,
+                                  struct md_object *obj,
+                                  struct thandle *handle,
                                   __u64 valid)
 {
         struct mdd_device *mdd = mdo2mdd(obj);
-        int bits, type = 0;
+        int bits, type = 0, rc;
 
         bits = (valid & ~(LA_CTIME|LA_MTIME|LA_ATIME)) ? 1 << CL_SETATTR : 0;
         bits |= (valid & LA_MTIME) ? 1 << CL_MTIME : 0;
@@ -1444,9 +1476,10 @@ static int mdd_attr_set_changelog(const struct lu_env *env,
                 type++;
         }
 
-        /* FYI we only store the first CLF_FLAGMASK bits of la_valid */
-        return mdd_changelog_data_store(env, mdd, type, (int)valid,
-                                        md2mdd_obj(obj), handle);
+        cfs_mutex_down(&mdd->mdd_log_sem);
+        rc = mdd_changelog_data_store(env, mdd, type, 0, valid, obj, handle);
+        cfs_mutex_up(&mdd->mdd_log_sem);
+        return rc;
 }
 
 /* set attr and LOV EA at once, return updated attr */
@@ -1580,7 +1613,7 @@ static int mdd_attr_set(const struct lu_env *env, struct md_object *obj,
 cleanup:
         if (rc == 0)
                 rc = mdd_attr_set_changelog(env, obj, handle,
-                                            ma->ma_attr.la_valid);
+                                            ma->ma_attr.la_valid | LA_MODE);
         mdd_trans_stop(env, mdd, rc, handle);
         if (rc == 0 && (lmm != NULL && lmm_size > 0 )) {
                 /*set obd attr, if needed*/
@@ -1670,9 +1703,13 @@ static int mdd_xattr_set(const struct lu_env *env, struct md_object *obj,
         rc = mdd_xattr_set_txn(env, mdd_obj, buf, name, fl, handle);
 
         /* Only record user xattr changes */
-        if ((rc == 0) && (strncmp("user.", name, 5) == 0))
-                rc = mdd_changelog_data_store(env, mdd, CL_XATTR, 0, mdd_obj,
-                                              handle);
+        if ((rc == 0) && (strncmp("user.", name, 5) == 0)) {
+                cfs_mutex_down(&mdd->mdd_log_sem);
+                rc = mdd_changelog_data_store(env, mdd, CL_XATTR, 0, 
+                                              0, obj, handle);
+                cfs_mutex_up(&mdd->mdd_log_sem);
+        }
+
         mdd_trans_stop(env, mdd, rc, handle);
 
         RETURN(rc);
@@ -1703,13 +1740,16 @@ int mdd_xattr_del(const struct lu_env *env, struct md_object *obj,
         mdd_write_lock(env, mdd_obj, MOR_TGT_CHILD);
         rc = mdo_xattr_del(env, mdd_obj, name, handle,
                            mdd_object_capa(env, mdd_obj));
-        mdd_write_unlock(env, mdd_obj);
 
         /* Only record user xattr changes */
-        if ((rc == 0) && (strncmp("user.", name, 5) != 0))
-                rc = mdd_changelog_data_store(env, mdd, CL_XATTR, 0, mdd_obj,
-                                              handle);
+        if ((rc == 0) && (strncmp("user.", name, 5) != 0)) {
+                cfs_mutex_down(&mdd->mdd_log_sem);
+                rc = mdd_changelog_data_store(env, mdd, CL_XATTR, 0, 
+                                              0, obj, handle);
+                cfs_mutex_up(&mdd->mdd_log_sem);
+        }
 
+        mdd_write_unlock(env, mdd_obj);
         mdd_trans_stop(env, mdd, rc, handle);
 
         RETURN(rc);
@@ -2065,17 +2105,25 @@ static int mdd_open_sanity_check(const struct lu_env *env,
 }
 
 static int mdd_open(const struct lu_env *env, struct md_object *obj,
-                    int flags)
+                    int mode)
 {
         struct mdd_object *mdd_obj = md2mdd_obj(obj);
+        struct mdd_device *mdd = mdo2mdd(obj);
         int rc = 0;
 
         mdd_write_lock(env, mdd_obj, MOR_TGT_CHILD);
 
-        rc = mdd_open_sanity_check(env, mdd_obj, flags);
+        rc = mdd_open_sanity_check(env, mdd_obj, mode);
         if (rc == 0)
                 mdd_obj->mod_count++;
 
+        if (rc == 0 && 
+            (mode & (FMODE_WRITE | MDS_OPEN_APPEND | MDS_OPEN_TRUNC))) {
+                cfs_mutex_down(&mdd->mdd_log_sem);
+                rc = mdd_changelog_data_store(env, mdo2mdd(obj), CL_OPEN, 
+                                              mode, LA_MODE, obj, NULL);
+                cfs_mutex_up(&mdd->mdd_log_sem);
+        }
         mdd_write_unlock(env, mdd_obj);
         return rc;
 }
@@ -2104,7 +2152,7 @@ int mdd_object_kill(const struct lu_env *env, struct mdd_object *obj,
  * No permission check is needed.
  */
 static int mdd_close(const struct lu_env *env, struct md_object *obj,
-                     struct md_attr *ma)
+                     struct md_attr *ma, int mode)
 {
         struct mdd_object *mdd_obj = md2mdd_obj(obj);
         struct mdd_device *mdd = mdo2mdd(obj);
@@ -2201,6 +2249,13 @@ out:
         if (reset)
                 ma->ma_valid &= ~(MA_LOV | MA_COOKIE);
 
+        if (rc == 0 && 
+            (mode & (FMODE_WRITE | MDS_OPEN_APPEND | MDS_OPEN_TRUNC))) {
+                cfs_mutex_down(&mdd->mdd_log_sem);
+                rc = mdd_changelog_data_store(env, mdd, CL_CLOSE,
+                                              mode, LA_MODE, obj, handle);
+                cfs_mutex_up(&mdd->mdd_log_sem);
+        }
         mdd_write_unlock(env, mdd_obj);
         if (handle != NULL)
                 mdd_trans_stop(env, mdo2mdd(obj), rc, handle);
@@ -2499,7 +2554,6 @@ const struct md_object_operations mdd_obj_ops = {
         .moo_close         = mdd_close,
         .moo_readpage      = mdd_readpage,
         .moo_readlink      = mdd_readlink,
-        .moo_changelog     = mdd_changelog,
         .moo_capa_get      = mdd_capa_get,
         .moo_object_sync   = mdd_object_sync,
         .moo_version_get   = mdd_version_get,

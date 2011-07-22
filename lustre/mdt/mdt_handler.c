@@ -4110,6 +4110,7 @@ static void mdt_stack_fini(const struct lu_env *env,
         lustre_cfg_free(lcfg);
 
         lu_stack_fini(env, top);
+        m->mdt_mdd = NULL;
         m->mdt_child = NULL;
         m->mdt_bottom = NULL;
 }
@@ -4200,6 +4201,7 @@ static int mdt_stack_init(struct lu_env *env,
         }
         d = tmp;
         md = lu2md_dev(d);
+        m->mdt_mdd = md;
 
         tmp = mdt_layer_setup(env, LUSTRE_CMM_NAME, d, cfg);
         if (IS_ERR(tmp)) {
@@ -4285,6 +4287,30 @@ static void mdt_obd_llog_cleanup(struct obd_device *obd)
         }
 }
 
+static int mdt_changelog_rec_fill(const struct lu_env *env, 
+                                  struct llog_changelog_rec *rec, 
+                                  void *cookie)
+{
+        struct mdt_thread_info *mti;
+        struct mdt_device *mdt;
+
+        mti = lu_context_key_get(&env->le_ctx, &mdt_thread_key);
+        LASSERT(mti != NULL);
+        mdt = mti->mti_mdt;
+        if (mti->mti_exp)
+                rec->cr.cr_clnid = mti->mti_exp->exp_connection->c_peer.nid;
+
+        /* this is mainly called by mdd layer to fill some changelog rec 
+         * fields when transaction is not yet finished. This is why we bump
+         * last transno to get transno that will be when this transation
+         * commits.*/
+        cfs_spin_lock(&mdt->mdt_lut.lut_translock);
+        rec->cr.cr_version = mdt->mdt_lut.lut_last_transno + 1;
+        cfs_spin_unlock(&mdt->mdt_lut.lut_translock);
+
+        return 0;
+}
+
 static void mdt_fini(const struct lu_env *env, struct mdt_device *m)
 {
         struct md_device  *next = m->mdt_child;
@@ -4293,6 +4319,7 @@ static void mdt_fini(const struct lu_env *env, struct mdt_device *m)
         struct obd_device *obd = mdt2obd_dev(m);
         ENTRY;
 
+        md_changelog_callback_del(m->mdt_mdd, &m->mdt_changelog_cb);
         target_recovery_fini(obd);
 
         ping_evictor_stop();
@@ -4652,6 +4679,8 @@ static int mdt_init0(const struct lu_env *env, struct mdt_device *m,
         if (ldlm_timeout == LDLM_TIMEOUT_DEFAULT)
                 ldlm_timeout = MDS_LDLM_TIMEOUT_DEFAULT;
 
+        m->mdt_changelog_cb.ccb_rec_fill = mdt_changelog_rec_fill;
+        md_changelog_callback_add(m->mdt_mdd, &m->mdt_changelog_cb);
         RETURN(0);
 
 err_stop_service:
@@ -5063,6 +5092,7 @@ static int mdt_obd_reconnect(const struct lu_env *env,
 
         RETURN(rc);
 }
+
 static int mdt_export_cleanup(struct obd_export *exp)
 {
         struct mdt_export_data *med = &exp->exp_mdt_data;
@@ -5303,6 +5333,193 @@ static int mdt_obd_notify(struct obd_device *host,
         RETURN(0);
 }
 
+static int mdt_sobj_populate(struct mdt_thread_info *mti,
+                             struct mdt_object *obj, 
+                             struct lu_sobj *so)
+{
+        struct md_object *next = mdt_object_child(obj);
+        const struct lu_env *env = mti->mti_env;
+        struct mdt_device *mdt = mti->mti_mdt;
+        struct md_attr *ma = &mti->mti_attr;
+        int rc;
+
+        so->so_valid = 0;
+        so->so_fid = *mdt_object_fid(obj);
+
+        memset(ma, 0, sizeof(*ma));
+        ma->ma_need = MA_INODE;
+        rc = mo_attr_get(env, next, ma);
+        if (rc) {
+                CERROR("Getting attributes failed: %d\n", rc);
+                return rc;
+        }
+        if (ma->ma_attr.la_valid & LA_ATIME) {
+                so->so_atime = ma->ma_attr.la_atime;
+                so->so_valid |= LA_ATIME;
+        }
+        if (ma->ma_attr.la_valid & LA_CTIME) {
+                so->so_ctime = ma->ma_attr.la_ctime;
+                so->so_valid |= LA_CTIME;
+        }
+        if (ma->ma_attr.la_valid & LA_MTIME) {
+                so->so_mtime = ma->ma_attr.la_mtime;
+                so->so_valid |= LA_MTIME;
+        }
+        if (ma->ma_attr.la_valid & LA_SIZE) {
+                so->so_size = ma->ma_attr.la_size;
+                so->so_valid |= LA_SIZE;
+        }
+        if (ma->ma_attr.la_valid & LA_BLKSIZE) {
+                so->so_blksize = ma->ma_attr.la_blksize;
+                so->so_valid |= LA_BLKSIZE;
+        }
+        if (ma->ma_attr.la_valid & LA_BLOCKS) {
+                so->so_blocks = ma->ma_attr.la_blocks;
+                so->so_valid |= LA_BLOCKS;
+        }
+        if (ma->ma_attr.la_valid & LA_NLINK) {
+                so->so_nlink = ma->ma_attr.la_nlink;
+                so->so_valid |= LA_NLINK;
+        }
+        if (ma->ma_attr.la_valid & LA_RDEV) {
+                so->so_rdev = ma->ma_attr.la_rdev;
+                so->so_valid |= LA_RDEV;
+        }
+        if (ma->ma_attr.la_valid & LA_MODE) {
+                so->so_valid |= LA_MODE;
+                so->so_mode = ma->ma_attr.la_mode;
+        }
+        if (ma->ma_attr.la_valid & LA_UID) {
+                so->so_valid |= LA_UID;
+                so->so_uid = ma->ma_attr.la_uid;
+        }
+        if (ma->ma_attr.la_valid & LA_GID) {
+                so->so_valid |= LA_GID;
+                so->so_gid = ma->ma_attr.la_gid;
+        }
+
+        if (mdt->mdt_child->md_ops->mdo_next_recno)
+                rc = mdt->mdt_child->md_ops->mdo_next_recno(env,
+                                                    mdt->mdt_child, 
+                                                    &so->so_recno);
+        return rc;
+}
+
+static int mdt_get_triple(struct mdt_thread_info *mti, 
+                          struct lu_triple *tpl)
+{
+        struct lu_fid *pfid = &tpl->sd_parent.so_fid;
+        struct mdt_device *mdt = mti->mti_mdt;
+        int namelen = strlen(tpl->sd_name);
+        struct mdt_lock_handle *plh, *clh;
+        struct mdt_object *pobj, *cobj;
+        char *name = tpl->sd_name;
+        struct lu_name *lname;
+        struct lu_fid cfid;
+        int rc;
+        ENTRY;
+
+        if (!fid_is_sane(pfid)) {
+                CERROR("Invalid triple parent fid "DFID"\n", PFID(pfid));
+                RETURN(-EINVAL);
+        }
+
+        /* find and lock parent */
+        plh = &mti->mti_lh[MDT_LH_PARENT];
+        mdt_lock_handle_init(plh);
+        mdt_lock_reg_init(plh, LCK_PR);
+
+        pobj = mdt_object_find_lock(mti, pfid, plh, MDS_INODELOCK_UPDATE);
+        if (IS_ERR(pobj))
+                RETURN(PTR_ERR(pobj));
+
+        rc = mdt_object_exists(pobj);
+        if (rc < 0) {
+                CERROR("Remote parent object "DFID"\n", PFID(pfid));
+                rc = -EREMOTE;
+                goto out_put_parent;
+        } else if (rc == 0) {
+                CERROR("Parent object "DFID" does not exist\n", PFID(pfid));
+                rc = -ESTALE;
+                goto out_put_parent;
+        }
+
+        /* lookup for child by name */
+        lname = mdt_name(mti->mti_env, name, namelen);
+        rc = mdo_lookup(mti->mti_env, mdt_object_child(pobj), 
+                        lname, &cfid, &mti->mti_spec);
+        if (rc) {
+                CERROR("Lookup for %*s failed: %d\n", 
+                       namelen, name, rc);
+                goto out_put_parent;
+        }
+
+        /* find and lock child */
+        clh = &mti->mti_lh[MDT_LH_CHILD];
+        mdt_lock_handle_init(clh);
+        mdt_lock_reg_init(clh, LCK_PR);
+
+        cobj = mdt_object_find_lock(mti, &cfid, clh, MDS_INODELOCK_UPDATE);
+        if (IS_ERR(cobj)) {
+                rc = PTR_ERR(cobj);
+                CERROR("Lock object failed: %d\n", rc);
+                goto out_put_parent;
+        }
+
+        rc = mdt_object_exists(cobj);
+        if (rc < 0) {
+                CERROR("Remote child object "DFID"\n", PFID(&cfid));
+                rc = -EREMOTE;
+                goto out_put_child;
+        } else if (rc == 0) {
+                CERROR("Child object "DFID" does not exist\n", PFID(&cfid));
+                rc = -ENOENT;
+                goto out_put_child;
+        }
+
+        /* get parent/child info */
+        rc = mdt_sobj_populate(mti, cobj, &tpl->sd_child);
+        if (rc) {
+                CERROR("Can't populate child info: %d\n", rc);
+                goto out_put_child;
+        }
+        rc = mdt_sobj_populate(mti, pobj, &tpl->sd_parent);
+        if (rc) {
+                CERROR("Can't populate parent info: %d\n", rc);
+                goto out_put_child;
+        }
+
+        cfs_spin_lock(&mdt->mdt_lut.lut_translock);
+        tpl->sd_child.so_version = mdt->mdt_lut.lut_last_transno;
+        tpl->sd_parent.so_version = mdt->mdt_lut.lut_last_transno;
+        cfs_spin_unlock(&mdt->mdt_lut.lut_translock);
+
+out_put_child:
+        mdt_object_unlock_put(mti, cobj, clh, 1);
+        clh->mlh_reg_lh.cookie = 0;
+out_put_parent:
+        mdt_object_unlock_put(mti, pobj, plh, 1);
+        plh->mlh_reg_lh.cookie = 0;
+        RETURN(rc);
+}
+
+static int mdt_rpc_get_triple(struct mdt_thread_info *info, void *key,
+                              void *val, int vallen)
+{
+        struct lu_triple *ti, *to;
+        int rc;
+
+        ti = key + cfs_size_round(sizeof(KEY_GET_TRIPLE));
+        to = val;
+
+        if (ptlrpc_req_need_swab(info->mti_pill->rc_req))
+                lustre_swab_get_triple(ti);
+
+        memcpy(to, ti, sizeof(*ti));
+        rc = mdt_get_triple(info, to);
+        RETURN(rc);
+}
+
 static int mdt_rpc_fid2path(struct mdt_thread_info *info, void *key,
                             void *val, int vallen)
 {
@@ -5396,13 +5613,16 @@ static int mdt_get_info(struct mdt_thread_info *info)
                 RETURN(-EFAULT);
         }
 
-        if (KEY_IS(KEY_FID2PATH))
+        if (KEY_IS(KEY_FID2PATH)) {
                 rc = mdt_rpc_fid2path(info, key, valout, *vallen);
-        else
+        } else if (KEY_IS(KEY_GET_TRIPLE)) {
+                rc = mdt_rpc_get_triple(info, key, valout, *vallen);
+        } else {
+                CERROR("Invalid get_info key\n");
                 rc = -EINVAL;
+        }
 
         lustre_msg_set_status(req->rq_repmsg, rc);
-
         RETURN(rc);
 }
 
@@ -5495,6 +5715,7 @@ static int mdt_iocontrol(unsigned int cmd, struct obd_export *exp, int len,
                 target_stop_recovery_thread(obd);
                 rc = 0;
                 break;
+        case OBD_IOC_CHANGELOG_CTL:
         case OBD_IOC_CHANGELOG_REG:
         case OBD_IOC_CHANGELOG_DEREG:
         case OBD_IOC_CHANGELOG_CLEAR:

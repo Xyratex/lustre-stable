@@ -104,7 +104,18 @@ extern int llapi_file_lookup(int dirfd, const char *name);
 #define VERBOSE_ALL     (VERBOSE_COUNT | VERBOSE_SIZE | VERBOSE_OFFSET | \
                          VERBOSE_POOL | VERBOSE_OBJID)
 
+#define WANT_PATH       0x1
+#define WANT_FSNAME     0x2
+#define WANT_FD         0x4
+#define WANT_INDEX      0x8
+#define WANT_ERROR      0x10
+
 struct find_param {
+        struct lu_fid fid;
+        int  operation;
+        char name[128];
+        char client[32];
+
         unsigned int maxdepth;
         time_t  atime;
         time_t  mtime;
@@ -123,21 +134,30 @@ struct find_param {
                         recursive:1,
                         got_uuids:1,
                         obds_printed:1,
-                        exclude_pattern:1,
-                        exclude_type:1,
-                        exclude_obd:1,
                         have_fileinfo:1,
-                        exclude_gid:1,
-                        exclude_uid:1,
                         check_gid:1,
                         check_uid:1,
                         check_pool:1,
                         check_size:1,
+                        check_atime:1,
+                        check_client:1,
+                        check_fid:1,
+                        check_name:1,
+                        check_op:1,
+                        exclude_pattern:1,
+                        exclude_type:1,
+                        exclude_obd:1,
+                        exclude_gid:1,
+                        exclude_uid:1,
                         exclude_pool:1,
                         exclude_size:1,
                         exclude_atime:1,
                         exclude_mtime:1,
                         exclude_ctime:1,
+                        exclude_fid:1,
+                        exclude_op:1,
+                        exclude_name:1,
+                        exclude_client:1,
                         get_mdt_index:1,
                         raw:1;
 
@@ -189,8 +209,6 @@ extern int llapi_path2fid(const char *path, lustre_fid *fid);
 extern int llapi_search_mounts(const char *pathname, int index,
                                char *mntdir, char *fsname);
 extern int llapi_search_fsname(const char *pathname, char *fsname);
-extern void llapi_ping_target(char *obd_type, char *obd_name,
-                              char *obd_uuid, void *args);
 
 struct mntent;
 #define HAVE_LLAPI_IS_LUSTRE_MNT
@@ -208,21 +226,26 @@ extern int llapi_rgetfacl(int argc, char *argv[]);
 extern int llapi_cp(int argc, char *argv[]);
 extern int llapi_ls(int argc, char *argv[]);
 extern int llapi_fid2path(const char *device, const char *fidstr, char *path,
-                          int pathlen, long long *recno, int *linkno);
+                          int pathlen, long long *recno, int *linkno, int want);
 extern int llapi_path2fid(const char *path, lustre_fid *fid);
+extern int llapi_get_root_fid(const char *path, lustre_fid *fid);
 extern int llapi_get_version(char *buffer, int buffer_size, char **version);
+
+extern int llapi_get_triple(const char *path, lustre_fid *pfid, 
+                            const char *name, struct lu_triple **triple);
 
 /* Changelog interface.  priv is private state, managed internally
    by these functions */
-#define CHANGELOG_FLAG_FOLLOW 0x01   /* Not yet implemented */
+#define CHANGELOG_FLAG_FOLLOW 0x01   /* Follow changes in the changelog */
 #define CHANGELOG_FLAG_BLOCK  0x02   /* Blocking IO makes sense in case of
    slow user parsing of the records, but it also prevents us from cleaning
    up if the records are not consumed. */
 
 extern int llapi_changelog_start(void **priv, int flags, const char *mdtname,
-                                 long long startrec);
+                                 long long startrec, int poll_timeout);
 extern int llapi_changelog_fini(void **priv);
 extern int llapi_changelog_recv(void *priv, struct changelog_rec **rech);
+extern int llapi_changelog_poll(void *priv, int timeout);
 extern int llapi_changelog_free(struct changelog_rec **rech);
 /* Allow records up to endrec to be destroyed; requires registered id. */
 extern int llapi_changelog_clear(const char *mdtname, const char *idstr,

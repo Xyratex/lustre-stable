@@ -1647,6 +1647,33 @@ int ll_do_fiemap(struct inode *inode, struct ll_user_fiemap *fiemap,
         RETURN(rc);
 }
 
+int ll_get_triple(struct obd_export *exp, void *arg)
+{
+        struct lu_triple *triple;
+        int rc;
+        ENTRY;
+                
+        OBD_ALLOC_PTR(triple);
+        if (triple == NULL)
+                RETURN(-ENOMEM);
+                
+        if (cfs_copy_from_user(triple, (void *)arg, sizeof(*triple))) {
+                OBD_FREE_PTR(triple);
+                RETURN(-EFAULT);
+        }
+        rc = obd_iocontrol(OBD_IOC_GET_TRIPLE, exp, sizeof(*triple),
+                           (void *)triple, NULL);
+        if (rc) {
+                OBD_FREE_PTR(triple);
+                return rc;
+        }
+        if (cfs_copy_to_user(arg, (void *)triple, sizeof(*triple)))
+                rc = -EFAULT;
+
+        OBD_FREE_PTR(triple);
+        RETURN(0);
+}
+
 int ll_fid2path(struct obd_export *exp, void *arg)
 {
         struct getinfo_fid2path *gfout, *gfin;

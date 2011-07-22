@@ -78,6 +78,8 @@ static struct lu_device_type mdd_device_type;
 static const char mdd_root_dir_name[] = "ROOT";
 static const char mdd_obf_dir_name[] = "fid";
 
+static int mdd_changelog_user_register(struct mdd_device *mdd, int *id);
+
 static int mdd_device_init(const struct lu_env *env, struct lu_device *d,
                            const char *name, struct lu_device *next)
 {
@@ -97,6 +99,8 @@ static int mdd_device_init(const struct lu_env *env, struct lu_device *d,
         mdd->mdd_atime_diff = MAX_ATIME_DIFF;
         /* sync permission changes */
         mdd->mdd_sync_permission = 1;
+        mdd->mdd_log_user_id = 0;
+        cfs_sema_init(&mdd->mdd_log_sem, 1);
 
         rc = mdd_procfs_init(mdd, name);
         RETURN(rc);
@@ -305,13 +309,14 @@ static __u64 cl_time(void) {
  */
 int mdd_changelog_llog_write(struct mdd_device         *mdd,
                              struct llog_changelog_rec *rec,
+                             int                        reclen,
                              struct thandle            *handle)
 {
         struct obd_device *obd = mdd2obd_dev(mdd);
         struct llog_ctxt *ctxt;
         int rc;
 
-        rec->cr_hdr.lrh_len = llog_data_len(sizeof(*rec) + rec->cr.cr_namelen);
+        rec->cr_hdr.lrh_len = reclen;
         /* llog_lvfs_write_rec sets the llog tail len */
         rec->cr_hdr.lrh_type = CHANGELOG_REC;
         rec->cr.cr_time = cl_time();
@@ -319,6 +324,7 @@ int mdd_changelog_llog_write(struct mdd_device         *mdd,
         /* NB: I suppose it's possible llog_add adds out of order wrt cr_index,
            but as long as the MDD transactions are ordered correctly for e.g.
            rename conflicts, I don't think this should matter. */
+        rec->cr.cr_prev = mdd->mdd_cl.mc_index;
         rec->cr.cr_index = ++mdd->mdd_cl.mc_index;
         cfs_spin_unlock(&mdd->mdd_cl.mc_lock);
         ctxt = llog_get_context(obd, LLOG_CHANGELOG_ORIG_CTXT);
@@ -407,7 +413,7 @@ int mdd_changelog_write_header(struct mdd_device *mdd, int markerflags)
         rec->cr.cr_markerflags = mdd->mdd_cl.mc_flags | markerflags;
 
         rc = (mdd->mdd_cl.mc_mask & (1 << CL_MARK)) ?
-                mdd_changelog_llog_write(mdd, rec, NULL) : 0;
+                mdd_changelog_llog_write(mdd, rec, reclen, NULL) : 0;
 
         /* assume on or off event; reset repeat-access time */
         mdd->mdd_cl.mc_starttime = cfs_time_current_64();
@@ -471,21 +477,24 @@ static int dot_lustre_mdd_attr_set(const struct lu_env *env,
 }
 
 static int dot_lustre_mdd_xattr_get(const struct lu_env *env,
-                                    struct md_object *obj, struct lu_buf *buf,
+                                    struct md_object *obj, 
+                                    struct lu_buf *buf,
                                     const char *name)
 {
         return 0;
 }
 
 static int dot_lustre_mdd_xattr_list(const struct lu_env *env,
-                                     struct md_object *obj, struct lu_buf *buf)
+                                     struct md_object *obj, 
+                                     struct lu_buf *buf)
 {
         return 0;
 }
 
 static int dot_lustre_mdd_xattr_set(const struct lu_env *env,
                                     struct md_object *obj,
-                                    const struct lu_buf *buf, const char *name,
+                                    const struct lu_buf *buf, 
+                                    const char *name,
                                     int fl)
 {
         return -EPERM;
@@ -499,7 +508,8 @@ static int dot_lustre_mdd_xattr_del(const struct lu_env *env,
 }
 
 static int dot_lustre_mdd_readlink(const struct lu_env *env,
-                                   struct md_object *obj, struct lu_buf *buf)
+                                   struct md_object *obj,
+                                   struct lu_buf *buf)
 {
         return 0;
 }
@@ -526,7 +536,8 @@ static int dot_lustre_mdd_ref_del(const struct lu_env *env,
         return -EPERM;
 }
 
-static int dot_lustre_mdd_open(const struct lu_env *env, struct md_object *obj,
+static int dot_lustre_mdd_open(const struct lu_env *env,
+                               struct md_object *obj,
                                int flags)
 {
         struct mdd_object *mdd_obj = md2mdd_obj(obj);
@@ -539,7 +550,7 @@ static int dot_lustre_mdd_open(const struct lu_env *env, struct md_object *obj,
 }
 
 static int dot_lustre_mdd_close(const struct lu_env *env, struct md_object *obj,
-                                struct md_attr *ma)
+                                struct md_attr *ma, int mode)
 {
         struct mdd_object *mdd_obj = md2mdd_obj(obj);
 
@@ -570,7 +581,7 @@ static void dot_lustre_mdd_version_set(const struct lu_env *env,
 }
 
 static int dot_lustre_mdd_path(const struct lu_env *env, struct md_object *obj,
-                           char *path, int pathlen, __u64 *recno, int *linkno)
+                               char *path, int pathlen, __u64 *recno, int *linkno)
 {
         return -ENOSYS;
 }
@@ -723,6 +734,18 @@ static struct md_dir_operations mdd_dot_lustre_dir_ops = {
         .mdo_rename_tgt  = dot_lustre_mdd_rename_tgt,
 };
 
+static int obf_mdd_permission(const struct lu_env *env,
+                              struct md_object *pobj,
+                              struct md_object *cobj,
+                              struct md_attr *attr, 
+                              int mask)
+{
+        if (mask & ~(MAY_READ | MAY_EXEC))
+                return -EPERM;
+        else
+                return 0;
+}
+
 static int obf_attr_get(const struct lu_env *env, struct md_object *obj,
                         struct md_attr *ma)
 {
@@ -765,7 +788,8 @@ static int obf_attr_get(const struct lu_env *env, struct md_object *obj,
         return rc;
 }
 
-static int obf_attr_set(const struct lu_env *env, struct md_object *obj,
+static int obf_attr_set(const struct lu_env *env, 
+                        struct md_object *obj,
                         const struct md_attr *ma)
 {
         return -EPERM;
@@ -791,7 +815,7 @@ static int obf_mdd_open(const struct lu_env *env, struct md_object *obj,
 }
 
 static int obf_mdd_close(const struct lu_env *env, struct md_object *obj,
-                         struct md_attr *ma)
+                         struct md_attr *ma, int mode)
 {
         struct mdd_object *mdd_obj = md2mdd_obj(obj);
 
@@ -802,12 +826,291 @@ static int obf_mdd_close(const struct lu_env *env, struct md_object *obj,
         return 0;
 }
 
-/** Nothing to list in "fid" directory */
-static int obf_mdd_readpage(const struct lu_env *env, struct md_object *obj,
-                            const struct lu_rdpg *rdpg)
+static __u64 obf_mdd_fid2hash(const struct lu_fid *fid)
 {
-        return -EPERM;
+        __u64 hash;
+        
+        hash = fid_oid(fid) | (fid_seq(fid) << 24);
+        return hash;
 }
+
+static void obf_mdd_hash2fid(struct lu_fid *fid, __u64 hash)
+{
+        fid->f_seq = hash >> 24;
+        fid->f_oid = (__u32)(hash & 0x0000000000ffffff);
+        fid->f_ver = 0;
+}
+
+static int obf_mdd_fid2str(char *str, int len, const struct lu_fid *fid)
+{
+        memset(str, 0, len);
+        if (lu_fid_eq(fid, &LU_OBF_FID)) {
+                strncpy(str, ".", 1);
+                return 1;
+        } else if (lu_fid_eq(fid, &LU_DOT_LUSTRE_FID)) {
+                strncpy(str, "..", 2);
+                return 2;
+        } else {
+                return snprintf(str, len, DFID_NOBRACE_NOX, PFID(fid));
+        }
+}
+
+static int obf_mdd_dir_page_build(const struct lu_env *env, struct mdd_device *mdd,
+                                  struct lu_dirpage *dp, int nob,
+                                  const struct dt_it_ops *iops, struct dt_it *it,
+                                  __u64 *start, __u32 attr)
+{
+        void                   *area = dp;
+        int                     result;
+        __u64                   hash = 0;
+        struct lu_dirent       *ent;
+        struct lu_dirent       *last = NULL;
+        int                     first = 1;
+        struct lu_fid           cur, tmp, *fid;
+        __u64                   hash_start;
+        int                     len, recsize, next;
+        static char             fidstr[48];
+
+        hash_start = *start;
+        obf_mdd_hash2fid(&cur, hash_start);
+        
+        memset(area, 0, sizeof (*dp));
+        area += sizeof (*dp);
+        nob  -= sizeof (*dp);
+
+        ent  = area;
+        do {
+                next = 0;
+                if (hash_start == 0 && unlikely(first)) {
+                        cur = LU_OBF_FID;
+                } else if (lu_fid_eq(&cur, &LU_OBF_FID)) {
+                        cur = LU_DOT_LUSTRE_FID;
+                } else if (lu_fid_eq(&cur, &LU_DOT_LUSTRE_FID)) {
+                        cur = mdd->mdd_root_fid;
+                } else {
+                        next = 1;
+                        len = iops->key_size(env, it);
+
+                        /* IAM iterator can return record with zero len. */
+                        if (len == 0)
+                                goto next;
+
+                        fid = (struct lu_fid *)iops->key(env, it);
+                        if (IS_ERR(fid)) {
+                                result = PTR_ERR(fid);
+                                goto out;
+                        }
+                        fid_be_to_cpu(&tmp, fid);
+
+                        if (!fid_seq_is_norm(fid_seq(&tmp)))
+                                goto next;
+                        cur = tmp;
+                }
+
+                len = obf_mdd_fid2str(fidstr, sizeof(fidstr), &cur);
+                hash = obf_mdd_fid2hash(&cur);
+
+                if (unlikely(first)) {
+                        first = 0;
+                        dp->ldp_hash_start = cpu_to_le64(hash);
+                }
+
+                /* calculate max space required for lu_dirent. */
+                recsize = lu_dirent_calc_size(len, 0);
+
+                if (nob >= recsize) {
+                        ent->lde_hash = cpu_to_le64(hash);
+                        fid_cpu_to_le(&ent->lde_fid, &cur);
+                        ent->lde_attrs = cpu_to_le32(LUDA_FID);
+                        ent->lde_reclen = cpu_to_le16(recsize);
+                        ent->lde_namelen = cpu_to_le16(len);
+                        strncpy(ent->lde_name, fidstr, len);
+                        result = 0;
+                } else {
+                        result = (last != NULL) ? 0 : -EINVAL;
+                        goto out;
+                }
+                last = ent;
+                ent = (void *)ent + recsize;
+                nob -= recsize;
+
+next:
+                if (next) {
+                        result = iops->next(env, it);
+                        if (result == -ESTALE)
+                                goto next;
+                }
+        } while (result == 0);
+
+out:
+        dp->ldp_hash_end = cpu_to_le64(hash);
+        if (last != NULL) {
+                if (last->lde_hash == dp->ldp_hash_end)
+                        dp->ldp_flags |= cpu_to_le32(LDF_COLLIDE);
+                last->lde_reclen = 0; /* end mark */
+        }
+        return result;
+}
+
+static int __obf_mdd_readpage(const struct lu_env *env, struct mdd_object *obj,
+                              const struct lu_rdpg *rdpg)
+{
+        struct dt_it      *it;
+        struct mdd_device *mdd = mdo2mdd(&obj->mod_obj);
+        struct dt_device  *child = mdd->mdd_child;
+        struct dt_object  *next = child->dd_oi;
+        const struct dt_it_ops  *iops;
+        struct page       *pg;
+        int i;
+        int nlupgs = 0;
+        struct lu_fid pos;
+        __u64 hash_start;
+        int rc;
+        int nob;
+
+        LASSERT(rdpg->rp_pages != NULL);
+        LASSERT(next->do_index_ops != NULL);
+
+        if (rdpg->rp_count <= 0)
+                return -EFAULT;
+
+        /*
+         * iterate through directory and fill pages from @rdpg
+         */
+        iops = &next->do_index_ops->dio_it;
+        it = iops->init(env, next, 0, BYPASS_CAPA);
+        if (IS_ERR(it))
+                return PTR_ERR(it);
+
+        /* unpack hash into fid components */
+        obf_mdd_hash2fid(&pos, rdpg->rp_hash);
+        fid_cpu_to_be(&pos, &pos);
+        
+        /* initial hash to pass to build page function. */
+        hash_start = rdpg->rp_hash;
+
+        /* position in oi index */
+        rc = iops->get(env, it, (struct dt_key *)&pos);
+        if (rc == 0) {
+                /*
+                 * Iterator didn't find record with exactly the key requested.
+                 *
+                 * It is currently either
+                 *
+                 *     - positioned above record with key less than
+                 *     requested---skip it.
+                 *
+                 *     - or not positioned at all (is in IAM_IT_SKEWED
+                 *     state)---position it on the next item.
+                 */
+                rc = iops->next(env, it);
+        } else if (rc > 0)
+                rc = 0;
+
+        /*
+         * At this point and across for-loop:
+         *
+         *  rc == 0 -> ok, proceed.
+         *  rc >  0 -> end of directory.
+         *  rc <  0 -> error.
+         */
+        for (i = 0, nob = rdpg->rp_count; rc == 0 && nob > 0;
+             i++, nob -= CFS_PAGE_SIZE) {
+                struct lu_dirpage *dp;
+
+                LASSERT(i < rdpg->rp_npages);
+                pg = rdpg->rp_pages[i];
+                dp = cfs_kmap(pg);
+#if CFS_PAGE_SIZE > LU_PAGE_SIZE
+repeat:
+#endif
+                rc = obf_mdd_dir_page_build(env, mdd, dp,
+                                            min_t(int, nob, LU_PAGE_SIZE),
+                                            iops, it, &hash_start, rdpg->rp_attrs);
+                if (rc > 0) {
+                        /*
+                         * end of directory.
+                         */
+                        dp->ldp_hash_end = cpu_to_le64(MDS_DIR_END_OFF);
+                        nlupgs++;
+                } else if (rc < 0) {
+                        CWARN("build page failed: %d!\n", rc);
+                } else {
+                        nlupgs++;
+#if CFS_PAGE_SIZE > LU_PAGE_SIZE
+                        dp = (struct lu_dirpage *)((char *)dp + LU_PAGE_SIZE);
+                        if ((unsigned long)dp & ~CFS_PAGE_MASK)
+                                goto repeat;
+#endif
+                }
+                cfs_kunmap(pg);
+        }
+        if (rc >= 0) {
+                struct lu_dirpage *dp;
+
+                dp = cfs_kmap(rdpg->rp_pages[0]);
+                dp->ldp_hash_start = cpu_to_le64(rdpg->rp_hash);
+                if (nlupgs == 0) {
+                        /*
+                         * No pages were processed, mark this for first page
+                         * and send back.
+                         */
+                        dp->ldp_flags  = cpu_to_le32(LDF_EMPTY);
+                        nlupgs = 1;
+                }
+                cfs_kunmap(rdpg->rp_pages[0]);
+
+                rc = min_t(unsigned int, nlupgs * LU_PAGE_SIZE, rdpg->rp_count);
+        }
+        iops->put(env, it);
+        iops->fini(env, it);
+
+        return rc;
+}
+
+int obf_mdd_readpage(const struct lu_env *env, struct md_object *obj,
+                     const struct lu_rdpg *rdpg)
+{
+        struct mdd_object *mdd_obj = md2mdd_obj(obj);
+        int rc;
+        ENTRY;
+
+        LASSERT(mdd_object_exists(mdd_obj));
+
+        mdd_read_lock(env, mdd_obj, MOR_TGT_CHILD);
+        if (mdd_is_dead_obj(mdd_obj)) {
+                struct page *pg;
+                struct lu_dirpage *dp;
+
+                /*
+                 * According to POSIX, please do not return any entry to client:
+                 * even dot and dotdot should not be returned.
+                 */
+                CWARN("readdir from dead object: "DFID"\n",
+                        PFID(mdd_object_fid(mdd_obj)));
+
+                if (rdpg->rp_count <= 0)
+                        GOTO(out_unlock, rc = -EFAULT);
+                LASSERT(rdpg->rp_pages != NULL);
+
+                pg = rdpg->rp_pages[0];
+                dp = (struct lu_dirpage*)cfs_kmap(pg);
+                memset(dp, 0 , sizeof(struct lu_dirpage));
+                dp->ldp_hash_start = cpu_to_le64(rdpg->rp_hash);
+                dp->ldp_hash_end   = cpu_to_le64(MDS_DIR_END_OFF);
+                dp->ldp_flags = cpu_to_le32(LDF_EMPTY);
+                cfs_kunmap(pg);
+                GOTO(out_unlock, rc = LU_PAGE_SIZE);
+        }
+
+        rc = __obf_mdd_readpage(env, mdd_obj, rdpg);
+
+        EXIT;
+out_unlock:
+        mdd_read_unlock(env, mdd_obj);
+        return rc;
+}
+
 
 static int obf_path(const struct lu_env *env, struct md_object *obj,
                     char *path, int pathlen, __u64 *recno, int *linkno)
@@ -816,6 +1119,7 @@ static int obf_path(const struct lu_env *env, struct md_object *obj,
 }
 
 static struct md_object_operations mdd_obf_obj_ops = {
+        .moo_permission = obf_mdd_permission,
         .moo_attr_get   = obf_attr_get,
         .moo_attr_set   = obf_attr_set,
         .moo_xattr_get  = obf_xattr_get,
@@ -826,8 +1130,8 @@ static struct md_object_operations mdd_obf_obj_ops = {
 };
 
 /**
- * Lookup method for "fid" object. Only filenames with correct SEQ:OID format
- * are valid. We also check if object with passed fid exists or not.
+ * Lookup method for "fid" object. Only filenames with correct SEQ:OID:VER
+ * format are valid. We also check if object with passed fid exists or not.
  */
 static int obf_lookup(const struct lu_env *env, struct md_object *p,
                       const struct lu_name *lname, struct lu_fid *f,
@@ -838,13 +1142,10 @@ static int obf_lookup(const struct lu_env *env, struct md_object *p,
         struct mdd_object *child;
         int rc = 0;
 
-        while (*name == '[')
-                name++;
-
-        sscanf(name, SFID, RFID(f));
+        sscanf(name, SFID_NOX, RFID(f));
         if (!fid_is_sane(f)) {
-                CWARN("bad FID format [%s], should be "DFID"\n", lname->ln_name,
-                      (__u64)1, 2, 0);
+                CWARN("bad FID format %s, should be "DFID_NOBRACE_NOX"\n", 
+                      lname->ln_name, (__u64)1, 2, 0);
                 GOTO(out, rc = -EINVAL);
         }
 
@@ -947,7 +1248,7 @@ static int mdd_dot_lustre_setup(const struct lu_env *env, struct mdd_device *m)
                 rc = PTR_ERR(dt_dot_lustre);
                 GOTO(out, rc);
         }
-
+        
         /* references are released in mdd_device_shutdown() */
         m->mdd_dot_lustre = lu2mdd_obj(lu_object_locate(dt_dot_lustre->do_lu.lo_header,
                                                         &mdd_device_type));
@@ -1112,6 +1413,7 @@ static int mdd_prepare(const struct lu_env *env,
                 GOTO(out, rc);
         }
 
+        mdd_changelog_user_register(mdd, &mdd->mdd_log_user_id);
 out:
         RETURN(rc);
 }
@@ -1134,6 +1436,16 @@ static int mdd_root_get(const struct lu_env *env,
         ENTRY;
         *f = mdd->mdd_root_fid;
         RETURN(0);
+}
+
+static int mdd_next_recno(const struct lu_env *env, struct md_device *m,
+                          __u64 *recno)
+{
+        struct mdd_device *mdd = lu2mdd_dev(&m->md_lu_dev);
+        cfs_spin_lock(&mdd->mdd_cl.mc_lock);
+        *recno = mdd->mdd_cl.mc_index;
+        cfs_spin_unlock(&mdd->mdd_cl.mc_lock);
+        return 0;
 }
 
 /*
@@ -1334,13 +1646,15 @@ static int mdd_changelog_user_register(struct mdd_device *mdd, int *id)
                 CERROR("Maximum number of changelog users exceeded!\n");
                 GOTO(out, rc = -EOVERFLOW);
         }
-        *id = rec->cur_id = ++mdd->mdd_cl.mc_lastuser;
+        rec->cur_id = ++mdd->mdd_cl.mc_lastuser;
+        if (id)
+                *id = rec->cur_id;
         rec->cur_endrec = mdd->mdd_cl.mc_index;
         cfs_spin_unlock(&mdd->mdd_cl.mc_user_lock);
 
         rc = llog_add(ctxt, &rec->cur_hdr, NULL, NULL, 0);
 
-        CDEBUG(D_IOCTL, "Registered changelog user %d\n", *id);
+        CDEBUG(D_IOCTL, "Registered changelog user %d\n", rec->cur_id);
 out:
         OBD_FREE_PTR(rec);
         llog_ctxt_put(ctxt);
@@ -1510,6 +1824,24 @@ static int mdd_iocontrol(const struct lu_env *env, struct md_device *m,
         }
 
         switch (cmd) {
+        case OBD_IOC_CHANGELOG_CTL:
+                if (data->ioc_offset) {
+                        if (mdd->mdd_log_user_id == 0)
+                                rc = mdd_changelog_user_register(mdd, 
+                                        &mdd->mdd_log_user_id);
+                        else
+                                rc = -EALREADY;
+                } else {
+                        if (mdd->mdd_log_user_id != 0) {
+                                rc = mdd_changelog_user_purge(mdd, 
+                                        mdd->mdd_log_user_id,
+                                        MCUD_UNREGISTER);
+                                mdd->mdd_log_user_id = 0;
+                        } else {
+                                rc = -EALREADY;
+                        }
+                }
+                break;
         case OBD_IOC_CHANGELOG_REG:
                 rc = mdd_changelog_user_register(mdd, &data->ioc_u32_1);
                 break;
@@ -1531,6 +1863,7 @@ LU_TYPE_INIT_FINI(mdd, &mdd_thread_key, &mdd_ucred_key, &mdd_capainfo_key,
 const struct md_device_operations mdd_ops = {
         .mdo_statfs         = mdd_statfs,
         .mdo_root_get       = mdd_root_get,
+        .mdo_next_recno     = mdd_next_recno,
         .mdo_maxsize_get    = mdd_maxsize_get,
         .mdo_init_capa_ctxt = mdd_init_capa_ctxt,
         .mdo_update_capa_key= mdd_update_capa_key,

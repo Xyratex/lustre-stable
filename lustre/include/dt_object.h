@@ -485,6 +485,7 @@ struct dt_index_operations {
 
 struct dt_device {
         struct lu_device                   dd_lu_dev;
+        struct dt_object		  *dd_oi;
         const struct dt_device_operations *dd_ops;
 
         /**

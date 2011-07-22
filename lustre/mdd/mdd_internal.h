@@ -134,6 +134,8 @@ struct mdd_device {
         struct mdd_object               *mdd_dot_lustre;
         struct mdd_dot_lustre_objs       mdd_dot_lustre_objs;
         unsigned int                     mdd_sync_permission;
+        cfs_semaphore_t                  mdd_log_sem;
+        int                              mdd_log_user_id;
 };
 
 enum mod_flags {
@@ -385,8 +387,6 @@ struct mdd_object *mdd_object_find(const struct lu_env *env,
 int mdd_get_default_md(struct mdd_object *mdd_obj, struct lov_mds_md *lmm);
 int mdd_readpage(const struct lu_env *env, struct md_object *obj,
                  const struct lu_rdpg *rdpg);
-int mdd_changelog(const struct lu_env *env, enum changelog_rec_type type,
-                  int flags, struct md_object *obj);
 /* mdd_quota.c*/
 #ifdef HAVE_QUOTA_SUPPORT
 int mdd_quota_notify(const struct lu_env *env, struct md_device *m);
@@ -456,6 +456,7 @@ struct lu_object *mdd_object_alloc(const struct lu_env *env,
 struct llog_changelog_rec;
 int mdd_changelog_llog_write(struct mdd_device         *mdd,
                              struct llog_changelog_rec *rec,
+                             int                        reclen,
                              struct thandle            *handle);
 int mdd_changelog_llog_cancel(struct mdd_device *mdd, long long endrec);
 int mdd_changelog_write_header(struct mdd_device *mdd, int markerflags);
@@ -489,6 +490,14 @@ int mdd_permission(const struct lu_env *env,
                    struct md_attr *ma, int mask);
 int mdd_capa_get(const struct lu_env *env, struct md_object *obj,
                  struct lustre_capa *capa, int renewal);
+
+int mdd_changelog_data_store(const struct lu_env     *env,
+                             struct mdd_device       *mdd,
+                             changelog_rec_t          type,
+                             __u32                    mode,
+                             __u64                    valid,
+                             struct md_object        *obj,
+                             struct thandle          *handle);
 
 static inline int lu_device_is_mdd(struct lu_device *d)
 {

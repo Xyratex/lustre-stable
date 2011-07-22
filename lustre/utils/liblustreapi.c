@@ -490,13 +490,8 @@ int llapi_file_create_pool(const char *name, unsigned long long stripe_size,
  * Find the fsname, the full path, and/or an open fd.
  * Either the fsname or path must not be NULL
  */
-#define WANT_PATH   0x1
-#define WANT_FSNAME 0x2
-#define WANT_FD     0x4
-#define WANT_INDEX  0x8
-#define WANT_ERROR  0x10
-static int get_root_path(int want, char *fsname, int *outfd, char *path,
-                         int index)
+int get_root_path(int want, char *fsname, int *outfd, char *path,
+                  int index)
 {
         struct mntent mnt;
         char buf[PATH_MAX], mntdir[PATH_MAX];
@@ -524,7 +519,7 @@ static int get_root_path(int want, char *fsname, int *outfd, char *path,
                         continue;
 
                 mntlen = strlen(mnt.mnt_dir);
-                ptr = strrchr(mnt.mnt_fsname, '/');
+                ptr = strchr(mnt.mnt_fsname, '/');
                 if (!ptr && !len) {
                         rc = -EINVAL;
                         break;
@@ -570,7 +565,7 @@ static int get_root_path(int want, char *fsname, int *outfd, char *path,
                 }
         } else if (want & WANT_ERROR)
                 llapi_err(LLAPI_MSG_ERROR | LLAPI_MSG_NO_ERRNO,
-                          "can't find fs root for '%s': %d",
+                          "Can't find fs root for '%s': %d",
                           (want & WANT_PATH) ? fsname : path, rc);
         return rc;
 }
@@ -2970,7 +2965,7 @@ int llapi_ls(int argc, char *argv[])
  * Eg: if name = "lustre-MDT0000", "lustre", or "lustre-MDT0000_UUID"
  *     then buf = "lustre-MDT0000"
  */
-static int get_mdtname(char *name, char *format, char *buf)
+int get_mdtname(char *name, char *format, char *buf)
 {
         char suffix[]="-MDT0000";
         int len = strlen(name);
@@ -3023,7 +3018,8 @@ static int root_ioctl(const char *mdtname, int opc, void *data, int *mdtidxp,
         if (rc < 0) {
                 if (want_error)
                         llapi_err(LLAPI_MSG_ERROR | LLAPI_MSG_NO_ERRNO,
-                                  "Can't open %s: %d\n", mdtname, rc);
+                                  "error: Failed to get root path for %s: %d", 
+                                  mdtname, rc);
                 return rc;
         }
 
@@ -3059,10 +3055,17 @@ static int changelog_ioctl(const char *mdtname, int opc, int id,
 }
 
 #define CHANGELOG_PRIV_MAGIC 0xCA8E1080
+#define DEVICE_MAX 64
+
 struct changelog_private {
         int magic;
         int flags;
+        int timeout;
+        int moredata;
+        __u64 startrec;
         lustre_kernelcomm kuc;
+        struct kuc_hdr *kuch;
+        char device[DEVICE_MAX];
 };
 
 /** Start reading from a changelog
@@ -3073,7 +3076,7 @@ struct changelog_private {
  * (just call llapi_changelog_fini when done; don't need an endrec)
  */
 int llapi_changelog_start(void **priv, int flags, const char *device,
-                          long long startrec)
+                          long long startrec, int poll_timeout)
 {
         struct changelog_private *cp;
         int rc;
@@ -3083,8 +3086,13 @@ int llapi_changelog_start(void **priv, int flags, const char *device,
         if (cp == NULL)
                 return -ENOMEM;
 
-        cp->magic = CHANGELOG_PRIV_MAGIC;
+        cp->moredata = 0;
+        cp->kuch = NULL;
         cp->flags = flags;
+        cp->startrec = startrec;
+        cp->timeout = poll_timeout;
+        cp->magic = CHANGELOG_PRIV_MAGIC;
+        strncpy(cp->device, device, sizeof(cp->device));
 
         /* Set up the receiver */
         rc = libcfs_ukuc_start(&cp->kuc, 0 /* no group registration */);
@@ -3092,19 +3100,6 @@ int llapi_changelog_start(void **priv, int flags, const char *device,
                 goto out_free;
 
         *priv = cp;
-
-        /* Tell the kernel to start sending */
-        rc = changelog_ioctl(device, OBD_IOC_CHANGELOG_SEND, cp->kuc.lk_wfd,
-                             startrec, flags);
-        /* Only the kernel reference keeps the write side open */
-        close(cp->kuc.lk_wfd);
-        cp->kuc.lk_wfd = 0;
-        if (rc < 0) {
-                /* frees and clears priv */
-                llapi_changelog_fini(priv);
-                return rc;
-        }
-
         return 0;
 
 out_free:
@@ -3120,10 +3115,95 @@ int llapi_changelog_fini(void **priv)
         if (!cp || (cp->magic != CHANGELOG_PRIV_MAGIC))
                 return -EINVAL;
 
+        close(cp->kuc.lk_wfd);
+        cp->kuc.lk_wfd = 0;
         libcfs_ukuc_stop(&cp->kuc);
+        if (cp->kuch)
+                free(cp->kuch);
         free(cp);
         *priv = NULL;
         return 0;
+}
+
+/** Wait for data or error for passed timeout 
+ * @param priv Opaque private control structure
+ * @param timeout time to wait for data
+ * @return 0 no data, no error
+ *         <0 error code
+ *         1 more data ready
+ */
+int llapi_changelog_poll(void *priv, int timeout)
+{
+        struct changelog_private *cp = (struct changelog_private *)priv;
+        struct kuc_hdr *kuch;
+        int rc = 0;
+
+        if (!cp || (cp->magic != CHANGELOG_PRIV_MAGIC))
+                return -EINVAL;
+        if (timeout == 0)
+                return -EINVAL;
+        if (cp->kuch)
+                return 1;
+        kuch = malloc(CR_MAXSIZE + sizeof(*kuch));
+        if (kuch == NULL)
+                return -ENOMEM;
+
+repeat:
+        if (!cp->moredata) {
+                /* Tell kernel to start sending records */
+                rc = changelog_ioctl(cp->device, OBD_IOC_CHANGELOG_SEND, 
+                                     cp->kuc.lk_wfd, cp->startrec, cp->flags);
+                if (rc) {
+                        llapi_err(LLAPI_MSG_ERROR | LLAPI_MSG_NO_ERRNO,
+                                  "error: Failed to poll changelog: %d",
+                                  rc);
+                        rc = -ECOMM;
+                        goto out_free;
+                }
+        }
+
+        rc = libcfs_ukuc_msg_get(&cp->kuc, (char *)kuch,
+                                 CR_MAXSIZE + sizeof(*kuch),
+                                 KUC_TRANSPORT_CHANGELOG);
+        if (rc < 0)
+                goto out_free;
+
+        if ((kuch->kuc_transport != KUC_TRANSPORT_CHANGELOG) ||
+            ((kuch->kuc_msgtype != CL_RECORD) &&
+             (kuch->kuc_msgtype != CL_START) &&
+             (kuch->kuc_msgtype != CL_EOF))) {
+                llapi_err(LLAPI_MSG_ERROR | LLAPI_MSG_NO_ERRNO,
+                          "error: Unknown changelog message type %d:%d",
+                          kuch->kuc_transport, kuch->kuc_msgtype);
+                rc = -EPROTO;
+                goto out_free;
+        }
+
+        if (kuch->kuc_msgtype == CL_START) {
+                cp->moredata = 1;
+                rc = 1;
+                goto out_free;
+        } else if (kuch->kuc_msgtype == CL_EOF) {
+                cp->moredata = 0;
+                if (timeout > 0) {
+                        sleep(1);
+                        timeout--;
+                        goto repeat;
+                } else {
+                        rc = 0;
+                        goto out_free;
+                }
+        } else {
+                cp->kuch = kuch;
+                cp->moredata = 1;
+                rc = 1;
+        }
+
+        return rc;
+
+out_free:
+        free(kuch);
+        return rc;
 }
 
 /** Read the next changelog entry
@@ -3143,11 +3223,30 @@ int llapi_changelog_recv(void *priv, struct changelog_rec **rech)
                 return -EINVAL;
         if (rech == NULL)
                 return -EINVAL;
+        if (cp->kuch) {
+                *rech = (struct changelog_rec *)(cp->kuch + 1);
+                cp->startrec = (*rech)->cr_index + 1;
+                cp->kuch = NULL;
+                return 0;
+        }
         kuch = malloc(CR_MAXSIZE + sizeof(*kuch));
         if (kuch == NULL)
                 return -ENOMEM;
 
 repeat:
+        if (!cp->moredata) {
+                /* Tell kernel to start sending records */
+                rc = changelog_ioctl(cp->device, OBD_IOC_CHANGELOG_SEND, 
+                                     cp->kuc.lk_wfd, cp->startrec, cp->flags);
+                if (rc) {
+                        llapi_err(LLAPI_MSG_ERROR | LLAPI_MSG_NO_ERRNO,
+                                  "error: Failed to read changelog: %d",
+                                  rc);
+                        rc = -ECOMM;
+                        goto out_free;
+                }
+        }
+
         rc = libcfs_ukuc_msg_get(&cp->kuc, (char *)kuch,
                                  CR_MAXSIZE + sizeof(*kuch),
                                  KUC_TRANSPORT_CHANGELOG);
@@ -3156,29 +3255,37 @@ repeat:
 
         if ((kuch->kuc_transport != KUC_TRANSPORT_CHANGELOG) ||
             ((kuch->kuc_msgtype != CL_RECORD) &&
+             (kuch->kuc_msgtype != CL_START) &&
              (kuch->kuc_msgtype != CL_EOF))) {
                 llapi_err(LLAPI_MSG_ERROR | LLAPI_MSG_NO_ERRNO,
-                          "Unknown changelog message type %d:%d\n",
+                          "error: Unknown changelog message type %d:%d",
                           kuch->kuc_transport, kuch->kuc_msgtype);
                 rc = -EPROTO;
                 goto out_free;
         }
 
-        if (kuch->kuc_msgtype == CL_EOF) {
+        if (kuch->kuc_msgtype == CL_START) {
+                /* Ignore more data mark */
+                cp->moredata = 1;
+                goto repeat;
+        } else if (kuch->kuc_msgtype == CL_EOF) {
+                cp->moredata = 0;
                 if (cp->flags & CHANGELOG_FLAG_FOLLOW) {
-                        /* Ignore EOFs */
+                        sleep(cp->timeout);
                         goto repeat;
                 } else {
                         rc = 1;
                         goto out_free;
                 }
+        } else {
+                cp->moredata = 1;
         }
 
         /* Our message is a changelog_rec.  Use pointer math to skip
          * kuch_hdr and point directly to the message payload.
          */
         *rech = (struct changelog_rec *)(kuch + 1);
-
+        cp->startrec = (*rech)->cr_index + 1;
         return 0;
 
 out_free:
@@ -3209,7 +3316,7 @@ int llapi_changelog_clear(const char *mdtname, const char *idstr,
 
         if (endrec < 0) {
                 llapi_err(LLAPI_MSG_ERROR | LLAPI_MSG_NO_ERRNO,
-                          "can't purge negative records\n");
+                          "error: Failed to purge negative records");
                 return -EINVAL;
         }
 
@@ -3218,7 +3325,7 @@ int llapi_changelog_clear(const char *mdtname, const char *idstr,
                                   strlen(CHANGELOG_USER_PREFIX)) != 0)) {
                 llapi_err(LLAPI_MSG_ERROR | LLAPI_MSG_NO_ERRNO,
                           "expecting id of the form '"CHANGELOG_USER_PREFIX
-                          "<num>'; got '%s'\n", idstr);
+                          "<num>'; got '%s'", idstr);
                 return -EINVAL;
         }
 
@@ -3226,20 +3333,19 @@ int llapi_changelog_clear(const char *mdtname, const char *idstr,
 }
 
 int llapi_fid2path(const char *device, const char *fidstr, char *buf,
-                   int buflen, long long *recno, int *linkno)
+                   int buflen, long long *recno, int *linkno, int want)
 {
         struct lu_fid fid;
         struct getinfo_fid2path *gf;
         int rc;
 
-        while (*fidstr == '[')
-                fidstr++;
-
-        sscanf(fidstr, SFID, RFID(&fid));
+        sscanf(fidstr, SFID_NOX, RFID(&fid));
         if (!fid_is_sane(&fid)) {
-                llapi_err(LLAPI_MSG_ERROR | LLAPI_MSG_NO_ERRNO,
-                          "bad FID format [%s], should be "DFID"\n",
-                          fidstr, (__u64)1, 2, 0);
+                if (want & WANT_ERROR) {
+                        llapi_err(LLAPI_MSG_ERROR | LLAPI_MSG_NO_ERRNO,
+                                  "error: Bad FID format [%s], should be "
+                                  DFID_NOBRACE_NOX, fidstr, (__u64)1, 2, 0);
+                }
                 return -EINVAL;
         }
 
@@ -3297,6 +3403,49 @@ int llapi_path2fid(const char *path, lustre_fid *fid)
                 rc = path2fid_from_lma(path, fid);
 
         close(fd);
+        return rc;
+}
+
+int llapi_get_root_fid(const char *path, lustre_fid *fid)
+{
+        int fd, rc;
+
+        memset(fid, 0, sizeof(*fid));
+        fd = open(path, O_RDONLY | O_NONBLOCK | O_NOFOLLOW);
+        if (fd < 0)
+                return -errno;
+
+        errno = 0;
+        rc = ioctl(fd, LL_IOC_GET_ROOT_FID, fid) < 0 ? -errno : 0;
+        close(fd);
+        return rc;
+}
+
+int llapi_get_triple(const char *path, lustre_fid *pfid, 
+                     const char *name, struct lu_triple **triple)
+{
+        int namelen = strlen(name);
+        int rc, fd;
+
+        *triple = malloc(sizeof(struct lu_triple));
+        if (*triple == NULL)
+                return -ENOMEM;
+
+        memset(*triple, 0, sizeof(struct lu_triple));
+        (*triple)->sd_parent.so_fid = *pfid;
+        strncpy((*triple)->sd_name, name, namelen);
+
+        fd = open(path, O_RDONLY | O_NONBLOCK | O_NOFOLLOW);
+        if (fd < 0) {
+                rc = -errno;
+                goto out;
+        }
+        errno = 0;
+        rc = ioctl(fd, OBD_IOC_GET_TRIPLE, *triple) < 0 ? -errno : 0;
+        close(fd);
+out:
+        if (rc)
+                free(*triple);
         return rc;
 }
 
@@ -3439,7 +3588,7 @@ int llapi_copytool_recv(void *priv, struct hsm_action_list **halh, int *msgsize)
         if (kuch->kuc_transport != KUC_TRANSPORT_HSM ||
             kuch->kuc_msgtype != HMT_ACTION_LIST) {
                 llapi_err(LLAPI_MSG_ERROR | LLAPI_MSG_NO_ERRNO,
-                          "Unknown HSM message type %d:%d\n",
+                          "error: Unknown HSM message type %d:%d",
                           kuch->kuc_transport, kuch->kuc_msgtype);
                 rc = -EPROTO;
                 goto out_free;
@@ -3453,7 +3602,7 @@ int llapi_copytool_recv(void *priv, struct hsm_action_list **halh, int *msgsize)
         /* Check that we have registered for this archive # */
         if (((1 << hal->hal_archive_num) & ct->archives) == 0) {
                     llapi_err(LLAPI_MSG_INFO | LLAPI_MSG_NO_ERRNO,
-                          "Ignoring request for archive #%d (bitmask %#x)\n",
+                          "Ignoring request for archive #%d (bitmask %#x)",
                           hal->hal_archive_num, ct->archives);
                 rc = 0;
                 goto out_free;

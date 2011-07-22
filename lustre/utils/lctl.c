@@ -228,6 +228,12 @@ command_t cmdlist[] = {
         {"changelog_deregister", jt_changelog_deregister, 0,
          "deregister an existing changelog user\n"
          "usage:\tdevice <mdtname>\n\tchangelog_deregister <id>"},
+        {"changelog_on", jt_changelog_on, 0,
+         "Switches mds changelog on for all clients\n"
+         "usage:\tdevice <mdtname>\n\tchangelog_on"},
+        {"changelog_off", jt_changelog_off, 0,
+         "Switches mds changelog off for all clients\n"
+         "usage:\tdevice <mdtname>\n\tchangelog_off"},
 
         /* Device configuration commands */
         {"== device setup (these are not normally used post 1.4) ==",

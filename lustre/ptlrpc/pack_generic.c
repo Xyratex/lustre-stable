@@ -1738,7 +1738,8 @@ void lustre_swab_mdt_body (struct mdt_body *b)
         __swab32s (&b->max_cookiesize);
         __swab32s (&b->uid_h);
         __swab32s (&b->gid_h);
-        CLASSERT(offsetof(typeof(*b), padding_5) != 0);
+        __swab64s (&b->version);
+        CLASSERT(offsetof(typeof(*b), padding_6) != 0);
 }
 
 void lustre_swab_mdt_ioepoch (struct mdt_ioepoch *b)
@@ -1831,6 +1832,32 @@ void lustre_swab_fid2path(struct getinfo_fid2path *gf)
         __swab32s(&gf->gf_pathlen);
 }
 EXPORT_SYMBOL(lustre_swab_fid2path);
+
+void lustre_swab_lu_sobj(struct lu_sobj *so)
+{
+        lustre_swab_lu_fid(&so->so_fid);
+        __swab16s(&so->so_valid);
+        __swab32s(&so->so_mode);
+        __swab64s(&so->so_atime);
+        __swab64s(&so->so_ctime);
+        __swab64s(&so->so_mtime);
+        __swab32s(&so->so_nlink);
+        __swab32s(&so->so_rdev);
+        __swab64s(&so->so_version);
+        __swab64s(&so->so_recno);
+        __swab32s(&so->so_uid);
+        __swab32s(&so->so_gid);
+        __swab64s(&so->so_size);
+        __swab64s(&so->so_blksize);
+        __swab64s(&so->so_blocks);
+}
+
+void lustre_swab_get_triple(struct lu_triple *t)
+{
+        lustre_swab_lu_sobj(&t->sd_parent);
+        lustre_swab_lu_sobj(&t->sd_child);
+}
+EXPORT_SYMBOL(lustre_swab_get_triple);
 
 void lustre_swab_fiemap_extent(struct ll_fiemap_extent *fm_extent)
 {

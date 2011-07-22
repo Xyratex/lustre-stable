@@ -142,8 +142,8 @@ struct obd_statfs {
 #define LL_IOC_GET_CONNECT_FLAGS        _IOWR('f', 174, __u64 *)
 #define LL_IOC_GET_MDTIDX               _IOR ('f', 175, int)
 #define LL_IOC_HSM_CT_START             _IOW ('f', 176,struct lustre_kernelcomm)
-/* see <lustre_obd.h> for ioctl numbers 177-210 */
-
+/* see <lustre_obd.h> for ioctl numbers 177-211 */
+#define LL_IOC_GET_ROOT_FID             _IOR ('f', 212, struct lu_fid)
 
 #define LL_STATFS_MDC           1
 #define LL_STATFS_LOV           2
@@ -323,19 +323,21 @@ typedef struct lu_fid lustre_fid;
 
 /* printf display format
    e.g. printf("file FID is "DFID"\n", PFID(fid)); */
-#define DFID_NOBRACE LPX64":0x%x:0x%x"
+#define DFID_NOBRACE_NOX LPX64i ":%x:%x"
+#define DFID_NOBRACE LPX64 ":0x%x:0x%x"
 #define DFID "["DFID_NOBRACE"]"
 #define PFID(fid)     \
         (fid)->f_seq, \
         (fid)->f_oid, \
         (fid)->f_ver
 
-/* scanf input parse format -- strip '[' first.
+/* scanf input parse format.
    e.g. sscanf(fidstr, SFID, RFID(&fid)); */
 /* #define SFID "0x"LPX64i":0x"LPSZX":0x"LPSZX""
 liblustreapi.c:2893: warning: format '%lx' expects type 'long unsigned int *', but argument 4 has type 'unsigned int *'
 liblustreapi.c:2893: warning: format '%lx' expects type 'long unsigned int *', but argument 5 has type 'unsigned int *'
 */
+#define SFID_NOX LPX64i":%x:%x"
 #define SFID "0x"LPX64i":0x%x:0x%x"
 #define RFID(fid)     \
         &((fid)->f_seq), \
@@ -486,6 +488,8 @@ enum changelog_rec_type {
         CL_LAST
 };
 
+typedef enum changelog_rec_type changelog_rec_t;
+
 static inline const char *changelog_type2str(int type) {
         static const char *changelog_str[] = {
                 "MARK",  "CREAT", "MKDIR", "HLINK", "SLINK", "MKNOD", "UNLNK",
@@ -494,6 +498,21 @@ static inline const char *changelog_type2str(int type) {
         if (type >= 0 && type < CL_LAST)
                 return changelog_str[type];
         return NULL;
+}
+
+static inline int changelog_str2type(const char *type) {
+        int i;
+
+        static const char *changelog_str[] = {
+                "MARK",  "CREAT", "MKDIR", "HLINK", "SLINK", "MKNOD", "UNLNK",
+                "RMDIR", "RNMFM", "RNMTO", "OPEN",  "CLOSE", "IOCTL", "TRUNC",
+                "SATTR", "XATTR", "HSM",   "TIME"  };
+        for (i = CL_MARK; i < CL_LAST; i++) {
+                if (!strcmp(changelog_str[i], type))
+                        return i;
+        }
+
+        return -1;
 }
 
 /* per-record flags */
@@ -579,13 +598,29 @@ static inline void hsm_set_cl_error(int *flags, int error)
 }
 
 #define CR_MAXSIZE (PATH_MAX + sizeof(struct changelog_rec))
+
 struct changelog_rec {
-        __u16                 cr_namelen;
-        __u16                 cr_flags; /**< (flags&CLF_FLAGMASK)|CLF_VERSION */
-        __u32                 cr_type;  /**< \a changelog_rec_type */
-        __u64                 cr_index; /**< changelog record number */
-        __u64                 cr_prev;  /**< last index for this target fid */
-        __u64                 cr_time;
+        __u16                 cr_namelen; /**< namelen */
+        __u16                 cr_flags;   /**< (flags&CLF_FLAGMASK)|CLF_VERSION */
+        __u16                 cr_valid;   /**< valid fields in thos rec */
+        __u32                 cr_mode;    /**< la->la_mode */
+        __u8                  cr_type;    /**< \a changelog_rec_type */
+        __u64                 cr_index;   /**< changelog record number */
+        __u64                 cr_prev;    /**< last index for this target fid */
+        __u64                 cr_time;    /**< time of rec generation */
+        __u64                 cr_atime;   /**< file atime */
+        __u64                 cr_ctime;   /**< file ctime */
+        __u64                 cr_mtime;   /**< file mtime */
+        __u32                 cr_nlink;   /**< file nlink */
+        __u32                 cr_rdev;    /**< rdev for special files */
+        __u64                 cr_version; /**< file version */
+        __u64                 cr_size;    /**< file size */
+        __u64                 cr_blocks;  /**< file blocks */
+        __u64                 cr_blksize; /**< file blksize */
+        __u32                 cr_uid;     /**< user id that made the change */
+        __u32                 cr_gid;     /**< group id of user that made the change */
+        __u32                 cr_sid;     /**< stream id that synchronized the change */
+        lnet_nid_t            cr_clnid;   /**< client nid that made the change */
         union {
                 lustre_fid    cr_tfid;        /**< target fid */
                 __u32         cr_markerflags; /**< CL_MARK flags */
@@ -604,6 +639,7 @@ struct ioc_changelog {
 enum changelog_message_type {
         CL_RECORD = 10, /* message is a changelog_rec */
         CL_EOF    = 11, /* at end of current changelog */
+        CL_START  = 12  /* more data coming, get ready */
 };
 
 /********* Misc **********/

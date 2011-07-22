@@ -257,7 +257,8 @@ static int cml_attr_get(const struct lu_env *env, struct md_object *mo,
         RETURN(rc);
 }
 
-static int cml_attr_set(const struct lu_env *env, struct md_object *mo,
+static int cml_attr_set(const struct lu_env *env, 
+                        struct md_object *mo,
                         const struct md_attr *attr)
 {
         int rc;
@@ -281,15 +282,6 @@ static int cml_readlink(const struct lu_env *env, struct md_object *mo,
         int rc;
         ENTRY;
         rc = mo_readlink(env, md_object_next(mo), buf);
-        RETURN(rc);
-}
-
-static int cml_changelog(const struct lu_env *env, enum changelog_rec_type type,
-                         int flags, struct md_object *mo)
-{
-        int rc;
-        ENTRY;
-        rc = mo_changelog(env, type, flags, md_object_next(mo));
         RETURN(rc);
 }
 
@@ -349,11 +341,11 @@ static int cml_open(const struct lu_env *env, struct md_object *mo,
 }
 
 static int cml_close(const struct lu_env *env, struct md_object *mo,
-                     struct md_attr *ma)
+                     struct md_attr *ma, int flags)
 {
         int rc;
         ENTRY;
-        rc = mo_close(env, md_object_next(mo), ma);
+        rc = mo_close(env, md_object_next(mo), ma, flags);
         RETURN(rc);
 }
 
@@ -438,7 +430,6 @@ static const struct md_object_operations cml_mo_ops = {
         .moo_close         = cml_close,
         .moo_readpage      = cml_readpage,
         .moo_readlink      = cml_readlink,
-        .moo_changelog     = cml_changelog,
         .moo_capa_get      = cml_capa_get,
         .moo_object_sync   = cml_object_sync,
         .moo_version_get   = cml_version_get,
@@ -1037,7 +1028,8 @@ static int cmr_attr_get(const struct lu_env *env, struct md_object *mo,
         return -EREMOTE;
 }
 
-static int cmr_attr_set(const struct lu_env *env, struct md_object *mo,
+static int cmr_attr_set(const struct lu_env *env, 
+                        struct md_object *mo,
                         const struct md_attr *attr)
 {
         return -EFAULT;
@@ -1051,12 +1043,6 @@ static int cmr_xattr_get(const struct lu_env *env, struct md_object *mo,
 
 static int cmr_readlink(const struct lu_env *env, struct md_object *mo,
                         struct lu_buf *buf)
-{
-        return -EFAULT;
-}
-
-static int cmr_changelog(const struct lu_env *env, enum changelog_rec_type type,
-                         int flags, struct md_object *mo)
 {
         return -EFAULT;
 }
@@ -1099,7 +1085,7 @@ static int cmr_open(const struct lu_env *env, struct md_object *mo,
 }
 
 static int cmr_close(const struct lu_env *env, struct md_object *mo,
-                     struct md_attr *ma)
+                     struct md_attr *ma, int mode)
 {
         return -EFAULT;
 }
@@ -1178,7 +1164,6 @@ static const struct md_object_operations cmr_mo_ops = {
         .moo_close         = cmr_close,
         .moo_readpage      = cmr_readpage,
         .moo_readlink      = cmr_readlink,
-        .moo_changelog     = cmr_changelog,
         .moo_capa_get      = cmr_capa_get,
         .moo_object_sync   = cmr_object_sync,
         .moo_version_get   = cmr_version_get,

@@ -515,6 +515,7 @@ static inline void obd_ioctl_freedata(char *buf, int len)
 #define OBD_IOC_CLEAR_LOG              _IOWR('f', 186, OBD_IOC_DATA_TYPE)
 #define OBD_IOC_PARAM                  _IOW ('f', 187, OBD_IOC_DATA_TYPE)
 #define OBD_IOC_POOL                   _IOWR('f', 188, OBD_IOC_DATA_TYPE)
+#define OBD_IOC_CHANGELOG_CTL          _IOW ('f', 189, struct obd_ioctl_data)
 
 #define OBD_IOC_CATLOGLIST             _IOWR('f', 190, OBD_IOC_DATA_TYPE)
 #define OBD_IOC_LLOG_INFO              _IOWR('f', 191, OBD_IOC_DATA_TYPE)
@@ -530,6 +531,7 @@ static inline void obd_ioctl_freedata(char *buf, int len)
 #define ECHO_IOC_CANCEL                _IOWR('f', 203, OBD_IOC_DATA_TYPE)
 
 #define OBD_IOC_GET_OBJ_VERSION        _IOR('f', 210, OBD_IOC_DATA_TYPE)
+#define OBD_IOC_GET_TRIPLE             _IOWR('f', 209, struct obd_ioctl_data)
 
 /* XXX _IOWR('f', 250, long) has been defined in
  * libcfs/include/libcfs/libcfs_private.h for debug, don't use it

@@ -92,6 +92,8 @@ int jt_llog_check(int argc, char **argv);
 
 int lcfg_ioctl(char * func, int dev_id, struct lustre_cfg *lcfg);
 int lcfg_mgs_ioctl(char *func, int dev_id, struct lustre_cfg *lcfg);
+void ping_target(char *obd_type, char *obd_name,
+                 char *obd_uuid, void *args);
 int parse_devname(char *func, char *name);
 char *jt_cmdname(char *func);
 
@@ -122,6 +124,8 @@ int jt_blockdev_detach(int argc, char **argv);
 int jt_blockdev_info(int argc, char **argv);
 
 int jt_pool_cmd(int argc, char **argv);
+int jt_changelog_on(int argc, char **argv);
+int jt_changelog_off(int argc, char **argv);
 int jt_changelog_register(int argc, char **argv);
 int jt_changelog_deregister(int argc, char **argv);
 

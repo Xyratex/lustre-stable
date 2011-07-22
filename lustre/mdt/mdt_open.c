@@ -1514,7 +1514,7 @@ int mdt_mfd_close(struct mdt_thread_info *info, struct mdt_file_data *mfd)
         ma->ma_valid &= ~MA_INODE;
 
         if (!MFD_CLOSED(mode))
-                rc = mo_close(info->mti_env, next, ma);
+                rc = mo_close(info->mti_env, next, ma, mode);
 
         if (ret == MDT_IOEPOCH_GETATTR || ret == MDT_IOEPOCH_OPENED) {
                 struct mdt_export_data *med;

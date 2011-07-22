@@ -50,6 +50,7 @@
 #include <unistd.h>
 #include <semaphore.h>
 #include <libcfs/libcfs.h>
+#include <lustre/lustre_idl.h>
 #include <lustre/liblustreapi.h>
 
 #define T1 "write data before unlink\n"

@@ -1313,10 +1313,31 @@ static mdt_reinter reinters[REINT_MAX] = {
 int mdt_reint_rec(struct mdt_thread_info *info,
                   struct mdt_lock_handle *lhc)
 {
+        struct mdt_lock_handle *lh;
+        struct mdt_object *mp;
         int rc;
         ENTRY;
 
         rc = reinters[info->mti_rr.rr_opcode](info, lhc);
+        if (rc)
+                RETURN(rc);
+
+        /* Invalidate virtual fids dir after ns opertion. */
+        if (info->mti_rr.rr_opcode == REINT_CREATE ||
+            info->mti_rr.rr_opcode == REINT_LINK   ||
+            info->mti_rr.rr_opcode == REINT_OPEN   ||
+            info->mti_rr.rr_opcode == REINT_UNLINK ||
+            info->mti_rr.rr_opcode == REINT_RENAME) {
+                lh = &info->mti_lh[MDT_LH_PARENT];
+                mdt_lock_reg_init(lh, LCK_CW);
+                mp = mdt_object_find_lock(info, &LU_OBF_FID, lh, MDS_INODELOCK_UPDATE);
+                if (IS_ERR(mp)) {
+                        CERROR("Failed to invalide .lustre/fid dir "DFID": %d",
+                               PFID(&LU_OBF_FID), (int)PTR_ERR(mp));
+                } else {
+                        mdt_object_unlock_put(info, mp, lh, 0);
+                }
+        }
 
         RETURN(rc);
 }
