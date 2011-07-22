@@ -697,7 +697,6 @@ int ll_merge_lvb(struct inode *inode);
 int ll_get_grouplock(struct inode *inode, struct file *file, unsigned long arg);
 int ll_put_grouplock(struct inode *inode, struct file *file, unsigned long arg);
 int ll_fid2path(struct obd_export *exp, void *arg);
-int ll_get_triple(struct obd_export *exp, void *arg);
 
 /* llite/dcache.c */
 /* llite/namei.c */

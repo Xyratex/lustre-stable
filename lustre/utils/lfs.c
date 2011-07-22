@@ -111,11 +111,6 @@ static int lfs_changelog_clear(int argc, char **argv);
 static int lfs_fid2path(int argc, char **argv);
 static int lfs_path2fid(int argc, char **argv);
 
-int get_mdtname(char *name, char *format, char *buf);
-
-int get_root_path(int want, char *fsname, int *outfd, char *path,
-                  int index);
-
 /* all avaialable commands */
 command_t cmdlist[] = {
         {"setstripe", lfs_setstripe, 0,
@@ -232,17 +227,8 @@ command_t cmdlist[] = {
          "Remote user list directory contents.\n"
          "usage: ls [OPTION]... [FILE]..."},
         {"changelog", lfs_changelog, 0,
-         "Show the metadata changes on an MDT using matching on a given parameters."
-         "\nusage: changelog <mdtname> [startrec [endrec]] ... \n"
-         "     [--show-all|-a] [--show-client|-c {1|0}] [--show-fid|-f {1|0}]\n"
-         "     [--show-user|-u {1|0}] [--show-time|-t {1|0}] [--show-name|-n {1|0}]\n"
-         "     [--show-operation|-o {1|0}] [-s {1|0}]\n"
-         "     [[!] --find-fid|-F N] [[!] --find-time|-T [+-]N] [[!] --find-client|-C N]\n"
-         "     [[!] --find-user|-U N] [[!] --find-group|-G N] [[!] --find-operation|-O N]\n"
-         "     [[!] --find-name|-N N] [[!] --find-stream|-S N]\n"
-         "         !: used before an option indicates 'NOT' the requested attribute\n"
-         "         -: used before an value indicates 'AT MOST' the requested value\n"
-         "         +: used before an option indicates 'AT LEAST' the requested value"},
+         "Show the metadata changes on an MDT."
+         "\nusage: changelog <mdtname> [startrec [endrec]]"},
         {"changelog_clear", lfs_changelog_clear, 0,
          "Indicate that old changelog records up to <endrec> are no longer of "
          "interest to consumer <id>, allowing the system to free up space.\n"
@@ -819,15 +805,13 @@ static int lfs_getstripe(int argc, char **argv)
                 {"verbose", 0, 0, 'v'},
                 {0, 0, 0, 0}
         };
-        int c, rc, neg_opt = 0;
-        struct find_param param = { {0} };
+        int c, rc;
+        struct find_param param = { 0 };
 
         param.maxdepth = 1;
         optind = 0;
         while ((c = getopt_long(argc, argv, "cdhiMoO:pqrRsv",
                                 long_opts, NULL)) != -1) {
-                if (neg_opt)
-                        --neg_opt;
                 switch (c) {
                 case 'O':
                         if (param.obduuid) {
@@ -837,13 +821,6 @@ static int lfs_getstripe(int argc, char **argv)
                                 return CMD_HELP;
                         }
                         param.obduuid = (struct obd_uuid *)optarg;
-                        break;
-                case 1:
-                        /* unknown; opt is "!" or path component,
-                         * checking done above.
-                         */
-                        if (strcmp(optarg, "!") == 0)
-                                neg_opt = 2;
                         break;
                 case 'q':
                         param.quiet++;
@@ -862,8 +839,6 @@ static int lfs_getstripe(int argc, char **argv)
                                 param.verbose |= VERBOSE_COUNT;
                                 param.maxdepth = 0;
                         }
-                        param.check_size = 1;
-                        param.exclude_size = !!neg_opt;
                         break;
                 case 's':
                         if (!(param.verbose & VERBOSE_DETAIL)) {
@@ -1224,7 +1199,7 @@ static int lfs_check(int argc, char **argv)
         }
 
         rc = llapi_target_iterate(num_types, obd_types,
-                                  mntdir, ping_target);
+                                  mntdir, llapi_ping_target);
 
         if (rc)
                 fprintf(stderr, "error: %s: %s status failed\n",
@@ -2330,211 +2305,47 @@ static int lfs_ls(int argc, char **argv)
         return(llapi_ls(argc, argv));
 }
 
-static char *mode_str[] = {
-        "", "WRITE", "TRUNC", "APPEND"
-};
-
-static char *lfs_mode2str(int mode)
-{
-        if (MDS_OPEN_TRUNC & mode)
-                return mode_str[2];
-                
-        if (MDS_OPEN_APPEND & mode)
-                return mode_str[3];
-
-        if (!((MDS_OPEN_TRUNC | MDS_OPEN_APPEND) & mode) && (FMODE_WRITE & mode))
-                return mode_str[1];
-                
-        return mode_str[0];
-}
-
 static int lfs_changelog(int argc, char **argv)
 {
-        char *mdt;
         void *changelog_priv;
         struct changelog_rec *rec;
-        long long startrec = 1, endrec = 1;
-        struct find_param param = { {0} };
+        long long startrec = 0, endrec = 0;
+        char *mdd;
         struct option long_opts[] = {
-                {"show-all",       no_argument,       0, 'a'},
-                {"show-fid",       required_argument, 0, 'f'},
-                {"show-time",      required_argument, 0, 't'},
-                {"show-operaion",  required_argument, 0, 'o'},
-                {"show-name",      required_argument, 0, 'n'},
-
-                {"show-client",    required_argument, 0, 'c'},
-                {"show-user",      required_argument, 0, 'u'},
-                {"show-stream",    required_argument, 0, 's'},
-
-                {"find-client",    required_argument, 0, 'C'},
-                {"find-uid",       required_argument, 0, 'U'},
-                {"find-gid",       required_argument, 0, 'G'},
-                {"find-steam",     required_argument, 0, 'S'},
-
-                {"find-fid",       required_argument, 0, 'F'},
-                {"find-time",      required_argument, 0, 'T'},
-                {"find-name",      required_argument, 0, 'N'},
-                {"find-operation", required_argument, 0, 'O'},
+                {"follow", no_argument, 0, 'f'},
                 {0, 0, 0, 0}
         };
-        
-        char short_opts[] = "-af:t:c:u:o:n:F:T:C:U:G:O:N:S:";
-        int show_stream = 0;
-        int show_client = 0;
-        int show_user = 0;
-        int show_all = 0;
-        int show_op = 0;
-        int show_fid = 0;
-        int show_time = 0;
-        int show_name = 1;
-        
-        time_t t;
+        char short_opts[] = "f";
+        int rc, follow = 0;
 
-        int rc, c;
-        int mdtind = -1;
-        int isoption;
-        int startset = 0;
-        int endset = 0;
-
-        char mntpath[PATH_MAX];
-        char fsname[20];
-        char *ptr;
-        
-        int neg_opt = 0;
-
-        time(&t);
         optind = 0;
-
-        while ((c = getopt_long_only(argc, argv, short_opts,
-                                     long_opts, NULL)) >= 0) {
-                if (neg_opt)
-                        --neg_opt;
-                isoption = (c != 1) || (strcmp(optarg, "!") == 0);
-                if (!isoption && mdtind == -1)
-                        mdtind = optind - 1;
-                switch (c) {
-                case 0:
-                        /* Long options. */
-                        break;
-                case 1:
-                        if (strcmp(optarg, "!") == 0) {
-                                neg_opt = 2;
-                        } else {
-                                if (!startset) {
-                                        startrec = strtoll(optarg, NULL, 10);
-                                        startset = startrec > 0;
-                                        if (startrec == 0)
-                                                startrec = 1;
-                                } else if (!endset) {
-                                        endrec = strtoll(optarg, NULL, 10);
-                                        endset = endrec > 0;
-                                        if (endrec == 0)
-                                                endrec = 1;
-                                }
-                        }
-                        break;
-                case 'T':
-                        param.exclude_atime = !!neg_opt;
-                        param.check_atime = 1;
-                        rc = set_time(&t, &param.atime, optarg);
-                        if (rc == INT_MAX)
-                                return -1;
-                        if (rc)
-                                param.asign = rc;
-                        param.atime += t;
-                        break;
-                case 'U':
-                        param.uid = strtol(optarg, 0, 0);
-                        param.exclude_uid = !!neg_opt;
-                        param.check_uid = 1;
-                        break;
-                case 'G':
-                        param.gid = strtol(optarg, 0, 0);
-                        param.exclude_gid = !!neg_opt;
-                        param.check_gid = 1;
-                        break;
-                case 'C':
-                        strncpy(param.client, optarg, sizeof(param.client));
-                        param.check_client = 1;
-                        param.exclude_client = !!neg_opt;
-                        break;
-                case 'S':
-                        param.type = strtol(optarg, 0, 0);
-                        param.exclude_type = !!neg_opt;
-                        break;
-                case 'F':
-                        sscanf(optarg, SFID_NOX, RFID(&param.fid));
-                        if (!fid_is_sane(&param.fid)) {
-                                fprintf(stderr, "Invalid fid \"%s\". Should be 01:02:00!\n", optarg);
-                                return CMD_HELP;
-                        }
-                        param.check_fid = 1;
-                        param.exclude_fid = !!neg_opt;
-                        break;
-                case 'O':
-                        param.operation = changelog_str2type(optarg);
-                        if (param.operation < 0) {
-                                fprintf(stderr, "Invalid operation type \"%s\"!\n", optarg);
-                                return CMD_HELP;
-                        }
-                        param.check_op = 1;
-                        param.exclude_op = !!neg_opt;
-                        break;
-                case 'N':
-                        strncpy(param.name, optarg, sizeof(param.name));
-                        param.check_name = 1;
-                        param.exclude_name = !!neg_opt;
-                case 'a':
-                        show_all++;
-                        break;
-                case 'o':
-                        show_op = atoi(optarg);
-                        break;
-                case 'n':
-                        show_name = atoi(optarg);
-                        break;
+        while ((rc = getopt_long(argc, argv, short_opts,
+                                long_opts, NULL)) != -1) {
+                switch (rc) {
                 case 'f':
-                        show_fid = atoi(optarg);
-                        break;
-                case 't':
-                        show_time = atoi(optarg);
-                        break;
-                case 'c':
-                        show_client = atoi(optarg);
-                        break;
-                case 'u':
-                        show_user = atoi(optarg);
-                        break;
-                case 's':
-                        show_stream = atoi(optarg);
+                        follow++;
                         break;
                 case '?':
                         return CMD_HELP;
                 default:
-                        fprintf(stderr, "error: %s: option '%s' unrecognized!\n",
+                        fprintf(stderr, "error: %s: option '%s' unrecognized\n",
                                 argv[0], argv[optind - 1]);
                         return CMD_HELP;
                 }
         }
-
-        if (mdtind == -1) {
-                fprintf(stderr, "error: %s: No mdt is specified!\n",
-                        argv[0]);
+        if (optind >= argc)
                 return CMD_HELP;
-        }
-        
-        mdt = argv[mdtind++];
-        if (get_mdtname(mdt, "%s%s", fsname) < 0)
-                return -EINVAL;
-        ptr = fsname + strlen(fsname) - 8;
-        *ptr = '\0';
-        rc = get_root_path(WANT_PATH | WANT_ERROR, fsname, NULL, mntpath, -1);
-        if (rc)
-                return -EINVAL;
+
+        mdd = argv[optind++];
+        if (argc > optind)
+                startrec = strtoll(argv[optind++], NULL, 10);
+        if (argc > optind)
+                endrec = strtoll(argv[optind++], NULL, 10);
 
         rc = llapi_changelog_start(&changelog_priv,
-                                   CHANGELOG_FLAG_BLOCK,
-                                   mdt, startrec, 0);
+                                   CHANGELOG_FLAG_BLOCK |
+                                   (follow ? CHANGELOG_FLAG_FOLLOW : 0),
+                                   mdd, startrec);
         if (rc < 0) {
                 fprintf(stderr, "Can't start changelog: %s\n",
                         strerror(errno = -rc));
@@ -2545,7 +2356,7 @@ static int lfs_changelog(int argc, char **argv)
                 time_t secs;
                 struct tm ts;
 
-                if (endrec > 1 && rec->cr_index > endrec) {
+                if (endrec && rec->cr_index > endrec) {
                         llapi_changelog_free(&rec);
                         break;
                 }
@@ -2556,146 +2367,20 @@ static int lfs_changelog(int argc, char **argv)
 
                 secs = rec->cr_time >> 30;
                 gmtime_r(&secs, &ts);
+                printf(LPU64" %02d%-5s %02d:%02d:%02d.%06d %04d.%02d.%02d "
+                       "0x%x t="DFID, rec->cr_index, rec->cr_type,
+                       changelog_type2str(rec->cr_type),
+                       ts.tm_hour, ts.tm_min, ts.tm_sec,
+                       (int)(rec->cr_time & ((1<<30) - 1)),
+                       ts.tm_year+1900, ts.tm_mon+1, ts.tm_mday,
+                       rec->cr_flags & CLF_FLAGMASK, PFID(&rec->cr_tfid));
+                if (rec->cr_namelen)
+                        /* namespace rec includes parent and filename */
+                        printf(" p="DFID" %.*s\n", PFID(&rec->cr_pfid),
+                               rec->cr_namelen, rec->cr_name);
+                else
+                        printf("\n");
 
-                /* We use type field for streamid, let's be modest */
-                if (param.type != 0) {
-                        if (rec->cr_sid == param.type) {
-                                if (param.exclude_type)
-                                        continue;
-                        } else {
-                                if (!param.exclude_type)
-                                        continue;
-                        }
-                }
-                if (param.check_uid) {
-                        if (rec->cr_uid == param.uid) {
-                                if (param.exclude_uid)
-                                        continue;
-                        } else {
-                                if (!param.exclude_uid)
-                                        continue;
-                        }
-                }
-                if (param.check_gid) {
-                        if (rec->cr_gid == param.gid) {
-                                if (param.exclude_gid)
-                                        continue;
-                        } else {
-                                if (!param.exclude_gid)
-                                        continue;
-                        }
-                }
-                if (param.check_client) {
-                        if (!strncmp(param.client, libcfs_nid2str(rec->cr_clnid), 
-                            sizeof(param.client))) {
-                                if (param.exclude_client)
-                                        continue;
-                        } else {
-                                if (!param.exclude_client)
-                                        continue;
-                        }
-                }
-                if (param.check_fid) {
-                        if (lu_fid_eq(&param.fid, &rec->cr_tfid)) {
-                                if (param.exclude_fid)
-                                        continue;
-                        } else {
-                                if (!param.exclude_fid)
-                                        continue;
-                        }
-                }
-                if (param.check_op) {
-                        if (param.operation == rec->cr_type) {
-                                if (param.exclude_op)
-                                        continue;
-                        } else {
-                                if (!param.exclude_op)
-                                        continue;
-                        }
-                }
-                if (param.check_name) {
-                        char *name;
-                        
-                        if (!rec->cr_namelen)
-                                continue;
-                        
-                        name = strrchr(rec->cr_name, '/');
-                        if (name)
-                                name++;
-                        else
-                                name = rec->cr_name;
-                        if (!strncmp(param.name, name, strlen(param.name))) {
-                                if (param.exclude_name)
-                                        continue;
-                        } else {
-                                if (!param.exclude_name)
-                                        continue;
-                        }
-                }
-                if (param.check_atime) {
-                        if (param.asign > 0) {
-                                if (secs >= param.atime) {
-                                        if (param.exclude_atime)
-                                                continue;
-                                } else {
-                                        if (!param.exclude_atime)
-                                                continue;
-                                }
-                        }
-                        if (param.asign < 0) {
-                                if (secs <= param.atime) {
-                                        if (param.exclude_atime)
-                                                continue;
-                                } else {
-                                        if (!param.exclude_atime)
-                                                continue;
-                                }
-                        }
-                        if (param.asign == 0) {
-                                if (secs == param.atime) {
-                                        if (param.exclude_atime)
-                                                continue;
-                                } else {
-                                        if (!param.exclude_atime)
-                                                continue;
-                                }
-                        }
-                }
-
-                printf(LPU64, rec->cr_index);
-                
-                if (show_all || show_op) {
-                        printf(" %02d %-5s %-6s (0x%02x)", rec->cr_type,
-                               changelog_type2str(rec->cr_type),
-                               lfs_mode2str(rec->cr_mode), rec->cr_mode);
-                }
-
-                if (show_all || show_time) {
-                        printf(" %02d:%02d:%02d.%06d %04d.%02d.%02d",
-                               ts.tm_hour, ts.tm_min, ts.tm_sec,
-                               (int)(rec->cr_time & ((1<<30) - 1)),
-                               ts.tm_year+1900, ts.tm_mon+1, ts.tm_mday);
-                }
-
-                if (show_all || show_user)
-                        printf(" 0x%03x:0x%03x", rec->cr_uid, rec->cr_gid);
-
-                if (show_all || show_stream)
-                        printf(" 0x%03x", rec->cr_sid);
-
-                if (show_all || show_client)
-                        printf(" [%s]", libcfs_nid2str(rec->cr_clnid));
-
-                if (show_all || show_fid)
-                        printf(" t="DFID, PFID(&rec->cr_tfid));
-
-                if (fid_is_sane(&rec->cr_pfid) && (show_all || show_fid))
-                        printf(" p="DFID, PFID(&rec->cr_pfid));
-                            
-                if ((show_all || show_name) && rec->cr_namelen > 0)
-            		printf(" %.*s", (int)rec->cr_namelen, rec->cr_name);
-
-                printf("\n");
                 llapi_changelog_free(&rec);
         }
 
@@ -2774,7 +2459,7 @@ static int lfs_fid2path(int argc, char **argv)
                 int oldtmp = lnktmp;
                 long long rectmp = recno;
                 rc = llapi_fid2path(device, fid, path, PATH_MAX, &rectmp,
-                                    &lnktmp, WANT_ERROR);
+                                    &lnktmp);
                 if (rc < 0) {
                         fprintf(stderr, "%s error: %s\n", argv[0],
                                 strerror(errno = -rc));

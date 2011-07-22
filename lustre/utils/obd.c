@@ -624,35 +624,6 @@ int jt_obd_device(int argc, char **argv)
         return rc;
 }
 
-void ping_target(char *obd_type, char *obd_name,
-                 char *obd_uuid, void *args)
-{
-        int  rc;
-        struct obd_ioctl_data data;
-        char rawbuf[MAX_IOC_BUFLEN], *buf = rawbuf;
-
-        memset(&data, 0, sizeof(data));
-        data.ioc_inlbuf4 = obd_name;
-        data.ioc_inllen4 = strlen(obd_name) + 1;
-        data.ioc_dev = OBD_DEV_BY_DEVNAME;
-        memset(buf, 0, sizeof(rawbuf));
-        if (obd_ioctl_pack(&data, &buf, sizeof(rawbuf))) {
-                fprintf(stderr, "error: invalid ioctl\n");
-                return;
-        }
-        rc = l_ioctl(OBD_DEV_ID, OBD_IOC_PING_TARGET, buf);
-        if (rc)
-                rc = errno;
-        if (rc == ENOTCONN || rc == ESHUTDOWN) {
-                printf("%s: INACTIVE\n", obd_name);
-        } else if (rc) {
-                printf("%s: check error: %s\n",
-                        obd_name, strerror(errno));
-        } else {
-                printf("%s: active\n", obd_name);
-        }
-}
-
 int jt_opt_device(int argc, char **argv)
 {
         int ret;
@@ -3080,9 +3051,11 @@ int jt_get_obj_version(int argc, char **argv)
                 return CMD_HELP;
 
         fidstr = argv[1];
-        sscanf(fidstr, SFID_NOX, RFID(&fid));
+        while (*fidstr == '[')
+                fidstr++;
+        sscanf(fidstr, SFID, RFID(&fid));
         if (!fid_is_sane(&fid)) {
-                fprintf(stderr, "bad FID format [%s], should be "DFID_NOBRACE_NOX"\n",
+                fprintf(stderr, "bad FID format [%s], should be "DFID"\n",
                         fidstr, (__u64)1, 2, 0);
                 return -EINVAL;
         }
@@ -3143,59 +3116,6 @@ void  llapi_ping_target(char *obd_type, char *obd_name,
         }
 }
 
-static int changelog_ctl(int argc, char **argv, int flag)
-{
-        char rawbuf[MAX_IOC_BUFLEN], *buf = rawbuf;
-        struct obd_ioctl_data data;
-        char devname[30];
-        int rc;
-
-        if (argc > 1)
-                return CMD_HELP;
-        if (cur_device < 0)
-                return CMD_HELP;
-
-        memset(&data, 0x00, sizeof(data));
-        data.ioc_dev = cur_device;
-
-        /* reuse offset for carrying flag into to the server. */
-        data.ioc_offset = flag;
- 
-        memset(buf, 0, sizeof(rawbuf));
-        rc = obd_ioctl_pack(&data, &buf, sizeof(rawbuf));
-        if (rc) {
-                fprintf(stderr, "error: %s: invalid ioctl\n",
-                        jt_cmdname(argv[0]));
-               return rc;
-         }
-
-        rc = l_ioctl(OBD_DEV_ID, OBD_IOC_CHANGELOG_CTL, buf);
-        if (rc < 0) {
-                fprintf(stderr, "error: %s: %s\n", jt_cmdname(argv[0]),
-                        strerror(rc = errno));
-                return rc;
-        }
-        obd_ioctl_unpack(&data, buf, sizeof(rawbuf));
-
-        if (lcfg_get_devname() != NULL)
-                strcpy(devname, lcfg_get_devname());
-        else
-                sprintf(devname, "dev %d", cur_device);
-
-        printf("%s: Changelog is %s\n", devname, flag ? "on" : "off");
-        return 0;
-}
-
-int jt_changelog_on(int argc, char **argv)
-{
-        return changelog_ctl(argc, argv, 1);
-}
-
-int jt_changelog_off(int argc, char **argv)
-{
-        return changelog_ctl(argc, argv, 0);
-}
- 
 int jt_changelog_register(int argc, char **argv)
 {
         char rawbuf[MAX_IOC_BUFLEN], *buf = rawbuf;

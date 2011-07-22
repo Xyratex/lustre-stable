@@ -2453,9 +2453,7 @@ static int lmv_readpage(struct obd_export *exp, const struct lu_fid *fid,
                  >> CFS_PAGE_SHIFT;
         nlupgs = (*request)->rq_bulk->bd_nob_transferred >> LU_PAGE_SHIFT;
         LASSERT(!((*request)->rq_bulk->bd_nob_transferred & ~LU_PAGE_MASK));
-        LASSERTF(nrdpgs > 0 && nrdpgs <= npages, 
-    		 "nrdpgs (%d) > 0 && nrdpgs (%d) <= npages (%d)\n",
-    		 nrdpgs, nrdpgs, npages);
+        LASSERT(nrdpgs > 0 && nrdpgs <= npages);
 
         CDEBUG(D_INODE, "read %d(%d)/%d pages\n", nrdpgs, nlupgs, npages);
 

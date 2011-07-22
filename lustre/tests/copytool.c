@@ -51,7 +51,6 @@
 #include <signal.h>
 #include <libcfs/libcfs.h>
 #include <lustre/lustre_user.h>
-#include <lustre/lustre_idl.h>
 #include <lustre/liblustreapi.h>
 
 void *ctdata;

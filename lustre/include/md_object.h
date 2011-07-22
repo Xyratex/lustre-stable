@@ -272,7 +272,7 @@ struct md_object_operations {
                         struct md_object *obj, int flag);
 
         int (*moo_close)(const struct lu_env *env, struct md_object *obj,
-                         struct md_attr *ma, int flags);
+                         struct md_attr *ma);
 
         int (*moo_capa_get)(const struct lu_env *, struct md_object *,
                             struct lustre_capa *, int renewal);
@@ -352,9 +352,6 @@ struct md_device_operations {
         /** meta-data device related handlers. */
         int (*mdo_root_get)(const struct lu_env *env, struct md_device *m,
                             struct lu_fid *f);
-        
-        int (*mdo_next_recno)(const struct lu_env *env, struct md_device *m,
-    			      __u64 *recno);
 
         int (*mdo_maxsize_get)(const struct lu_env *env, struct md_device *m,
                                int *md_size, int *cookie_size);
@@ -475,45 +472,7 @@ struct md_device {
         struct lu_device                   md_lu_dev;
         const struct md_device_operations *md_ops;
         struct md_upcall                   md_upcall;
-        cfs_list_t                         md_changelog_callbacks;
 };
-
-struct md_changelog_cb {
-        int      (*ccb_rec_fill)(const struct lu_env *,
-                                 struct llog_changelog_rec *, void *);
-        void      *ccb_cookie;
-        cfs_list_t ccb_linkage;
-};
-
-static inline void md_changelog_callback_add(struct md_device *dev,
-                                             struct md_changelog_cb *cb)
-{
-        cfs_list_add(&cb->ccb_linkage, &dev->md_changelog_callbacks);
-}
-
-static inline void md_changelog_callback_del(struct md_device *dev,
-                                             struct md_changelog_cb *cb)
-{
-        cfs_list_del_init(&cb->ccb_linkage);
-}
-
-static inline int md_changelog_hook_fill(const struct lu_env *env,
-                                         struct md_device *dev,
-                                         struct llog_changelog_rec *rec)
-{
-        struct md_changelog_cb    *cb;
-        int                        result;
-
-        result = 0;
-        cfs_list_for_each_entry(cb, &dev->md_changelog_callbacks, ccb_linkage) {
-                if (cb->ccb_rec_fill == NULL)
-                        continue;
-                result = cb->ccb_rec_fill(env, rec, cb->ccb_cookie);
-                if (result < 0)
-                        break;
-        }
-        return result;
-}
 
 static inline void md_upcall_init(struct md_device *m, void *upcl)
 {
@@ -630,7 +589,6 @@ static inline struct md_site *lu_site2md(const struct lu_site *s)
 
 static inline int md_device_init(struct md_device *md, struct lu_device_type *t)
 {
-	CFS_INIT_LIST_HEAD(&md->md_changelog_callbacks);
         return lu_device_init(&md->md_lu_dev, t);
 }
 
@@ -735,11 +693,10 @@ static inline int mo_open(const struct lu_env *env,
 
 static inline int mo_close(const struct lu_env *env,
                            struct md_object *m,
-                           struct md_attr *ma,
-                           int flags)
+                           struct md_attr *ma)
 {
         LASSERT(m->mo_ops->moo_close);
-        return m->mo_ops->moo_close(env, m, ma, flags);
+        return m->mo_ops->moo_close(env, m, ma);
 }
 
 static inline int mo_readpage(const struct lu_env *env,

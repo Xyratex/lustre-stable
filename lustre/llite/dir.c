@@ -1453,8 +1453,6 @@ out_free:
         case LL_IOC_GET_CONNECT_FLAGS: {
                 RETURN(obd_iocontrol(cmd, sbi->ll_md_exp, 0, NULL, (void*)arg));
         }
-        case OBD_IOC_GET_TRIPLE:
-                RETURN(ll_get_triple(ll_i2mdexp(inode), (void *)arg));
         case OBD_IOC_CHANGELOG_SEND:
         case OBD_IOC_CHANGELOG_CLEAR:
                 rc = copy_and_ioctl(cmd, sbi->ll_md_exp, (void *)arg,
@@ -1462,18 +1460,13 @@ out_free:
                 RETURN(rc);
         case OBD_IOC_FID2PATH:
                 RETURN(ll_fid2path(ll_i2mdexp(inode), (void *)arg));
-        case LL_IOC_GET_ROOT_FID:
-                if (cfs_copy_to_user((void *)arg, &sbi->ll_root_fid,
-                                     sizeof(struct lu_fid)))
-                        RETURN(-EFAULT);
-                RETURN(0);
         case LL_IOC_HSM_CT_START:
                 rc = copy_and_ioctl(cmd, sbi->ll_md_exp, (void *)arg,
                                     sizeof(struct lustre_kernelcomm));
                 RETURN(rc);
 
         default:
-                RETURN(obd_iocontrol(cmd, sbi->ll_dt_exp, 0, NULL, (void *)arg));
+                RETURN(obd_iocontrol(cmd, sbi->ll_dt_exp,0,NULL,(void *)arg));
         }
 }
 

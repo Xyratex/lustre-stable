@@ -159,24 +159,10 @@ void lustre_swab_llog_rec(struct llog_rec_hdr *rec, struct llog_rec_tail *tail)
 
                 __swab16s(&cr->cr.cr_namelen);
                 __swab16s(&cr->cr.cr_flags);
-                __swab16s(&cr->cr.cr_valid);
-                __swab32s(&cr->cr.cr_mode);
+                __swab32s(&cr->cr.cr_type);
                 __swab64s(&cr->cr.cr_index);
                 __swab64s(&cr->cr.cr_prev);
                 __swab64s(&cr->cr.cr_time);
-                __swab64s(&cr->cr.cr_atime);
-                __swab64s(&cr->cr.cr_ctime);
-                __swab64s(&cr->cr.cr_mtime);
-                __swab32s(&cr->cr.cr_nlink);
-                __swab32s(&cr->cr.cr_rdev);
-                __swab64s(&cr->cr.cr_version);
-                __swab64s(&cr->cr.cr_size);
-                __swab64s(&cr->cr.cr_blksize);
-                __swab64s(&cr->cr.cr_blocks);
-                __swab32s(&cr->cr.cr_uid);
-                __swab32s(&cr->cr.cr_gid);
-                __swab32s(&cr->cr.cr_sid);
-                __swab64s(&cr->cr.cr_clnid);
                 lustre_swab_lu_fid(&cr->cr.cr_tfid);
                 lustre_swab_lu_fid(&cr->cr.cr_pfid);
                 break;

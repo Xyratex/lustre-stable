@@ -606,6 +606,7 @@ static int __mdd_index_delete(const struct lu_env *env, struct mdd_object *pobj,
         RETURN(rc);
 }
 
+
 /** Store a namespace change changelog record
  * If this fails, we must fail the whole transaction; we don't
  * want the change to commit without the log entry.
@@ -617,21 +618,18 @@ static int __mdd_index_delete(const struct lu_env *env, struct mdd_object *pobj,
  */
 static int mdd_changelog_ns_store(const struct lu_env  *env,
                                   struct mdd_device    *mdd,
-                                  changelog_rec_t       type,
-                                  int                   flags,
+                                  enum changelog_rec_type type,
+                                  int flags,
                                   struct mdd_object    *target,
                                   struct mdd_object    *parent,
                                   const struct lu_fid  *tf,
                                   const struct lu_name *tname,
-                                  struct thandle       *handle)
+                                  struct thandle *handle)
 {
-        struct md_attr *ma = &mdd_env_info(env)->mti_ma;
-        const struct lu_fid *pfid = mdo2fid(parent);
-        const struct lu_buf *link = NULL;
-        struct llog_changelog_rec *rec;
         const struct lu_fid *tfid;
+        const struct lu_fid *tpfid = mdo2fid(parent);
+        struct llog_changelog_rec *rec;
         struct lu_buf *buf;
-        int linklen = 0;
         int reclen;
         int rc;
         ENTRY;
@@ -646,105 +644,27 @@ static int mdd_changelog_ns_store(const struct lu_env  *env,
         LASSERT(tname != NULL);
         LASSERT(handle != NULL);
 
-        if (target) {
-                memset(ma, 0, sizeof(*ma));
-                ma->ma_need = MA_INODE;
-                mo_attr_get(env, &target->mod_obj, ma);
-
-                if (S_ISLNK(ma->ma_attr.la_mode))
-                        linklen = ma->ma_attr.la_size;
-        }
-
         /* target */
-        reclen = llog_data_len(sizeof(*rec) + tname->ln_namelen + linklen); 
+        reclen = llog_data_len(sizeof(*rec) + tname->ln_namelen);
         buf = mdd_buf_alloc(env, reclen);
         if (buf->lb_buf == NULL)
                 RETURN(-ENOMEM);
         rec = (struct llog_changelog_rec *)buf->lb_buf;
 
-        /* fill some fields on other levels of mds (cr_version, etc) */
-        rc = md_changelog_hook_fill(env, &mdd->mdd_md_dev, rec);
-        if (rc)
-                RETURN(rc);
         rec->cr.cr_flags = CLF_VERSION | (CLF_FLAGMASK & flags);
-        tfid = target ? mdo2fid(target) : tf;
-        rec->cr.cr_type = type;
-        rec->cr.cr_pfid = *pfid;
-        if (tfid)
-                rec->cr.cr_tfid = *tfid;
-        rec->cr.cr_sid = 0;
-        rec->cr.cr_valid = 0;
+        rec->cr.cr_type = (__u32)type;
+        tfid = tf ? tf : mdo2fid(target);
+        rec->cr.cr_tfid = *tfid;
+        rec->cr.cr_pfid = *tpfid;
         rec->cr.cr_namelen = tname->ln_namelen;
-        memcpy(rec->cr.cr_name, tname->ln_name, tname->ln_namelen);
-        if (target) {
-                struct dt_object  *next;
-                loff_t             pos = 0;
-
-                link = mdd_buf_get_const(env, 
-                                         rec->cr.cr_name + tname->ln_namelen,
-                                         linklen);
-                if (link == NULL)
-                        RETURN(-ENOMEM);
-                LASSERT(mdd_object_exists(target));
-
-                next = mdd_object_child(target);
-                rc = next->do_body_ops->dbo_read(env, next,
-                                                 (struct lu_buf *)link,
-                                                 &pos, BYPASS_CAPA);
-                if (rc < 0)
-                        RETURN(rc);
-
-                if (ma->ma_attr.la_valid & LA_ATIME) {
-                        rec->cr.cr_atime = ma->ma_attr.la_atime;
-                        rec->cr.cr_valid |= LA_ATIME;
-                }
-                if (ma->ma_attr.la_valid & LA_CTIME) {
-                        rec->cr.cr_ctime = ma->ma_attr.la_ctime;
-                        rec->cr.cr_valid |= LA_CTIME;
-                }
-                if (ma->ma_attr.la_valid & LA_MTIME) {
-                        rec->cr.cr_mtime = ma->ma_attr.la_mtime;
-                        rec->cr.cr_valid |= LA_MTIME;
-                }
-                if (ma->ma_attr.la_valid & LA_SIZE) {
-                        rec->cr.cr_size = ma->ma_attr.la_size;
-                        rec->cr.cr_valid |= LA_SIZE;
-                }
-                if (ma->ma_attr.la_valid & LA_BLKSIZE) {
-                        rec->cr.cr_blksize = ma->ma_attr.la_blksize;
-                        rec->cr.cr_valid |= LA_BLKSIZE;
-                }
-                if (ma->ma_attr.la_valid & LA_BLOCKS) {
-                        rec->cr.cr_blocks = ma->ma_attr.la_blocks;
-                        rec->cr.cr_valid |= LA_BLOCKS;
-                }
-                if (ma->ma_attr.la_valid & LA_NLINK) {
-                        rec->cr.cr_nlink = ma->ma_attr.la_nlink;
-                        rec->cr.cr_valid |= LA_NLINK;
-                }
-                if (ma->ma_attr.la_valid & LA_RDEV) {
-                        rec->cr.cr_rdev = ma->ma_attr.la_rdev;
-                        rec->cr.cr_valid |= LA_RDEV;
-                }
-                if (ma->ma_attr.la_valid & LA_UID) {
-                        rec->cr.cr_uid = ma->ma_attr.la_uid;
-                        rec->cr.cr_valid |= LA_UID;
-                }
-                if (ma->ma_attr.la_valid & LA_GID) {
-                        rec->cr.cr_gid = ma->ma_attr.la_gid;
-                        rec->cr.cr_valid |= LA_GID;
-                }
-                if (ma->ma_attr.la_valid & LA_MODE) {
-                        rec->cr.cr_valid |= LA_MODE;
-                        rec->cr.cr_mode = ma->ma_attr.la_mode;
-                }
+        memcpy(rec->cr.cr_name, tname->ln_name, rec->cr.cr_namelen);
+        if (likely(target))
                 target->mod_cltime = cfs_time_current_64();
-        }
 
-        rc = mdd_changelog_llog_write(mdd, rec, reclen, handle);
+        rc = mdd_changelog_llog_write(mdd, rec, handle);
         if (rc < 0) {
                 CERROR("changelog failed: rc=%d, op%d %s c"DFID" p"DFID"\n",
-                       rc, type, tname->ln_name, PFID(tfid), PFID(pfid));
+                       rc, type, tname->ln_name, PFID(tfid), PFID(tpfid));
                 return -EFAULT;
         }
 
@@ -822,27 +742,19 @@ static int mdd_link(const struct lu_env *env, struct md_object *tgt_obj,
 
         la->la_valid = LA_CTIME;
         rc = mdd_attr_check_set_internal(env, mdd_sobj, la, handle, 0);
-        if (rc == 0)
+        if (rc == 0) {
                 mdd_links_add(env, mdd_sobj,
                               mdo2fid(mdd_tobj), lname, handle, 0);
-
-        cfs_mutex_down(&mdd->mdd_log_sem);
-        if (rc == 0)
-                rc = mdd_changelog_ns_store(env, mdd, CL_HARDLINK, 0,
-                                            mdd_sobj, mdd_tobj, NULL, lname, 
-                                            handle);
-        if (rc == 0)
-                rc = mdd_changelog_data_store(env, mdd, CL_SETATTR, 0,
-                                              LA_CTIME | LA_MTIME | LA_NLINK | 
-                                              LA_SIZE | LA_BLOCKS,
-                                              tgt_obj, handle);
-        cfs_mutex_up(&mdd->mdd_log_sem);
+        }
 
         EXIT;
 out_unlock:
         mdd_write_unlock(env, mdd_sobj);
         mdd_pdo_write_unlock(env, mdd_tobj, dlh);
 out_trans:
+        if (rc == 0)
+                rc = mdd_changelog_ns_store(env, mdd, CL_HARDLINK, 0, mdd_sobj,
+                                            mdd_tobj, NULL, lname, handle);
         mdd_trans_stop(env, mdd, rc, handle);
 out_pending:
 #ifdef HAVE_QUOTA_SUPPORT
@@ -936,7 +848,6 @@ static int mdd_unlink(const struct lu_env *env, struct md_object *pobj,
         int quota_opc = 0;
 #endif
         int is_dir = S_ISDIR(ma->ma_attr.la_mode);
-        int cl_flags;
         int rc;
         ENTRY;
 
@@ -950,11 +861,6 @@ static int mdd_unlink(const struct lu_env *env, struct md_object *pobj,
         handle = mdd_trans_start(env, mdd);
         if (IS_ERR(handle))
                 RETURN(PTR_ERR(handle));
-
-        cl_flags = (ma->ma_attr.la_nlink == 0) ? CLF_UNLINK_LAST : 0;
-        if ((ma->ma_valid & MA_HSM) &&
-            (ma->ma_hsm.mh_flags & HS_EXISTS))
-                cl_flags |= CLF_UNLINK_HSM_EXISTS;
 
         dlh = mdd_pdo_write_lock(env, mdd_pobj, name, MOR_TGT_PARENT);
         if (dlh == NULL)
@@ -992,21 +898,6 @@ static int mdd_unlink(const struct lu_env *env, struct md_object *pobj,
                         GOTO(cleanup, rc);
         }
 
-        cfs_mutex_down(&mdd->mdd_log_sem);
-        if (rc == 0)
-                rc = mdd_changelog_ns_store(env, mdd, is_dir ? CL_RMDIR : CL_UNLINK, 
-                                            cl_flags, mdd_cobj, mdd_pobj, NULL, 
-                                            lname, handle);
-        if (rc == 0)        
-                rc = mdd_changelog_data_store(env, mdd, CL_SETATTR, 0,
-                                              LA_CTIME | LA_MTIME | LA_NLINK |
-                                              LA_SIZE | LA_BLOCKS, 
-                                              pobj, handle);
-        cfs_mutex_up(&mdd->mdd_log_sem);
-
-        if (rc)
-                GOTO(cleanup, rc);
-
         rc = mdd_finish_unlink(env, mdd_cobj, ma, handle);
 #ifdef HAVE_QUOTA_SUPPORT
         if (mds->mds_quota && ma->ma_valid & MA_INODE &&
@@ -1030,12 +921,24 @@ static int mdd_unlink(const struct lu_env *env, struct md_object *pobj,
                 mdd_links_rename(env, mdd_cobj, mdo2fid(mdd_pobj),
                                  lname, NULL, NULL, handle);
 
-
         EXIT;
 cleanup:
         mdd_write_unlock(env, mdd_cobj);
         mdd_pdo_write_unlock(env, mdd_pobj, dlh);
 out_trans:
+        if (rc == 0) {
+                int cl_flags;
+
+                cl_flags = (ma->ma_attr.la_nlink == 0) ? CLF_UNLINK_LAST : 0;
+                if ((ma->ma_valid & MA_HSM) &&
+                    (ma->ma_hsm.mh_flags & HS_EXISTS))
+                        cl_flags |= CLF_UNLINK_HSM_EXISTS;
+
+                rc = mdd_changelog_ns_store(env, mdd,
+                         is_dir ? CL_RMDIR : CL_UNLINK, cl_flags,
+                         mdd_cobj, mdd_pobj, NULL, lname, handle);
+        }
+
         mdd_trans_stop(env, mdd, rc, handle);
 #ifdef HAVE_QUOTA_SUPPORT
         if (quota_opc)
@@ -1399,25 +1302,18 @@ static int mdd_rename_tgt(const struct lu_env *env,
                 }
 #endif
         }
-        cfs_mutex_down(&mdd->mdd_log_sem);
-        if (rc == 0)
-                /* Bare EXT record with no RENAME in front of it signifies
-                   a partial slave op */
-                rc = mdd_changelog_ns_store(env, mdd, CL_EXT, 0,
-                                            mdd_tobj, mdd_tpobj, NULL, 
-                                            lname, handle);
-        if (rc == 0)        
-                rc = mdd_changelog_data_store(env, mdd, CL_SETATTR, 0,
-                                              LA_CTIME | LA_MTIME | LA_NLINK |
-                                              LA_SIZE | LA_BLOCKS, 
-                                              pobj, handle);
-        cfs_mutex_up(&mdd->mdd_log_sem);
         EXIT;
 cleanup:
         if (tobj)
                 mdd_write_unlock(env, mdd_tobj);
         mdd_pdo_write_unlock(env, mdd_tpobj, dlh);
 out_trans:
+        if (rc == 0)
+                /* Bare EXT record with no RENAME in front of it signifies
+                   a partial slave op */
+                rc = mdd_changelog_ns_store(env, mdd, CL_EXT, 0, mdd_tobj,
+                                            mdd_tpobj, NULL, lname, handle);
+
         mdd_trans_stop(env, mdd, rc, handle);
 out_pending:
 #ifdef HAVE_QUOTA_SUPPORT
@@ -1696,7 +1592,7 @@ static int mdd_create(const struct lu_env *env,
                       const struct lu_name *lname,
                       struct md_object *child,
                       struct md_op_spec *spec,
-                      struct md_attr *ma)
+                      struct md_attr* ma)
 {
         struct mdd_thread_info *info = mdd_env_info(env);
         struct lu_attr         *la = &info->mti_la_for_fix;
@@ -1708,7 +1604,6 @@ static int mdd_create(const struct lu_env *env,
         struct lov_mds_md      *lmm = NULL;
         struct thandle         *handle;
         struct dynlock_handle  *dlh;
-        const struct lu_buf    *link = NULL;
         const char             *name = lname->ln_name;
         int rc, created = 0, initialized = 0, inserted = 0, lmm_size = 0;
         int got_def_acl = 0;
@@ -1910,10 +1805,11 @@ static int mdd_create(const struct lu_env *env,
                 struct dt_object *dt = mdd_object_child(son);
                 const char *target_name = spec->u.sp_symname;
                 int sym_len = strlen(target_name);
+                const struct lu_buf *buf;
                 loff_t pos = 0;
 
-                link = mdd_buf_get_const(env, target_name, sym_len);
-                rc = dt->do_body_ops->dbo_write(env, dt, link, &pos, handle,
+                buf = mdd_buf_get_const(env, target_name, sym_len);
+                rc = dt->do_body_ops->dbo_write(env, dt, buf, &pos, handle,
                                                 mdd_object_capa(env, son),
                                                 uc->mu_cap &
                                                 CFS_CAP_SYS_RESOURCE_MASK);
@@ -1955,28 +1851,18 @@ cleanup:
                 }
         }
 
+        /* update lov_objid data, must be before transaction stop! */
         if (rc == 0)
-                /* update lov_objid data, must be before transaction stop! */
                 mdd_lov_objid_update(mdd, lmm);
 
-        mdd_write_lock(env, son, MOR_TGT_CHILD);
-        cfs_mutex_down(&mdd->mdd_log_sem);
+        mdd_pdo_write_unlock(env, mdd_pobj, dlh);
+out_trans:
         if (rc == 0)
                 rc = mdd_changelog_ns_store(env, mdd,
                             S_ISDIR(attr->la_mode) ? CL_MKDIR :
                             S_ISREG(attr->la_mode) ? CL_CREATE :
                             S_ISLNK(attr->la_mode) ? CL_SOFTLINK : CL_MKNOD,
                             0, son, mdd_pobj, NULL, lname, handle);
-        if (rc == 0)
-                rc = mdd_changelog_data_store(env, mdd, CL_SETATTR, 0,
-                                              LA_CTIME | LA_MTIME | LA_NLINK |
-                                              LA_SIZE | LA_BLOCKS,
-                                              pobj, handle);
-        cfs_mutex_up(&mdd->mdd_log_sem);
-        mdd_write_unlock(env, son);
-        mdd_pdo_write_unlock(env, mdd_pobj, dlh);
-
-out_trans:
         mdd_trans_stop(env, mdd, rc, handle);
 out_free:
         /* finish lov_create stuff, free all temporary data */
@@ -2283,7 +2169,7 @@ static int mdd_rename(const struct lu_env *env,
         if (mdd_spobj != mdd_tpobj) {
                 la->la_valid = LA_CTIME | LA_MTIME;
                 rc = mdd_attr_check_set_internal_locked(env, mdd_tpobj, la,
-                                                        handle, 0);
+                                                  handle, 0);
         }
 
         if (rc == 0 && mdd_sobj) {
@@ -2341,42 +2227,21 @@ fixup_spobj2:
                 rc2 = __mdd_index_insert(env, mdd_spobj,
                                          lf, sname, is_dir, handle, BYPASS_CAPA);
                 if (rc2)
-                        CWARN("sp obj fix error %d\n", rc2);
+                        CWARN("sp obj fix error %d\n",rc2);
         }
 cleanup:
-        if (mdd_sobj)
-                mdd_write_lock(env, mdd_sobj, MOR_SRC_CHILD);
-        if (mdd_tobj)
-                mdd_write_lock(env, mdd_tobj, MOR_TGT_CHILD);
-        cfs_mutex_down(&mdd->mdd_log_sem);
-        if (rc == 0)
-                rc = mdd_changelog_ns_store(env, mdd, CL_RENAME, 0,
-                                            mdd_sobj, mdd_spobj, lf, lsname, 
-                                            handle);
-        if (rc == 0)
-                rc = mdd_changelog_data_store(env, mdd, CL_SETATTR, 0,
-                                              LA_CTIME | LA_MTIME | LA_NLINK |
-                                              LA_SIZE | LA_BLOCKS,
-                                              src_pobj, handle);
-        if (rc == 0)
-                rc = mdd_changelog_ns_store(env, mdd, CL_EXT, 0,
-                                            mdd_tobj ? mdd_tobj : mdd_sobj, 
-                                            mdd_tpobj, lf, ltname, handle);
-        if (rc == 0)
-                rc = mdd_changelog_data_store(env, mdd, CL_SETATTR, 0,
-                                              LA_CTIME | LA_MTIME | LA_NLINK |
-                                              LA_SIZE | LA_BLOCKS,
-                                              tgt_pobj, handle);
-        cfs_mutex_up(&mdd->mdd_log_sem);
-        if (mdd_tobj)
-                mdd_write_unlock(env, mdd_tobj);
-        if (mdd_sobj)
-                mdd_write_unlock(env, mdd_sobj);
         if (likely(tdlh) && sdlh != tdlh)
                 mdd_pdo_write_unlock(env, mdd_tpobj, tdlh);
         if (likely(sdlh))
                 mdd_pdo_write_unlock(env, mdd_spobj, sdlh);
 cleanup_unlocked:
+        if (rc == 0)
+                rc = mdd_changelog_ns_store(env, mdd, CL_RENAME, 0, mdd_tobj,
+                                            mdd_spobj, lf, lsname, handle);
+        if (rc == 0)
+                rc = mdd_changelog_ns_store(env, mdd, CL_EXT, 0, mdd_tobj,
+                                            mdd_tpobj, lf, ltname, handle);
+
         mdd_trans_stop(env, mdd, rc, handle);
         if (mdd_sobj)
                 mdd_object_put(env, mdd_sobj);

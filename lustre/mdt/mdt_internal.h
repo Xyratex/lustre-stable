@@ -112,11 +112,9 @@ struct mdt_device {
         struct ptlrpc_client      *mdt_ldlm_client;
         /* underlying device */
         struct md_device          *mdt_child;
-        struct md_device          *mdt_mdd;
         struct dt_device          *mdt_bottom;
         /** target device */
         struct lu_target           mdt_lut;
-        struct md_changelog_cb     mdt_changelog_cb; 
         /*
          * Options bit-fields.
          */

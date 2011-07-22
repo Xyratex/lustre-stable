@@ -155,7 +155,7 @@ retry:
                         rc = obj->do_ops->do_index_try(env, obj, &oi_feat);
                         if (rc == 0) {
                                 LASSERT(obj->do_index_ops != NULL);
-                                oi->oi_dir = dev->dd_oi = obj;
+                                oi->oi_dir = obj;
                         } else {
                                 CERROR("Wrong index \"%s\": %d\n", name, rc);
                                 lu_object_put(env, &obj->do_lu);

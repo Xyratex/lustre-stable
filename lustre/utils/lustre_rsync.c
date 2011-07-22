@@ -119,8 +119,8 @@
 
 #include <libcfs/libcfs.h>
 #include <libcfs/libcfsutil.h>
-#include <lustre/lustre_idl.h>
 #include <lustre/liblustreapi.h>
+#include <lustre/lustre_idl.h>
 #include "lustre_rsync.h"
 
 #define REPLICATE_STATUS_VER 1
@@ -148,7 +148,7 @@ extern int obd_initialize(int argc, char **argv);
 struct lr_info {
         long long recno;
         int target_no;
-        changelog_rec_t type;
+        enum changelog_rec_type type;
         char pfid[LR_FID_STR_LEN];
         char tfid[LR_FID_STR_LEN];
         char name[PATH_MAX + 1];
@@ -497,7 +497,7 @@ int lr_get_path_ln(struct lr_info *info, char *fidstr, int linkno)
         int rc;
 
         rc = llapi_fid2path(status->ls_source, fidstr, info->path,
-                            PATH_MAX, &recno, &linkno, WANT_ERROR);
+                            PATH_MAX, &recno, &linkno);
         if (rc < 0 && rc != -ENOENT) {
                 fprintf(stderr, "fid2path error: (%s, %s) %d %s\n",
                         status->ls_source, fidstr, -rc, strerror(errno = -rc));
@@ -1408,7 +1408,7 @@ int lr_replicate()
 
         /* Open changelogs for consumption*/
         rc = llapi_changelog_start(&changelog_priv, CHANGELOG_FLAG_BLOCK,
-                                   status->ls_source_fs, status->ls_last_recno, 0);
+                                   status->ls_source_fs, status->ls_last_recno);
         if (rc < 0) {
                 fprintf(stderr, "Error opening changelog file for fs %s.\n",
                         status->ls_source_fs);

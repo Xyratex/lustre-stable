@@ -1203,46 +1203,6 @@ out:
         return rc;
 }
 
-static int mdc_ioc_get_triple(struct obd_export *exp, struct lu_triple *t)
-{
-        __u32 keylen, vallen;
-        void *key;
-        int rc;
-
-        /* Key is KEY_GET_TRIPLE + lu_triple description */
-        keylen = cfs_size_round(sizeof(KEY_GET_TRIPLE)) + sizeof(*t);
-        OBD_ALLOC(key, keylen);
-        if (key == NULL)
-                RETURN(-ENOMEM);
-        memcpy(key, KEY_GET_TRIPLE, sizeof(KEY_GET_TRIPLE));
-        memcpy(key + cfs_size_round(sizeof(KEY_GET_TRIPLE)), t, sizeof(*t));
-
-        CDEBUG(D_IOCTL, "path triple "DFID"/%s\n",
-               PFID(&t->sd_parent.so_fid), t->sd_name);
-
-        if (!fid_is_sane(&t->sd_parent.so_fid)) {
-                CERROR("Invalid triple fid "DFID"\n", 
-                       PFID(&t->sd_parent.so_fid));
-                GOTO(out, rc = -EINVAL);
-        }
-
-        /* Val is struct getinfo_fid2path result plus path */
-        vallen = sizeof(*t);
-
-        rc = obd_get_info(exp, keylen, key, &vallen, t, NULL);
-        if (rc)
-                GOTO(out, rc);
-
-        if (vallen != sizeof(*t))
-                GOTO(out, rc = -EPROTO);
-
-        CDEBUG(D_IOCTL, "get triple "DFID"/%s\n",
-               PFID(&t->sd_parent.so_fid), t->sd_name);
-out:
-        OBD_FREE(key, keylen);
-        return rc;
-}
-
 static struct kuc_hdr *changelog_kuc_hdr(char *buf, int len, int flags)
 {
         struct kuc_hdr *lh = (struct kuc_hdr *)buf;
@@ -1260,29 +1220,22 @@ static struct kuc_hdr *changelog_kuc_hdr(char *buf, int len, int flags)
 #define D_CHANGELOG 0
 
 struct changelog_show {
-        __u64                   cs_startrec;
-        __u32                   cs_flags;
-        cfs_file_t             *cs_fp;
-        char                   *cs_buf;
-        int                     cs_start;
-        struct obd_device      *cs_obd;
+        __u64       cs_startrec;
+        __u32       cs_flags;
+        cfs_file_t *cs_fp;
+        char       *cs_buf;
+        struct obd_device *cs_obd;
 };
 
-static int changelog_show_cb(struct llog_handle *llh, 
-                             struct llog_rec_hdr *hdr,
+static int changelog_show_cb(struct llog_handle *llh, struct llog_rec_hdr *hdr,
                              void *data)
 {
-        struct llog_ctxt *ctxt = llh->lgh_ctxt;
         struct changelog_show *cs = data;
-        struct llog_changelog_rec *rec;
+        struct llog_changelog_rec *rec = (struct llog_changelog_rec *)hdr;
         struct kuc_hdr *lh;
         int len, rc;
         ENTRY;
 
-        if (ctxt->loc_obd->obd_stopping)
-                RETURN(LLOG_PROC_BREAK);
-
-        rec = (struct llog_changelog_rec *)hdr;
         if ((rec->cr_hdr.lrh_type != CHANGELOG_REC) ||
             (rec->cr.cr_type >= CL_LAST)) {
                 CERROR("Not a changelog rec %d/%d\n", rec->cr_hdr.lrh_type,
@@ -1290,9 +1243,12 @@ static int changelog_show_cb(struct llog_handle *llh,
                 RETURN(-EINVAL);
         }
 
-        /* Skip all records below ->cs_startrec */
-        if (rec->cr.cr_index < cs->cs_startrec)
+        if (rec->cr.cr_index < cs->cs_startrec) {
+                /* Skip entries earlier than what we are interested in */
+                CDEBUG(D_CHANGELOG, "rec="LPU64" start="LPU64"\n",
+                       rec->cr.cr_index, cs->cs_startrec);
                 RETURN(0);
+        }
 
         CDEBUG(D_CHANGELOG, LPU64" %02d%-5s "LPU64" 0x%x t="DFID" p="DFID
                " %.*s\n", rec->cr.cr_index, rec->cr.cr_type,
@@ -1301,30 +1257,16 @@ static int changelog_show_cb(struct llog_handle *llh,
                PFID(&rec->cr.cr_tfid), PFID(&rec->cr.cr_pfid),
                rec->cr.cr_namelen, rec->cr.cr_name);
 
-        if (cs->cs_start) {
-                /* Send start to let user space know that data comming */
-                if ((lh = changelog_kuc_hdr(cs->cs_buf, sizeof(*lh),
-                                            cs->cs_flags))) {
-                        lh->kuc_msgtype = CL_START;
-                        rc = libcfs_kkuc_msg_put(cs->cs_fp, lh);
-                        if (rc)
-                                GOTO(out_err, rc);
-                }
-                cs->cs_start = 0;
-        }
+        len = sizeof(*lh) + sizeof(rec->cr) + rec->cr.cr_namelen;
 
-        /* Set up the record message */
-        len = sizeof(*lh) + rec->cr_hdr.lrh_len;
+        /* Set up the message */
         lh = changelog_kuc_hdr(cs->cs_buf, len, cs->cs_flags);
         memcpy(lh + 1, &rec->cr, len - sizeof(*lh));
 
         rc = libcfs_kkuc_msg_put(cs->cs_fp, lh);
-        EXIT;
-out_err:
-        CDEBUG(D_CHANGELOG, "kucmsg fp %p len %d rc %d\n", cs->cs_fp, len, rc);
-        if (rc == 0)
-                 cs->cs_startrec = rec->cr.cr_index + 1;
-        return rc;
+        CDEBUG(D_CHANGELOG, "kucmsg fp %p len %d rc %d\n", cs->cs_fp, len,rc);
+
+        RETURN(rc);
 }
 
 static int mdc_changelog_send_thread(void *csdata)
@@ -1333,10 +1275,7 @@ static int mdc_changelog_send_thread(void *csdata)
         struct llog_ctxt *ctxt = NULL;
         struct llog_handle *llh = NULL;
         struct kuc_hdr *kuch;
-        __u64 startidx;
-        __u64 startcat;
         int rc;
-        ENTRY;
 
         CDEBUG(D_CHANGELOG, "changelog to fp=%p start "LPU64"\n",
                cs->cs_fp, cs->cs_startrec);
@@ -1367,17 +1306,7 @@ static int mdc_changelog_send_thread(void *csdata)
                 GOTO(out, rc);
         }
 
-        /* Calculate correct startcat and startidx inside it. */
-        startcat = (cs->cs_startrec - 1) / (LLOG_BITMAP_BYTES * 8);
-        startidx = (cs->cs_startrec - 1) % (LLOG_BITMAP_BYTES * 8);
-
-        /* We need the pipe fd open, so llog_process can't daemonize */
-        rc = llog_cat_process_flags(llh, changelog_show_cb, cs,
-                                    LLOG_FLAG_NODEAMON, startcat, startidx);
-        if (rc == LLOG_PROC_BREAK)
-                rc = 0;
-        else if (rc)
-                CERROR("llog_cat_process_flags() failed %d\n", rc);
+        rc = llog_cat_process_flags(llh, changelog_show_cb, cs, 0, 0, 0);
 
         /* Send EOF no matter what our result */
         if ((kuch = changelog_kuc_hdr(cs->cs_buf, sizeof(*kuch),
@@ -1386,7 +1315,6 @@ static int mdc_changelog_send_thread(void *csdata)
                 libcfs_kkuc_msg_put(cs->cs_fp, kuch);
         }
 
-        EXIT;
 out:
         cfs_put_file(cs->cs_fp);
         if (llh)
@@ -1417,7 +1345,6 @@ static int mdc_ioc_changelog_send(struct obd_device *obd,
         /* matching cfs_put_file in mdc_changelog_send_thread */
         cs->cs_fp = cfs_get_fd(icc->icc_id);
         cs->cs_flags = icc->icc_flags;
-        cs->cs_start = 1;
 
         /* New thread because we should return to user app before
            writing into our pipe */
@@ -1436,8 +1363,8 @@ static int mdc_ioc_changelog_send(struct obd_device *obd,
 static int mdc_ioc_hsm_ct_start(struct obd_export *exp,
                                 struct lustre_kernelcomm *lk);
 
-static int mdc_iocontrol(unsigned int cmd, struct obd_export *exp,
-                         int len, void *karg, void *uarg)
+static int mdc_iocontrol(unsigned int cmd, struct obd_export *exp, int len,
+                         void *karg, void *uarg)
 {
         struct obd_device *obd = exp->exp_obd;
         struct obd_ioctl_data *data = karg;
@@ -1468,10 +1395,6 @@ static int mdc_iocontrol(unsigned int cmd, struct obd_export *exp,
         }
         case OBD_IOC_FID2PATH: {
                 rc = mdc_ioc_fid2path(exp, karg);
-                GOTO(out, rc);
-        }
-        case OBD_IOC_GET_TRIPLE: {
-                rc = mdc_ioc_get_triple(exp, karg);
                 GOTO(out, rc);
         }
         case OBD_IOC_CLIENT_RECOVER:
@@ -1591,10 +1514,9 @@ int mdc_get_info_rpc(struct obd_export *exp,
                 tmp = req_capsule_server_get(&req->rq_pill, &RMF_GETINFO_VAL);
                 memcpy(val, tmp, vallen);
                 if (ptlrpc_rep_need_swab(req)) {
-                        if (KEY_IS(KEY_FID2PATH))
+                        if (KEY_IS(KEY_FID2PATH)) {
                                 lustre_swab_fid2path(val);
-                        else if (KEY_IS(KEY_GET_TRIPLE))
-                                lustre_swab_get_triple(val);
+                        }
                 }
         }
         ptlrpc_req_finished(req);

@@ -83,17 +83,6 @@ int cmm_root_get(const struct lu_env *env, struct md_device *md,
                 return -EINVAL;
 }
 
-int cmm_next_recno(const struct lu_env *env, struct md_device *md,
-                   __u64 *recno)
-{
-        struct cmm_device *cmm_dev = md2cmm_dev(md);
-        if (cmm_dev->cmm_local_num == 0)
-                return cmm_child_ops(cmm_dev)->mdo_next_recno(env,
-                                     cmm_dev->cmm_child, recno);
-        else
-                return -EINVAL;
-}
-
 static int cmm_statfs(const struct lu_env *env, struct md_device *md,
                       cfs_kstatfs_t *sfs)
 {
@@ -411,7 +400,6 @@ int cmm_iocontrol(const struct lu_env *env, struct md_device *m,
 static const struct md_device_operations cmm_md_ops = {
         .mdo_statfs          = cmm_statfs,
         .mdo_root_get        = cmm_root_get,
-        .mdo_next_recno      = cmm_next_recno,
         .mdo_maxsize_get     = cmm_maxsize_get,
         .mdo_init_capa_ctxt  = cmm_init_capa_ctxt,
         .mdo_update_capa_key = cmm_update_capa_key,
