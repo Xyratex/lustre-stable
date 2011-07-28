@@ -3586,7 +3586,7 @@ TEST60_HEAD="test_60 run $RANDOM"
 test_60a() {
         [ ! -f run-llog.sh ] && skip_env "missing subtest run-llog.sh" && return
 	log "$TEST60_HEAD - from kernel mode"
-	sh run-llog.sh
+	do_facet mgs sh run-llog.sh
 }
 run_test 60a "llog sanity tests run from kernel module =========="
 
@@ -4421,9 +4421,41 @@ test_80() { # bug 10718
                 error "elapsed for 1M@1T = $DIFF"
         fi
         true
-    	rm -f $DIR/$tfile
+        rm -f $DIR/$tfile
 }
 run_test 80 "Page eviction is equally fast at high offsets too  ===="
+
+test_81a() { # LU-456
+        # define OBD_FAIL_OST_MAPBLK_ENOSPC    0x228
+        # MUST OR with the OBD_FAIL_ONCE (0x80000000)
+        do_facet ost0 lctl set_param fail_loc=0x80000228
+
+        # write should trigger a retry and success
+        $SETSTRIPE -i 0 -c 1 $DIR/$tfile
+        multiop $DIR/$tfile oO_CREAT:O_RDWR:O_SYNC:w4096c
+        RC=$?
+        if [ $RC -ne 0 ] ; then
+                error "write should success, but failed for $RC"
+        fi
+}
+run_test 81a "OST should retry write when get -ENOSPC ==============="
+
+test_81b() { # LU-456
+        # define OBD_FAIL_OST_MAPBLK_ENOSPC    0x228
+        # Don't OR with the OBD_FAIL_ONCE (0x80000000)
+        do_facet ost0 lctl set_param fail_loc=0x228
+
+        # write should retry several times and return -ENOSPC finally
+        $SETSTRIPE -i 0 -c 1 $DIR/$tfile
+        multiop $DIR/$tfile oO_CREAT:O_RDWR:O_SYNC:w4096c
+        RC=$?
+        ENOSPC=28
+        if [ $RC -ne $ENOSPC ] ; then
+                error "dd should fail for -ENOSPC, but succeed."
+        fi
+}
+run_test 81b "OST should return -ENOSPC when retry still fails ======="
+
 
 test_99a() {
         [ -z "$(which cvs 2>/dev/null)" ] && skip_env "could not find cvs" && \
@@ -8043,6 +8075,21 @@ test_218() {
        rm -rf $DIR/$tfile || error "tmp file removal failed"
 }
 run_test 218 "parallel read and truncate should not deadlock ======================="
+
+test_219() {
+        # write one partial page
+        dd if=/dev/zero of=$DIR/$tfile bs=1024 count=1
+        # set no grant so vvp_io_commit_write will do sync write
+        $LCTL set_param fail_loc=0x411
+        # write a full page at the end of file
+        dd if=/dev/zero of=$DIR/$tfile bs=4096 count=1 seek=1 conv=notrunc
+
+        $LCTL set_param fail_loc=0
+        dd if=/dev/zero of=$DIR/$tfile bs=4096 count=1 seek=3
+        $LCTL set_param fail_loc=0x411
+        dd if=/dev/zero of=$DIR/$tfile bs=1024 count=1 seek=2 conv=notrunc
+}
+run_test 219 "LU-394: Write partial won't cause uncontiguous pages vec at LND"
 
 #
 # tests that do cleanup/setup should be run at the end

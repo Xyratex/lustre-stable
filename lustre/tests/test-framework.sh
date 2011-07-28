@@ -1712,6 +1712,8 @@ change_active() {
     # save the active host for this facet
     local activevar=${facet}active
     echo "$activevar=${!activevar}" > $TMP/$activevar
+    [[ $facet = mds1 ]] && combined_mgs_mds && \
+        echo "mgsactive=${!activevar}" > $TMP/mgsactive
     local TO=`facet_active_host $facet`
     echo "Failover $facet to $TO"
     done
@@ -1841,6 +1843,7 @@ add() {
     # make sure its not already running
     stop ${facet} -f
     rm -f $TMP/${facet}active
+    [[ $facet = mds1 ]] && combined_mgs_mds && rm -f $TMP/mgsactive
     do_facet ${facet} $MKFS $*
 }
 
@@ -1862,6 +1865,8 @@ mdsdevname() {
 
 facet_mntpt () {
     local facet=$1
+    [[ $facet = mgs ]] && combined_mgs_mds && facet="mds1"
+
     local var=${facet}_MOUNT
     eval mntpt=${!var:-${MOUNT%/*}/$facet}
 
@@ -1893,6 +1898,7 @@ stopall() {
         stop mds$num -f
         rm -f ${TMP}/mds${num}active
     done
+    combined_mgs_mds && rm -f $TMP/mgsactive
 
     for num in `seq $OSTCOUNT`; do
         stop ost$num -f
@@ -3206,9 +3212,11 @@ run_one() {
 run_one_logged() {
     local BEFORE=`date +%s`
     local TEST_ERROR
-    local name=${TESTSUITE}.test_${1}.test_log.$(hostname).log
+    local name=${TESTSUITE}.test_${1}.test_log.$(hostname -s).log
     local test_log=$LOGDIR/$name
     rm -rf $LOGDIR/err
+    local SAVE_UMASK=`umask`
+    umask 0022
 
     echo
     log_sub_test_begin test_${1}
@@ -3226,6 +3234,8 @@ run_one_logged() {
     if [ -f $LOGDIR/err ]; then
         $FAIL_ON_ERROR && exit $RC
     fi
+
+    umask $SAVE_UMASK
 
     return 0
 }
@@ -4068,14 +4078,14 @@ gather_logs () {
 
     if [ "$CLIENTONLY" -o "$PDSH" == "no_dsh" ]; then
         echo "Dumping logs only on local client."
-        $LCTL dk > ${prefix}.debug_log.$(hostname).${suffix}
-        dmesg > ${prefix}.dmesg.$(hostname).${suffix}
+        $LCTL dk > ${prefix}.debug_log.$(hostname -s).${suffix}
+        dmesg > ${prefix}.dmesg.$(hostname -s).${suffix}
         return
     fi
 
     do_nodesv $list \
-        "$LCTL dk > ${prefix}.debug_log.\\\$(hostname).${suffix};
-         dmesg > ${prefix}.dmesg.\\\$(hostname).${suffix}"
+        "$LCTL dk > ${prefix}.debug_log.\\\$(hostname -s).${suffix};
+         dmesg > ${prefix}.dmesg.\\\$(hostname -s).${suffix}"
     if [ ! -f $LOGDIR/shared ]; then
         do_nodes $list rsync -az "${prefix}.*.${suffix}" $HOSTNAME:$LOGDIR
       fi
@@ -4434,7 +4444,7 @@ check_logdir() {
         # Not found. Create local logdir
         mkdir -p $dir
     else
-        touch $dir/node.$(hostname).yml
+        touch $dir/node.$(hostname -s).yml
     fi
     return 0
 }
@@ -4442,7 +4452,7 @@ check_logdir() {
 check_write_access() {
     local dir=$1
     for node in $(nodes_list); do
-        if [ ! -f "$dir/node.${node}.yml" ]; then
+        if [ ! -f "$dir/node.$(short_hostname ${node}).yml" ]; then
             # Logdir not accessible/writable from this node.
             return 1
         fi
@@ -4454,6 +4464,9 @@ init_logging() {
     if [[ -n $YAML_LOG ]]; then
         return
     fi
+    local SAVE_UMASK=`umask`
+    umask 0000
+
     export YAML_LOG=${LOGDIR}/results.yml
     mkdir -p $LOGDIR
     init_clients_lists
@@ -4468,6 +4481,8 @@ init_logging() {
 
     yml_nodes_file $LOGDIR >> $YAML_LOG
     yml_results_file >> $YAML_LOG
+
+    umask $SAVE_UMASK
 }
 
 log_test() {
@@ -4594,4 +4609,3 @@ is_sanity_benchmark() {
 min_ost_size () {
     $LCTL get_param -n osc.*.kbytesavail | sort -n | head -n1
 }
-
