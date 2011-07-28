@@ -519,3 +519,15 @@ Index: linux-stage/fs/ext4/namei.c
  	    !(bh = ext4_bread(NULL, inode, 0, 0, &err))) {
  		if (err)
  			ext4_error(inode->i_sb,
+Index: b/fs/ext4/super.c
+===================================================================
+--- a/fs/ext4/super.c
++++ b/fs/ext4/super.c
+@@ -1761,6 +1761,7 @@ static int ext4_setup_super(struct super
+ 	ext4_update_dynamic_rev(sb);
+ 	if (sbi->s_journal)
+ 		EXT4_SET_INCOMPAT_FEATURE(sb, EXT4_FEATURE_INCOMPAT_RECOVER);
++	EXT4_SET_INCOMPAT_FEATURE(sb, EXT4_FEATURE_INCOMPAT_DIRDATA);
+ 
+ 	ext4_commit_super(sb, 1);
+ 	if (test_opt(sb, DEBUG))
