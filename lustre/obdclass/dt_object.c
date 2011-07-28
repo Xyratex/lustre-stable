@@ -28,6 +28,9 @@
  * Use is subject to license terms.
  */
 /*
+ * Copyright (c) 2011 Xyratex, Inc.
+ */
+/*
  * This file is part of Lustre, http://www.lustre.org/
  * Lustre is a trademark of Sun Microsystems, Inc.
  *
@@ -204,12 +207,15 @@ enum dt_format_type dt_mode_to_dft(__u32 mode)
 }
 
 EXPORT_SYMBOL(dt_mode_to_dft);
+
 /**
  * lookup fid for object named \a name in directory \a dir.
  */
-
-static int dt_lookup(const struct lu_env *env, struct dt_object *dir,
-                     const char *name, struct lu_fid *fid)
+int dt_store_lookup(const struct lu_env *env,
+                    struct dt_object *dir,
+                    const char *name,
+                    struct lu_fid *fid,
+                    struct lustre_capa *capa)
 {
         struct dt_rec       *rec = (struct dt_rec *)fid;
         const struct dt_key *key = (const struct dt_key *)name;
@@ -217,7 +223,7 @@ static int dt_lookup(const struct lu_env *env, struct dt_object *dir,
 
         if (dt_try_as_dir(env, dir)) {
                 result = dir->do_index_ops->dio_lookup(env, dir, rec, key,
-                                                       BYPASS_CAPA);
+                                                       capa);
                 if (result > 0)
                         result = 0;
                 else if (result == 0)
@@ -225,6 +231,16 @@ static int dt_lookup(const struct lu_env *env, struct dt_object *dir,
         } else
                 result = -ENOTDIR;
         return result;
+}
+EXPORT_SYMBOL(dt_store_lookup);
+
+/**
+ * lookup fid for object named \a name in directory \a dir.
+ */
+static int dt_lookup(const struct lu_env *env, struct dt_object *dir,
+                     const char *name, struct lu_fid *fid)
+{
+        return dt_store_lookup(env, dir, name, fid, BYPASS_CAPA);
 }
 
 /**

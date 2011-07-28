@@ -28,6 +28,9 @@
  * Use is subject to license terms.
  */
 /*
+ * Copyright (c) 2011 Xyratex, Inc.
+ */
+/*
  * This file is part of Lustre, http://www.lustre.org/
  * Lustre is a trademark of Sun Microsystems, Inc.
  *
@@ -58,6 +61,7 @@ struct lu_fid;
 struct osd_thread_info;
 struct lu_site;
 struct thandle;
+struct osd_device;
 
 struct dt_device;
 
@@ -103,6 +107,11 @@ int  osd_oi_insert(struct osd_thread_info *info, struct osd_oi *oi,
 int  osd_oi_delete(struct osd_thread_info *info,
                    struct osd_oi *oi, const struct lu_fid *fid,
                    struct thandle *th);
-
+int osd_oi_rebuild(struct osd_thread_info *info,
+                   struct osd_device *osd,
+                   struct osd_inode_id *id,
+                   const struct lu_fid *fid,
+                   struct thandle *th,
+                   __u32 flags);
 #endif /* __KERNEL__ */
 #endif /* _OSD_OI_H */

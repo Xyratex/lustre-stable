@@ -28,6 +28,9 @@
  * Use is subject to license terms.
  */
 /*
+ * Copyright (c) 2011 Xyratex, Inc.
+ */
+/*
  * This file is part of Lustre, http://www.lustre.org/
  * Lustre is a trademark of Sun Microsystems, Inc.
  *
@@ -47,12 +50,24 @@
 
 #ifdef LPROCFS
 
-static const char *osd_counter_names[LPROC_OSD_NR] = {
+struct osd_lproc_cntr {
+        __u32       code;
+        __u32       conf;
+        const char *name;
+        const char *unit;
+} osd_lproc_table[LPROC_OSD_NR] = {
 #if OSD_THANDLE_STATS
-        [LPROC_OSD_THANDLE_STARTING] = "thandle starting",
-        [LPROC_OSD_THANDLE_OPEN]     = "thandle open",
-        [LPROC_OSD_THANDLE_CLOSING]  = "thandle closing"
-#endif
+        { LPROC_OSD_THANDLE_STARTING,   LPROCFS_CNTR_AVGMINMAX,
+          "thandle starting",           "usec" },
+        { LPROC_OSD_THANDLE_OPEN,       LPROCFS_CNTR_AVGMINMAX,
+          "thandle open",               "usec" },
+        { LPROC_OSD_THANDLE_CLOSING,    LPROCFS_CNTR_AVGMINMAX,
+          "thandle closing",            "usec" },
+ #endif
+        { LPROC_OSD_REBUILD_LMA,        0, "LMA created", "" },
+        { LPROC_OSD_REBUILD_OI_ADD,     0, "OI entry added", ""},
+        { LPROC_OSD_REBUILD_OI_RM,      0, "OI entry removed", "" },
+        { LPROC_OSD_REBUILD_DIRENTRY,   0, "FID-in-direntry added", "" },
 };
 
 int osd_procfs_init(struct osd_device *osd, const char *name)
@@ -60,7 +75,7 @@ int osd_procfs_init(struct osd_device *osd, const char *name)
         struct lprocfs_static_vars lvars;
         struct lu_device    *ld = &osd->od_dt_dev.dd_lu_dev;
         struct obd_type     *type;
-        int                  rc;
+        int                  rc, i;
         ENTRY;
 
         type = ld->ld_type->ldt_obd_type;
@@ -80,9 +95,18 @@ int osd_procfs_init(struct osd_device *osd, const char *name)
                 GOTO(out, rc);
         }
 
-        rc = lu_time_init(&osd->od_stats,
-                          osd->od_proc_entry,
-                          osd_counter_names, ARRAY_SIZE(osd_counter_names));
+        osd->od_stats = lprocfs_alloc_stats(LPROC_OSD_NR, 0);
+        if (osd->od_stats == NULL)
+                GOTO(out, rc = -ENOMEM);
+
+        for (i = 0; i < LPROC_OSD_NR; ++i)
+                lprocfs_counter_init(osd->od_stats,
+                                     osd_lproc_table[i].code,
+                                     osd_lproc_table[i].conf,
+                                     osd_lproc_table[i].name,
+                                     osd_lproc_table[i].unit);
+        rc = lprocfs_register_stats(osd->od_proc_entry, "lu_stat",
+                                    osd->od_stats);
         EXIT;
 out:
         if (rc)

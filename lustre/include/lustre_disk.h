@@ -31,6 +31,9 @@
  *
  */
 /*
+ * Copyright (c) 2011 Xyratex, Inc.
+ */
+/*
  * This file is part of Lustre, http://www.lustre.org/
  * Lustre is a trademark of Sun Microsystems, Inc.
  *
@@ -198,6 +201,8 @@ struct lustre_mount_data {
 #define LMD_FLG_NOMGS        0x0020  /* Only start target for servers, reusing
                                         existing MGS services */
 #define LMD_FLG_WRITECONF    0x0040  /* Rewrite config log */
+#define LMD_FLG_UPGRADE      0x0080  /* Upgrade the disk format */
+#define LMD_FLG_RESTORE      0x0100  /* Restore the disk format */
 
 #define lmd_is_client(x) ((x)->lmd_flags & LMD_FLG_CLIENT)
 

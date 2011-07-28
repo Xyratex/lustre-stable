@@ -28,6 +28,9 @@
  * Use is subject to license terms.
  */
 /*
+ * Copyright (c) 2011 Xyratex, Inc.
+ */
+/*
  * Copyright (c) 2011 Whamcloud, Inc.
  */
 /*
@@ -362,6 +365,34 @@ out:
         RETURN(rc);
 }
 
+/**
+ * Finds an object by the given \a fid, checks it exists and returns it.
+ */
+struct mdd_object *mdd_object_by_fid(const struct lu_env *env,
+                                     struct mdd_device *mdd,
+                                     const struct lu_fid *fid)
+{
+        struct mdd_object *mdd_obj;
+        int rc;
+
+        mdd_obj = mdd_object_find(env, mdd, fid);
+        if (mdd_obj == NULL)
+                RETURN(ERR_PTR(-EREMOTE));
+        if (IS_ERR(mdd_obj))
+                RETURN(mdd_obj);
+
+        rc = lu_object_exists(&mdd_obj->mod_obj.mo_lu);
+        if (rc <= 0) {
+                mdd_object_put(env, mdd_obj);
+                if (rc == -1)
+                        mdd_obj = ERR_PTR(-EREMOTE);
+                else if (rc == 0)
+                        mdd_obj = ERR_PTR(-ENOENT);
+        }
+
+        RETURN(mdd_obj);
+}
+
 /** The maximum depth that fid2path() will search.
  * This is limited only because we want to store the fids for
  * historical path lookup purposes.
@@ -403,22 +434,10 @@ static int mdd_path_current(const struct lu_env *env,
         pli->pli_fids[0] = *(struct lu_fid *)mdd_object_fid(pli->pli_mdd_obj);
 
         while (!mdd_is_root(mdd, &pli->pli_fids[pli->pli_fidcount])) {
-                mdd_obj = mdd_object_find(env, mdd,
-                                          &pli->pli_fids[pli->pli_fidcount]);
-                if (mdd_obj == NULL)
-                        GOTO(out, rc = -EREMOTE);
+                mdd_obj = mdd_object_by_fid(env, mdd,
+                                            &pli->pli_fids[pli->pli_fidcount]);
                 if (IS_ERR(mdd_obj))
                         GOTO(out, rc = PTR_ERR(mdd_obj));
-                rc = lu_object_exists(&mdd_obj->mod_obj.mo_lu);
-                if (rc <= 0) {
-                        mdd_object_put(env, mdd_obj);
-                        if (rc == -1)
-                                rc = -EREMOTE;
-                        else if (rc == 0)
-                                /* Do I need to error out here? */
-                                rc = -ENOENT;
-                        GOTO(out, rc);
-                }
 
                 /* Get parent fid and object name */
                 mdd_read_lock(env, mdd_obj, MOR_TGT_CHILD);
@@ -2364,7 +2383,8 @@ static int __mdd_readpage(const struct lu_env *env, struct mdd_object *obj,
          * iterate through directory and fill pages from @rdpg
          */
         iops = &next->do_index_ops->dio_it;
-        it = iops->init(env, next, rdpg->rp_attrs, mdd_object_capa(env, obj));
+        it = iops->init(env, next, rdpg->rp_attrs, 0,
+                        mdd_object_capa(env, obj));
         if (IS_ERR(it))
                 return PTR_ERR(it);
 

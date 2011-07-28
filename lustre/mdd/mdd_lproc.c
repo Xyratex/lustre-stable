@@ -28,6 +28,9 @@
  * Use is subject to license terms.
  */
 /*
+ * Copyright (c) 2011 Xyratex, Inc.
+ */
+/*
  * This file is part of Lustre, http://www.lustre.org/
  * Lustre is a trademark of Sun Microsystems, Inc.
  *
@@ -54,7 +57,16 @@
 
 #include "mdd_internal.h"
 
-static const char *mdd_counter_names[LPROC_MDD_NR] = {
+struct mdd_lproc_cntr {
+        __u32       code;
+        __u32       conf;
+        const char *name;
+        const char *unit;
+} mdd_lproc_table[LPROC_MDD_NR] = {
+        { LPROC_MDD_REBUILD_LINKEA_ADD, 0, "LinkEA added", "" },
+        { LPROC_MDD_REBUILD_LINKEA_RM, 0, "LinkEA removed", "" },
+        { LPROC_MDD_REBUILD_FILES, 0, "files handled", "" },
+        { LPROC_MDD_REBUILD_DIRS, 0, "dirs handled", "" }
 };
 
 int mdd_procfs_init(struct mdd_device *mdd, const char *name)
@@ -62,7 +74,7 @@ int mdd_procfs_init(struct mdd_device *mdd, const char *name)
         struct lprocfs_static_vars lvars;
         struct lu_device    *ld = &mdd->mdd_md_dev.md_lu_dev;
         struct obd_type     *type;
-        int                  rc;
+        int                  rc, i;
         ENTRY;
 
         type = ld->ld_type->ldt_obd_type;
@@ -82,9 +94,19 @@ int mdd_procfs_init(struct mdd_device *mdd, const char *name)
                 GOTO(out, rc);
         }
 
-        rc = lu_time_init(&mdd->mdd_stats,
-                          mdd->mdd_proc_entry,
-                          mdd_counter_names, ARRAY_SIZE(mdd_counter_names));
+        mdd->mdd_stats = lprocfs_alloc_stats(LPROC_MDD_NR,
+                                             LPROCFS_STATS_FLAG_NONE);
+        if (mdd->mdd_stats == NULL)
+                GOTO(out, rc = -ENOMEM);
+
+        for (i = 0; i < LPROC_MDD_NR; ++i)
+                lprocfs_counter_init(mdd->mdd_stats,
+                                     mdd_lproc_table[i].code,
+                                     mdd_lproc_table[i].conf,
+                                     mdd_lproc_table[i].name,
+                                     mdd_lproc_table[i].unit);
+        rc = lprocfs_register_stats(mdd->mdd_proc_entry, "lu_stat",
+                                    mdd->mdd_stats);
 
         EXIT;
 out:
@@ -294,6 +316,29 @@ static int lprocfs_wr_sync_perm(struct file *file, const char *buffer,
         return count;
 }
 
+static int lprocfs_rd_percpu_rebuild(char *page, char **start, off_t off,
+                                     int count, int *eof, void *data)
+{
+        struct mdd_device *mdd = data;
+        int i, len = 0;
+
+        LASSERT(mdd != NULL);
+        len += snprintf(page, count, "dirs / files handled per-cpu\n");
+        for (i = 0; i < cfs_num_possible_cpus(); i++) {
+                struct lprocfs_stats *stats = mdd->mdd_stats;
+                struct lprocfs_counter *lcf, *lcd;
+                __s64 dirs, files;
+
+                lcf = &(stats->ls_percpu[i]->lp_cntr[LPROC_MDD_REBUILD_FILES]);
+                lcd = &(stats->ls_percpu[i]->lp_cntr[LPROC_MDD_REBUILD_DIRS]);
+                files = lprocfs_read_helper(lcf, LPROCFS_FIELDS_FLAGS_COUNT);
+                dirs = lprocfs_read_helper(lcd, LPROCFS_FIELDS_FLAGS_COUNT);
+
+                len += snprintf(page + len, count, "%lld %lld\n", dirs, files);
+        }
+        return len;
+}
+
 static struct lprocfs_vars lprocfs_mdd_obd_vars[] = {
         { "atime_diff",      lprocfs_rd_atime_diff, lprocfs_wr_atime_diff, 0 },
         { "changelog_mask",  lprocfs_rd_changelog_mask,
@@ -304,6 +349,7 @@ static struct lprocfs_vars lprocfs_mdd_obd_vars[] = {
                              mdd_lprocfs_quota_wr_type, 0 },
 #endif
         { "sync_permission", lprocfs_rd_sync_perm, lprocfs_wr_sync_perm, 0 },
+        { "per_cpu_rebuild", lprocfs_rd_percpu_rebuild, 0, 0 },
         { 0 }
 };
 

@@ -31,6 +31,9 @@
  *
  */
 /*
+ * Copyright (c) 2011 Xyratex, Inc.
+ */
+/*
  * This file is part of Lustre, http://www.lustre.org/
  * Lustre is a trademark of Sun Microsystems, Inc.
  *
@@ -2045,7 +2048,15 @@ static int lmd_parse(char *options, struct lustre_mount_data *lmd)
                         if (rc)
                                 goto invalid;
                         clear++;
+                } else if (strncmp(s1, "upgrade", 7) == 0) {
+                        lmd->lmd_flags |= LMD_FLG_UPGRADE;
+                        clear++;
+                } else if (strncmp(s1, "restore", 7) == 0) {
+                        lmd->lmd_flags |= LMD_FLG_RESTORE;
+                        clear++;
                 }
+
+
                 /* Linux 2.4 doesn't pass the device, so we stuck it at the
                    end of the options. */
                 else if (strncmp(s1, "device=", 7) == 0) {

@@ -124,6 +124,16 @@ The default soft recovery timeout is set to 300 seconds (5 minutes).
 The server will be allowed to incrementally extend its timeout up to a hard
 maximum of 'timeout' seconds.  The default hard recovery timeout is set to
 900 seconds (15 minutes).
+.TP
+.BI upgrade
+MDT only option. Upgrade the FS to the true 2.x disk format if migrated from 1.8 Lustre.
+
+It includes assigning a new File Identifier Descriptor (FID), adding it to the special Extend Attribute as well as to the directory entry; creating a special FID index; storing links to all the parents from each file in the "Link" Extended Attribute.
+.TP
+.BI restore
+MDT only option. Restore the 2.x FS disk format after backup/restore.
+
+It includes restoring the special FID index which is lost after backup/restore.
 .SH EXAMPLES
 .TP
 .B mount -t lustre cfs21@tcp0:/testfs /mnt/myfilesystem

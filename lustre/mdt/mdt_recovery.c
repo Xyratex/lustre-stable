@@ -31,6 +31,9 @@
  *
  */
 /*
+ * Copyright (c) 2011 Xyratex, Inc.
+ */
+/*
  * This file is part of Lustre, http://www.lustre.org/
  * Lustre is a trademark of Sun Microsystems, Inc.
  *
@@ -424,6 +427,16 @@ static int mdt_server_data_init(const struct lu_env *env,
                 }
                 /** set 2.0 flag to upgrade/downgrade between 1.8 and 2.0 */
                 lsd->lsd_feature_compat |= OBD_COMPAT_20;
+        }
+
+        if (lsi->lsi_lmd->lmd_flags & LMD_FLG_UPGRADE) {
+                LCONSOLE_WARN("Mounting %s with upgrade, "
+                              "remove all clients for interop needs\n",
+                              obd->obd_name);
+                simple_truncate(lsi->lsi_srv_mnt->mnt_sb->s_root,
+                                lsi->lsi_srv_mnt, LAST_RCVD,
+                                lsd->lsd_client_start);
+                last_rcvd_size = lsd->lsd_client_start;
         }
 
         if (ldd->ldd_flags & LDD_F_IAM_DIR)

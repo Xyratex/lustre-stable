@@ -34,6 +34,9 @@
  * Copyright (c) 2011 Whamcloud, Inc.
  */
 /*
+ * Copyright (c) 2011 Xyratex, Inc.
+ */
+/*
  * This file is part of Lustre, http://www.lustre.org/
  * Lustre is a trademark of Sun Microsystems, Inc.
  *
@@ -1836,19 +1839,20 @@ static int osd_object_create(const struct lu_env *env, struct dt_object *dt,
 /**
  * Helper function for osd_xattr_set()
  */
-static int __osd_xattr_set(const struct lu_env *env, struct dt_object *dt,
-                           const struct lu_buf *buf, const char *name, int fl)
+static int osd_inode_xattr_set(const struct lu_env *env,
+                               struct inode *inode,
+                               const struct lu_buf *buf,
+                               const char *name,
+                               int fl)
 {
-        struct osd_object      *obj      = osd_dt_obj(dt);
-        struct inode           *inode    = obj->oo_inode;
         struct osd_thread_info *info     = osd_oti_get(env);
         struct dentry          *dentry   = &info->oti_child_dentry;
         int                     fs_flags = 0;
-        int  rc;
+        int                     rc;
 
-        LASSERT(dt_object_exists(dt));
-        LASSERT(inode->i_op != NULL && inode->i_op->setxattr != NULL);
-        LASSERT(osd_write_locked(env, obj));
+        LASSERT(inode != NULL &&
+                inode->i_op != NULL &&
+                inode->i_op->setxattr != NULL);
 
         if (fl & LU_XATTR_REPLACE)
                 fs_flags |= XATTR_REPLACE;
@@ -1872,18 +1876,29 @@ static int __osd_xattr_set(const struct lu_env *env, struct dt_object *dt,
  *
  * FIXME: It is good to have/use ldiskfs_xattr_set_handle() here
  */
+static int osd_inode_fid_set(const struct lu_env *env,
+                             struct inode *inode,
+                             const struct lu_fid *fid)
+{
+        struct osd_thread_info  *info  = osd_oti_get(env);
+        struct lustre_mdt_attrs *attrs = &info->oti_mdt_attrs;
+
+        lustre_lma_init(attrs, fid);
+        lustre_lma_swab(attrs);
+        return osd_inode_xattr_set(env, inode,
+                                   osd_buf_get(env, attrs, sizeof *attrs),
+                                   XATTR_NAME_LMA, LU_XATTR_CREATE);
+}
+
 static int osd_ea_fid_set(const struct lu_env *env, struct dt_object *dt,
                           const struct lu_fid *fid)
 {
-        struct osd_thread_info  *info      = osd_oti_get(env);
-        struct lustre_mdt_attrs *mdt_attrs = &info->oti_mdt_attrs;
+        struct osd_object       *obj   = osd_dt_obj(dt);
 
-        lustre_lma_init(mdt_attrs, fid);
-        lustre_lma_swab(mdt_attrs);
-        return __osd_xattr_set(env, dt,
-                               osd_buf_get(env, mdt_attrs, sizeof *mdt_attrs),
-                               XATTR_NAME_LMA, LU_XATTR_CREATE);
+        LASSERT(dt_object_exists(dt));
+        LASSERT(osd_write_locked(env, obj));
 
+        return osd_inode_fid_set(env, obj->oo_inode, fid);
 }
 
 /**
@@ -1915,13 +1930,12 @@ void osd_fid_pack(struct osd_fid_pack *pack, const struct dt_rec *fid,
  * its inmemory API.
  */
 void osd_get_ldiskfs_dirent_param(struct ldiskfs_dentry_param *param,
-                                  const struct dt_rec *fid)
+                                  const struct lu_fid *fid)
 {
         param->edp_magic = LDISKFS_LUFID_MAGIC;
         param->edp_len =  sizeof(struct lu_fid) + 1;
 
-        fid_cpu_to_be((struct lu_fid *)param->edp_data,
-                      (struct lu_fid *)fid);
+        fid_cpu_to_be((struct lu_fid *)param->edp_data, fid);
 }
 
 int osd_fid_unpack(struct lu_fid *fid, const struct osd_fid_pack *pack)
@@ -1942,39 +1956,48 @@ int osd_fid_unpack(struct lu_fid *fid, const struct osd_fid_pack *pack)
 }
 
 /**
- * Try to read the fid from inode ea into dt_rec, if return value
- * i.e. rc is +ve, then we got fid, otherwise we will have to form igif
+ * Get inode by the given \a id.
  *
- * \param fid object fid.
+ * \retval inode, on success
+ */
+static struct inode *osd_get_id(const struct lu_env *env,
+                                struct osd_device *dev,
+                                struct osd_inode_id *id)
+{
+        struct osd_thread_info  *info      = osd_oti_get(env);
+        struct inode *inode;
+
+        inode = osd_iget(info, dev, id);
+        if (IS_ERR(inode))
+                return inode;
+
+        id->oii_gen = inode->i_generation;
+        return inode;
+}
+
+/**
+ * Try to read the fid from inode ea into \a fid
+ *
+ * \param fid the found fid.
  *
  * \retval 0 on success
  */
-static int osd_ea_fid_get(const struct lu_env *env, struct osd_object *obj,
-                          __u32 ino, struct lu_fid *fid)
+static int osd_inode_fid_get(const struct lu_env *env,
+                             struct inode *inode,
+                             struct lu_fid *fid)
 {
         struct osd_thread_info  *info      = osd_oti_get(env);
         struct lustre_mdt_attrs *mdt_attrs = &info->oti_mdt_attrs;
-        struct lu_device        *ldev   = obj->oo_dt.do_lu.lo_dev;
         struct dentry           *dentry = &info->oti_child_dentry;
-        struct osd_inode_id     *id     = &info->oti_id;
-        struct osd_device       *dev;
-        struct inode            *inode;
         int                      rc;
 
         ENTRY;
-        dev  = osd_dev(ldev);
 
-        id->oii_ino = ino;
-        id->oii_gen = OSD_OII_NOGEN;
+        LASSERT(inode != NULL &&
+                inode->i_op != NULL &&
+                inode->i_op->getxattr != NULL);
 
-        inode = osd_iget(info, dev, id);
-        if (IS_ERR(inode)) {
-                rc = PTR_ERR(inode);
-                GOTO(out,rc);
-        }
         dentry->d_inode = inode;
-
-        LASSERT(inode->i_op != NULL && inode->i_op->getxattr != NULL);
         rc = inode->i_op->getxattr(dentry, XATTR_NAME_LMA, (void *)mdt_attrs,
                                    sizeof *mdt_attrs);
 
@@ -1991,12 +2014,130 @@ static int osd_ea_fid_get(const struct lu_env *env, struct osd_object *obj,
                 lustre_lma_swab(mdt_attrs);
                 memcpy(fid, &mdt_attrs->lma_self_fid, sizeof(*fid));
                 rc = 0;
-        } else if (rc == -ENODATA) {
-                osd_igif_get(env, inode, fid);
-                rc = 0;
         }
-        iput(inode);
-out:
+        RETURN(rc);
+}
+
+/**
+ * Try to read the fid from inode ea into \a fid. If there is no such in
+ * EA, either build a new EA or proceed with igif.
+ *
+ * \param inode the inode to read/fix the LMA EA for.
+ * \param fid the object final fid to be placed into.
+ * \param new_fid the new fid the object to be rebuilt with, if needed.
+ * \param flags flags the rebuilt to be done with
+ *
+ * \retval 0 on success
+ */
+static int osd_inode_fid_build(const struct lu_env *env,
+                               struct osd_device *osd,
+                               struct inode *inode,
+                               struct lu_fid *fid,
+                               struct lu_fid *new_fid,
+                               __u32 *flags)
+{
+        int rc;
+        ENTRY;
+
+        while (1) {
+                rc = osd_inode_fid_get(env, inode, fid);
+                if (rc == -ENODATA) {
+                        if (new_fid && (*flags & LDF_REBUILD_LMA)) {
+                                struct lu_fid tmp_fid;
+
+                                LASSERT(fid_is_norm(new_fid));
+                                osd_igif_get(env, inode, &tmp_fid);
+
+                                CDEBUG(D_INODE,
+                                       "build new fid for %lu/%u:"DFID"\n",
+                                       inode->i_ino, inode->i_generation,
+                                       PFID(new_fid));
+                                rc = osd_inode_fid_set(env, inode, new_fid);
+                                /* It may happen that a racing thread has
+                                 * already added the LMA for hardlinked file,
+                                 * repeat for EEXIST. */
+                                if (rc == -EEXIST)
+                                        continue;
+
+                                *flags |= LDF_REBUILD_DONE;
+                                *fid = *new_fid;
+                                /* Return the previous fid above. */
+                                *new_fid = tmp_fid;
+
+                                lprocfs_counter_incr(osd->od_stats,
+                                                     LPROC_OSD_REBUILD_LMA);
+                        } else {
+                                osd_igif_get(env, inode, fid);
+                                rc = 0;
+                        }
+                } else {
+                        /* Fid is found in the EA, but not in the direntry,
+                         * inform upper layers direntry is to be rebuilt. */
+                        *flags |= LDF_REBUILD_DONE;
+                }
+
+                break;
+        }
+
+        RETURN(rc);
+}
+
+/**
+ * Checks if direntry already has FID and tries to read the fid from inode ea
+ * if not. Also fixes EA and OI entry if needed.
+ *
+ * \param obj object to be handled
+ * \param ent_fid fid found in direntry
+ * \param ino inode number found in direntry
+ * \param new_fid fid the object to be rebuilt with if no fid is assigned so far
+ * \param flags flags the rebuilt to be done with
+ *
+ * \retval 0 on success
+ */
+static int osd_ea_rec(const struct lu_env *env,
+                      struct osd_object *obj,
+                      struct lu_fid *ent_fid,
+                      struct lu_fid *new_fid,
+                      struct thandle *th,
+                      __u32 ino,
+                      __u32 *flags)
+{
+        struct osd_thread_info  *info = osd_oti_get(env);
+        struct osd_inode_id     *id  = &info->oti_id;
+        struct osd_device       *osd = osd_obj2dev(obj);
+        struct inode            *inode = NULL;
+        int rc = 0;
+        ENTRY;
+
+        /* Get the inode to work with if:
+         * - it is needed for LMA access/rebuild;
+         * - generation is needed for OI entry rebuild. */
+        if (*flags & (LDF_REBUILD_OI | LDF_REBUILD_LMA) ||
+            !fid_is_sane(ent_fid)) {
+                id->oii_ino = ino;
+                id->oii_gen = OSD_OII_NOGEN;
+
+                inode = osd_get_id(env, osd, id);
+                if (IS_ERR(inode)) {
+                        CERROR("Failed to find inode %u/%u\n",
+                               id->oii_ino, id->oii_gen);
+                        RETURN(PTR_ERR(inode));
+                }
+        }
+
+        /* Get the FID from EA if:
+         * - direntry has no FID;
+         * - direntry has IGIF and LMA is to be rebuilt */
+        if (!fid_is_sane(ent_fid) ||
+            (!fid_is_norm(ent_fid) && (*flags & LDF_REBUILD_LMA)))
+                rc = osd_inode_fid_build(env, osd, inode, ent_fid, new_fid, flags);
+
+        if (rc == 0)
+                rc = osd_oi_rebuild(info, osd, id, ent_fid, th, *flags);
+
+        if (inode)
+                iput(inode);
+
         RETURN(rc);
 }
 
@@ -2008,11 +2149,12 @@ out:
  * \retval   0, on success
  * \retval -ve, on error
  */
-static int osd_object_ea_create(const struct lu_env *env, struct dt_object *dt,
-                             struct lu_attr *attr,
-                             struct dt_allocation_hint *hint,
-                             struct dt_object_format *dof,
-                             struct thandle *th)
+static int osd_object_ea_create(const struct lu_env *env,
+                                struct dt_object *dt,
+                                struct lu_attr *attr,
+                                struct dt_allocation_hint *hint,
+                                struct dt_object_format *dof,
+                                struct thandle *th)
 {
         const struct lu_fid    *fid    = lu_object_fid(&dt->do_lu);
         struct osd_object      *obj    = osd_dt_obj(dt);
@@ -2118,12 +2260,17 @@ static int osd_xattr_set(const struct lu_env *env, struct dt_object *dt,
                          const struct lu_buf *buf, const char *name, int fl,
                          struct thandle *handle, struct lustre_capa *capa)
 {
+        struct osd_object      *obj    = osd_dt_obj(dt);
+        struct inode           *inode  = obj->oo_inode;
+
         LASSERT(handle != NULL);
+        LASSERT(dt_object_exists(dt));
+        LASSERT(osd_write_locked(env, obj));
 
         if (osd_object_auth(env, dt, capa, CAPA_OPC_META_WRITE))
                 return -EACCES;
 
-        return __osd_xattr_set(env, dt, buf, name, fl);
+        return osd_inode_xattr_set(env, inode, buf, name, fl);
 }
 
 /*
@@ -2797,6 +2944,8 @@ static inline int osd_get_fid_from_dentry(struct ldiskfs_dir_entry_2 *de,
         if (de->file_type & LDISKFS_DIRENT_LUFID) {
                 rec = (struct osd_fid_pack *) (de->name + de->name_len + 1);
                 rc = osd_fid_unpack((struct lu_fid *)fid, rec);
+        } else {
+                fid_zero((struct lu_fid *)fid);
         }
         RETURN(rc);
 }
@@ -3001,7 +3150,7 @@ static int __osd_ea_add_rec(struct osd_thread_info *info,
                             struct osd_object *pobj,
                             struct inode  *cinode,
                             const char *name,
-                            const struct dt_rec *fid,
+                            const struct lu_fid *fid,
                             struct htree_lock *hlock,
                             struct thandle *th)
 {
@@ -3016,8 +3165,7 @@ static int __osd_ea_add_rec(struct osd_thread_info *info,
 
         child = osd_child_dentry_get(info->oti_env, pobj, name, strlen(name));
 
-        if (fid_is_igif((struct lu_fid *)fid) ||
-            fid_is_norm((struct lu_fid *)fid)) {
+        if (fid_is_igif(fid) || fid_is_norm(fid)) {
                 ldp = (struct ldiskfs_dentry_param *)info->oti_ldp;
                 osd_get_ldiskfs_dirent_param(ldp, fid);
                 child->d_fsdata = (void*) ldp;
@@ -3043,8 +3191,8 @@ static int __osd_ea_add_rec(struct osd_thread_info *info,
 static int osd_add_dot_dotdot(struct osd_thread_info *info,
                               struct osd_object *dir,
                               struct inode  *parent_dir, const char *name,
-                              const struct dt_rec *dot_fid,
-                              const struct dt_rec *dot_dot_fid,
+                              const struct lu_fid *dot_fid,
+                              const struct lu_fid *dot_dot_fid,
                               struct thandle *th)
 {
         struct inode            *inode  = dir->oo_inode;
@@ -3071,7 +3219,7 @@ static int osd_add_dot_dotdot(struct osd_thread_info *info,
 
                 if (!dir->oo_compat_dot_created)
                         return -EINVAL;
-                if (fid_seq((struct lu_fid *)dot_fid) >= FID_SEQ_NORMAL) {
+                if (fid_seq(dot_fid) >= FID_SEQ_NORMAL) {
                         osd_get_ldiskfs_dirent_param(dot_ldp, dot_fid);
                         osd_get_ldiskfs_dirent_param(dot_dot_ldp, dot_dot_fid);
                 } else {
@@ -3102,8 +3250,9 @@ static int osd_ea_add_rec(const struct lu_env *env,
                           struct osd_object *pobj,
                           struct inode *cinode,
                           const char *name,
-                          const struct dt_rec *fid,
-                          struct thandle *th)
+                          const struct lu_fid *fid,
+                          struct thandle *th,
+                          int rebuild)
 {
         struct osd_thread_info    *info   = osd_oti_get(env);
         struct htree_lock         *hlock;
@@ -3111,8 +3260,9 @@ static int osd_ea_add_rec(const struct lu_env *env,
 
         hlock = pobj->oo_hl_head != NULL ? info->oti_hlock : NULL;
 
-        if (name[0] == '.' && (name[1] == '\0' || (name[1] == '.' &&
-                                                   name[2] =='\0'))) {
+        if ((name[0] == '.') &&
+            (name[1] == '\0' || (name[1] == '.' && name[2] =='\0')) &&
+            (rebuild == 0)) {
                 if (hlock != NULL) {
                         ldiskfs_htree_lock(hlock, pobj->oo_hl_head,
                                            pobj->oo_inode, 0);
@@ -3120,7 +3270,7 @@ static int osd_ea_add_rec(const struct lu_env *env,
                         cfs_down_write(&pobj->oo_ext_idx_sem);
                 }
                 rc = osd_add_dot_dotdot(info, pobj, cinode, name,
-                     (struct dt_rec *)lu_object_fid(&pobj->oo_dt.do_lu),
+                                        lu_object_fid(&pobj->oo_dt.do_lu),
                                         fid, th);
         } else {
                 if (hlock != NULL) {
@@ -3149,16 +3299,21 @@ static int osd_ea_add_rec(const struct lu_env *env,
  * \retval   0, on success
  * \retval -ve, on error
  */
-static int osd_ea_lookup_rec(const struct lu_env *env, struct osd_object *obj,
-                             struct dt_rec *rec, const struct dt_key *key)
+static int osd_ea_lookup_rec(const struct lu_env *env,
+                             struct osd_object *obj,
+                             struct dt_rec *rec,
+                             struct dt_rec *new_rec,
+                             const struct dt_key *key,
+                             struct thandle *th,
+                             int flags)
 {
         struct inode               *dir    = obj->oo_inode;
         struct dentry              *dentry;
         struct ldiskfs_dir_entry_2 *de;
         struct buffer_head         *bh;
         struct lu_fid              *fid = (struct lu_fid *) rec;
+        struct lu_fid              *new_fid = (struct lu_fid *)new_rec;
         struct htree_lock          *hlock = NULL;
-        int ino;
         int rc;
 
         LASSERT(dir->i_op != NULL && dir->i_op->lookup != NULL);
@@ -3176,13 +3331,16 @@ static int osd_ea_lookup_rec(const struct lu_env *env, struct osd_object *obj,
 
         bh = osd_ldiskfs_find_entry(dir, dentry, &de, hlock);
         if (bh) {
-                ino = le32_to_cpu(de->inode);
                 rc = osd_get_fid_from_dentry(de, rec);
+                if (rc == -ENODATA)
+                        rc = 0;
 
                 /* done with de, release bh */
                 brelse(bh);
-                if (rc != 0)
-                        rc = osd_ea_fid_get(env, obj, ino, fid);
+
+                if (rc == 0)
+                        rc = osd_ea_rec(env, obj, fid, new_fid, th,
+                                        le32_to_cpu(de->inode), &flags);
         } else {
                 rc = -ENOENT;
         }
@@ -3251,8 +3409,7 @@ static inline void osd_object_put(const struct lu_env *env,
 }
 
 /**
- * Index add function for interoperability mode (b11826).
- * It will add the directory entry.This entry is needed to
+ * Add the directory entry.This entry is needed to
  * maintain name->fid mapping.
  *
  * \param key it is key i.e. file entry to be inserted
@@ -3261,14 +3418,16 @@ static inline void osd_object_put(const struct lu_env *env,
  * \retval   0, on success
  * \retval -ve, on error
  */
-static int osd_index_ea_insert(const struct lu_env *env, struct dt_object *dt,
-                               const struct dt_rec *rec,
-                               const struct dt_key *key, struct thandle *th,
-                               struct lustre_capa *capa, int ignore_quota)
+static int osd_index_name_insert(const struct lu_env *env,
+                                 struct dt_object *dt,
+                                 const struct lu_fid *fid,
+                                 const char *name,
+                                 struct thandle *th,
+                                 struct lustre_capa *capa,
+                                 int ignore_quota,
+                                 int rebuild)
 {
         struct osd_object        *obj   = osd_dt_obj(dt);
-        struct lu_fid            *fid   = (struct lu_fid *) rec;
-        const char               *name  = (const char *)key;
         struct osd_object        *child;
 #ifdef HAVE_QUOTA_SUPPORT
         cfs_cap_t                 save  = cfs_curproc_cap_pack();
@@ -3292,7 +3451,8 @@ static int osd_index_ea_insert(const struct lu_env *env, struct dt_object *dt,
                 else
                         cfs_cap_lower(CFS_CAP_SYS_RESOURCE);
 #endif
-                rc = osd_ea_add_rec(env, obj, child->oo_inode, name, rec, th);
+                rc = osd_ea_add_rec(env, obj, child->oo_inode,
+                                    name, fid, th, rebuild);
 #ifdef HAVE_QUOTA_SUPPORT
                 cfs_curproc_cap_unpack(save);
 #endif
@@ -3306,6 +3466,29 @@ static int osd_index_ea_insert(const struct lu_env *env, struct dt_object *dt,
 }
 
 /**
+ * Index add function for interoperability mode (b11826).
+ * It will add the directory entry.This entry is needed to
+ * maintain name->fid mapping.
+ *
+ * \param key it is key i.e. file entry to be inserted
+ * \param rec it is value of given key i.e. fid
+ *
+ * \retval   0, on success
+ * \retval -ve, on error
+ */
+static int osd_index_ea_insert(const struct lu_env *env, struct dt_object *dt,
+                               const struct dt_rec *rec,
+                               const struct dt_key *key, struct thandle *th,
+                               struct lustre_capa *capa, int ignore_quota)
+{
+        const char          *name  = (const char *)key;
+        const struct lu_fid *fid   = (struct lu_fid *)rec;
+
+        return osd_index_name_insert(env, dt, fid, name, th,
+                                     capa, ignore_quota, 0);
+}
+
+/**
  *  Initialize osd Iterator for given osd index object.
  *
  *  \param  dt      osd index object
@@ -3314,6 +3497,7 @@ static int osd_index_ea_insert(const struct lu_env *env, struct dt_object *dt,
 static struct dt_it *osd_it_iam_init(const struct lu_env *env,
                                      struct dt_object *dt,
                                      __u32 unused,
+                                     it_init_flags_t flags,
                                      struct lustre_capa *capa)
 {
         struct osd_it_iam         *it;
@@ -3567,15 +3751,38 @@ static const struct dt_index_operations osd_index_iam_ops = {
 static struct dt_it *osd_it_ea_init(const struct lu_env *env,
                                     struct dt_object *dt,
                                     __u32 attr,
+                                    it_init_flags_t flags,
                                     struct lustre_capa *capa)
 {
         struct osd_object       *obj  = osd_dt_obj(dt);
-        struct osd_thread_info  *info = osd_oti_get(env);
-        struct osd_it_ea        *it   = &info->oti_it_ea;
+        struct osd_it_ea        *it;
         struct lu_object        *lo   = &dt->do_lu;
-        struct dentry           *obj_dentry = &info->oti_it_dentry;
+        struct dentry           *obj_dentry;
         ENTRY;
         LASSERT(lu_object_exists(lo));
+
+        if (flags & II_MULTI_THREAD) {
+                OBD_ALLOC_PTR(it);
+                if (it == NULL)
+                        RETURN(NULL);
+                OBD_ALLOC_PTR(obj_dentry);
+                if (obj_dentry == NULL) {
+                        OBD_FREE_PTR(it);
+                        RETURN(NULL);
+                }
+                OBD_ALLOC(it->oie_buf, OSD_IT_EA_BUFSIZE);
+                if (it->oie_buf == NULL) {
+                        OBD_FREE_PTR(it);
+                        OBD_FREE_PTR(obj_dentry);
+                        RETURN(NULL);
+                }
+        } else {
+                struct osd_thread_info  *info = osd_oti_get(env);
+
+                it          = &info->oti_it_ea;
+                obj_dentry  = &info->oti_it_dentry;
+                it->oie_buf = info->oti_it_ea_buf;
+        }
 
         obj_dentry->d_inode = obj->oo_inode;
         obj_dentry->d_sb = osd_sb(osd_obj2dev(obj));
@@ -3584,7 +3791,6 @@ static struct dt_it *osd_it_ea_init(const struct lu_env *env,
         it->oie_rd_dirent       = 0;
         it->oie_it_dirent       = 0;
         it->oie_dirent          = NULL;
-        it->oie_buf             = info->oti_it_ea_buf;
         it->oie_obj             = obj;
         it->oie_file.f_pos      = 0;
         it->oie_file.f_dentry   = obj_dentry;
@@ -3613,6 +3819,12 @@ static void osd_it_ea_fini(const struct lu_env *env, struct dt_it *di)
         ENTRY;
         it->oie_file.f_op->release(inode, &it->oie_file);
         lu_object_put(env, &obj->oo_dt.do_lu);
+
+        if (it != &osd_oti_get(env)->oti_it_ea) {
+                OBD_FREE(it->oie_buf, OSD_IT_EA_BUFSIZE);
+                OBD_FREE_PTR(it->oie_file.f_dentry);
+                OBD_FREE_PTR(it);
+        }
         EXIT;
 }
 
@@ -3646,6 +3858,13 @@ static int osd_it_ea_get(const struct lu_env *env,
  */
 static void osd_it_ea_put(const struct lu_env *env, struct dt_it *di)
 {
+}
+
+static struct osd_it_ea_dirent *
+osd_ldiskfs_next_ent(struct osd_it_ea_dirent *ent)
+{
+        return (void *)ent + cfs_size_round(sizeof(*ent) +
+                                            ent->oied_namelen + 1);
 }
 
 /**
@@ -3696,9 +3915,10 @@ static int osd_ldiskfs_filldir(char *buf, const char *name, int namelen,
         ent->oied_type    = d_type;
 
         memcpy(ent->oied_name, name, namelen);
+        ent->oied_name[namelen] = '\0';
 
         it->oie_rd_dirent++;
-        it->oie_dirent = (void *) ent + cfs_size_round(sizeof(*ent) + namelen);
+        it->oie_dirent = osd_ldiskfs_next_ent(ent);
         RETURN(0);
 }
 
@@ -3751,6 +3971,63 @@ static int osd_ldiskfs_it_fill(const struct lu_env *env,
 }
 
 /**
+ * It does the direntry rebuild, if LMA EA was previously rebuilt.
+ * \param di iterator's in memory structure
+ * \param flags flags the rebuild to be done with.
+ *
+ * \retval   0 success
+ * \retval -ve on error
+ */
+static int osd_direntry_rebuild(const struct lu_env *env,
+                                const struct dt_it *di,
+                                struct thandle *th,
+                                __u32 flags)
+{
+        struct osd_it_ea        *it     = (struct osd_it_ea *)di;
+        struct dt_object        *dt     = &it->oie_obj->oo_dt;
+        struct osd_device       *osd    = osd_dev(dt->do_lu.lo_dev);
+        struct osd_it_ea_dirent *ent    = it->oie_dirent;
+        struct lu_fid           *ent_fid= &ent->oied_fid;
+        int rc = 0;
+        ENTRY;
+
+        if (!(flags & LDF_REBUILD_DIRENTRY))
+                RETURN(0);
+
+        /* LMA was rebuilt or was found (we lookup for LMA only if direntry
+         * has no FID). */
+        if (!(flags & LDF_REBUILD_DONE))
+                RETURN(0);
+
+        if ((ent->oied_namelen == sizeof(dot) - 1 &&
+             strcmp(it->oie_dirent->oied_name, dot) == 0) ||
+            (ent->oied_namelen == sizeof(dotdot) - 1 &&
+             strcmp(it->oie_dirent->oied_name, dotdot) == 0))
+                RETURN(0);
+
+        if (!LDISKFS_HAS_INCOMPAT_FEATURE(it->oie_obj->oo_inode->i_sb,
+                                          LDISKFS_FEATURE_INCOMPAT_DIRDATA))
+                RETURN(0);
+
+        rc = osd_index_ea_delete(env, dt, (const struct dt_key *)ent->oied_name,
+                                 th, BYPASS_CAPA);
+
+        if (rc == 0)
+                rc = osd_index_name_insert(env, dt, ent_fid, ent->oied_name,
+                                           th, BYPASS_CAPA, 1, 1);
+
+        if (rc == 0) {
+                CDEBUG(D_INODE, "replace dentry %.*s with "DFID"\n",
+                       ent->oied_namelen, ent->oied_name, PFID(ent_fid));
+
+                lprocfs_counter_incr(osd->od_stats,
+                                     LPROC_OSD_REBUILD_DIRENTRY);
+        }
+
+        RETURN(rc);
+}
+
+/**
  * It calls osd_ldiskfs_it_fill() which will use ->readdir()
  * to load a directory entry at a time and stored it in
  * iterator's in-memory data structure.
@@ -3769,10 +4046,7 @@ static int osd_it_ea_next(const struct lu_env *env, struct dt_it *di)
         ENTRY;
 
         if (it->oie_it_dirent < it->oie_rd_dirent) {
-                it->oie_dirent =
-                        (void *) it->oie_dirent +
-                        cfs_size_round(sizeof(struct osd_it_ea_dirent) +
-                                       it->oie_dirent->oied_namelen);
+                it->oie_dirent = osd_ldiskfs_next_ent(it->oie_dirent);
                 it->oie_it_dirent++;
                 RETURN(0);
         } else {
@@ -3814,6 +4088,38 @@ static int osd_it_ea_key_size(const struct lu_env *env, const struct dt_it *di)
         RETURN(it->oie_dirent->oied_namelen);
 }
 
+static inline int osd_it_ea_rec_handle(const struct lu_env *env,
+                                       const struct dt_it *di,
+                                       struct lu_dirent *lde,
+                                       struct lu_fid *new_fid,
+                                       struct thandle *th,
+                                       __u32 flags,
+                                       __u32 attr)
+{
+        struct osd_it_ea    *it      = (struct osd_it_ea *)di;
+        int                 rc       = 0;
+
+        ENTRY;
+
+        if (!((flags & LDF_REBUILD_NO_PARENT) &&
+              it->oie_dirent->oied_namelen == strlen(dotdot) &&
+              strcmp(it->oie_dirent->oied_name, dotdot) == 0))
+        {
+                rc = osd_ea_rec(env, it->oie_obj, &it->oie_dirent->oied_fid,
+                                new_fid, th, it->oie_dirent->oied_ino, &flags);
+
+                if (rc == 0)
+                        rc = osd_direntry_rebuild(env, di, th, flags);
+        }
+
+        osd_it_pack_dirent(lde, &it->oie_dirent->oied_fid,
+                           it->oie_dirent->oied_off,
+                           it->oie_dirent->oied_name,
+                           it->oie_dirent->oied_namelen,
+                           it->oie_dirent->oied_type,
+                           attr);
+        RETURN(rc);
+}
 
 /**
  * Returns the value (i.e. fid/igif) at current position from iterator's
@@ -3831,23 +4137,36 @@ static inline int osd_it_ea_rec(const struct lu_env *env,
                                 struct lu_dirent *lde,
                                 __u32 attr)
 {
-        struct osd_it_ea        *it     = (struct osd_it_ea *)di;
-        struct osd_object       *obj    = it->oie_obj;
-        struct lu_fid           *fid    = &it->oie_dirent->oied_fid;
-        int    rc = 0;
+        return osd_it_ea_rec_handle(env, di, lde, NULL, NULL, 0, attr);
+}
 
-        ENTRY;
-
-        if (!fid_is_sane(fid))
-                rc = osd_ea_fid_get(env, obj, it->oie_dirent->oied_ino, fid);
-
-        if (rc == 0)
-                osd_it_pack_dirent(lde, fid, it->oie_dirent->oied_off,
-                                   it->oie_dirent->oied_name,
-                                   it->oie_dirent->oied_namelen,
-                                   it->oie_dirent->oied_type,
-                                   attr);
-        RETURN(rc);
+/**
+ * Index iterator rebuild function for the 2.x on-disk format migration.
+ * It rebuilds the directory entry as well as LMA EA, OI entry for the child
+ * object.
+ *
+ * It also returns the value (i.e. fid/igif) at current position from
+ * iterator's in memory structure.
+ *
+ * \param di struct osd_it_ea, iterator's in memory structure
+ * \param attr attr requested for dirent
+ * \param lde lustre dirent
+ * \param new_fid fid the child object to be rebuild with,
+ *                if no one is assigned so far
+ * \param flags flags the rebuild to be done with
+ *
+ * \retval   0 no error and \param lde has correct lustre dirent.
+ * \retval -ve on error
+ */
+static inline int osd_it_ea_rebuild(const struct lu_env *env,
+                                    const struct dt_it *di,
+                                    struct lu_dirent *lde,
+                                    struct lu_fid *new_fid,
+                                    struct thandle *th,
+                                    __u32 flags,
+                                    __u32 attr)
+{
+        return osd_it_ea_rec_handle(env, di, lde, new_fid, th, flags, attr);
 }
 
 /**
@@ -3914,13 +4233,42 @@ static int osd_index_ea_lookup(const struct lu_env *env, struct dt_object *dt,
         if (osd_object_auth(env, dt, capa, CAPA_OPC_INDEX_LOOKUP))
                 return -EACCES;
 
-        rc = osd_ea_lookup_rec(env, obj, rec, key);
+        rc = osd_ea_lookup_rec(env, obj, rec, NULL, key, NULL, 0);
 
         if (rc == 0)
                 rc = +1;
         RETURN(rc);
 }
 
+/**
+ * Index rebuild function for the 2.x on-disk format migration.
+ * It rebuilds LMA EA and OI entry for the child object.
+ *
+ * \param key,  key i.e. file entry pointing to the object to be rebuilt.
+ *
+ * \retval   0, on success
+ * \retval -ve, on error
+ */
+static int osd_index_ea_rebuild(const struct lu_env *env,
+                                struct dt_object *dt,
+                                struct dt_rec *rec,
+                                struct dt_rec *new_rec,
+                                const struct dt_key *key,
+                                struct thandle *th,
+                                int flags)
+{
+        struct osd_object *obj = osd_dt_obj(dt);
+        int rc = 0;
+
+        ENTRY;
+
+        LASSERT(S_ISDIR(obj->oo_inode->i_mode));
+        LINVRNT(osd_invariant(obj));
+
+        rc = osd_ea_lookup_rec(env, obj, rec, new_rec, key, th, flags);
+
+        RETURN(rc);
+}
 /**
  * Index and Iterator operations for interoperability
  * mode (i.e. to run 2.0 mds on 1.8 disk) (b11826)
@@ -3929,6 +4277,7 @@ static const struct dt_index_operations osd_index_ea_ops = {
         .dio_lookup = osd_index_ea_lookup,
         .dio_insert = osd_index_ea_insert,
         .dio_delete = osd_index_ea_delete,
+        .dio_rebuild = osd_index_ea_rebuild,
         .dio_it     = {
                 .init     = osd_it_ea_init,
                 .fini     = osd_it_ea_fini,
@@ -3938,6 +4287,7 @@ static const struct dt_index_operations osd_index_ea_ops = {
                 .key      = osd_it_ea_key,
                 .key_size = osd_it_ea_key_size,
                 .rec      = osd_it_ea_rec,
+                .rebuild  = osd_it_ea_rebuild,
                 .store    = osd_it_ea_store,
                 .load     = osd_it_ea_load
         }

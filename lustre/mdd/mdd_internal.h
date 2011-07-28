@@ -31,6 +31,9 @@
  *
  */
 /*
+ * Copyright (c) 2011 Xyratex, Inc.
+ */
+/*
  * This file is part of Lustre, http://www.lustre.org/
  * Lustre is a trademark of Sun Microsystems, Inc.
  *
@@ -84,6 +87,7 @@ enum mdd_txn_op {
         MDD_TXN_CREATE_DATA_OP,
         MDD_TXN_MKDIR_OP,
         MDD_TXN_CLOSE_OP,
+        MDD_TXN_REBUILD_OP,
         MDD_TXN_LAST_OP
 };
 
@@ -182,6 +186,7 @@ struct mdd_thread_info {
         struct lu_buf             mti_buf;
         struct lu_buf             mti_big_buf; /* biggish persistent buf */
         struct lu_name            mti_name;
+        struct lu_name            mti_name2;
         struct obdo               mti_oa;
         char                      mti_xattr_buf[LUSTRE_POSIX_ACL_MAX_SIZE];
         struct dt_allocation_hint mti_hint;
@@ -293,6 +298,9 @@ void mdd_pdo_write_unlock(const struct lu_env *env, struct mdd_object *obj,
 void mdd_pdo_read_unlock(const struct lu_env *env, struct mdd_object *obj,
                          struct dynlock_handle *dlh);
 /* mdd_dir.c */
+extern const char dot[];
+extern const char dotdot[];
+
 int mdd_is_subdir(const struct lu_env *env, struct md_object *mo,
                   const struct lu_fid *fid, struct lu_fid *sfid);
 void __mdd_ref_add(const struct lu_env *env, struct mdd_object *obj,
@@ -316,12 +324,24 @@ int mdd_object_initialize(const struct lu_env *env, const struct lu_fid *pfid,
                           const struct md_op_spec *spec);
 int mdd_link_sanity_check(const struct lu_env *env, struct mdd_object *tgt_obj,
                           const struct lu_name *lname, struct mdd_object *src_obj);
+int mdd_links_check_add(const struct lu_env *env,
+                        struct mdd_object *mdd_obj,
+                        const struct lu_fid *pfid,
+                        const struct lu_name *lname,
+                        struct thandle *handle);
 int mdd_is_root(struct mdd_device *mdd, const struct lu_fid *fid);
 int mdd_lookup(const struct lu_env *env,
                struct md_object *pobj, const struct lu_name *lname,
                struct lu_fid* fid, struct md_op_spec *spec);
 struct lu_buf *mdd_links_get(const struct lu_env *env,
                              struct mdd_object *mdd_obj);
+int mdd_links_rename_check(const struct lu_env *env,
+                           struct mdd_object *mdd_obj,
+                           const struct lu_fid *oldpfid,
+                           const struct lu_name *oldlname,
+                           const struct lu_fid *newpfid,
+                           const struct lu_name *newlname,
+                           struct thandle *handle);
 void mdd_lee_unpack(const struct link_ea_entry *lee, int *reclen,
                     struct lu_name *lname, struct lu_fid *pfid);
 
@@ -369,6 +389,9 @@ void mdd_lprocfs_time_end(const struct lu_env *env,
                           struct mdd_device *mdd, int op);
 
 /* mdd_object.c */
+struct mdd_object *mdd_object_by_fid(const struct lu_env *env,
+                                     struct mdd_device *mdd,
+                                     const struct lu_fid *fid);
 int mdd_get_flags(const struct lu_env *env, struct mdd_object *obj);
 struct lu_buf *mdd_buf_alloc(const struct lu_env *env, ssize_t len);
 int mdd_buf_grow(const struct lu_env *env, ssize_t len);
@@ -467,6 +490,26 @@ int mdd_changelog_llog_write(struct mdd_device         *mdd,
 int mdd_changelog_llog_cancel(struct mdd_device *mdd, long long endrec);
 int mdd_changelog_write_header(struct mdd_device *mdd, int markerflags);
 int mdd_changelog_on(struct mdd_device *mdd, int on);
+void mdd_changelog_path_store(struct llog_changelog_rec *rec,
+                              struct mdd_object *target,
+                              char *path, int pathlen,
+                              int compat);
+void mdd_changelog_rec_fill(const struct lu_env *env,
+                            struct llog_changelog_rec *rec);
+
+static inline struct lu_name *mdd_name(const struct lu_env *env,
+                                       char *name, int namelen)
+{
+        struct lu_name *lname = &mdd_env_info(env)->mti_name;
+
+        LASSERT(namelen > 0);
+        LASSERT(namelen <= NAME_MAX);
+
+        lname->ln_name = name;
+        lname->ln_namelen = namelen;
+        return lname;
+}
+
 
 /* mdd_permission.c */
 #define mdd_cap_t(x) (x)
@@ -644,6 +687,10 @@ static inline void mdd_set_capainfo(const struct lu_env *env, int offset,
 #define MAX_ATIME_DIFF 60
 
 enum {
+        LPROC_MDD_REBUILD_LINKEA_ADD,
+        LPROC_MDD_REBUILD_LINKEA_RM,
+        LPROC_MDD_REBUILD_FILES,
+        LPROC_MDD_REBUILD_DIRS,
         LPROC_MDD_NR
 };
 

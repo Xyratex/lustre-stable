@@ -31,6 +31,9 @@
  * Copyright (c) 2011 Whamcloud, Inc.
  */
 /*
+ * Copyright (c) 2011 Xyratex, Inc.
+ */
+/*
  * This file is part of Lustre, http://www.lustre.org/
  * Lustre is a trademark of Sun Microsystems, Inc.
  *
@@ -1069,6 +1072,881 @@ static int mdd_recovery_complete(const struct lu_env *env,
         RETURN(rc);
 }
 
+#define MDD_REBUILD_THREAD_NR cfs_num_online_cpus()
+
+/* mdd_rebuild_info flags */
+/* Let the threads to start the rebuild once this flag is dropped. */
+#define MRT_PREPARE     LDF_REBUILD_LAST
+/* Set this flag to interrupt the rebuild work. */
+#define MRT_STOPPING    LDF_REBUILD_LAST << 1
+
+/* A common rebuild info for all the threads. */
+struct mdd_rebuild_info {
+        struct mdd_device      *ri_mdd;
+
+        /** The sequence manager for the new FID allocation. */
+        struct lu_client_seq   *ri_seq;
+
+        /** The lock for the thread synchronization */
+        cfs_spinlock_t          ri_lock;
+
+        /** The wait queue for the rebuild work synchronization */
+        cfs_waitq_t             ri_waitq;
+
+        /** The list of all the rebuild threads. */
+        cfs_list_t              ri_threads;
+        int                     ri_thread_count;
+
+        /** The list of items to be rebuilt */
+        cfs_list_t              ri_head;
+
+        /**
+         * An amount of allocated items, not necessary in the
+         * mdd_rebuild_info::ri_head. For sanity checking. */
+        cfs_atomic_t            ri_count;
+
+        /** Amount of busy threads */
+        cfs_atomic_t            ri_busy;
+
+        /** Rebuild flags */
+        __u32                   ri_flags;
+
+        /** Rebuild error code */
+        int                     ri_error;
+
+};
+
+#define THREAD_NAME_LEN 32
+
+/* The per-thread rebuild info. */
+struct mdd_rebuild_thread {
+        /** A pointer to the common rebuild info. */
+        struct mdd_rebuild_info *mr_info;
+
+        /** linked list of threads */
+        cfs_list_t              mr_list;
+
+        /** A new allocated fid to rebuild the current object with */
+        struct lu_fid           mr_new_fid;
+        /** The current object fid. */
+        struct lu_fid           mr_cur_fid;
+        /** The last generated fid. */
+        struct lu_fid           mr_last_fid;
+
+        /** The thread name */
+        char                    mr_name[THREAD_NAME_LEN];
+
+        struct lu_dirent        mr_dirent;
+        char                    mr_dirent_name[NAME_MAX];
+
+#if defined(CONFIG_SMP) && defined(HAVE_NODE_TO_CPUMASK)
+        /** The cpu index. */
+        int                     mr_cpu;
+#endif
+        /** The statistics counter. */
+        __u32                   mr_processed;
+};
+
+/* The rebuild item sitting in the mdd_rebuild_info::ri_head list. */
+struct mdd_rebuild_ent {
+        /** The parent pointer to the parent rebuild item. */
+        struct mdd_rebuild_ent  *re_parent;
+
+        /** The object referenced by the rebuild item. Directory only. */
+        struct dt_object        *re_obj;
+
+        /** The original FID. Directory only. */
+        struct lu_fid           re_oldfid;
+
+        /** The index iterator on the object. */
+        struct dt_it            *re_di;
+
+        /** The link to the rebuild list. */
+        cfs_list_t              re_list;
+
+        /**
+         * The reference counter. Taken by the children rebuild items and
+         * by the handling threads.
+         */
+        cfs_atomic_t            re_refs;
+};
+
+/**
+ * Allocate and initialise the rebuild item.
+ * A reference on the parent is taken if \a parent is given.
+ */
+static struct mdd_rebuild_ent *
+mdd_rebuild_ent_alloc(const struct lu_env *env,
+                      struct mdd_rebuild_info *ri,
+                      struct dt_object *obj,
+                      struct mdd_rebuild_ent *parent)
+{
+        struct mdd_rebuild_ent *rent;
+        const struct dt_it_ops *iops;
+        int rc;
+        ENTRY;
+
+        if (!dt_try_as_dir(env, obj)) {
+                CERROR("failed to init %p/"DFID"\n", parent,
+                       PFID(lu_object_fid(&obj->do_lu)));
+                RETURN(ERR_PTR(-ENOTDIR));
+        }
+
+        OBD_ALLOC_PTR(rent);
+        if (rent == NULL)
+                return ERR_PTR(-ENOMEM);
+
+        CFS_INIT_LIST_HEAD(&rent->re_list);
+        rent->re_obj = obj;
+
+        iops = &obj->do_index_ops->dio_it;
+
+        rent->re_di = iops->init(env, obj, 0, II_MULTI_THREAD, BYPASS_CAPA);
+        if (IS_ERR(rent->re_di))
+                GOTO(free, rc = PTR_ERR(rent->re_di));
+
+        rc = iops->get(env, rent->re_di, (const void *)"");
+        if (rc < 0)
+                GOTO(fini, rc);
+
+        lu_object_get(&rent->re_obj->do_lu);
+        cfs_atomic_set(&rent->re_refs, 1);
+        cfs_atomic_inc(&ri->ri_count);
+
+        if (parent) {
+                rent->re_parent = parent;
+                cfs_atomic_inc(&parent->re_refs);
+        }
+
+        CDEBUG(D_HA, "alloc rebuild %p/%p/"DFID"\n", parent,
+               rent, PFID(lu_object_fid(&rent->re_obj->do_lu)));
+
+        RETURN(rent);
+fini:
+        iops->fini(env, rent->re_di);
+free:
+        OBD_FREE(rent, CFS_PAGE_SIZE);
+        return ERR_PTR(rc);
+}
+
+/**
+ * Free the rebuild item
+ * \pre  not in the mdd_rebuild_info::ri_head list
+ */
+static void mdd_rebuild_ent_free(const struct lu_env *env,
+                                 struct mdd_rebuild_info *ri,
+                                 struct mdd_rebuild_ent *rent)
+{
+        LASSERT(rent != NULL);
+
+        cfs_atomic_dec(&ri->ri_count);
+        LASSERT(cfs_list_empty(&rent->re_list));
+        rent->re_obj->do_index_ops->dio_it.put(env, rent->re_di);
+        rent->re_obj->do_index_ops->dio_it.fini(env, rent->re_di);
+        lu_object_put(env, &rent->re_obj->do_lu);
+        OBD_FREE_PTR(rent);
+}
+
+/**
+ * Take the rebuild item from the mdd_rebuild_info::ri_head list into
+ * processing.
+ *
+ * \pre  mdd_rebuild_info::ri_lock is hold
+ *
+ * mdd_rebuild_ent::re_refs is not changed, in fact, -1 for removing
+ * from the list, +1 for the handling thread.
+ */
+static void mdd_rebuild_ent_get_locked(struct mdd_rebuild_info *ri,
+                                       struct mdd_rebuild_ent *rent)
+{
+        LASSERT(rent->re_obj != NULL);
+        LASSERT(cfs_spin_is_locked(&ri->ri_lock));
+        /* The object is sitting in the TODO list, so there is a reference */
+        LASSERT(cfs_atomic_read(&rent->re_refs) >= 1);
+        LASSERT(S_ISDIR(lu_object_attr(&rent->re_obj->do_lu)));
+        cfs_list_del_init(&rent->re_list);
+
+        CDEBUG(D_HA, "get rebuild %p/%p/"DFID"\n", rent->re_parent,
+               rent, PFID(lu_object_fid(&rent->re_obj->do_lu)));
+}
+
+/**
+ * Put the rebuild item back to the mdd_rebuild_info::ri_head list after
+ * a partial processing.
+ *
+ * mdd_rebuild_ent::re_refs is not changed, in fact, +1 for adding to the
+ * list, -1 for the handling thread.
+ */
+static void mdd_rebuild_ent_put(struct mdd_rebuild_info *ri,
+                                struct mdd_rebuild_ent *rent)
+{
+        LASSERT(rent != NULL);
+        LASSERT(rent->re_obj != NULL);
+
+        /* The rebuild is not completed, so there is a reference. */
+        CDEBUG(D_HA, "put rebuild %p/%p/"DFID"\n", rent->re_parent,
+               rent, PFID(lu_object_fid(&rent->re_obj->do_lu)));
+        LASSERT(cfs_atomic_read(&rent->re_refs) >= 1);
+        LASSERT(S_ISDIR(lu_object_attr(&rent->re_obj->do_lu)));
+        cfs_spin_lock(&ri->ri_lock);
+        /* Add to the head so that the recent items would be handled first. */
+        cfs_list_add(&rent->re_list, &ri->ri_head);
+        cfs_spin_unlock(&ri->ri_lock);
+        cfs_waitq_signal(&ri->ri_waitq);
+}
+
+/**
+ * Release a reference on the rebuild item \a rent.
+ * This may lead to the item deallocation if there is no other references.
+ * Deallocation involves a parent reference decrement.
+ *
+ * No locking, only one thread is the last one which will free the item,
+ * it is protected by the atomic mdd_rebuild_ent::re_refs.
+ */
+static void mdd_rebuild_ent_release(struct lu_env *env,
+                                    struct mdd_rebuild_info *ri,
+                                    struct mdd_rebuild_ent *rent)
+{
+
+        while (rent) {
+                int refs = cfs_atomic_read(&rent->re_refs);
+                struct mdd_rebuild_ent *child = rent;
+
+                /* Each item in the up path has a taken reference. */
+                LASSERT(refs >= 1);
+                CDEBUG(D_HA, "release rebuild %p/%p/"DFID" refs %u\n",
+                       rent->re_parent, rent,
+                       PFID(lu_object_fid(&rent->re_obj->do_lu)), refs);
+
+                if (cfs_atomic_dec_and_test(&rent->re_refs) == 0)
+                        break;
+
+                /* No refs means the entry is not in the rebuild list. */
+                LASSERT(cfs_list_empty(&rent->re_list));
+                rent = rent->re_parent;
+                mdd_rebuild_ent_free(env, ri, child);
+        }
+}
+
+/**
+ * Read and rebuild the directory entry and the object pointed by it.
+ */
+static inline int mdd_rebuild_ent(struct lu_env *env,
+                                  struct mdd_rebuild_thread *th,
+                                  struct mdd_rebuild_ent *rent)
+{
+        struct thandle *handle;
+        const struct dt_it_ops *iops;
+        __u32 flags = th->mr_info->ri_flags;
+        struct mdd_device *mdd = th->mr_info->ri_mdd;
+        int rc;
+
+        mdd_txn_param_build(env, mdd, MDD_TXN_REBUILD_OP, 0);
+        handle = mdd_trans_start(env, mdd);
+        if (IS_ERR(handle))
+                RETURN(PTR_ERR(handle));
+
+        flags |= rent->re_parent == NULL ? LDF_REBUILD_NO_PARENT : 0;
+        iops = &rent->re_obj->do_index_ops->dio_it;
+        rc = iops->rebuild(env, rent->re_di, &th->mr_dirent,
+                           &th->mr_new_fid, handle, flags, 0);
+        mdd_trans_stop(env, mdd, rc, handle);
+
+        fid_le_to_cpu(&th->mr_cur_fid, &th->mr_dirent.lde_fid);
+        CDEBUG(D_HA, "rebuild "DFID"/'%.*s': "DFID" flags 0x%x "
+               "rc %d\n", PFID(lu_object_fid(&rent->re_obj->do_lu)),
+               le16_to_cpu(th->mr_dirent.lde_namelen),
+               th->mr_dirent.lde_name, PFID(&th->mr_cur_fid), flags, rc);
+
+        return rc;
+}
+
+/**
+ * Rebuild the LinkEA for the given object \a obj.
+ */
+static int mdd_rebuild_ent_links(struct lu_env *env,
+                                 struct mdd_device *mdd,
+                                 struct mdd_object *obj,
+                                 struct mdd_rebuild_ent *parent,
+                                 struct lu_dirent *ent,
+                                 __u32 flags)
+{
+        const struct lu_fid *newfid, *oldfid;
+        struct thandle *handle;
+        struct lu_name *lname;
+        int rc;
+
+        LASSERT(obj != NULL);
+        LASSERT(parent != NULL);
+
+        if (!(flags & LDF_REBUILD_LINKEA))
+                return 0;
+
+        mdd_txn_param_build(env, mdd, MDD_TXN_LINK_OP, 0);
+        handle = mdd_trans_start(env, mdd);
+        if (IS_ERR(handle))
+                RETURN(PTR_ERR(handle));
+
+        oldfid = fid_is_sane(&parent->re_oldfid) ? &parent->re_oldfid : NULL;
+        newfid = lu_object_fid(&parent->re_obj->do_lu);
+
+        lname = mdd_name(env, ent->lde_name, le16_to_cpu(ent->lde_namelen));
+        mdd_write_lock(env, obj, MOR_TGT_CHILD);
+        rc = mdd_links_rename_check(env, obj, oldfid, lname,
+                                    newfid, lname, handle);
+        mdd_write_unlock(env, obj);
+
+        mdd_trans_stop(env, mdd, rc, handle);
+        return rc;
+}
+
+/**
+ * Allocate a child rebuild item for the object pointer by the directory
+ * entry \a ent, if the child is a directory.
+ *
+ * While the child object is accessed, its LinkEA is also rebuilt.
+ *
+ * \retval  the new allocated item      success
+ * \retval  0 if not a directory        success
+ * \retval -ve                          failure
+ */
+static struct mdd_rebuild_ent *
+mdd_rebuild_get_child(struct lu_env *env,
+                      struct mdd_rebuild_thread *th,
+                      struct mdd_rebuild_ent *parent,
+                      struct lu_dirent *ent)
+{
+        struct mdd_rebuild_info *ri = th->mr_info;
+        struct mdd_rebuild_ent *child = NULL;
+        struct dt_object *next;
+        struct mdd_object *mo;
+        int rc;
+        ENTRY;
+
+        mo = mdd_object_by_fid(env, ri->ri_mdd, &th->mr_cur_fid);
+        if (IS_ERR(mo))
+                RETURN((void *)mo);
+
+        /* Get index ops installed. */
+        next = mdd_object_child(mo);
+        rc = mdd_rebuild_ent_links(env, ri->ri_mdd, mo, parent,
+                                   ent, ri->ri_flags);
+        if (rc)
+                GOTO(error, child = ERR_PTR(rc));
+
+        if (S_ISDIR(mdd_object_type(mo))) {
+                child = mdd_rebuild_ent_alloc(env, ri, next, parent);
+                if (IS_ERR(child))
+                        GOTO(error, child);
+        }
+        EXIT;
+error:
+        mdd_object_put(env, mo);
+        return child;
+}
+
+/**
+ * Follow parent links from the current item \a rent and return the first
+ * not being handled by any thread.
+ *
+ * \retval the found parent     success
+ */
+static struct mdd_rebuild_ent *
+mdd_rebuild_get_parent(struct mdd_rebuild_info *ri,
+                       struct mdd_rebuild_ent *rent)
+{
+        struct mdd_rebuild_ent *parent;
+        ENTRY;
+
+        LASSERT(cfs_list_empty(&rent->re_list));
+        cfs_spin_lock(&ri->ri_lock);
+        parent = rent->re_parent;
+        /* Take the first parent item sitting in the rebuild list, i.e.
+         * not being handled by any thread. */
+        while (parent && cfs_list_empty(&parent->re_list))
+                parent = parent->re_parent;
+
+        if (parent) {
+                /* Item sitting in the rebuild list and having children
+                 * must have at least 2 taken references */
+                LASSERT(cfs_atomic_read(&parent->re_refs) >= 2);
+                mdd_rebuild_ent_get_locked(ri, parent);
+        }
+
+        cfs_spin_unlock(&ri->ri_lock);
+        RETURN(parent);
+}
+
+/**
+ * Traverse the semantic tree and rebuild the objects.
+ *
+ * The traverse starts from the first item in the mdd_rebuild_info::ri_head
+ * list. Originally, only the root item exists there. Once an item is taken
+ * into processing, it is removed from the list. The traverse goes in child-
+ * -first order. If a thread switches to a child, the parent is returned back
+ * to the list so that other thread could proceed with it. Once a directory
+ * is rebuilt completely with all its children, the thread takes its parent
+ * following mdd_rebuild_ent::re_parent, precisely the nearest parent waiting
+ * for the rebuild in the mdd_rebuild_info::ri_head list. If all the parents
+ * are being handled by other threads, the traverse exists. The caller is
+ * responsible for the full rebuild completion.
+ *
+ */
+static int mdd_rebuild_handler(struct lu_env *env,
+                               struct mdd_rebuild_thread *th)
+{
+        struct mdd_rebuild_info *ri = th->mr_info;
+        struct mdd_rebuild_ent *rent;
+        const struct dt_it_ops *iops;
+        int rc = 0;
+        ENTRY;
+
+        /* Take the first entity to be rebuilt.
+         * Only directories are added to the list, by taking it from
+         * the list, we let ony 1 thread to handle 1 directory at a time. */
+        cfs_spin_lock(&ri->ri_lock);
+        if (cfs_list_empty(&ri->ri_head)) {
+                cfs_spin_unlock(&ri->ri_lock);
+                RETURN(0);
+        }
+        rent = cfs_list_entry(ri->ri_head.next,
+                              struct mdd_rebuild_ent, re_list);
+        mdd_rebuild_ent_get_locked(ri, rent);
+        cfs_spin_unlock(&ri->ri_lock);
+
+        while (rent != NULL) {
+                struct mdd_rebuild_ent *next;
+
+                if (ri->ri_flags & MRT_STOPPING) {
+                        rc = 0;
+                        break;
+                }
+
+                iops = &rent->re_obj->do_index_ops->dio_it;
+                rc = iops->next(env, rent->re_di);
+                if (rc < 0)
+                        GOTO(error, rc);
+
+                /* If the item is rebuilt completely, move to the parent. */
+                if (rc > 0) {
+                        next = mdd_rebuild_get_parent(ri, rent);
+                        if (IS_ERR(next)) {
+                                GOTO(error, rc = PTR_ERR(next));
+                        }
+                        /* Release the completed child and switch to
+                         * the parent. */
+                        mdd_rebuild_ent_release(env, ri, rent);
+                        rent = next;
+                        continue;
+                }
+
+                rc = mdd_rebuild_ent(env, th, rent);
+                if (rc < 0)
+                        GOTO(error, rc);
+
+                if (le16_to_cpu(th->mr_dirent.lde_namelen) == 1 &&
+                    strncmp(th->mr_dirent.lde_name, dot, 1) == 0)
+                        continue;
+
+                if (le16_to_cpu(th->mr_dirent.lde_namelen) == 2 &&
+                    strncmp(th->mr_dirent.lde_name, dotdot, 2) == 0)
+                        continue;
+
+                th->mr_processed++;
+                /* Let's try to switch to the child if it is a directory. */
+                next = mdd_rebuild_get_child(env, th, rent, &th->mr_dirent);
+                if (IS_ERR(next)) {
+                        GOTO(error, rc = PTR_ERR(next));
+                } else if (next != NULL) {
+                        /* Put the parent back to the rebuild list and
+                         * switch to the child. */
+                        mdd_rebuild_ent_put(ri, rent);
+                        rent = next;
+                        lprocfs_counter_incr(ri->ri_mdd->mdd_stats,
+                                             LPROC_MDD_REBUILD_DIRS);
+                } else {
+                        lprocfs_counter_incr(ri->ri_mdd->mdd_stats,
+                                             LPROC_MDD_REBUILD_FILES);
+                }
+
+                /* If the child object has the same fid as the new generated
+                 * one, the new fid was used during the ->rebuild() process
+                 * and a new one is to be genarated. The value in the \a
+                 * th->mr_new_fid was replaced by the previous object fid,
+                 * store it in \a rent */
+                if (lu_fid_eq(&th->mr_last_fid, &th->mr_cur_fid)) {
+                        if (next != NULL)
+                                rent->re_oldfid = th->mr_new_fid;
+                        seq_client_alloc_fid(env, ri->ri_seq, &th->mr_new_fid);
+                        th->mr_last_fid = th->mr_new_fid;
+                }
+        }
+
+        EXIT;
+error:
+        if (rent) {
+                LASSERT(!IS_ERR(rent));
+                if (rc < 0) {
+                        CERROR("Failed to rebuild "DFID" : %d\n",
+                               PFID(lu_object_fid(&rent->re_obj->do_lu)), rc);
+                }
+                mdd_rebuild_ent_release(env, ri, rent);
+        }
+        return rc < 0 ? rc : 0;
+}
+
+/**
+ * The main rebuild thread handler.
+ * Threads are woken up if there is an item in the mdd_rebuild_info::ri_head
+ * list, and the semantic traverse starts at this item.
+ */
+static int mdd_rebuild_main(void *arg)
+{
+        struct mdd_rebuild_thread *th = (struct mdd_rebuild_thread *)arg;
+        struct mdd_rebuild_info *ri = th->mr_info;
+        struct l_wait_info lwi = { 0 };
+        struct lu_env env;
+        int rc;
+
+        cfs_daemonize(th->mr_name);
+#if defined(CONFIG_SMP) && defined(HAVE_NODE_TO_CPUMASK)
+        cfs_set_cpus_allowed(cfs_current(),
+                             node_to_cpumask(cpu_to_node(th->mr_cpu)));
+#endif
+
+        CDEBUG(D_HA, "MDD recovery thread started, pid %d\n",
+               cfs_curproc_pid());
+
+        /* Wait when the caller completes the mdd_rebuild_info initialisation */
+        l_wait_event(ri->ri_waitq, (!(ri->ri_flags & MRT_PREPARE)), &lwi);
+
+        rc = lu_env_init(&env, LCT_MD_THREAD | LCT_NOREF | LCT_REMEMBER);
+        if (rc)
+                RETURN(rc);
+
+        seq_client_alloc_fid(&env, ri->ri_seq, &th->mr_new_fid);
+        th->mr_last_fid = th->mr_new_fid;
+
+        while (1) {
+                /* Waits for some items to be rebuilt or
+                 * an indicator the work is to be interrupted or
+                 * if all the items are idle and there is nothing left in the
+                 * rebuild list -- i.e. the rebuild is completed. */
+                l_wait_event(ri->ri_waitq,
+                             !cfs_list_empty(&ri->ri_head) ||
+                             cfs_atomic_read(&ri->ri_busy) == 0 ||
+                             ri->ri_flags & MRT_STOPPING, &lwi);
+
+                /* A request to stop the rebuild is given. */
+                if (ri->ri_flags & MRT_STOPPING)
+                        break;
+
+                /* The rebuild is completed. */
+                if (cfs_list_empty(&ri->ri_head) &&
+                    cfs_atomic_read(&ri->ri_busy) == 0)
+                        break;
+
+                cfs_atomic_inc(&ri->ri_busy);
+                rc = mdd_rebuild_handler(&env, th);
+                cfs_atomic_dec(&ri->ri_busy);
+                if (rc) {
+                        cfs_spin_lock(&ri->ri_lock);
+                        ri->ri_flags |= MRT_STOPPING;
+                        ri->ri_error = rc;
+                        cfs_spin_unlock(&ri->ri_lock);
+                }
+        }
+
+        lu_env_fini(&env);
+
+        CDEBUG(D_HA, "MDD recovery thread completed, pid %d, processed %u\n",
+               cfs_curproc_pid(), th->mr_processed);
+
+        /* Some threads are probably still sleeping, wake them up. */
+        cfs_waitq_signal(&ri->ri_waitq);
+        cfs_spin_lock(&ri->ri_lock);
+        cfs_list_del(&th->mr_list);
+        OBD_FREE_PTR(th);
+        /* Wake up the parent to proceed with mount. Do it before unlocking
+         * to avoid a race with possible deallocation of mdd_rebuild_info
+         * before signal is sent at all. */
+        if (cfs_list_empty(&ri->ri_threads))
+                cfs_waitq_signal(&ri->ri_waitq);
+        cfs_spin_unlock(&ri->ri_lock);
+
+        return rc;
+}
+
+/**
+ * Allocate and initialise the rebuild client sequence manager.
+ * It is needed to get new unused FIDs for the rebuild.
+ */
+static int mdd_client_seq_init(struct mdd_rebuild_info *ri)
+{
+        struct md_site *ms;
+        int rc;
+        ENTRY;
+
+        ms = lu_site2md(mdd2lu_dev(ri->ri_mdd)->ld_site);
+        OBD_ALLOC_PTR(ri->ri_seq);
+        if (ri->ri_seq == NULL)
+                RETURN(-ENOMEM);
+
+        /* Init client side sequence-manager */
+        rc = seq_client_init(ri->ri_seq, NULL, LUSTRE_SEQ_METADATA,
+                             "mdd-cl-seq", ms->ms_server_seq);
+        if (rc) {
+                OBD_FREE_PTR(ri->ri_seq);
+                ri->ri_seq = NULL;
+        }
+
+        RETURN(rc);
+}
+
+/**
+ * Finalize and free the rebuild client sequence manager.
+ */
+static void mdd_client_seq_fini(struct mdd_rebuild_info *ri)
+{
+        seq_client_fini(ri->ri_seq);
+        OBD_FREE_PTR(ri->ri_seq);
+        ri->ri_seq = NULL;
+}
+
+/**
+ * Wait for the rebuild thread completion, finalise and free all the resources.
+ * In an error case, send an MRT_STOPPING flag to the rebuild threads so that
+ * they would interrupt their work and complete the work.
+ */
+static int mdd_rebuild_stop_threads(const struct lu_env *env,
+                                    struct mdd_rebuild_info *ri, int rc)
+{
+        struct l_wait_info lwi = { 0 };
+
+        if (rc) {
+                cfs_spin_lock(&ri->ri_lock);
+                ri->ri_flags &= ~MRT_PREPARE;
+                ri->ri_flags |= MRT_STOPPING;
+                cfs_spin_unlock(&ri->ri_lock);
+                cfs_waitq_broadcast(&ri->ri_waitq);
+        }
+        l_wait_event(ri->ri_waitq, cfs_list_empty(&ri->ri_threads), &lwi);
+
+        /* If the job was interrupted, cleanup the rebuild list.
+         * Make mdd_rebuild_ent_free() happy, take the spinlock.
+         * This spinlock is also needed due to mdd_rebuild_main()
+         * unlocking after waking up the parent. */
+        cfs_spin_lock(&ri->ri_lock);
+        while (!cfs_list_empty(&ri->ri_head)) {
+                struct mdd_rebuild_ent *rent;
+                rent = cfs_list_entry(ri->ri_head.next,
+                                      struct mdd_rebuild_ent, re_list);
+                cfs_list_del_init(&rent->re_list);
+                /* It may happen that its parent has been already processed
+                 * and not sitting in this list anymore, add it to the tail */
+                if (rent->re_parent &&
+                    cfs_list_empty(&rent->re_parent->re_list))
+                {
+                        cfs_list_add_tail(&rent->re_parent->re_list,
+                                          &ri->ri_head);
+                }
+                mdd_rebuild_ent_free(env, ri, rent);
+        }
+        cfs_spin_unlock(&ri->ri_lock);
+        RETURN(rc);
+}
+
+/**
+ * Alloc and init the rebuild info
+ */
+static struct mdd_rebuild_info *mdd_rebuild_info_alloc(struct mdd_device *mdd,
+                                                        __u32 flags)
+{
+        struct mdd_rebuild_info *ri;
+        int rc;
+
+        OBD_ALLOC_PTR(ri);
+        if (ri == NULL)
+                return ERR_PTR(-ENOMEM);
+
+        ri->ri_mdd = mdd;
+        cfs_spin_lock_init(&ri->ri_lock);
+        CFS_INIT_LIST_HEAD(&ri->ri_threads);
+        CFS_INIT_LIST_HEAD(&ri->ri_head);
+        cfs_waitq_init(&ri->ri_waitq);
+        cfs_atomic_set(&ri->ri_busy, 0);
+        cfs_atomic_set(&ri->ri_count, 0);
+        ri->ri_flags = flags | MRT_PREPARE;
+        ri->ri_thread_count = MDD_REBUILD_THREAD_NR;
+
+        rc = mdd_client_seq_init(ri);
+        if (rc) {
+                OBD_FREE_PTR(ri);
+                return ERR_PTR(rc);
+        }
+        return ri;
+}
+
+static int mdd_rebuild_info_free(struct mdd_rebuild_info *ri)
+{
+        int rc;
+
+        mdd_client_seq_fini(ri);
+        rc = ri->ri_error;
+
+        /* Check that there is no leak of items not sitting in the list
+         * at the time of cleanup. */
+        LASSERTF(cfs_atomic_read(&ri->ri_count) == 0,
+                 "count %d, list empty %d\n",
+                 cfs_atomic_read(&ri->ri_count),
+                 cfs_list_empty(&ri->ri_head) ? 1 : 0);
+        OBD_FREE_PTR(ri);
+
+        return rc;
+}
+
+/**
+ * Allocate the rebuild threads and assign/initialise all the needed resources.
+ */
+static struct mdd_rebuild_info *
+mdd_rebuild_start_threads(const struct lu_env *env,
+                          struct mdd_rebuild_info *ri)
+{
+        int rc, i, cpu;
+        ENTRY;
+
+        for (i = 0, cpu = 0; i < ri->ri_thread_count; i++) {
+                struct mdd_rebuild_thread *thread;
+
+                OBD_ALLOC_PTR(thread);
+                if (thread == NULL)
+                        GOTO(free, rc = -ENOMEM);
+
+                thread->mr_info = ri;
+
+#if defined(CONFIG_SMP) && defined(HAVE_NODE_TO_CPUMASK)
+                while (!cpu_online(cpu)) {
+                        cpu++;
+                        if (cpu >= cfs_num_possible_cpus())
+                                cpu = 0;
+                }
+                thread->mr_cpu = cpu++;
+#endif
+
+                CFS_INIT_LIST_HEAD(&thread->mr_list);
+                sprintf(thread->mr_name, "rebuild_%02d", i);
+
+                cfs_spin_lock(&ri->ri_lock);
+                cfs_list_add(&thread->mr_list, &ri->ri_threads);
+                cfs_spin_unlock(&ri->ri_lock);
+                rc = cfs_create_thread(mdd_rebuild_main, thread,
+                                       CLONE_VM | CLONE_FILES);
+                if (rc < 0) {
+                        CERROR("cannot start thread %s, rc = %d\n",
+                               thread->mr_name, rc);
+                        cfs_spin_lock(&ri->ri_lock);
+                        cfs_list_del(&thread->mr_list);
+                        cfs_spin_unlock(&ri->ri_lock);
+                        OBD_FREE_PTR(thread);
+                        GOTO(free, rc);
+                }
+        }
+        RETURN(ri);
+free:
+        mdd_rebuild_stop_threads(env, ri, rc);
+        return ERR_PTR(rc);
+}
+
+/**
+ * Rebuilds the MDD_ROOT object.
+ */
+static int mdd_root_rebuild(const struct lu_env *env,
+                            struct mdd_rebuild_info *ri)
+{
+        struct lu_fid root_fid, fid;
+        struct dt_object *dir;
+        int rc;
+        ENTRY;
+
+        if (!(ri->ri_flags & (LDF_REBUILD_OI | LDF_REBUILD_LMA)))
+                RETURN(0);
+
+        dir = dt_store_open(env, ri->ri_mdd->mdd_child, "", ".", &fid);
+        if (IS_ERR(dir))
+                RETURN(PTR_ERR(dir));
+
+        if (dt_try_as_dir(env, dir)) {
+                struct thandle *handle;
+
+                seq_client_alloc_fid(env, ri->ri_seq, &root_fid);
+                mdd_txn_param_build(env, ri->ri_mdd, MDD_TXN_REBUILD_OP, 0);
+                handle = mdd_trans_start(env, ri->ri_mdd);
+                if (IS_ERR(handle))
+                        RETURN(PTR_ERR(handle));
+
+                rc = dir->do_index_ops->dio_rebuild(env, dir,
+                                                    (struct dt_rec *)&fid,
+                                                    (struct dt_rec *)&root_fid,
+                                                    (const struct dt_key *)
+                                                    mdd_root_dir_name,
+                                                    handle, ri->ri_flags);
+                mdd_trans_stop(env, ri->ri_mdd, rc, handle);
+        } else {
+                rc = -ENOTDIR;
+        }
+
+        if (rc == 0)
+                lprocfs_counter_incr(ri->ri_mdd->mdd_stats,
+                                     LPROC_MDD_REBUILD_DIRS);
+
+        lu_object_put(env, &dir->do_lu);
+        RETURN(rc);
+}
+
+/**
+ * Start rebuild threads, giv them the root object and wait for their
+ * completion, which will happen either if the process will be interrupted
+ * or the whole semantic tree will be traversed and rebuilt.
+ */
+static int mdd_fs_rebuild(const struct lu_env *env,
+                          struct mdd_rebuild_info *ri)
+{
+        struct mdd_rebuild_ent  *rent;
+        struct dt_object        *root;
+        int                     rc = 0;
+        ENTRY;
+
+        ri = mdd_rebuild_start_threads(env, ri);
+        if (IS_ERR(ri))
+                GOTO(error, rc = PTR_ERR(ri));
+
+        root = dt_store_open(env, ri->ri_mdd->mdd_child, "",
+                             mdd_root_dir_name, &ri->ri_mdd->mdd_root_fid);
+        if (IS_ERR(root))
+                GOTO(error, rc = PTR_ERR(root));
+        else
+                LASSERT(root != NULL);
+
+        rent = mdd_rebuild_ent_alloc(env, ri, root, NULL);
+        if (IS_ERR(rent))
+                GOTO(put_root, rc = PTR_ERR(rent));
+
+        /* Add the root item and let the threads to start the rebuild. */
+        mdd_rebuild_ent_put(ri, rent);
+
+        cfs_spin_lock(&ri->ri_lock);
+        ri->ri_flags &= ~MRT_PREPARE;
+        cfs_spin_unlock(&ri->ri_lock);
+        cfs_waitq_broadcast(&ri->ri_waitq);
+        EXIT;
+put_root:
+        lu_object_put(env, &root->do_lu);
+error:
+        rc = mdd_rebuild_stop_threads(env, ri, rc);
+        return rc;
+}
+
+
 static int mdd_prepare(const struct lu_env *env,
                        struct lu_device *pdev,
                        struct lu_device *cdev)
@@ -1106,11 +1984,43 @@ out:
         RETURN(rc);
 }
 
+static int mdd_rebuild(const struct lu_env *env,
+                       struct lu_device *cdev,
+                       __u32 flags)
+{
+        struct mdd_device *mdd = lu2mdd_dev(cdev);
+        struct mdd_rebuild_info *ri;
+        int rc, rc2;
+        ENTRY;
+
+        if (!(flags & LDF_REBUILD_DEFAULT))
+                RETURN(0);
+
+        ri = mdd_rebuild_info_alloc(mdd, flags);
+        if (IS_ERR(ri))
+                RETURN(PTR_ERR(ri));
+
+        rc = mdd_root_rebuild(env, ri);
+        if (rc)
+                GOTO(error, rc);
+
+        rc = mdd_fs_rebuild(env, ri);
+
+        EXIT;
+error:
+        rc2 = mdd_rebuild_info_free(ri);
+        rc = rc ? : rc2;
+        if (rc)
+                CERROR("Failed to rebuild 2.x fs format: %d,%d\n", rc, rc2);
+        return rc;
+}
+
 const struct lu_device_operations mdd_lu_ops = {
         .ldo_object_alloc      = mdd_object_alloc,
         .ldo_process_config    = mdd_process_config,
         .ldo_recovery_complete = mdd_recovery_complete,
         .ldo_prepare           = mdd_prepare,
+        .ldo_rebuild           = mdd_rebuild,
 };
 
 /*

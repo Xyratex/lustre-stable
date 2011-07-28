@@ -31,6 +31,9 @@
  * Copyright (c) 2011 Whamcloud, Inc.
  */
 /*
+ * Copyright (c) 2011 Xyratex, Inc.
+ */
+/*
  * This file is part of Lustre, http://www.lustre.org/
  * Lustre is a trademark of Sun Microsystems, Inc.
  *
@@ -200,6 +203,10 @@ enum {
         LPROC_OSD_THANDLE_OPEN,
         LPROC_OSD_THANDLE_CLOSING,
 #endif
+        LPROC_OSD_REBUILD_LMA,
+        LPROC_OSD_REBUILD_OI_ADD,
+        LPROC_OSD_REBUILD_OI_RM,
+        LPROC_OSD_REBUILD_DIRENTRY,
         LPROC_OSD_NR
 };
 #endif
@@ -299,7 +306,6 @@ struct osd_thread_info {
          */
 
         /** osd iterator context used for iterator session */
-
         union {
                 struct osd_it_iam      oti_it;
                 /** ldiskfs iterator data structure, see osd_it_ea_{init, fini} */

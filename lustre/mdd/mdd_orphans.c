@@ -31,6 +31,9 @@
  *
  */
 /*
+ * Copyright (c) 2011 Xyratex, Inc.
+ */
+/*
  * This file is part of Lustre, http://www.lustre.org/
  * Lustre is a trademark of Sun Microsystems, Inc.
  *
@@ -397,7 +400,7 @@ static int orph_index_iterate(const struct lu_env *env,
         /* In recovery phase, do not need for any lock here */
 
         iops = &dor->do_index_ops->dio_it;
-        it = iops->init(env, dor, LUDA_64BITHASH, BYPASS_CAPA);
+        it = iops->init(env, dor, LUDA_64BITHASH, 0, BYPASS_CAPA);
         if (!IS_ERR(it)) {
                 result = iops->load(env, it, 0);
                 if (result > 0) {

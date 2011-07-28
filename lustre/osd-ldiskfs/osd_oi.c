@@ -28,6 +28,9 @@
  * Use is subject to license terms.
  */
 /*
+ * Copyright (c) 2011 Xyratex, Inc.
+ */
+/*
  * This file is part of Lustre, http://www.lustre.org/
  * Lustre is a trademark of Sun Microsystems, Inc.
  *
@@ -265,6 +268,62 @@ int osd_oi_delete(struct osd_thread_info *info,
         key = (struct dt_key *) oi_fid;
         return idx->do_index_ops->dio_delete(info->oti_env, idx,
                                              key, th, BYPASS_CAPA);
+}
+
+/**
+ * Rebuild the OI record for the given fid.
+ */
+int osd_oi_rebuild(struct osd_thread_info *info,
+                   struct osd_device *osd,
+                   struct osd_inode_id *id,
+                   const struct lu_fid *fid,
+                   struct thandle *th,
+                   __u32 flags)
+{
+        struct osd_inode_id oi_id;
+        int rc;
+        ENTRY;
+
+        /* Rebuild for normal/local FIDs only in the OI rebuild mode. */
+        if (!((flags & LDF_REBUILD_OI) && fid_is_norm(fid)))
+                RETURN(0);
+
+        rc = osd_oi_lookup(info, &osd->od_oi, fid, &oi_id);
+        if (rc < 0 && rc != -ENOENT)
+                RETURN(rc);
+
+        if (rc == 0) {
+                /* OI record is found, check if it matches the
+                 * given \var id, remove the record otherwise. */
+                if (oi_id.oii_ino == id->oii_ino &&
+                    oi_id.oii_gen == id->oii_gen)
+                        RETURN(0);
+
+                CDEBUG(D_INODE, "rm OI %u/%u for:" DFID"\n",
+                       oi_id.oii_ino, oi_id.oii_gen, PFID(fid));
+
+                rc = osd_oi_delete(info, &osd->od_oi, fid, th);
+                /* It may happen that a racing thread has already
+                 * deleted the OI record for hardlinked file, repeat. */
+                if (rc < 0 && rc != -ENOENT)
+                        RETURN(rc);
+
+                lprocfs_counter_incr(osd->od_stats,
+                                     LPROC_OSD_REBUILD_OI_RM);
+        }
+
+        CDEBUG(D_INODE, "add OI %u/%u for:" DFID"\n",
+               id->oii_ino, id->oii_gen, PFID(fid));
+
+        rc = osd_oi_insert(info, &osd->od_oi, fid, id, th, 1);
+        /* It may happen that a racing thread has already added the
+         * OI for hardlinked file, skip EEXIST. */
+        if (rc < 0 && rc != -EEXIST)
+                RETURN(rc);
+
+        lprocfs_counter_incr(osd->od_stats, LPROC_OSD_REBUILD_OI_ADD);
+
+        RETURN(0);
 }
 
 int osd_oi_mod_init()

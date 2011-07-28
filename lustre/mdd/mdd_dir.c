@@ -31,6 +31,9 @@
  *
  */
 /*
+ * Copyright (c) 2011 Xyratex, Inc.
+ */
+/*
  * This file is part of Lustre, http://www.lustre.org/
  * Lustre is a trademark of Sun Microsystems, Inc.
  *
@@ -57,8 +60,8 @@
 
 #include "mdd_internal.h"
 
-static const char dot[] = ".";
-static const char dotdot[] = "..";
+const char dot[] = ".";
+const char dotdot[] = "..";
 
 static struct lu_name lname_dotdot = {
         (char *) dotdot,
@@ -246,7 +249,7 @@ static int mdd_dir_is_empty(const struct lu_env *env,
                 RETURN(-ENOTDIR);
 
         iops = &obj->do_index_ops->dio_it;
-        it = iops->init(env, obj, LUDA_64BITHASH, BYPASS_CAPA);
+        it = iops->init(env, obj, LUDA_64BITHASH, 0, BYPASS_CAPA);
         if (!IS_ERR(it)) {
                 result = iops->get(env, it, (const void *)"");
                 if (result > 0) {
@@ -1427,7 +1430,6 @@ __mdd_lookup(const struct lu_env *env, struct md_object *pobj,
              const struct lu_name *lname, struct lu_fid* fid, int mask)
 {
         const char          *name = lname->ln_name;
-        const struct dt_key *key = (const struct dt_key *)name;
         struct mdd_object   *mdd_obj = md2mdd_obj(pobj);
         struct mdd_device   *m = mdo2mdd(pobj);
         struct dt_object    *dir = mdd_object_child(mdd_obj);
@@ -1455,17 +1457,10 @@ __mdd_lookup(const struct lu_env *env, struct md_object *pobj,
         if (rc)
                 RETURN(rc);
 
-        if (likely(S_ISDIR(mdd_object_type(mdd_obj)) &&
-                   dt_try_as_dir(env, dir))) {
-
-                rc = dir->do_index_ops->dio_lookup(env, dir,
-                                                 (struct dt_rec *)fid, key,
-                                                 mdd_object_capa(env, mdd_obj));
-                if (rc > 0)
-                        rc = 0;
-                else if (rc == 0)
-                        rc = -ENOENT;
-        } else
+        if (likely(S_ISDIR(mdd_object_type(mdd_obj))))
+                rc = dt_store_lookup(env, dir, name, fid,
+                                     mdd_object_capa(env, mdd_obj));
+        else
                 rc = -ENOTDIR;
 
         RETURN(rc);
@@ -2559,14 +2554,20 @@ static int __mdd_links_add(const struct lu_env *env,
                         return -EEXIST;
         }
 
-        return mdd_links_add_buf(env, ldata, lname, pfid);
+        rc = mdd_links_add_buf(env, ldata, lname, pfid);
+        if (check && rc == 0)
+                lprocfs_counter_incr(mdo2mdd(&mdd_obj->mod_obj)->mdd_stats,
+                                     LPROC_MDD_REBUILD_LINKEA_ADD);
+
+        return rc;
 }
 
 static int __mdd_links_del(const struct lu_env *env,
                            struct mdd_object *mdd_obj,
                            struct mdd_link_data *ldata,
                            const struct lu_name *lname,
-                           const struct lu_fid *pfid)
+                           const struct lu_fid *pfid,
+                           int check)
 {
         int rc;
 
@@ -2581,6 +2582,11 @@ static int __mdd_links_del(const struct lu_env *env,
                 return rc;
 
         mdd_links_del_buf(env, ldata, lname);
+
+        if (check)
+                lprocfs_counter_incr(mdo2mdd(&mdd_obj->mod_obj)->mdd_stats,
+                                     LPROC_MDD_REBUILD_LINKEA_RM);
+
         return 0;
 }
 
@@ -2610,7 +2616,7 @@ static int mdd_links_rename(const struct lu_env *env,
 
         if (oldpfid != NULL) {
                 rc = __mdd_links_del(env, mdd_obj, &ldata,
-                                     oldlname, oldpfid);
+                                     oldlname, oldpfid, check);
                 if (rc) {
                         if ((check == 0) ||
                             (rc != -ENODATA && rc != -ENOENT))
@@ -2682,6 +2688,18 @@ static int mdd_links_del(const struct lu_env *env,
 {
         return mdd_links_rename(env, mdd_obj, pfid, lname,
                                 NULL, NULL, handle, 0, 0);
+}
+
+int mdd_links_rename_check(const struct lu_env *env,
+                           struct mdd_object *mdd_obj,
+                           const struct lu_fid *oldpfid,
+                           const struct lu_name *oldlname,
+                           const struct lu_fid *newpfid,
+                           const struct lu_name *newlname,
+                           struct thandle *handle)
+{
+        return mdd_links_rename(env, mdd_obj, oldpfid, oldlname,
+                                newpfid, newlname, handle, 0, 1);
 }
 
 const struct md_dir_operations mdd_dir_ops = {

@@ -31,6 +31,9 @@
  * Copyright (c) 2011 Whamcloud, Inc.
  */
 /*
+ * Copyright (c) 2011 Xyratex, Inc.
+ */
+/*
  * This file is part of Lustre, http://www.lustre.org/
  * Lustre is a trademark of Sun Microsystems, Inc.
  */
@@ -110,6 +113,27 @@ struct lu_object_header;
 struct lu_context;
 struct lu_env;
 
+enum lu_device_flags {
+         /* Create LMA EA and put a new allocated real FID there. */
+         LDF_REBUILD_LMA        = 1 << 0,
+        /* Rebuild OI file. */
+         LDF_REBUILD_OI         = 1 << 1,
+         /* Put FID to direntry. */
+         LDF_REBUILD_DIRENTRY   = 1 << 2,
+         /* Rebuild LinkEA extended attribute. */
+         LDF_REBUILD_LINKEA     = 1 << 3,
+         /* Rebuild is done, an internal flag. */
+         LDF_REBUILD_DONE       = 1 << 4,
+         /* Skip ".." entry rebuild. Used for rebuild of ROOT entries. */
+         LDF_REBUILD_NO_PARENT  = 1 << 5,
+         /* First unused flag */
+         LDF_REBUILD_LAST       = 1 << 6,
+};
+
+#define LDF_REBUILD_DEFAULT (LDF_REBUILD_LMA      | LDF_REBUILD_OI | \
+                             LDF_REBUILD_DIRENTRY | LDF_REBUILD_LINKEA)
+#define LDF_REBUILD_RESTORE (LDF_REBUILD_OI)
+
 /**
  * Operations common for data and meta-data devices.
  */
@@ -167,6 +191,12 @@ struct lu_device_operations {
                            struct lu_device *parent,
                            struct lu_device *dev);
 
+        /**
+         * rebuild the fs to the true 2.x format.
+         */
+        int (*ldo_rebuild)(const struct lu_env *,
+                           struct lu_device *dev,
+                           __u32 flags);
 };
 
 /**

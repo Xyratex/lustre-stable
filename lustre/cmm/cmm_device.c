@@ -28,6 +28,9 @@
  * Use is subject to license terms.
  */
 /*
+ * Copyright (c) 2011 Xyratex, Inc.
+ */
+/*
  * This file is part of Lustre, http://www.lustre.org/
  * Lustre is a trademark of Sun Microsystems, Inc.
  *
@@ -659,11 +662,25 @@ static int cmm_prepare(const struct lu_env *env,
         RETURN(rc);
 }
 
+static int cmm_rebuild(const struct lu_env *env,
+                       struct lu_device *dev,
+                       __u32 flags)
+{
+        struct cmm_device *cmm = lu2cmm_dev(dev);
+        struct lu_device *next = md2lu_dev(cmm->cmm_child);
+        int rc;
+
+        ENTRY;
+        rc = next->ld_ops->ldo_rebuild(env, next, flags);
+        RETURN(rc);
+}
+
 static const struct lu_device_operations cmm_lu_ops = {
         .ldo_object_alloc      = cmm_object_alloc,
         .ldo_process_config    = cmm_process_config,
         .ldo_recovery_complete = cmm_recovery_complete,
         .ldo_prepare           = cmm_prepare,
+        .ldo_rebuild           = cmm_rebuild,
 };
 
 /* --- lu_device_type operations --- */
