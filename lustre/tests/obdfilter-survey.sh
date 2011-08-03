@@ -16,6 +16,7 @@ size=${size:-1024}
 
 [ "$SLOW" = no ] && { nobjhi=1; thrhi=4; }
 thrlo=${thrlo:-$(( thrhi / 2))}
+verify=0
 
 # Skip these tests
 # bug number   23791 23791
@@ -70,7 +71,7 @@ obdflter_survey_run () {
 	rm -f ${TMP}/obdfilter_survey*
 
 	local targets=$(obdflter_survey_targets $case)
-	local cmd="NETTYPE=$NETTYPE thrlo=$thrlo nobjhi=$nobjhi thrhi=$thrhi size=$size case=$case rslt_loc=${TMP} targets=\"$targets\" $OBDSURVEY"
+	local cmd="NETTYPE=$NETTYPE verify=$verify thrlo=$thrlo nobjhi=$nobjhi thrhi=$thrhi size=$size case=$case rslt_loc=${TMP} targets=\"$targets\" $OBDSURVEY"
 	echo + $cmd
 	eval $cmd
 
@@ -144,6 +145,11 @@ test_1b () {
 	return $rc
 }
 run_test 1b "Object Storage Targets survey, async journal"
+
+test_1c () {
+	verify=1 thrlo=4 nobjhi=1 thrhi=4 obdflter_survey_run disk
+}
+run_test 1c "Object Storage Targets survey, verify"
 
 test_2a () {
 	obdflter_survey_run netdisk
