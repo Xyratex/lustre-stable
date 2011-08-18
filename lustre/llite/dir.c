@@ -1617,5 +1617,6 @@ struct file_operations ll_dir_operations = {
         .release  = ll_file_release,
         .read     = generic_read_dir,
         .readdir  = ll_readdir,
-        .ioctl    = ll_dir_ioctl
+        .ioctl    = ll_dir_ioctl,
+        .fsync    = ll_fsync
 };
