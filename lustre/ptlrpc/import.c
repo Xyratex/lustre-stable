@@ -811,15 +811,21 @@ static int ptlrpc_connect_interpret(const struct lu_env *env,
 
 	imp->imp_connect_data = *ocd;
 
+	CDEBUG(D_HA, "%s: connect to target with instance %u\n",
+	       imp->imp_obd->obd_name, ocd->ocd_instance);
 	exp = class_conn2export(&imp->imp_dlm_handle);
 
 	cfs_spin_unlock(&imp->imp_lock);
 
 	/* check that server granted subset of flags we asked for. */
-	LASSERTF((ocd->ocd_connect_flags &
-		imp->imp_connect_flags_orig) ==
-		ocd->ocd_connect_flags, LPX64" != "LPX64,
-		imp->imp_connect_flags_orig, ocd->ocd_connect_flags);
+	if ((ocd->ocd_connect_flags & imp->imp_connect_flags_orig) !=
+	    ocd->ocd_connect_flags) {
+		CERROR("%s: Server didn't granted asked subset of flags: "
+		       "asked="LPX64" grranted="LPX64"\n",
+		       imp->imp_obd->obd_name,imp->imp_connect_flags_orig,
+		       ocd->ocd_connect_flags);
+		GOTO(out, rc = -EPROTO);
+	}
 
 	if (!exp) {
 		/* This could happen if export is cleaned during the

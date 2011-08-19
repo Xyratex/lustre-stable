@@ -382,25 +382,6 @@ static int mgs_nidtbl_init_fs(struct fs_db *fsdb)
 }
 
 /* --------- Imperative Recovery relies on nidtbl stuff ------- */
-void mgs_ir_notify_complete(struct fs_db *fsdb)
-{
-        struct timeval tv;
-        cfs_duration_t delta;
-
-        cfs_atomic_set(&fsdb->fsdb_notify_phase, 0);
-
-        /* do statistic */
-        fsdb->fsdb_notify_count++;
-        delta = cfs_time_sub(cfs_time_current(), fsdb->fsdb_notify_start);
-        fsdb->fsdb_notify_total += delta;
-        if (delta > fsdb->fsdb_notify_max)
-                fsdb->fsdb_notify_max = delta;
-
-        cfs_duration_usec(delta, &tv);
-        CDEBUG(D_MGS, "Revoke recover lock of %s completed after %ld.%06lds\n",
-               fsdb->fsdb_name, tv.tv_sec, tv.tv_usec);
-}
-
 static int mgs_ir_notify(void *arg)
 {
         struct fs_db      *fsdb   = arg;
@@ -414,11 +395,13 @@ static int mgs_ir_notify(void *arg)
 
         cfs_complete(&fsdb->fsdb_notify_comp);
 
-        set_user_nice(current, -2);
-
         mgc_fsname2resid(fsdb->fsdb_name, &resid, CONFIG_T_RECOVER);
         while (1) {
                 struct l_wait_info   lwi = { 0 };
+                struct lustre_handle lockh;
+                cfs_time_t           curtime;
+                int                  lockrc;
+                int                  delta;
 
                 l_wait_event(fsdb->fsdb_notify_waitq,
                              fsdb->fsdb_notify_stop ||
@@ -430,8 +413,24 @@ static int mgs_ir_notify(void *arg)
                 CDEBUG(D_MGS, "%s woken up, phase is %d\n",
                        name, cfs_atomic_read(&fsdb->fsdb_notify_phase));
 
-                fsdb->fsdb_notify_start = cfs_time_current();
-                mgs_revoke_lock(fsdb->fsdb_obd, fsdb, CONFIG_T_RECOVER);
+                curtime = cfs_time_current();
+                lockrc = mgs_get_lock(fsdb->fsdb_obd, &resid, &lockh);
+                if (lockrc == ELDLM_OK) {
+                        cfs_atomic_set(&fsdb->fsdb_notify_phase, 0);
+                        mgs_put_lock(&lockh);
+
+                        /* do statistic */
+                        fsdb->fsdb_notify_count++;
+                        delta = (cfs_time_current() - curtime) / NSEC_PER_USEC;
+                        fsdb->fsdb_notify_total += delta;
+                        if (delta > fsdb->fsdb_notify_max)
+                                fsdb->fsdb_notify_max = delta;
+                        CDEBUG(D_MGS, "Revoke recover lock of %s spent %dus\n",
+                               fsdb->fsdb_name, delta);
+                } else {
+                        CERROR("Fatal error %d for fs %s\n",
+                               lockrc, fsdb->fsdb_name);
+                }
         }
 
         cfs_complete(&fsdb->fsdb_notify_comp);
@@ -450,8 +449,6 @@ int mgs_ir_init_fs(struct obd_device *obd, struct fs_db *fsdb)
         if (cfs_time_before(cfs_time_current_sec(),
                             mgs->mgs_start_time + ir_timeout))
                 fsdb->fsdb_ir_state = IR_STARTUP;
-        fsdb->fsdb_nonir_clients = 0;
-        CFS_INIT_LIST_HEAD(&fsdb->fsdb_clients);
 
         /* start notify thread */
         fsdb->fsdb_obd = obd;
@@ -473,11 +470,7 @@ void mgs_ir_fini_fs(struct obd_device *obd, struct fs_db *fsdb)
         if (cfs_test_bit(FSDB_MGS_SELF, &fsdb->fsdb_flags))
                 return;
 
-        mgs_fsc_cleanup_by_fsdb(fsdb);
-
         mgs_nidtbl_fini_fs(fsdb);
-
-        LASSERT(cfs_list_empty(&fsdb->fsdb_clients));
 
         fsdb->fsdb_notify_stop = 1;
         cfs_waitq_signal(&fsdb->fsdb_notify_waitq);
@@ -493,8 +486,6 @@ static inline void ir_state_graduate(struct fs_db *fsdb)
                 if (cfs_time_before(mgs->mgs_start_time + ir_timeout,
                                     cfs_time_current_sec())) {
                         fsdb->fsdb_ir_state = IR_FULL;
-                        if (fsdb->fsdb_nonir_clients)
-                                fsdb->fsdb_ir_state = IR_PARTIAL;
                 }
         }
 }
@@ -690,8 +681,6 @@ static int lprocfs_ir_set_state(struct fs_db *fsdb, const char *buf)
         CDEBUG(D_MGS, "change fsr state of %s from %s to %s\n",
                fsdb->fsdb_name, strings[fsdb->fsdb_ir_state], strings[state]);
         cfs_mutex_lock(&fsdb->fsdb_mutex);
-        if (state == IR_FULL && fsdb->fsdb_nonir_clients)
-                state = IR_PARTIAL;
         fsdb->fsdb_ir_state = state;
         cfs_mutex_unlock(&fsdb->fsdb_mutex);
 
@@ -787,30 +776,16 @@ int lprocfs_rd_ir_state(struct seq_file *seq, void *data)
         struct fs_db      *fsdb = data;
         struct mgs_nidtbl *tbl  = &fsdb->fsdb_nidtbl;
         const char        *ir_strings[] = IR_STRINGS;
-        struct timeval     tv_max;
-        struct timeval     tv;
 
         /* mgs_live_seq_show() already holds fsdb_mutex. */
         ir_state_graduate(fsdb);
 
-        seq_printf(seq, "\nimperative_recovery_state:\n");
         seq_printf(seq,
-                   "    state: %s\n"
-                   "    nonir_clients: %d\n"
-                   "    nidtbl_version: %lld\n",
-                   ir_strings[fsdb->fsdb_ir_state], fsdb->fsdb_nonir_clients,
-                   tbl->mn_version);
-
-        cfs_duration_usec(fsdb->fsdb_notify_total, &tv);
-        cfs_duration_usec(fsdb->fsdb_notify_max, &tv_max);
-
-        seq_printf(seq, "    notify_duration_total: %lu.%06lu\n"
-                        "    notify_duation_max: %lu.%06lu\n"
-                        "    notify_count: %u\n",
-                   tv.tv_sec, tv.tv_usec,
-                   tv_max.tv_sec, tv_max.tv_usec,
+                   "\tstate: %s, nidtbl version: %lld\n",
+                   ir_strings[fsdb->fsdb_ir_state], tbl->mn_version);
+        seq_printf(seq, "\tnotify total/max/count: %u/%u/%u\n",
+                   fsdb->fsdb_notify_total, fsdb->fsdb_notify_max,
                    fsdb->fsdb_notify_count);
-
         return 0;
 }
 
@@ -825,126 +800,4 @@ int lprocfs_wr_ir_timeout(struct file *file, const char *buffer,
                           unsigned long count, void *data)
 {
         return lprocfs_wr_uint(file, buffer, count, &ir_timeout);
-}
-
-/* --------------- Handle non IR support clients --------------- */
-/* attach a lustre file system to an export */
-int mgs_fsc_attach(struct obd_export *exp, char *fsname)
-{
-        struct mgs_export_data *data = &exp->u.eu_mgs_data;
-        struct obd_device *obd       = exp->exp_obd;
-        struct fs_db      *fsdb;
-        struct mgs_fsc    *fsc     = NULL;
-        struct mgs_fsc    *new_fsc = NULL;
-        bool               found   = false;
-        int                rc;
-        ENTRY;
-
-        rc = mgs_find_or_make_fsdb(obd, fsname, &fsdb);
-        if (rc)
-                RETURN(rc);
-
-        /* allocate a new fsc in case we need it in spinlock. */
-        OBD_ALLOC_PTR(new_fsc);
-        if (new_fsc == NULL)
-                RETURN(-ENOMEM);
-
-        CFS_INIT_LIST_HEAD(&new_fsc->mfc_export_list);
-        CFS_INIT_LIST_HEAD(&new_fsc->mfc_fsdb_list);
-        new_fsc->mfc_fsdb       = fsdb;
-        new_fsc->mfc_export     = class_export_get(exp);
-        new_fsc->mfc_ir_capable =
-                !!(exp->exp_connect_data.ocd_connect_flags &
-		   OBD_CONNECT_IMP_RECOV);
-
-        rc = -EEXIST;
-        cfs_mutex_lock(&fsdb->fsdb_mutex);
-
-        /* tend to find it in export list because this list is shorter. */
-        cfs_spin_lock(&data->med_lock);
-        cfs_list_for_each_entry(fsc, &data->med_clients, mfc_export_list) {
-                if (strcmp(fsname, fsc->mfc_fsdb->fsdb_name) == 0) {
-                        found = true;
-                        break;
-                }
-        }
-        if (!found) {
-                fsc = new_fsc;
-                new_fsc = NULL;
-
-                /* add it into export list. */
-                cfs_list_add(&fsc->mfc_export_list, &data->med_clients);
-
-                /* add into fsdb list. */
-                cfs_list_add(&fsc->mfc_fsdb_list, &fsdb->fsdb_clients);
-                if (!fsc->mfc_ir_capable) {
-                        ++fsdb->fsdb_nonir_clients;
-                        if (fsdb->fsdb_ir_state == IR_FULL)
-                                fsdb->fsdb_ir_state = IR_PARTIAL;
-                }
-                rc = 0;
-        }
-        cfs_spin_unlock(&data->med_lock);
-        cfs_mutex_unlock(&fsdb->fsdb_mutex);
-
-        if (new_fsc) {
-                class_export_put(new_fsc->mfc_export);
-                OBD_FREE_PTR(new_fsc);
-        }
-        RETURN(rc);
-}
-
-void mgs_fsc_cleanup(struct obd_export *exp)
-{
-        struct mgs_export_data *data = &exp->u.eu_mgs_data;
-        struct mgs_fsc *fsc, *tmp;
-        CFS_LIST_HEAD(head);
-
-        cfs_spin_lock(&data->med_lock);
-        cfs_list_splice_init(&data->med_clients, &head);
-        cfs_spin_unlock(&data->med_lock);
-
-        cfs_list_for_each_entry_safe(fsc, tmp, &head, mfc_export_list) {
-                struct fs_db *fsdb = fsc->mfc_fsdb;
-
-                LASSERT(fsc->mfc_export == exp);
-
-                cfs_mutex_lock(&fsdb->fsdb_mutex);
-                cfs_list_del_init(&fsc->mfc_fsdb_list);
-                if (fsc->mfc_ir_capable == 0) {
-                        --fsdb->fsdb_nonir_clients;
-                        LASSERT(fsdb->fsdb_ir_state != IR_FULL);
-                        if (fsdb->fsdb_nonir_clients == 0 &&
-                            fsdb->fsdb_ir_state == IR_PARTIAL)
-                                fsdb->fsdb_ir_state = IR_FULL;
-                }
-                cfs_mutex_unlock(&fsdb->fsdb_mutex);
-                cfs_list_del_init(&fsc->mfc_export_list);
-                class_export_put(fsc->mfc_export);
-                OBD_FREE_PTR(fsc);
-        }
-}
-
-/* must be called with fsdb->fsdb_mutex held */
-void mgs_fsc_cleanup_by_fsdb(struct fs_db *fsdb)
-{
-        struct mgs_fsc *fsc, *tmp;
-
-        cfs_list_for_each_entry_safe(fsc, tmp, &fsdb->fsdb_clients,
-                                     mfc_fsdb_list) {
-                struct mgs_export_data *data = &fsc->mfc_export->u.eu_mgs_data;
-
-                LASSERT(fsdb == fsc->mfc_fsdb);
-                cfs_list_del_init(&fsc->mfc_fsdb_list);
-
-                cfs_spin_lock(&data->med_lock);
-                cfs_list_del_init(&fsc->mfc_export_list);
-                cfs_spin_unlock(&data->med_lock);
-                class_export_put(fsc->mfc_export);
-                OBD_FREE_PTR(fsc);
-        }
-
-        fsdb->fsdb_nonir_clients = 0;
-        if (fsdb->fsdb_ir_state == IR_PARTIAL)
-                fsdb->fsdb_ir_state = IR_FULL;
 }

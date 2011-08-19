@@ -140,6 +140,7 @@
 #define SEQ_METADATA_PORTAL            30
 #define SEQ_DATA_PORTAL                31
 #define SEQ_CONTROLLER_PORTAL          32
+#define MGS_BULK_PORTAL                33
 
 /* Portal 63 is reserved for the Cray Inc DVS - nic@cray.com, roe@cray.com, n8851@cray.com */
 
@@ -1113,6 +1114,7 @@ extern void lustre_swab_ptlrpc_body(struct ptlrpc_body *pb);
 #define OBD_CONNECT_64BITHASH    0x4000000000ULL /* client supports 64-bits
                                                   * directory hash */
 #define OBD_CONNECT_MAXBYTES     0x8000000000ULL /* max stripe size */
+#define OBD_CONNECT_IMP_RECOV   0x10000000000ULL /* imp recovery support */
 #define OBD_CONNECT_JOBSTATS    0x20000000000ULL /* jobid in ptlrpc_body */
 #define OBD_CONNECT_UMASK       0x40000000000ULL /* create uses client umask */
 #define OBD_CONNECT_EINPROGRESS 0x80000000000ULL /* client handles -EINPROGRESS
@@ -1125,6 +1127,9 @@ extern void lustre_swab_ptlrpc_body(struct ptlrpc_body *pb);
 #define OBD_CONNECT_LVB_TYPE	0x400000000000ULL /* variable type of LVB */
 #define OBD_CONNECT_LIGHTWEIGHT 0x1000000000000ULL/* lightweight connection */
 #define OBD_CONNECT_SHORTIO   0x2000000000000ULL /* short io */
+
+#define OCD_HAS_FLAG(ocd, flg)  \
+        (!!((ocd)->ocd_connect_flags & OBD_CONNECT_##flg))
 
 /* XXX README XXX:
  * Please DO NOT add flag values here before first ensuring that this same
@@ -1168,7 +1173,7 @@ extern void lustre_swab_ptlrpc_body(struct ptlrpc_body *pb);
                                 OBD_CONNECT_MAX_EASIZE | OBD_CONNECT_SHORTIO)
 #define ECHO_CONNECT_SUPPORTED (0)
 #define MGS_CONNECT_SUPPORTED  (OBD_CONNECT_VERSION | OBD_CONNECT_AT | \
-                                OBD_CONNECT_FULL20)
+                                OBD_CONNECT_FULL20 | OBD_CONNECT_IMP_RECOV)
 
 /* Features required for this version of the client to work with server */
 #define CLIENT_CONNECT_MDT_REQD (OBD_CONNECT_IBITS | OBD_CONNECT_FID | \
@@ -1200,7 +1205,7 @@ struct obd_connect_data_v1 {
         __u32 ocd_group;         /* MDS group on OST */
         __u32 ocd_cksum_types;   /* supported checksum algorithms */
         __u32 ocd_max_easize;    /* How big LOV EA can be on MDS */
-        __u32 padding;           /* also fix lustre_swab_connect */
+        __u32 ocd_instance;      /* also fix lustre_swab_connect */
         __u64 ocd_maxbytes;      /* Maximum stripe size in bytes */
 };
 
@@ -1219,7 +1224,7 @@ struct obd_connect_data {
         __u32 ocd_group;         /* MDS group on OST */
         __u32 ocd_cksum_types;   /* supported checksum algorithms */
         __u32 ocd_max_easize;    /* How big LOV EA can be on MDS */
-        __u32 padding;           /* also fix lustre_swab_connect */
+        __u32 ocd_instance;      /* instance # of this target */
         __u64 ocd_maxbytes;      /* Maximum stripe size in bytes */
         /* Fields after ocd_maxbytes are only accessible by the receiver
          * if the corresponding flag in ocd_connect_flags is set. Accessing
@@ -2451,6 +2456,7 @@ typedef enum {
         MGS_TARGET_REG,        /* whenever target starts up */
         MGS_TARGET_DEL,
         MGS_SET_INFO,
+        MGS_CONFIG_READ,
         MGS_LAST_OPC
 } mgs_cmd_t;
 #define MGS_FIRST_OPC MGS_CONNECT
@@ -2463,24 +2469,54 @@ struct mgs_send_param {
 };
 
 /* We pass this info to the MGS so it can write config logs */
-#define MTI_NAME_MAXLEN 64
+#define MTI_NAME_MAXLEN  64
 #define MTI_PARAM_MAXLEN 4096
-#define MTI_NIDS_MAX 32
+#define MTI_NIDS_MAX     32
 struct mgs_target_info {
         __u32            mti_lustre_ver;
         __u32            mti_stripe_index;
         __u32            mti_config_ver;
         __u32            mti_flags;
         __u32            mti_nid_count;
-        __u32            padding;                    /* 64 bit align */
+        __u32            mti_instance; /* Running instance of target */
         char             mti_fsname[MTI_NAME_MAXLEN];
         char             mti_svname[MTI_NAME_MAXLEN];
         char             mti_uuid[sizeof(struct obd_uuid)];
         __u64            mti_nids[MTI_NIDS_MAX];     /* host nids (lnet_nid_t)*/
         char             mti_params[MTI_PARAM_MAXLEN];
 };
-
 extern void lustre_swab_mgs_target_info(struct mgs_target_info *oinfo);
+
+struct mgs_nidtbl_entry {
+        __u64           mne_version;    /* table version of this entry */
+        __u32           mne_instance;   /* target instance # */
+        __u32           mne_index;      /* target index */
+        __u32           mne_length;     /* length of this entry - by bytes */
+        __u8            mne_type;       /* target type LDD_F_SV_TYPE_OST/MDT */
+        __u8            mne_nid_type;   /* type of nid(mbz). for ipv6. */
+        __u8            mne_nid_size;   /* size of each NID, by bytes */
+        __u8            mne_nid_count;  /* # of NIDs in buffer */
+        union {
+                lnet_nid_t nids[0];     /* variable size buffer for NIDs. */
+        } u;
+};
+extern void lustre_swab_mgs_nidtbl_entry(struct mgs_nidtbl_entry *oinfo);
+
+struct mgs_config_body {
+        char     mcb_name[MTI_NAME_MAXLEN]; /* logname */
+        __u64    mcb_offset;    /* next index of config log to request */
+        __u16    mcb_type;      /* type of log: CONFIG_T_[CONFIG|RECOVER] */
+        __u8     mcb_reserved;
+        __u8     mcb_bits;      /* bits unit size of config log */
+        __u32    mcb_units;     /* # of units for bulk transfer */
+};
+extern void lustre_swab_mgs_config_body(struct mgs_config_body *body);
+
+struct mgs_config_res {
+        __u64    mcr_offset;    /* index of last config log */
+        __u64    mcr_size;      /* size of the log */
+};
+extern void lustre_swab_mgs_config_res(struct mgs_config_res *body);
 
 /* Config marker flags (in config log) */
 #define CM_START       0x01
