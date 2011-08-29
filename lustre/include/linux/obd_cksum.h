@@ -26,7 +26,7 @@
  * GPL HEADER END
  */
 /*
- * Copyright (c) 1999, 2010, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2008, 2010, Oracle and/or its affiliates. All rights reserved.
  * Use is subject to license terms.
  */
 /*
@@ -34,40 +34,32 @@
  * Lustre is a trademark of Sun Microsystems, Inc.
  */
 
-#ifndef _LINUX_OBD_SUPPORT
-#define _LINUX_OBD_SUPPORT
+#ifndef __LINUX_OBD_CKSUM
+#define __LINUX_OBD_CKSUM
 
-#ifndef _OBD_SUPPORT
-#error Do not #include this file directly. #include <obd_support.h> instead
+#ifndef __OBD_CKSUM
+#error Do not #include this file directly. #include <obd_chsum.h> instead
 #endif
 
-#ifdef __KERNEL__
-#ifndef AUTOCONF_INCLUDED
-#include <linux/config.h>
-#include <asm/cpufeature.h>
-#include <asm/processor.h>
-#endif
-#include <linux/seq_file.h>
-#include <linux/module.h>
-#include <linux/slab.h>
-#include <linux/highmem.h>
-#include <linux/swap.h>
-#endif
 #include <libcfs/libcfs.h>
-#include <linux/lustre_compat25.h>
-#include <lustre/lustre_idl.h>
 
+/* Prefer the kernel's version, if it exports it, because it might be
+ * optimized for this CPU. */
+#if defined(__KERNEL__) && (defined(CONFIG_CRC32) || defined(CONFIG_CRC32_MODULE))
+# include <linux/crc32.h>
+# define HAVE_ARCH_CRC32
+#endif
 
 #ifdef __KERNEL__
-# include <linux/types.h>
-# include <linux/blkdev.h>
-# include <lvfs.h>
-#else /* !__KERNEL__ */
-# define LTIME_S(time) (time)
-/* for obd_class.h */
-# ifndef ERR_PTR
-#  define ERR_PTR(a) ((void *)(a))
+# include <linux/zutil.h>
+# ifndef HAVE_ADLER
+#  define HAVE_ADLER
 # endif
-#endif  /* __KERNEL__ */
+# define adler32(a,b,l) zlib_adler32(a,b,l)
+#else /*  __KERNEL__ */
+# ifdef HAVE_ADLER
+#  include <zlib.h>
+# endif
+#endif /*! __KERNEL__ */
 
 #endif
