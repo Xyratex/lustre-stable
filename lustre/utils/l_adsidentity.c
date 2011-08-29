@@ -382,6 +382,7 @@ int get_params(FILE *fp, char params[][STRING_MAX_SIZE])
         char value[STRING_MAX_SIZE];
         int  num_params = 0;
         int  i;
+        char *ch;
 
         memset(line, 0, sizeof(line));
         memset(desc, 0, sizeof(desc));
@@ -399,9 +400,21 @@ int get_params(FILE *fp, char params[][STRING_MAX_SIZE])
                 if (!conf_section(ln, fs_name))
                         continue;
 
-                i = sscanf(ln, "%s %s", desc, value);
-                if (i != 2)
+                ch = strpbrk(ln, " \t");
+                if (ch == NULL)
                         continue;
+                strncpy(desc, ln, ch - ln);
+                desc[ch - ln] = '\0';
+                while (*ch && (isspace(*ch))) ch++;
+                if (*ch == '\0')
+                        continue;
+                strcpy(value, ch);
+                ch = value + strlen(value) - 1;
+                while (isspace(*ch)) {
+                        *ch = '\0';
+                        ch--;
+                }
+
                 for (i = 0; i < CONF_MAX; i++) {
                         if (reqd_params[i].isvisited == FALSE &&
                             !strcmp(reqd_params[i].desc, desc)) {
