@@ -49,6 +49,16 @@ if [ -n "$MDSSIZE" ]; then
     STORED_MDSSIZE=$MDSSIZE
 fi
 
+# pass "-E lazy_itable_init" to mke2fs to speed up the formatting time
+for facet in MGS MDS OST; do
+    opts=${facet}_MKFS_OPTS
+    if [[ ${!opts} != *lazy_itable_init* ]]; then
+        eval SAVED_${facet}_MKFS_OPTS=\"${!opts}\"
+        eval ${facet}_MKFS_OPTS=\"${!opts} \
+--mkfsoptions='\\\"-E lazy_itable_init\\\"'\"
+    fi
+done
+
 init_logging
 
 #
@@ -216,7 +226,7 @@ cleanup_nocli() {
 }
 
 cleanup() {
- 	umount_client $MOUNT || return 200
+	umount_client $MOUNT || return 200
 	cleanup_nocli || return $?
 }
 
@@ -317,7 +327,7 @@ test_5a() {	# was test_5
 	# cleanup may return an error from the failed
 	# disconnects; for now I'll consider this successful
 	# if all the modules have unloaded.
- 	umount -d $MOUNT &
+	umount -d $MOUNT &
 	UMOUNT_PID=$!
 	sleep 6
 	echo "killing umount"
@@ -348,7 +358,7 @@ test_5a() {	# was test_5
 	while [ "$WAIT" -ne "$MAX_WAIT" ]; do
 		sleep $sleep
 		grep -q $MOUNT" " /etc/mtab || break
-        	echo "Waiting /etc/mtab updated ... "
+		echo "Waiting /etc/mtab updated ... "
 		WAIT=$(( WAIT + sleep))
 	done
 	[ "$WAIT" -eq "$MAX_WAIT" ] && error "/etc/mtab is not updated in $WAIT secs"
@@ -767,10 +777,10 @@ test_23a() {	# was test_23
 	stop $SINGLEMDS
 	# force down client so that recovering mds waits for reconnect
 	local running=$(grep -c $MOUNT /proc/mounts) || true
-    	if [ $running -ne 0 ]; then
-        	echo "Stopping client $MOUNT (opts: -f)"
-        	umount -f $MOUNT
-    	fi
+	if [ $running -ne 0 ]; then
+		echo "Stopping client $MOUNT (opts: -f)"
+		umount -f $MOUNT
+	fi
 
 	# enter recovery on mds
 	start_mds
@@ -880,7 +890,7 @@ test_24a() {
 	facet_failover fs2mds
 	facet_failover fs2ost
 	df
- 	umount_client $MOUNT
+	umount_client $MOUNT
 	# the MDS must remain up until last MDT
 	stop_mds
 	MDS=$(do_facet $SINGLEMDS "lctl get_param -n devices" | awk '($3 ~ "mdt" && $4 ~ "MDT") { print $4 }' | head -1)
@@ -981,7 +991,7 @@ test_28() {
 	set_and_check client "$TEST" "$PARAM" $FINAL || return 3
 	FINAL=$(($FINAL + 1))
 	set_and_check client "$TEST" "$PARAM" $FINAL || return 4
- 	umount_client $MOUNT || return 200
+	umount_client $MOUNT || return 200
 	mount_client $MOUNT
 	RESULT=$($TEST)
 	if [ $RESULT -ne $FINAL ]; then
@@ -1043,7 +1053,7 @@ test_29() {
 	[ -n "$ENABLE_QUOTA" ] && { $LFS quotacheck -ug $MOUNT || error "quotacheck has failed" ; }
 
         # test new client starts deactivated
- 	umount_client $MOUNT || return 200
+	umount_client $MOUNT || return 200
 	mount_client $MOUNT
 	RESULT=$(lctl get_param -n $PROC_UUID | grep DEACTIV | grep NEW)
 	if [ -z "$RESULT" ]; then
@@ -1059,7 +1069,7 @@ test_29() {
 	# make sure it reactivates
 	set_and_check client "lctl get_param -n $PROC_ACT" "$PARAM" $ACTV || return 6
 
- 	umount_client $MOUNT
+	umount_client $MOUNT
 	stop_ost2
 	cleanup_nocli
 	#writeconf to remove all ost2 traces for subsequent tests
@@ -1078,7 +1088,7 @@ test_30a() {
 	    set_and_check client "$TEST" "$FSNAME.llite.max_read_ahead_whole_mb" $i || return 3
 	done
 	# make sure client restart still works
- 	umount_client $MOUNT
+	umount_client $MOUNT
 	mount_client $MOUNT || return 4
 	[ "$($TEST)" -ne "$i" ] && error "Param didn't stick across restart $($TEST) != $i"
 	pass
@@ -1393,7 +1403,7 @@ test_34b() {
 	touch $DIR/$tfile || return 1
 	stop_mds --force || return 2
 
- 	manual_umount_client --force
+	manual_umount_client --force
 	rc=$?
 	if [ $rc -ne 0 ]; then
 		error "mtab after failed umount - rc $rc"
@@ -1409,7 +1419,7 @@ test_34c() {
 	touch $DIR/$tfile || return 1
 	stop_ost --force || return 2
 
- 	manual_umount_client --force
+	manual_umount_client --force
 	rc=$?
 	if [ $rc -ne 0 ]; then
 		error "mtab after failed umount - rc $rc"
@@ -1487,31 +1497,35 @@ test_35b() { # bug 18674
 		return 1
 
 	local at_max_saved=0
-	# adaptive timeouts may prevent seeing the issue 
+	# adaptive timeouts may prevent seeing the issue
 	if at_is_enabled; then
 		at_max_saved=$(at_max_get mds)
 		at_max_set 0 mds client
 	fi
 
-	mkdir -p $MOUNT/testdir
-	touch $MOUNT/testdir/test
+	mkdir -p $MOUNT/$tdir
 
 	log "Injecting EBUSY on MDS"
 	# Setting OBD_FAIL_MDS_RESEND=0x136
 	do_facet $SINGLEMDS "$LCTL set_param fail_loc=0x80000136" || return 2
 
-	log "Stat on a test file"
-	stat $MOUNT/testdir/test
+	$LCTL set_param mdc.${FSNAME}*.stats=clear
+
+	log "Creating a test file and stat it"
+	touch $MOUNT/$tdir/$tfile
+	stat $MOUNT/$tdir/$tfile
 
 	log "Stop injecting EBUSY on MDS"
 	do_facet $SINGLEMDS "$LCTL set_param fail_loc=0" || return 3
-	rm -f $MOUNT/testdir/test
+	rm -f $MOUNT/$tdir/$tfile
 
 	log "done"
 	# restore adaptive timeout
 	[ $at_max_saved -ne 0 ] && at_max_set $at_max_saved mds client
 
 	$LCTL dk $TMP/lustre-log-$TESTNAME.log
+
+	CONNCNT=`$LCTL get_param mdc.${FSNAME}*.stats | awk '/mds_connect/{print $2}'`
 
 	# retrieve from the log if the client has ever tried to
 	# contact the fake server after the loss of connection
@@ -1532,7 +1546,14 @@ test_35b() { # bug 18674
 		log "ERROR: The client tried to reconnect to the failover server while the primary was busy" && \
 		return 5
 
-        cleanup
+	# LU-290
+	# When OBD_FAIL_MDS_RESEND is hit, we sleep for 2 * obd_timeout
+	# Reconnects are supposed to be rate limited to one every 5s
+	[ $CONNCNT -gt $((2 * $TIMEOUT / 5 + 1)) ] && \
+		log "ERROR: Too many reconnects $CONNCNT" && \
+		return 6
+
+	cleanup
 	# remove nid settings
 	writeconf
 }
@@ -1766,8 +1787,8 @@ test_41b() {
         stop_mds -f || return 203
 
 }
-
 run_test 41b "mount mds with --nosvc and --nomgs on first mount"
+
 test_42() { #bug 14693
         setup
         check_mount || return 2
@@ -1931,7 +1952,7 @@ cleanup_46a() {
 		stop ost${count} -f || rc=$?
 		let count=count-1
 	done	
-	stop_mds || rc=$? 
+	stop_mds || rc=$?
 	cleanup_nocli || rc=$?
 	#writeconf to remove all ost2 traces for subsequent tests
 	writeconf
@@ -1949,7 +1970,7 @@ test_46a() {
 	mount_client $MOUNT || return 3
 	trap "cleanup_46a $OSTCOUNT" EXIT ERR
 
-	local i 
+	local i
 	for (( i=2; i<=$OSTCOUNT; i++ )); do
 	    start ost$i `ostdevname $i` $OST_MOUNT_OPTS || return $((i+2))
 	done
@@ -2172,7 +2193,7 @@ test_50c() {
         wait_osc_import_state mds ost DISCONN
 	lazystatfs $MOUNT || error "lazystatfs failed with one down server"
 
- 	umount_client $MOUNT || error "Unable to unmount client"
+	umount_client $MOUNT || error "Unable to unmount client"
 	stop_ost2 || error "Unable to stop OST2"
 	stop_mds || error "Unable to stop MDS"
 	#writeconf to remove all ost2 traces for subsequent tests
@@ -2194,7 +2215,7 @@ test_50d() {
 	stop_ost || error "Unable to stop OST1"
 	lazystatfs $MOUNT || error "lazystatfs failed with one down server"
 
- 	umount_client $MOUNT || error "Unable to unmount client"
+	umount_client $MOUNT || error "Unable to unmount client"
 	stop_ost2 || error "Unable to stop OST2"
 	stop_mds || error "Unable to stop MDS"
 	#writeconf to remove all ost2 traces for subsequent tests
@@ -2567,33 +2588,20 @@ test_53b() {
 }
 run_test 53b "check MDT thread count params"
 
-run_llverfs()
-{
-        local dir=$1
-        local partial_arg=""
-        local size=$(df -B G $dir | tail -1 | awk '{print $2}' | sed 's/G//') # Gb
-
-        # Run in partial (fast) mode if the size
-        # of a partition > 10 GB
-        [ $size -gt 10 ] && partial_arg="-p"
-
-        llverfs $partial_arg $dir
-}
-
 test_54a() {
-    do_rpc_nodes $(facet_host ost1) run_llverdev $(ostdevname 1)
+    do_rpc_nodes $(facet_host ost1) run_llverdev $(ostdevname 1) -p
     [ $? -eq 0 ] || error "llverdev failed!"
     reformat_and_config
 }
-run_test 54a "llverdev"
+run_test 54a "test llverdev and partial verify of device"
 
 test_54b() {
     setup
-    run_llverfs $MOUNT
+    run_llverfs $MOUNT -p
     [ $? -eq 0 ] || error "llverfs failed!"
     cleanup
 }
-run_test 54b "llverfs"
+run_test 54b "test llverfs and partial verify of filesystem"
 
 lov_objid_size()
 {
@@ -2606,7 +2614,7 @@ test_55() {
 	local ostdev=$(ostdevname 1)
 	local saved_opts=$OST_MKFS_OPTS
 
-	for i in 0 1023 2048
+	for i in 1023 2048
 	do
 		OST_MKFS_OPTS="$saved_opts --index $i"
 		reformat
@@ -2748,6 +2756,14 @@ if ! combined_mgs_mds ; then
 fi
 
 cleanup_gss
+
+# restore the ${facet}_MKFS_OPTS variables
+for facet in MGS MDS OST; do
+    opts=SAVED_${facet}_MKFS_OPTS
+    if [[ -n ${!opts} ]]; then
+        eval ${facet}_MKFS_OPTS=\"${!opts}\"
+    fi
+done
 
 complete $(basename $0) $SECONDS
 exit_status

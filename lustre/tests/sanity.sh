@@ -8,10 +8,8 @@
 # e.g. ONLY="22 23" or ONLY="`seq 32 39`" or EXCEPT="31"
 set -e
 
-# bug number for skipped test: 13297 2108 9789 3637 9789 3561 12622 12653 12653 5188 16260 19742 
-ALWAYS_EXCEPT="                27u   42a  42b  42c  42d  45   51d   65a   65e   68b  $SANITY_EXCEPT"
-# bug number for skipped test: 2108 9789 3637 9789 3561 5188/5749 1443
-#ALWAYS_EXCEPT=${ALWAYS_EXCEPT:-"27m 42a 42b 42c 42d 45 68 76"}
+# bug number for skipped test: 13297 2108 9789 3637 9789 3561 12622 5188
+ALWAYS_EXCEPT="                27u   42a  42b  42c  42d  45   51d   68b  $SANITY_EXCEPT"
 # UPDATE THE COMMENT ABOVE WITH BUG NUMBERS WHEN CHANGING ALWAYS_EXCEPT!
 
 # Tests that fail on uml
@@ -1208,9 +1206,9 @@ test_27u() { # bug 4900
 run_test 27u "skip object creation on OSC w/o objects =========="
 
 test_27v() { # bug 4900
-	[ "$OSTCOUNT" -lt "2" ] && skip_env "too few OSTs" && return
-	remote_mds_nodsh && skip "remote MDS with nodsh" && return
-	remote_ost_nodsh && skip "remote OST with nodsh" && return
+        [ "$OSTCOUNT" -lt "2" ] && skip_env "too few OSTs" && return
+        remote_mds_nodsh && skip "remote MDS with nodsh" && return
+        remote_ost_nodsh && skip "remote OST with nodsh" && return
 
         exhaust_all_precreations 0x215
         reset_enospc
@@ -1229,9 +1227,10 @@ test_27v() { # bug 4900
 
         local FINISH=`date +%s`
         local TIMEOUT=`lctl get_param -n timeout`
-        [ $((FINISH - START)) -ge $((TIMEOUT / 2)) ] && \
+        local PROCESS=$((FINISH - START))
+        [ $PROCESS -ge $((TIMEOUT / 2)) ] && \
                error "$FINISH - $START >= $TIMEOUT / 2"
-
+        sleep $((TIMEOUT / 2 - PROCESS))
         reset_enospc
 }
 run_test 27v "skip object creation on slow OST ================="
@@ -1886,7 +1885,7 @@ test_33c() {
         for ostnum in $(seq $OSTCOUNT); do
                 # test-framework's OST numbering is one-based, while Lustre's
                 # is zero-based
-                ostname=$(printf "lustre-OST%.4d" $((ostnum - 1)))
+                ostname=$(printf "$FSNAME-OST%.4d" $((ostnum - 1)))
                 # Parsing llobdstat's output sucks; we could grep the /proc
                 # path, but that's likely to not be as portable as using the
                 # llobdstat utility.  So we parse lctl output instead.
@@ -1910,7 +1909,7 @@ test_33c() {
 
         # Total up write_bytes after writing.  We'd better find non-zeros.
         for ostnum in $(seq $OSTCOUNT); do
-                ostname=$(printf "lustre-OST%.4d" $((ostnum - 1)))
+                ostname=$(printf "$FSNAME-OST%.4d" $((ostnum - 1)))
                 write_bytes=$(do_facet ost$ostnum lctl get_param -n \
                         obdfilter/$ostname/stats |
                         awk '/^write_bytes/ {print $7}' )
@@ -1925,7 +1924,7 @@ test_33c() {
         if $all_zeros
         then
                 for ostnum in $(seq $OSTCOUNT); do
-                        ostname=$(printf "lustre-OST%.4d" $((ostnum - 1)))
+                        ostname=$(printf "$FSNAME-OST%.4d" $((ostnum - 1)))
                         echo "Check that write_bytes is present in obdfilter/*/stats:"
                         do_facet ost$ostnum lctl get_param -n \
                                 obdfilter/$ostname/stats
@@ -6259,7 +6258,7 @@ test_126() { # bug 12829/13455
 }
 run_test 126 "check that the fsgid provided by the client is taken into account"
 
-test_127() { # bug 15521
+test_127a() { # bug 15521
         $SETSTRIPE -i 0 -c 1 $DIR/$tfile || error "setstripe failed"
         $LCTL set_param osc.*.stats=0
         FSIZE=$((2048 * 1024))
@@ -6295,7 +6294,47 @@ test_127() { # bug 15521
         [ "$read_bytes" != 0 ] || error "no read done"
         [ "$write_bytes" != 0 ] || error "no write done"
 }
-run_test 127 "verify the client stats are sane"
+run_test 127a "verify the client stats are sane"
+
+test_127b() { # bug LU-333
+        $LCTL set_param llite.*.stats=0
+        FSIZE=65536 # sized fixed to match PAGE_SIZE for most clients
+        # perform 2 reads and writes so MAX is different from SUM.
+        dd if=/dev/zero of=$DIR/$tfile bs=$FSIZE count=1
+        dd if=/dev/zero of=$DIR/$tfile bs=$FSIZE count=1
+        cancel_lru_locks osc
+        dd if=$DIR/$tfile of=/dev/null bs=$FSIZE count=1
+        dd if=$DIR/$tfile of=/dev/null bs=$FSIZE count=1
+
+        $LCTL get_param llite.*.stats | grep samples > $TMP/${tfile}.tmp
+        while read NAME COUNT SAMP UNIT MIN MAX SUM SUMSQ; do
+                echo "got $COUNT $NAME"
+                eval $NAME=$COUNT || error "Wrong proc format"
+
+        case $NAME in
+                read_bytes)
+                        [ $COUNT -ne 2 ] && error "count is not 2: $COUNT"
+                        [ $MIN -ne $FSIZE ] && error "min is not $FSIZE: $MIN"
+                        [ $MAX -ne $FSIZE ] && error "max is incorrect: $MAX"
+                        [ $SUM -ne $((FSIZE * 2)) ] && error "sum is wrong: $SUM"
+                        ;;
+                write_bytes)
+                        [ $COUNT -ne 2 ] && error "count is not 2: $COUNT"
+                        [ $MIN -ne $FSIZE ] && error "min is not $FSIZE: $MIN"
+                        [ $MAX -ne $FSIZE ] && error "max is incorrect: $MAX"
+                        [ $SUM -ne $((FSIZE * 2)) ] && error "sum is wrong: $SUM"
+                        ;;
+                        *) ;;
+                esac
+        done < $TMP/${tfile}.tmp
+
+        #check that we actually got some stats
+        [ "$read_bytes" ] || error "Missing read_bytes stats"
+        [ "$write_bytes" ] || error "Missing write_bytes stats"
+        [ "$read_bytes" != 0 ] || error "no read done"
+        [ "$write_bytes" != 0 ] || error "no write done"
+}
+run_test 127b "verify the llite client stats are sane"
 
 test_128() { # bug 15212
 	touch $DIR/$tfile
@@ -8191,6 +8230,53 @@ test_219() {
         dd if=/dev/zero of=$DIR/$tfile bs=1024 count=1 seek=2 conv=notrunc
 }
 run_test 219 "LU-394: Write partial won't cause uncontiguous pages vec at LND"
+
+test_220() { #LU-325
+	local OSTIDX=0
+
+	mkdir -p $DIR/$tdir
+	local OST=$(lfs osts | grep ${OSTIDX}": " | \
+		awk '{print $2}' | sed -e 's/_UUID$//')
+
+        # on the mdt's osc
+	local mdtosc_proc1=$(get_mdtosc_proc_path $SINGLEMDS $OST)
+	local last_id=$(do_facet $SINGLEMDS lctl get_param -n \
+			osc.$mdtosc_proc1.prealloc_last_id)
+	local next_id=$(do_facet $SINGLEMDS lctl get_param -n \
+			osc.$mdtosc_proc1.prealloc_next_id)
+
+	$LFS df -i
+
+	do_facet mgs $LCTL pool_new $FSNAME.$TESTNAME || return 1
+	do_facet mgs $LCTL pool_add $FSNAME.$TESTNAME $OST || return 2
+
+	$SETSTRIPE $DIR/$tdir -i $OSTIDX -c 1 -p $FSNAME.$TESTNAME
+
+	echo "preallocated objects in MDS is $((last_id - next_id))" \
+             "($last_id - $next_id)"
+
+	count=$($LFS df -i $MOUNT | grep ^$OST | awk '{print $4}')
+	echo "OST still has $count objects"
+
+	free=$((count + last_id - next_id))
+	echo "create $free files..."
+	createmany -o $DIR/$tdir/f $next_id $free || return 3
+
+	local last_id=$(do_facet mds${MDSIDX} lctl get_param -n \
+			osc.$mdtosc_proc1.prealloc_last_id)
+	local next_id=$(do_facet mds${MDSIDX} lctl get_param -n \
+			osc.$mdtosc_proc1.prealloc_next_id)
+
+	echo "after creation, last_id=$last_id, next_id=$next_id"
+	$LFS df -i
+
+	echo "cleanup..."
+
+	do_facet mgs $LCTL pool_remove $FSNAME.$TESTNAME $OST || return 4
+	do_facet mgs $LCTL pool_destroy $FSNAME.$TESTNAME || return 5
+	unlinkmany $DIR/$tdir/f $next_id $free || return 3
+}
+run_test 220 "the preallocated objects in MDS still can be used if ENOSPC is returned by OST with enough disk space"
 
 #
 # tests that do cleanup/setup should be run at the end

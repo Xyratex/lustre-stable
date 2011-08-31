@@ -207,10 +207,10 @@ static int client_common_fill_super(struct super_block *sb, char *md, char *dt,
 
         /* indicate the features supported by this client */
         data->ocd_connect_flags = OBD_CONNECT_IBITS    | OBD_CONNECT_NODEVOH  |
-                                  OBD_CONNECT_JOIN     | OBD_CONNECT_ATTRFID  |
+                                  OBD_CONNECT_ATTRFID  |
                                   OBD_CONNECT_VERSION  | OBD_CONNECT_BRW_SIZE |
                                   OBD_CONNECT_MDS_CAPA | OBD_CONNECT_OSS_CAPA |
-                                  OBD_CONNECT_CANCELSET| OBD_CONNECT_FID      |
+                                  OBD_CONNECT_CANCELSET | OBD_CONNECT_FID     |
                                   OBD_CONNECT_AT       | OBD_CONNECT_LOV_V3   |
                                   OBD_CONNECT_RMT_CLIENT | OBD_CONNECT_VBR    |
                                   OBD_CONNECT_FULL20   | OBD_CONNECT_64BITHASH;
@@ -278,6 +278,30 @@ static int client_common_fill_super(struct super_block *sb, char *md, char *dt,
                          cfs_time_shift_64(-OBD_STATFS_CACHE_SECONDS), 0);
         if (err)
                 GOTO(out_md_fid, err);
+
+        /* This needs to be after statfs to ensure connect has finished.
+         * Note that "data" does NOT contain the valid connect reply.
+         * If connecting to a 1.8 server there will be no LMV device, so
+         * we can access the MDC export directly and exp_connect_flags will
+         * be non-zero, but if accessing an upgraded 2.1 server it will
+         * have the correct flags filled in.
+         * XXX: fill in the LMV exp_connect_flags from MDC(s). */
+        valid = sbi->ll_md_exp->exp_connect_flags & CLIENT_CONNECT_MDT_REQD;
+        if (sbi->ll_md_exp->exp_connect_flags != 0 &&
+            valid != CLIENT_CONNECT_MDT_REQD) {
+                char *buf;
+
+                OBD_ALLOC_WAIT(buf, CFS_PAGE_SIZE);
+                obd_connect_flags2str(buf, CFS_PAGE_SIZE,
+                                      valid ^ CLIENT_CONNECT_MDT_REQD, ",");
+                LCONSOLE_ERROR_MSG(0x170, "Server %s does not support "
+                                   "feature(s) needed for correct operation "
+                                   "of this client (%s). Please upgrade "
+                                   "server or downgrade client.\n",
+                                   sbi->ll_md_exp->exp_obd->obd_name, buf);
+                OBD_FREE(buf, CFS_PAGE_SIZE);
+                GOTO(out_md, err = -EPROTO);
+        }
 
         size = sizeof(*data);
         err = obd_get_info(sbi->ll_md_exp, sizeof(KEY_CONN_DATA),
@@ -870,12 +894,14 @@ static inline int ll_bdi_register(struct backing_dev_info *bdi)
 
 int ll_fill_super(struct super_block *sb, struct vfsmount *mnt)
 {
-        struct lustre_profile *lprof;
+        struct lustre_profile *lprof = NULL;
         struct lustre_sb_info *lsi = s2lsi(sb);
         struct ll_sb_info *sbi;
         char  *dt = NULL, *md = NULL;
         char  *profilenm = get_profile_name(sb);
         struct config_llog_instance *cfg;
+        /* %p for void* in printf needs 16+2 characters: 0xffffffffffffffff */
+        const int instlen = sizeof(cfg->cfg_instance) * 2 + 2;
         int    err;
         ENTRY;
 
@@ -915,7 +941,7 @@ int ll_fill_super(struct super_block *sb, struct vfsmount *mnt)
         /* Generate a string unique to this super, in case some joker tries
            to mount the same fs at two mount points.
            Use the address of the super itself.*/
-        snprintf(cfg->cfg_instance, sizeof(cfg->cfg_instance), "%p", sb);
+        cfg->cfg_instance = sb;
         cfg->cfg_uuid = lsi->lsi_llsbi->ll_sb_uuid;
 
         /* set up client obds */
@@ -936,26 +962,24 @@ int ll_fill_super(struct super_block *sb, struct vfsmount *mnt)
         CDEBUG(D_CONFIG, "Found profile %s: mdc=%s osc=%s\n", profilenm,
                lprof->lp_md, lprof->lp_dt);
 
-        OBD_ALLOC(dt, strlen(lprof->lp_dt) +
-                  strlen(cfg->cfg_instance) + 2);
+        OBD_ALLOC(dt, strlen(lprof->lp_dt) + instlen + 2);
         if (!dt)
                 GOTO(out_free, err = -ENOMEM);
-        sprintf(dt, "%s-%s", lprof->lp_dt, cfg->cfg_instance);
+        sprintf(dt, "%s-%p", lprof->lp_dt, cfg->cfg_instance);
 
-        OBD_ALLOC(md, strlen(lprof->lp_md) +
-                  strlen(cfg->cfg_instance) + 2);
+        OBD_ALLOC(md, strlen(lprof->lp_md) + instlen + 2);
         if (!md)
                 GOTO(out_free, err = -ENOMEM);
-        sprintf(md, "%s-%s", lprof->lp_md, cfg->cfg_instance);
+        sprintf(md, "%s-%p", lprof->lp_md, cfg->cfg_instance);
 
         /* connections, registrations, sb setup */
         err = client_common_fill_super(sb, md, dt, mnt);
 
 out_free:
         if (md)
-                OBD_FREE(md, strlen(md) + 1);
+                OBD_FREE(md, strlen(lprof->lp_md) + instlen + 2);
         if (dt)
-                OBD_FREE(dt, strlen(dt) + 1);
+                OBD_FREE(dt, strlen(lprof->lp_dt) + instlen + 2);
         if (err)
                 ll_put_super(sb);
         else
@@ -982,8 +1006,8 @@ void ll_put_super(struct super_block *sb)
 
         ll_print_capa_stat(sbi);
 
-        snprintf(cfg.cfg_instance, sizeof(cfg.cfg_instance), "%p", sb);
-        lustre_end_log(sb, NULL, &cfg);
+        cfg.cfg_instance = sb;
+        lustre_end_log(sb, profilenm, &cfg);
 
         if (sbi->ll_md_exp) {
                 obd = class_exp2obd(sbi->ll_md_exp);
@@ -1026,7 +1050,7 @@ void ll_put_super(struct super_block *sb)
 
         cl_env_cache_purge(~0);
 
-        LCONSOLE_WARN("client %s umount complete\n", cfg.cfg_instance);
+        LCONSOLE_WARN("client %p umount complete\n", cfg.cfg_instance);
 
         cfs_module_put(THIS_MODULE);
 

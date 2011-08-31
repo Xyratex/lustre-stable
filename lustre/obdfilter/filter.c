@@ -2692,8 +2692,10 @@ static int filter_connect_internal(struct obd_export *exp,
         data->ocd_version = LUSTRE_VERSION_CODE;
 
         /* Kindly make sure the SKIP_ORPHAN flag is from MDS. */
-        if (!ergo(data->ocd_connect_flags & OBD_CONNECT_SKIP_ORPHAN,
-                  data->ocd_connect_flags & OBD_CONNECT_MDS))
+        if (data->ocd_connect_flags & OBD_CONNECT_MDS)
+                CWARN("%s: Received MDS connection for group %u\n",
+                      exp->exp_obd->obd_name, data->ocd_group);
+        else if (data->ocd_connect_flags & OBD_CONNECT_SKIP_ORPHAN)
                 RETURN(-EPROTO);
 
         if (exp->exp_connect_flags & OBD_CONNECT_GRANT) {
@@ -2810,7 +2812,6 @@ static int filter_reconnect(const struct lu_env *env,
         RETURN(rc);
 }
 
-/* nearly identical to mds_connect */
 static int filter_connect(const struct lu_env *env,
                           struct obd_export **exp, struct obd_device *obd,
                           struct obd_uuid *cluuid,
@@ -2819,7 +2820,6 @@ static int filter_connect(const struct lu_env *env,
         struct lvfs_run_ctxt saved;
         struct lustre_handle conn = { 0 };
         struct obd_export *lexp;
-        __u32 group;
         int rc;
         ENTRY;
 
@@ -2846,16 +2846,11 @@ static int filter_connect(const struct lu_env *env,
                         GOTO(cleanup, rc);
         }
 
-        group = data->ocd_group;
-
-        CWARN("%s: Received MDS connection ("LPX64"); group %d\n",
-              obd->obd_name, lexp->exp_handle.h_cookie, group);
-
         push_ctxt(&saved, &obd->obd_lvfs_ctxt, NULL);
-        rc = filter_read_groups(obd, group, 1);
+        rc = filter_read_groups(obd, data->ocd_group, 1);
         pop_ctxt(&saved, &obd->obd_lvfs_ctxt, NULL);
         if (rc != 0) {
-                CERROR("can't read group %u\n", group);
+                CERROR("can't read group %u\n", data->ocd_group);
                 GOTO(cleanup, rc);
         }
 
@@ -3838,6 +3833,13 @@ static int filter_precreate(struct obd_device *obd, struct obdo *oa,
                                LPU64"\n", obd->obd_name, osfs->os_bavail <<
                                obd->u.obt.obt_vfsmnt->mnt_sb->s_blocksize_bits);
                         *num = 0;
+                        if (oa->o_valid & OBD_MD_FLFLAGS)
+                                oa->o_flags |= OBD_FL_NOSPC_BLK;
+                        else {
+                                oa->o_valid |= OBD_MD_FLFLAGS;
+                                oa->o_flags = OBD_FL_NOSPC_BLK;
+                        }
+
                         rc = -ENOSPC;
                 }
                 OBD_FREE(osfs, sizeof(*osfs));
@@ -3942,9 +3944,21 @@ static int filter_precreate(struct obd_device *obd, struct obdo *oa,
                         CERROR("create failed rc = %d\n", rc);
                         if (rc == -ENOSPC) {
                                 os_ffree = filter_calc_free_inodes(obd);
-                                if (os_ffree != -1)
+                                if (os_ffree == -1) 
+                                        GOTO(cleanup, rc);
+
+                                if (obd->obd_osfs.os_bavail <
+                                    (obd->obd_osfs.os_blocks >> 10)) {
+                                        if (oa->o_valid & OBD_MD_FLFLAGS)
+                                                oa->o_flags |= OBD_FL_NOSPC_BLK;
+                                        else {
+                                                oa->o_valid |= OBD_MD_FLFLAGS;
+                                                oa->o_flags = OBD_FL_NOSPC_BLK;
+                                        }
+
                                         CERROR("%s: free inode "LPU64"\n",
                                                obd->obd_name, os_ffree);
+                                }
                         }
                         GOTO(cleanup, rc);
                 }
@@ -4028,7 +4042,17 @@ int filter_create(struct obd_export *exp, struct obdo *oa,
         fed = &exp->exp_filter_data;
         filter = &obd->u.filter;
 
-        if (fed->fed_group != oa->o_seq) {
+        /* 1.8 client doesn't carry the ocd_group with connect request,
+         * so the fed_group will always be zero for 1.8 client. */
+        if (!(exp->exp_connect_flags & OBD_CONNECT_FULL20)) {
+                if (oa->o_seq != FID_SEQ_OST_MDT0 &&
+                    oa->o_seq != FID_SEQ_LLOG &&
+                    oa->o_seq != FID_SEQ_ECHO) {
+                        CERROR("The request from older client has invalid"
+                               " group "LPU64"!\n", oa->o_seq);
+                        RETURN(-EINVAL);
+                }
+        } else if (fed->fed_group != oa->o_seq) {
                 CERROR("%s: this export (nid %s) used object group %d "
                         "earlier; now it's trying to use group "LPU64"!"
                         " This could be a bug in the MDS. Please report to "

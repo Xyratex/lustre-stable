@@ -46,6 +46,9 @@
  * @{
  */
 
+#ifndef __KERNEL__
+#include <libcfs/posix/posix-types.h>
+#endif
 #include <lustre/ll_fiemap.h>
 #if defined(__linux__)
 #include <linux/lustre_user.h>
@@ -134,7 +137,7 @@ struct obd_statfs {
 /* LL_IOC_POLL_QUOTACHECK: See also OBD_IOC_POLL_QUOTACHECK */
 #define LL_IOC_POLL_QUOTACHECK          _IOR ('f', 161, struct if_quotacheck *)
 /* LL_IOC_QUOTACTL: See also OBD_IOC_QUOTACTL */
-#define LL_IOC_QUOTACTL                 _IOWR('f', 162, struct if_quotactl *)
+#define LL_IOC_QUOTACTL                 _IOWR('f', 162, struct if_quotactl)
 #define IOC_OBD_STATFS                  _IOWR('f', 164, struct obd_statfs *)
 #define IOC_LOV_GETINFO                 _IOWR('f', 165, struct lov_user_mds_data *)
 #define LL_IOC_FLUSHCTX                 _IOW ('f', 166, long)
@@ -166,10 +169,12 @@ struct obd_statfs {
 
 #define O_LOV_DELAY_CREATE 0100000000  /* hopefully this does not conflict */
 
-#define LL_FILE_IGNORE_LOCK             0x00000001
-#define LL_FILE_GROUP_LOCKED            0x00000002
-#define LL_FILE_READAHEAD               0x00000004
-#define LL_FILE_RMTACL                  0x00000008
+#define LL_FILE_IGNORE_LOCK     0x00000001
+#define LL_FILE_GROUP_LOCKED    0x00000002
+#define LL_FILE_READAHEA        0x00000004
+#define LL_FILE_LOCKED_DIRECTIO 0x00000008 /* client-side locks with dio */
+#define LL_FILE_LOCKLESS_IO     0x00000010 /* server-side locks with cio */
+#define LL_FILE_RMTACL          0x00000020
 
 #define LOV_USER_MAGIC_V1 0x0BD10BD0
 #define LOV_USER_MAGIC    LOV_USER_MAGIC_V1
@@ -369,7 +374,7 @@ struct if_quotacheck {
         struct obd_uuid         obd_uuid;
 };
 
-#define IDENTITY_DOWNCALL_MAGIC 0x6d6dd620
+#define IDENTITY_DOWNCALL_MAGIC 0x6d6dd629
 
 /* permission */
 #define N_PERMS_MAX      64
@@ -377,6 +382,7 @@ struct if_quotacheck {
 struct perm_downcall_data {
         __u64 pdd_nid;
         __u32 pdd_perm;
+        __u32 pdd_padding;
 };
 
 struct identity_downcall_data {
@@ -385,8 +391,8 @@ struct identity_downcall_data {
         __u32                            idd_uid;
         __u32                            idd_gid;
         __u32                            idd_nperms;
-        struct perm_downcall_data idd_perms[N_PERMS_MAX];
         __u32                            idd_ngroups;
+        struct perm_downcall_data idd_perms[N_PERMS_MAX];
         __u32                            idd_groups[0];
 };
 

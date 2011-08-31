@@ -28,6 +28,9 @@
 /*
  * Copyright (c) 2007, 2010, Oracle and/or its affiliates. All rights reserved.
  * Use is subject to license terms.
+ *
+ * Copyright (c) 2011 Whamcloud, Inc.
+ *
  */
 /*
  * This file is part of Lustre, http://www.lustre.org/
@@ -915,8 +918,8 @@ void mdt_reconstruct_open(struct mdt_thread_info *info,
         mdt_req_from_lcd(req, lcd);
         mdt_set_disposition(info, ldlm_rep, lcd->lcd_last_data);
 
-        CERROR("This is reconstruct open: disp="LPX64", result=%d\n",
-                ldlm_rep->lock_policy_res1, req->rq_status);
+        CDEBUG(D_INODE, "This is reconstruct open: disp="LPX64", result=%d\n",
+               ldlm_rep->lock_policy_res1, req->rq_status);
 
         if (mdt_get_disposition(ldlm_rep, DISP_OPEN_CREATE) &&
             req->rq_status != 0)
