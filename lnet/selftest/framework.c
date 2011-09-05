@@ -287,7 +287,8 @@ sfw_session_expired (void *data)
 }
 
 static inline void
-sfw_init_session (sfw_session_t *sn, lst_sid_t sid, const char *name)
+sfw_init_session(sfw_session_t *sn, lst_sid_t sid,
+		 unsigned features, const char *name)
 {
         stt_timer_t *timer = &sn->sn_timer;
 
@@ -301,6 +302,7 @@ sfw_init_session (sfw_session_t *sn, lst_sid_t sid, const char *name)
 
         sn->sn_timer_active = 0;
         sn->sn_id           = sid;
+	sn->sn_features	    = features;
         sn->sn_timeout      = session_timeout;
         sn->sn_started      = cfs_time_current();
 
@@ -446,9 +448,11 @@ sfw_get_stats (srpc_stat_reqst_t *request, srpc_stat_reply_t *reply)
 }
 
 int
-sfw_make_session (srpc_mksn_reqst_t *request, srpc_mksn_reply_t *reply)
+sfw_make_session(srpc_mksn_reqst_t *request, srpc_mksn_reply_t *reply)
 {
-        sfw_session_t *sn = sfw_data.fw_session;
+	sfw_session_t *sn = sfw_data.fw_session;
+	srpc_msg_t    *msg = container_of(request, srpc_msg_t,
+					  msg_body.mksn_reqst);
 
         if (request->mksn_sid.ses_nid == LNET_NID_ANY) {
                 reply->mksn_sid = (sn == NULL) ? LST_INVALID_SID : sn->sn_id;
@@ -473,6 +477,17 @@ sfw_make_session (srpc_mksn_reqst_t *request, srpc_mksn_reply_t *reply)
                 }
         }
 
+	/* reject the request if it requires unknown features
+	 * NB: old version will always accept all features because it's not
+	 * aware of srpc_msg_t::msg_ses_feats, it's a defect but it's also
+	 * harmless because it will return zero feature to console, and it's
+	 * console's responsibility to make sure all nodes in a session have
+	 * same feature mask. */
+	if ((msg->msg_ses_feats & ~LST_FEATS_MASK) != 0) {
+		reply->mksn_status = EPROTO;
+		return 0;
+	}
+
         /* brand new or create by force */
         LIBCFS_ALLOC(sn, sizeof(sfw_session_t));
         if (sn == NULL) {
@@ -480,7 +495,8 @@ sfw_make_session (srpc_mksn_reqst_t *request, srpc_mksn_reply_t *reply)
                 return -ENOMEM;
         }
 
-        sfw_init_session(sn, request->mksn_sid, &request->mksn_name[0]);
+	sfw_init_session(sn, request->mksn_sid,
+			 msg->msg_ses_feats, &request->mksn_name[0]);
 
         cfs_spin_lock(&sfw_data.fw_lock);
 
@@ -673,7 +689,7 @@ sfw_destroy_session (sfw_session_t *sn)
 }
 
 void
-sfw_unpack_test_req (srpc_msg_t *msg)
+sfw_unpack_addtest_req(srpc_msg_t *msg)
 {
         srpc_test_reqst_t *req = &msg->msg_body.tes_reqst;
 
@@ -685,14 +701,25 @@ sfw_unpack_test_req (srpc_msg_t *msg)
 
         LASSERT (msg->msg_magic == __swab32(SRPC_MSG_MAGIC));
 
-        if (req->tsr_service == SRPC_SERVICE_BRW) {
-                test_bulk_req_t *bulk = &req->tsr_u.bulk;
+	if (req->tsr_service == SRPC_SERVICE_BRW) {
+		if ((msg->msg_ses_feats & LST_FEAT_BULK_LEN) == 0) {
+			test_bulk_req_t *bulk = &req->tsr_u.bulk_v0;
 
-                __swab32s(&bulk->blk_opc);
-                __swab32s(&bulk->blk_npg);
-                __swab32s(&bulk->blk_flags);
-                return;
-        }
+			__swab32s(&bulk->blk_opc);
+			__swab32s(&bulk->blk_npg);
+			__swab32s(&bulk->blk_flags);
+
+		} else {
+			test_bulk_req_v1_t *bulk = &req->tsr_u.bulk_v1;
+
+			__swab16s(&bulk->blk_opc);
+			__swab16s(&bulk->blk_flags);
+			__swab32s(&bulk->blk_offset);
+			__swab32s(&bulk->blk_len);
+		}
+
+		return;
+	}
 
         if (req->tsr_service == SRPC_SERVICE_PING) {
                 test_ping_req_t *ping = &req->tsr_u.ping;
@@ -759,9 +786,10 @@ sfw_add_test_instance (sfw_batch_t *tsb, srpc_server_rpc_t *rpc)
         LASSERT (bk->bk_pages != NULL);
 #endif
         LASSERT (bk->bk_niov * SFW_ID_PER_PAGE >= (unsigned int)ndest);
-        LASSERT ((unsigned int)bk->bk_len >= sizeof(lnet_process_id_t) * ndest);
+	LASSERT((unsigned int)bk->bk_len >=
+		sizeof(lnet_process_id_packed_t) * ndest);
 
-        sfw_unpack_test_req(msg);
+	sfw_unpack_addtest_req(msg);
         memcpy(&tsi->tsi_u, &req->tsr_u, sizeof(tsi->tsi_u));
 
         for (i = 0; i < ndest; i++) {
@@ -860,7 +888,7 @@ sfw_test_rpc_done (srpc_client_rpc_t *rpc)
         int                  done = 0;
 
         tsi->tsi_ops->tso_done_rpc(tsu, rpc);
-                      
+
         cfs_spin_lock(&tsi->tsi_lock);
 
         LASSERT (sfw_test_active(tsi));
@@ -889,8 +917,9 @@ sfw_test_rpc_done (srpc_client_rpc_t *rpc)
 }
 
 int
-sfw_create_test_rpc (sfw_test_unit_t *tsu, lnet_process_id_t peer,
-                     int nblk, int blklen, srpc_client_rpc_t **rpcpp)
+sfw_create_test_rpc(sfw_test_unit_t *tsu, lnet_process_id_t peer,
+		    unsigned features, int nblk, int blklen,
+		    srpc_client_rpc_t **rpcpp)
 {
         srpc_client_rpc_t   *rpc = NULL;
         sfw_test_instance_t *tsi = tsu->tsu_instance;
@@ -912,18 +941,26 @@ sfw_create_test_rpc (sfw_test_unit_t *tsu, lnet_process_id_t peer,
         }
 
         cfs_spin_unlock(&tsi->tsi_lock);
-        
-        if (rpc == NULL)
-                rpc = srpc_create_client_rpc(peer, tsi->tsi_service, nblk,
-                                             blklen, sfw_test_rpc_done, 
-                                             sfw_test_rpc_fini, tsu);
-        if (rpc == NULL) {
-                CERROR ("Can't create rpc for test %d\n", tsi->tsi_service);
-                return -ENOMEM;
-        }
 
-        *rpcpp = rpc;
-        return 0;
+	if (rpc == NULL) {
+		rpc = srpc_create_client_rpc(peer, tsi->tsi_service, nblk,
+					     blklen, sfw_test_rpc_done,
+					     sfw_test_rpc_fini, tsu);
+	} else {
+		srpc_init_client_rpc(rpc, peer, tsi->tsi_service, nblk,
+				     blklen, sfw_test_rpc_done,
+				     sfw_test_rpc_fini, tsu);
+	}
+
+	if (rpc == NULL) {
+		CERROR("Can't create rpc for test %d\n", tsi->tsi_service);
+		return -ENOMEM;
+	}
+
+	rpc->crpc_reqstmsg.msg_ses_feats = features;
+	*rpcpp = rpc;
+
+	return 0;
 }
 
 int
@@ -1090,13 +1127,15 @@ sfw_free_pages (srpc_server_rpc_t *rpc)
 }
 
 int
-sfw_alloc_pages (srpc_server_rpc_t *rpc, int npages, int sink)
+sfw_alloc_pages(struct srpc_server_rpc *rpc, int npages, int len,
+		int sink)
 {
         LASSERT (rpc->srpc_bulk == NULL);
         LASSERT (npages > 0 && npages <= LNET_MAX_IOV);
 
-        rpc->srpc_bulk = srpc_alloc_bulk(npages, sink);
-        if (rpc->srpc_bulk == NULL) return -ENOMEM;
+	rpc->srpc_bulk = srpc_alloc_bulk(npages, len, sink);
+	if (rpc->srpc_bulk == NULL)
+		return -ENOMEM;
 
         return 0;
 }
@@ -1145,9 +1184,19 @@ sfw_add_test (srpc_server_rpc_t *rpc)
         }
 
         if (request->tsr_is_client && rpc->srpc_bulk == NULL) {
-                /* rpc will be resumed later in sfw_bulk_ready */
-                return sfw_alloc_pages(rpc,
-                                       sfw_id_pages(request->tsr_ndest), 1);
+		/* rpc will be resumed later in sfw_bulk_ready */
+		int	npg = sfw_id_pages(request->tsr_ndest);
+		int	len;
+
+		if ((sn->sn_features & LST_FEAT_BULK_LEN) == 0) {
+			len = npg * CFS_PAGE_SIZE;
+
+		} else  {
+			len = sizeof(lnet_process_id_packed_t) *
+			      request->tsr_ndest;
+		}
+
+		return sfw_alloc_pages(rpc, npg, len, 1);
         }
 
         rc = sfw_add_test_instance(bat, rpc);
@@ -1208,6 +1257,7 @@ sfw_handle_server_rpc (srpc_server_rpc_t *rpc)
         srpc_service_t *sv = rpc->srpc_service;
         srpc_msg_t     *reply = &rpc->srpc_replymsg;
         srpc_msg_t     *request = &rpc->srpc_reqstbuf->buf_msg;
+        unsigned        features = LST_FEATS_MASK;
         int             rc = 0;
 
         LASSERT (sfw_data.fw_active_srpc == NULL);
@@ -1233,6 +1283,31 @@ sfw_handle_server_rpc (srpc_server_rpc_t *rpc)
 
         sfw_unpack_message(request);
         LASSERT (request->msg_type == srpc_service2request(sv->sv_id));
+
+	/* rpc module should have checked this */
+	LASSERT(request->msg_version == SRPC_MSG_VERSION);
+
+	if (sv->sv_id != SRPC_SERVICE_MAKE_SESSION &&
+	    sv->sv_id != SRPC_SERVICE_DEBUG) {
+		sfw_session_t *sn = sfw_data.fw_session;
+
+		if (sn != NULL &&
+		    sn->sn_features != request->msg_ses_feats) {
+			CNETERR("Features of framework RPC don't match "
+				"features of current session: %x/%x\n",
+				request->msg_ses_feats, sn->sn_features);
+			reply->msg_body.reply.status = EPROTO;
+			reply->msg_body.reply.sid    = sn->sn_id;
+			goto out;
+		}
+
+	} else if ((request->msg_ses_feats & ~LST_FEATS_MASK) != 0) {
+		/* NB: at this point, old version will ignore features and
+		 * create new session anyway, so console should be able
+		 * to handle this */
+		reply->msg_body.reply.status = EPROTO;
+		goto out;
+	}
 
         switch(sv->sv_id) {
         default:
@@ -1267,6 +1342,10 @@ sfw_handle_server_rpc (srpc_server_rpc_t *rpc)
                 break;
         }
 
+	if (sfw_data.fw_session != NULL)
+		features = sfw_data.fw_session->sn_features;
+ out:
+	reply->msg_ses_feats = features;
         rpc->srpc_done = sfw_server_rpc_done;
         cfs_spin_lock(&sfw_data.fw_lock);
 
@@ -1337,11 +1416,11 @@ sfw_bulk_ready (srpc_server_rpc_t *rpc, int status)
 }
 
 srpc_client_rpc_t *
-sfw_create_rpc (lnet_process_id_t peer, int service,
-                int nbulkiov, int bulklen,
-                void (*done) (srpc_client_rpc_t *), void *priv)
+sfw_create_rpc(lnet_process_id_t peer, int service,
+	       unsigned features, int nbulkiov, int bulklen,
+	       void (*done)(srpc_client_rpc_t *), void *priv)
 {
-        srpc_client_rpc_t *rpc;
+	srpc_client_rpc_t *rpc = NULL;
 
         cfs_spin_lock(&sfw_data.fw_lock);
 
@@ -1352,19 +1431,25 @@ sfw_create_rpc (lnet_process_id_t peer, int service,
                 rpc = cfs_list_entry(sfw_data.fw_zombie_rpcs.next,
                                      srpc_client_rpc_t, crpc_list);
                 cfs_list_del(&rpc->crpc_list);
-                cfs_spin_unlock(&sfw_data.fw_lock);
 
                 srpc_init_client_rpc(rpc, peer, service, 0, 0,
                                      done, sfw_client_rpc_fini, priv);
-                return rpc;
         }
 
         cfs_spin_unlock(&sfw_data.fw_lock);
 
-        rpc = srpc_create_client_rpc(peer, service, nbulkiov, bulklen, done,
-                                     nbulkiov != 0 ? NULL : sfw_client_rpc_fini,
-                                     priv);
-        return rpc;
+	if (rpc == NULL) {
+		rpc = srpc_create_client_rpc(peer, service,
+					     nbulkiov, bulklen, done,
+					     nbulkiov != 0 ?  NULL :
+					     sfw_client_rpc_fini,
+					     priv);
+	}
+
+	if (rpc != NULL) /* "session" is concept in framework */
+		rpc->crpc_reqstmsg.msg_ses_feats = features;
+
+	return rpc;
 }
 
 void
@@ -1373,9 +1458,8 @@ sfw_unpack_message (srpc_msg_t *msg)
         if (msg->msg_magic == SRPC_MSG_MAGIC)
                 return; /* no flipping needed */
 
+	/* srpc module should guarantee I wouldn't get crap */
         LASSERT (msg->msg_magic == __swab32(SRPC_MSG_MAGIC));
-
-        __swab32s(&msg->msg_type);
 
         if (msg->msg_type == SRPC_MSG_STAT_REQST) {
                 srpc_stat_reqst_t *req = &msg->msg_body.stat_reqst;
