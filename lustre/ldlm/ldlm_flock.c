@@ -728,13 +728,10 @@ EXPORT_SYMBOL(ldlm_flock_completion_ast);
 int ldlm_flock_blocking_ast(struct ldlm_lock *lock, struct ldlm_lock_desc *desc,
                             void *data, int flag)
 {
-        struct ldlm_namespace *ns;
         ENTRY;
 
         LASSERT(lock);
         LASSERT(flag == LDLM_CB_CANCELING);
-
-        ns = ldlm_lock_to_ns(lock);
 
         /* take lock off the deadlock detection hash list. */
         lock_res_and_lock(lock);

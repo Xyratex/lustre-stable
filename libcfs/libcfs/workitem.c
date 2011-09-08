@@ -412,8 +412,7 @@ int
 cfs_wi_startup (void)
 {
         int i;
-        int n;
-        int rc;
+        int n, rc;
 
         cfs_wi_data.wi_nthreads = 0;
         cfs_wi_data.wi_nsched   = CFS_WI_NSCHED;
@@ -438,7 +437,8 @@ cfs_wi_startup (void)
                 }
         }
 #else
-        n = rc = 0;
+        SET_BUT_UNUSED(rc);
+        SET_BUT_UNUSED(n);
 #endif
 
         return 0;

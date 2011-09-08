@@ -709,7 +709,7 @@ int ldlm_prep_elc_req(struct obd_export *exp, struct ptlrpc_request *req,
         struct ldlm_namespace   *ns = exp->exp_obd->obd_namespace;
         struct req_capsule      *pill = &req->rq_pill;
         struct ldlm_request     *dlm = NULL;
-        int flags, avail, to_free, bufcount, pack = 0;
+        int flags, avail, to_free, pack = 0;
         CFS_LIST_HEAD(head);
         int rc;
         ENTRY;
@@ -718,7 +718,7 @@ int ldlm_prep_elc_req(struct obd_export *exp, struct ptlrpc_request *req,
                 cancels = &head;
         if (ns_connect_cancelset(ns)) {
                 /* Estimate the amount of available space in the request. */
-                bufcount = req_capsule_filled_sizes(pill, RCL_CLIENT);
+                req_capsule_filled_sizes(pill, RCL_CLIENT);
                 avail = ldlm_capsule_handles_avail(pill, RCL_CLIENT, canceloff);
 
                 flags = ns_connect_lru_resize(ns) ?
@@ -1128,8 +1128,6 @@ int ldlm_cli_cancel_req(struct obd_export *exp, cfs_list_t *cancels,
                 count = free;
 
         while (1) {
-                int bufcount;
-
                 imp = class_exp2cliimp(exp);
                 if (imp == NULL || imp->imp_invalid) {
                         CDEBUG(D_DLMTRACE,
@@ -1141,7 +1139,7 @@ int ldlm_cli_cancel_req(struct obd_export *exp, cfs_list_t *cancels,
                 if (req == NULL)
                         GOTO(out, rc = -ENOMEM);
 
-                bufcount = req_capsule_filled_sizes(&req->rq_pill, RCL_CLIENT);
+                req_capsule_filled_sizes(&req->rq_pill, RCL_CLIENT);
                 req_capsule_set_size(&req->rq_pill, &RMF_DLM_REQ, RCL_CLIENT,
                                      ldlm_request_bufsize(count, LDLM_CANCEL));
 
@@ -1203,7 +1201,7 @@ static inline struct ldlm_pool *ldlm_imp2pl(struct obd_import *imp)
 int ldlm_cli_update_pool(struct ptlrpc_request *req)
 {
         struct obd_device *obd;
-        __u64 old_slv, new_slv;
+        __u64 new_slv;
         __u32 new_limit;
         ENTRY;
         if (unlikely(!req->rq_import || !req->rq_import->imp_obd ||
@@ -1243,7 +1241,6 @@ int ldlm_cli_update_pool(struct ptlrpc_request *req)
          * oops in that time.
          */
         cfs_write_lock(&obd->obd_pool_lock);
-        old_slv = obd->obd_pool_slv;
         obd->obd_pool_slv = new_slv;
         obd->obd_pool_limit = new_limit;
         cfs_write_unlock(&obd->obd_pool_lock);

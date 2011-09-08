@@ -2401,10 +2401,8 @@ static struct ptlrpc_request *osc_build_req(const struct lu_env *env,
         struct osc_brw_async_args *aa;
         struct obdo *oa = NULL;
         const struct obd_async_page_ops *ops = NULL;
-        void *caller_data = NULL;
         struct osc_async_page *oap;
         struct osc_async_page *tmp;
-        struct ost_body *body;
         struct cl_req *clerq = NULL;
         enum cl_req_type crt = (cmd & OBD_BRW_WRITE) ? CRT_WRITE : CRT_READ;
         struct ldlm_lock *lock = NULL;
@@ -2431,7 +2429,6 @@ static struct ptlrpc_request *osc_build_req(const struct lu_env *env,
                 struct cl_page *page = osc_oap2cl_page(oap);
                 if (ops == NULL) {
                         ops = oap->oap_caller_ops;
-                        caller_data = oap->oap_caller_data;
 
                         clerq = cl_req_alloc(env, page, crt,
                                              1 /* only 1-object rpcs for
@@ -2480,7 +2477,6 @@ static struct ptlrpc_request *osc_build_req(const struct lu_env *env,
          * later setattr before earlier BRW (as determined by the request xid),
          * the OST will not use BRW timestamps.  Sadly, there is no obvious
          * way to do this in a single call.  bug 10150 */
-        body = req_capsule_client_get(&req->rq_pill, &RMF_OST_BODY);
         cl_req_attr_set(env, clerq, &crattr,
                         OBD_MD_FLMTIME|OBD_MD_FLCTIME|OBD_MD_FLATIME);
 

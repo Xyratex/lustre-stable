@@ -902,7 +902,6 @@ int jt_dbg_modules(int argc, char **argv)
 {
         struct mod_paths *mp;
         char *path = "";
-        char *kernel = "linux";
         const char *proc = "/proc/modules";
         char modname[128], buf[4096];
         long modaddr;
@@ -910,8 +909,6 @@ int jt_dbg_modules(int argc, char **argv)
 
         if (argc >= 2)
                 path = argv[1];
-        if (argc == 3)
-                kernel = argv[2];
         if (argc > 3) {
                 printf("%s [path] [kernel]\n", argv[0]);
                 return 0;
