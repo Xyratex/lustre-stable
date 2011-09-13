@@ -1311,6 +1311,8 @@ static int ll_issue_page_read(struct obd_export *exp,
         if (rc) {
                 LL_CDEBUG_PAGE(D_ERROR, page, "read queue failed: rc %d\n", rc);
                 page_cache_release(page);
+        } else {
+                task_io_account_read(CFS_PAGE_SIZE);
         }
         RETURN(rc);
 }
