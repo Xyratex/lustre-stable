@@ -762,8 +762,8 @@ void class_export_recovery_cleanup(struct obd_export *exp)
                 cfs_spin_lock(&exp->exp_lock);
                 exp->exp_in_recovery = 0;
                 cfs_spin_unlock(&exp->exp_lock);
-                LASSERT(obd->obd_connected_clients);
-                obd->obd_connected_clients--;
+                LASSERT_ATOMIC_POS(&obd->obd_connected_clients);
+                cfs_atomic_dec(&obd->obd_connected_clients);
         }
         cfs_spin_unlock(&obd->obd_recovery_task_lock);
         /** Cleanup req replay fields */
@@ -1168,7 +1168,6 @@ int class_connect(struct lustre_handle *conn, struct obd_device *obd,
         RETURN(0);
 }
 EXPORT_SYMBOL(class_connect);
-
 
 /* This function removes 1-3 references from the export:
  * 1 - for export pointer passed
