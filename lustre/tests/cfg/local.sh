@@ -8,6 +8,8 @@ mds1failover_HOST=${mds1failover_HOST:-$mdsfailover_HOST}
 mgs_HOST=${mgs_HOST:-$mds1_HOST}
 ost_HOST=${ost_HOST:-`hostname`}
 ostfailover_HOST=${ostfailover_HOST}
+CLIENT1=${CLIENT1:-`hostname`}
+SINGLECLIENT=$CLIENT1
 CLIENTS=""
 
 TMP=${TMP:-/tmp}
