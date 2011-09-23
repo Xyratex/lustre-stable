@@ -2018,6 +2018,10 @@ int ll_file_flock(struct file *file, int cmd, struct file_lock *file_lock)
 
         ll_stats_ops_tally(ll_i2sbi(inode), LPROC_LL_FLOCK, 1);
 
+        /* LOCK_MAND flocks are not supported */
+        if (file_lock->fl_type & LOCK_MAND)
+                RETURN(-ENOTSUPP);
+
         if (file_lock->fl_flags & FL_FLOCK) {
                 LASSERT((cmd == F_SETLKW) || (cmd == F_SETLK));
                 /* flocks are whole-file locks */
