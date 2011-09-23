@@ -1,0 +1,46 @@
+From a8b77288f3a100d2b45ce9a647f2ad530b02fc42 Mon Sep 17 00:00:00 2001
+From: Eric Mei <eric_mei@us.xyratex.com>
+Date: Fri, 2 Sep 2011 18:06:30 -0700
+Subject: [PATCH] [md] pdraid fix: block update number may lag behind due to a race.
+
+This update is from pdraid_61 branch commit 725456df2bc13a7f50bed14e781fe32936b1c5e2
+---
+ drivers/md/raid5.c |   11 +++++++++--
+ 1 files changed, 9 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/md/raid5.c b/drivers/md/raid5.c
+index 361550b..98f0be5 100644
+--- a/drivers/md/raid5.c
++++ b/drivers/md/raid5.c
+@@ -2817,7 +2817,8 @@ static void handle_parity_checks5(raid5_conf_t *conf, struct stripe_head *sh,
+ 
+ 		/* either failed parity check, or recovery is happening */
+ 		BUG_ON(!test_bit(R5_UPTODATE, &dev->flags));
+-		BUG_ON(s->uptodate != disks);
++		/* see raid6 version */
++		BUG_ON(s->uptodate < disks - 1);
+ 
+ 		set_bit(R5_LOCKED, &dev->flags);
+ 		s->locked++;
+@@ -2938,11 +2939,17 @@ static void handle_parity_checks6(raid5_conf_t *conf, struct stripe_head *sh,
+ 		/* check that a write has not made the stripe insync */
+ 		if (test_bit(STRIPE_INSYNC, &sh->state))
+ 			break;
++		/*
++		 * there's slight chance that when entering handle_stripe
++		 * compute_block is ongoing but then finished soon after
++		 * the initial check around was done. in that case the
++		 * s->uptodate could be disks - 2.
++		 */
++		BUG_ON(s->uptodate < disks - 2);
+ 
+ 		/* now write out any block on a failed drive,
+ 		 * or P or Q if they were recomputed
+ 		 */
+-		BUG_ON(s->uptodate < disks - 1); /* We don't need Q to recover */
+ 		if (s->failed == 2) {
+ 			dev = &sh->dev[r6s->failed_num[1]];
+ 			s->locked++;
+-- 
+1.7.3.4
+

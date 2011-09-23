@@ -1,9 +1,9 @@
 diff --git a/drivers/md/raid5.c b/drivers/md/raid5.c
 index 9cd137e..6d1a32d 100644
-Index: linux-2.6.32-131.4.1.el6/drivers/md/raid5.c
+Index: linux-2.6.32-131.12.1.el6.x86_64/drivers/md/raid5.c
 ===================================================================
---- linux-2.6.32-131.4.1.el6.orig/drivers/md/raid5.c	2011-07-20 13:25:50.000000000 +0300
-+++ linux-2.6.32-131.4.1.el6/drivers/md/raid5.c	2011-07-20 13:27:43.000000000 +0300
+--- linux-2.6.32-131.12.1.el6.x86_64.orig/drivers/md/raid5.c	2011-09-23 14:49:20.000000000 +0300
++++ linux-2.6.32-131.12.1.el6.x86_64/drivers/md/raid5.c	2011-09-23 14:49:54.000000000 +0300
 @@ -193,6 +193,25 @@ static int stripe_operations_active(stru
  	       test_bit(STRIPE_COMPUTE_RUN, &sh->state);
  }
@@ -102,11 +102,13 @@ Index: linux-2.6.32-131.4.1.el6/drivers/md/raid5.c
  static struct dma_async_tx_descriptor *
  ops_run_biodrain(struct stripe_head *sh, struct dma_async_tx_descriptor *tx)
  {
-@@ -1032,6 +1102,11 @@ ops_run_biodrain(struct stripe_head *sh,
+@@ -1032,6 +1102,13 @@ ops_run_biodrain(struct stripe_head *sh,
  			wbi = dev->written = chosen;
  			spin_unlock(&sh->lock);
  
 +			if (try_reuse_data_page(dev)) {
++				if (wbi->bi_rw & REQ_FUA)
++					set_bit(R5_WantFUA, &dev->flags);
 +				atomic_inc(&sh->raid_conf->writes_zcopy);
 +				continue;
 +			}
@@ -114,17 +116,17 @@ Index: linux-2.6.32-131.4.1.el6/drivers/md/raid5.c
  			while (wbi && wbi->bi_sector <
  				dev->sector + STRIPE_SECTORS) {
  				if (wbi->bi_rw & REQ_FUA)
-@@ -1064,7 +1139,8 @@ static void ops_complete_reconstruct(voi
- 	for (i = disks; i--; ) {
+@@ -1065,7 +1142,8 @@ static void ops_complete_reconstruct(voi
  		struct r5dev *dev = &sh->dev[i];
  
--		if (dev->written || i == pd_idx || i == qd_idx) {
-+		if ((dev->written && !test_bit(R5_Direct, &dev->flags)) ||
-+		    i == pd_idx || i == qd_idx) {
- 			set_bit(R5_UPTODATE, &dev->flags);
+ 		if (dev->written || i == pd_idx || i == qd_idx) {
+-			set_bit(R5_UPTODATE, &dev->flags);
++			if (!test_bit(R5_Direct, &dev->flags))
++				set_bit(R5_UPTODATE, &dev->flags);
  			if (fua)
  				set_bit(R5_WantFUA, &dev->flags);
-@@ -1644,6 +1720,7 @@ static void raid5_end_read_request(struc
+ 		}
+@@ -1644,6 +1722,7 @@ static void raid5_end_read_request(struc
  		}
  	}
  	rdev_dec_pending(conf->disks[i].rdev, conf->mddev);
@@ -132,7 +134,7 @@ Index: linux-2.6.32-131.4.1.el6/drivers/md/raid5.c
  	clear_bit(R5_LOCKED, &sh->dev[i].flags);
  	set_bit(STRIPE_HANDLE, &sh->state);
  	release_stripe(sh);
-@@ -1673,6 +1750,8 @@ static void raid5_end_write_request(stru
+@@ -1673,6 +1752,8 @@ static void raid5_end_write_request(stru
  
  	rdev_dec_pending(conf->disks[i].rdev, conf->mddev);
  	
@@ -141,7 +143,7 @@ Index: linux-2.6.32-131.4.1.el6/drivers/md/raid5.c
  	clear_bit(R5_LOCKED, &sh->dev[i].flags);
  	set_bit(STRIPE_HANDLE, &sh->state);
  	release_stripe(sh);
-@@ -2515,7 +2594,8 @@ static void handle_stripe_clean_event(ra
+@@ -2515,7 +2596,8 @@ static void handle_stripe_clean_event(ra
  		if (sh->dev[i].written) {
  			dev = &sh->dev[i];
  			if (!test_bit(R5_LOCKED, &dev->flags) &&
@@ -151,7 +153,7 @@ Index: linux-2.6.32-131.4.1.el6/drivers/md/raid5.c
  				/* We can return any write requests */
  				struct bio *wbi, *wbi2;
  				int bitmap_end = 0;
-@@ -2523,6 +2603,7 @@ static void handle_stripe_clean_event(ra
+@@ -2523,6 +2605,7 @@ static void handle_stripe_clean_event(ra
  				spin_lock_irq(&conf->device_lock);
  				wbi = dev->written;
  				dev->written = NULL;
@@ -159,7 +161,7 @@ Index: linux-2.6.32-131.4.1.el6/drivers/md/raid5.c
  				while (wbi && wbi->bi_sector <
  					dev->sector + STRIPE_SECTORS) {
  					wbi2 = r5_next_bio(wbi, dev->sector);
-@@ -3476,7 +3557,8 @@ static void handle_stripe6(struct stripe
+@@ -3476,7 +3559,8 @@ static void handle_stripe6(struct stripe
  			    (i == sh->pd_idx || i == qd_idx ||
  			     dev->written)) {
  				pr_debug("Writing block %d\n", i);
@@ -169,7 +171,7 @@ Index: linux-2.6.32-131.4.1.el6/drivers/md/raid5.c
  				set_bit(R5_Wantwrite, &dev->flags);
  				if (!test_bit(R5_Insync, &dev->flags) ||
  				    ((i == sh->pd_idx || i == qd_idx) &&
-@@ -5210,6 +5292,7 @@ static int run(mddev_t *mddev)
+@@ -5210,6 +5294,7 @@ static int run(mddev_t *mddev)
  
  		mddev->queue->backing_dev_info.congested_data = mddev;
  		mddev->queue->backing_dev_info.congested_fn = raid5_congested;
@@ -177,10 +179,10 @@ Index: linux-2.6.32-131.4.1.el6/drivers/md/raid5.c
  		mddev->queue->unplug_fn = raid5_unplug_queue;
  
  		chunk_size = mddev->chunk_sectors << 9;
-Index: linux-2.6.32-131.4.1.el6/drivers/md/raid5.h
+Index: linux-2.6.32-131.12.1.el6.x86_64/drivers/md/raid5.h
 ===================================================================
---- linux-2.6.32-131.4.1.el6.orig/drivers/md/raid5.h	2011-06-10 17:19:25.000000000 +0300
-+++ linux-2.6.32-131.4.1.el6/drivers/md/raid5.h	2011-07-20 13:54:06.000000000 +0300
+--- linux-2.6.32-131.12.1.el6.x86_64.orig/drivers/md/raid5.h	2011-07-31 23:05:58.000000000 +0300
++++ linux-2.6.32-131.12.1.el6.x86_64/drivers/md/raid5.h	2011-09-23 14:49:20.000000000 +0300
 @@ -232,7 +232,7 @@ struct stripe_head {
  	struct r5dev {
  		struct bio	req;
@@ -200,10 +202,10 @@ Index: linux-2.6.32-131.4.1.el6/drivers/md/raid5.h
  /*
   * Write method
   */
-Index: linux-2.6.32-131.4.1.el6/include/linux/backing-dev.h
+Index: linux-2.6.32-131.12.1.el6.x86_64/include/linux/backing-dev.h
 ===================================================================
---- linux-2.6.32-131.4.1.el6.orig/include/linux/backing-dev.h	2011-06-10 17:17:37.000000000 +0300
-+++ linux-2.6.32-131.4.1.el6/include/linux/backing-dev.h	2011-07-20 13:47:18.000000000 +0300
+--- linux-2.6.32-131.12.1.el6.x86_64.orig/include/linux/backing-dev.h	2011-07-31 23:06:03.000000000 +0300
++++ linux-2.6.32-131.12.1.el6.x86_64/include/linux/backing-dev.h	2011-09-23 14:49:20.000000000 +0300
 @@ -230,6 +230,7 @@ int bdi_set_max_ratio(struct backing_dev
  #define BDI_CAP_EXEC_MAP	0x00000040
  #define BDI_CAP_NO_ACCT_WB	0x00000080
@@ -235,10 +237,10 @@ Index: linux-2.6.32-131.4.1.el6/include/linux/backing-dev.h
  static inline int bdi_sched_wait(void *word)
  {
  	schedule();
-Index: linux-2.6.32-131.4.1.el6/include/linux/page-flags.h
+Index: linux-2.6.32-131.12.1.el6.x86_64/include/linux/page-flags.h
 ===================================================================
---- linux-2.6.32-131.4.1.el6.orig/include/linux/page-flags.h	2011-06-10 17:18:05.000000000 +0300
-+++ linux-2.6.32-131.4.1.el6/include/linux/page-flags.h	2011-07-20 13:47:18.000000000 +0300
+--- linux-2.6.32-131.12.1.el6.x86_64.orig/include/linux/page-flags.h	2011-07-31 23:04:50.000000000 +0300
++++ linux-2.6.32-131.12.1.el6.x86_64/include/linux/page-flags.h	2011-09-23 14:49:20.000000000 +0300
 @@ -111,6 +111,7 @@ enum pageflags {
  #ifdef CONFIG_TRANSPARENT_HUGEPAGE
  	PG_compound_lock,

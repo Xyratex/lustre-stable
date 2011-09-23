@@ -1,0 +1,43 @@
+From 1dc975befc94a8963e899f348da2072766e9ec1d Mon Sep 17 00:00:00 2001
+From: Eric Mei <eric_mei@us.xyratex.com>
+Date: Wed, 31 Aug 2011 10:05:17 -0700
+Subject: [PATCH] [md] raid5: Fix io callback setting.
+ (cherry picked from commit 2f3d5fe7befe3e45bb5349878ef30c75f2b2820a)
+
+---
+ drivers/md/raid5.c |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/md/raid5.c b/drivers/md/raid5.c
+index e7a6cea0..0c0c0fd 100644
+--- a/drivers/md/raid5.c
++++ b/drivers/md/raid5.c
+@@ -565,7 +565,7 @@ static void ops_run_io(struct stripe_head *sh, struct stripe_head_state *s)
+ 		bi = &sh->dev[i].req;
+ 
+ 		bi->bi_rw = rw;
+-		if (rw == WRITE) {
++		if (rw & WRITE) {
+ 			atomic_inc(&conf->writes_out);
+ 			bi->bi_end_io = raid5_end_write_request;
+ 		} else {
+@@ -602,14 +602,14 @@ static void ops_run_io(struct stripe_head *sh, struct stripe_head_state *s)
+ 			bi->bi_io_vec[0].bv_offset = 0;
+ 			bi->bi_size = STRIPE_SIZE;
+ 			bi->bi_next = NULL;
+-			if (rw == WRITE &&
++			if ((rw & WRITE) &&
+ 			    test_bit(R5_ReWrite, &sh->dev[i].flags))
+ 				atomic_add(STRIPE_SECTORS,
+ 					&rdev->corrected_errors);
+ 			atomic_inc(&conf->out_reqs_in_queue);
+ 			generic_make_request(bi);
+ 		} else {
+-			if (rw == WRITE)
++			if (rw & WRITE)
+ 				set_bit(STRIPE_DEGRADED, &sh->state);
+ 			pr_debug("skip op %ld on disc %d for sector %llu\n",
+ 				bi->bi_rw, i, (unsigned long long)sh->sector);
+-- 
+1.7.3.4
+
