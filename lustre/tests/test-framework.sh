@@ -3063,7 +3063,7 @@ error_noexit() {
 
     # We need to dump the logs on all nodes
     if $dump; then
-        gather_logs $(comma_list $(nodes_list))
+        gather_logs $(comma_list $(nodes_list)) 0
     fi
 
     debugrestore
@@ -4245,6 +4245,7 @@ cleanup_pools () {
 
 gather_logs () {
     local list=$1
+    local tar_logs=$2
 
     local ts=$(date +%s)
     local docp=true
@@ -4270,10 +4271,12 @@ gather_logs () {
         do_nodes $list rsync -az "${prefix}.*.${suffix}" $HOSTNAME:$LOGDIR
       fi
 
-    local archive=$LOGDIR/${TESTSUITE}-$ts.tar.bz2
-    tar -jcf $archive $LOGDIR/*$ts* $LOGDIR/*${TESTSUITE}*
+    if [ $tar_logs == 1 ]; then
+        local archive=$LOGDIR/${TESTSUITE}-$ts.tar.bz2
+        tar -jcf $archive $LOGDIR/*$ts* $LOGDIR/*${TESTSUITE}*
 
-    echo $archive
+        echo $archive
+    fi
 }
 
 cleanup_logs () {
