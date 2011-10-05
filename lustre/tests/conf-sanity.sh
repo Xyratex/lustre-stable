@@ -565,16 +565,21 @@ is_blkdev () {
 #
 
 test_17() {
+        local mgsdev
+
         setup
         check_mount || return 41
         cleanup || return $?
 
         echo "Remove mds config log"
-        if ! combined_mgs_mds ; then
+        if combined_mgs_mds ; then
+                mgsdev=$(mdsdevname 1)
+        else
+                mgsdev=$MGSDEV
                 stop mgs
         fi
 
-        do_facet mgs "$DEBUGFS -w -R 'unlink CONFIGS/$FSNAME-MDT0000' $MGSDEV || return \$?" || return $?
+        do_facet mgs "$DEBUGFS -w -R 'unlink CONFIGS/$FSNAME-MDT0000' $mgsdev || return \$?" || return $?
 
         if ! combined_mgs_mds ; then
                 start_mgs
