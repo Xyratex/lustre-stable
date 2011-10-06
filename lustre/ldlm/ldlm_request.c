@@ -846,6 +846,7 @@ int ldlm_cli_enqueue(struct obd_export *exp, struct ptlrpc_request **reqp,
 	lock->l_conn_export = exp;
 	lock->l_export = NULL;
 	lock->l_blocking_ast = einfo->ei_cb_bl;
+        lock->l_flags |= (*flags & LDLM_FL_NO_LRU);
 
         /* lock not sent to server yet */
 
