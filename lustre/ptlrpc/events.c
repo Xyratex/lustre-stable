@@ -180,6 +180,7 @@ void client_bulk_callback (lnet_event_t *ev)
 {
         struct ptlrpc_cb_id     *cbid = ev->md.user_ptr;
         struct ptlrpc_bulk_desc *desc = cbid->cbid_arg;
+        struct ptlrpc_request   *req;
         ENTRY;
 
         LASSERT ((desc->bd_type == BULK_PUT_SINK &&
@@ -194,7 +195,7 @@ void client_bulk_callback (lnet_event_t *ev)
                ev->type, ev->status, desc);
 
         cfs_spin_lock(&desc->bd_lock);
-
+        req = desc->bd_req;
         LASSERT(desc->bd_network_rw);
         desc->bd_network_rw = 0;
 
@@ -203,14 +204,20 @@ void client_bulk_callback (lnet_event_t *ev)
                 desc->bd_nob_transferred = ev->mlength;
                 desc->bd_sender = ev->sender;
         }
+        if (ev->type == LNET_EVENT_UNLINK || ev->status != 0) {
+                /* start reconnect and resend if network error hit */
+                cfs_spin_lock(&req->rq_lock);
+                req->rq_net_err = 1;
+                cfs_spin_unlock(&req->rq_lock);
+        }
 
         /* release the encrypted pages for write */
-        if (desc->bd_req->rq_bulk_write)
+        if (req->rq_bulk_write)
                 sptlrpc_enc_pool_put_pages(desc);
 
         /* NB don't unlock till after wakeup; desc can disappear under us
          * otherwise */
-        ptlrpc_client_wake_req(desc->bd_req);
+        ptlrpc_client_wake_req(req);
 
         cfs_spin_unlock(&desc->bd_lock);
         EXIT;
