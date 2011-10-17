@@ -863,7 +863,6 @@ static int getparam_display(struct param_opts *popt, char *pattern)
 
 int jt_lcfg_getparam(int argc, char **argv)
 {
-        int fp;
         int rc = 0, i;
         struct param_opts popt;
         char pattern[PATH_MAX];
@@ -878,15 +877,8 @@ int jt_lcfg_getparam(int argc, char **argv)
 
                 clean_path(path);
 
-                /* If the entire path is specified as input */
-                fp = open(path, O_RDONLY);
-                if (fp < 0) {
-                        snprintf(pattern, PATH_MAX, "/proc/{fs,sys}/{lnet,lustre}/%s",
+                snprintf(pattern, PATH_MAX, "/proc/{fs,sys}/{lnet,lustre}/%s",
                                  path);
-                } else {
-                        strcpy(pattern, path);
-                        close(fp);
-                }
 
                 if (popt.only_path)
                         rc = listparam_display(&popt, pattern);
@@ -966,7 +958,6 @@ static int setparam_display(struct param_opts *popt, char *pattern, char *value)
 
 int jt_lcfg_setparam(int argc, char **argv)
 {
-        int fp;
         int rc = 0, i;
         struct param_opts popt;
         char pattern[PATH_MAX];
@@ -994,15 +985,8 @@ int jt_lcfg_setparam(int argc, char **argv)
 
                 clean_path(path);
 
-                /* If the entire path is specified as input */
-                fp = open(path, O_RDONLY);
-                if (fp < 0) {
-                        snprintf(pattern, PATH_MAX, "/proc/{fs,sys}/{lnet,lustre}/%s",
+                snprintf(pattern, PATH_MAX, "/proc/{fs,sys}/{lnet,lustre}/%s",
                                  path);
-                } else {
-                        strcpy(pattern, path);
-                        close(fp);
-                }
 
                 rc = setparam_display(&popt, pattern, value);
                 path = NULL;
