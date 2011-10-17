@@ -405,32 +405,35 @@ set_debug_size () {
 }
 
 set_default_debug () {
-    lctl set_param debug=$PTLDEBUG
-    lctl set_param subsystem_debug=${SUBSYSTEM# }
+    local debug=${1:-"$PTLDEBUG"}
+    local subsystem_debug=${2:-"$SUBSYSTEM"}
+    local debug_size=${3:-$DEBUG_SIZE}
 
-    set_debug_size $DEBUG_SIZE
+    lctl set_param debug="$debug"
+    lctl set_param subsystem_debug="${subsystem_debug# }"
+
+    set_debug_size $debug_size
     sync
-}
-
-remote_node () {
-    local node=$1
-    [ "$node" != "$(hostname)" ]
 }
 
 set_default_debug_nodes () {
     local nodes=$1
 
-    if remote_node $nodes; then
-	do_rpc_nodes $nodes set_default_debug
-    else
+    if [[ ,$nodes, = *,$HOSTNAME,* ]]; then
+	nodes=$(exclude_items_from_list "$nodes" "$HOSTNAME")
 	set_default_debug
     fi
+
+    [[ -n $nodes ]] && do_rpc_nodes $nodes set_default_debug \
+            \\\"$PTLDEBUG\\\" \\\"$SUBSYSTEM\\\" $DEBUG_SIZE || true
 }
 
 set_default_debug_facet () {
     local facet=$1
+    local node=$(facet_active_host $facet)
+    [ -z "$node" ] && echo "No host defined for facet $facet" && exit 1
 
-    set_default_debug_nodes $(facet_host ${facet})
+    set_default_debug_nodes $node
 }
 
 # Facet functions
@@ -2896,6 +2899,11 @@ osc_to_ost()
 ostuuid_from_index()
 {
     $LFS osts $2 | awk '/^'$1'/ { print $2 }'
+}
+
+remote_node () {
+    local node=$1
+    [[ $node != $HOSTNAME ]]
 }
 
 remote_mds ()
