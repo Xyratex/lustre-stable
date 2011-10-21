@@ -202,6 +202,7 @@ void client_destroy_import(struct obd_import *imp)
         sptlrpc_import_sec_put(imp);
         class_import_put(imp);
 }
+EXPORT_SYMBOL(client_destroy_import);
 
 /* configure an RPC client OBD device
  *
@@ -404,6 +405,8 @@ int client_obd_cleanup(struct obd_device *obddev)
         ldlm_namespace_free_post(obddev->obd_namespace);
         obddev->obd_namespace = NULL;
 
+        LASSERT(obddev->u.cli.cl_import == NULL);
+ 
         ldlm_put_ref();
         RETURN(0);
 }
@@ -535,13 +538,6 @@ int client_disconnect_export(struct obd_export *exp)
         cfs_down_write(&cli->cl_sem);
 
         ptlrpc_invalidate_import(imp);
-
-        if (imp->imp_rq_pool) {
-                ptlrpc_free_rq_pool(imp->imp_rq_pool);
-                imp->imp_rq_pool = NULL;
-        }
-        client_destroy_import(imp);
-        cli->cl_import = NULL;
 
         EXIT;
 
