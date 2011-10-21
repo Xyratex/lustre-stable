@@ -34,18 +34,38 @@ if [ $(( size * 1024 )) -ge $minsize  ]; then
     echo min kbytesavail: $minsize using size=${size} MBytes per obd instance
 fi
 
+get_devs() {
+        echo $(do_node $1 'lctl dl | grep obdfilter' | \
+             awk '{print $4}' | sort -u)
+}
+
 get_targets () {
         local targets
         local devs
         local oss
 
         for oss in $(osts_nodes); do
-                devs=$(do_node $oss "lctl dl |grep obdfilter |sort" | awk '{print $4}')
+                devs=$(get_devs $oss)
                 for d in $devs; do
                         # if oss is local -- obdfilter-survey needs dev wo/ host
                         target=$d
                         [[ $oss = `hostname` ]] || target=$oss:$target
                         targets="$targets $target"
+                done
+        done
+
+	echo $targets
+}
+
+get_targets_netdisk () {
+        local targets
+        local devs
+        local oss
+
+        for oss in $(osts_nodes); do
+                devs=$(get_devs $oss)
+                for d in $devs; do
+                        targets="$targets $oss:$d"
                 done
         done
 
@@ -58,7 +78,7 @@ obdflter_survey_targets () {
 
 	case $case in
 		disk)    targets=$(get_targets);;
-		netdisk) targets=$(get_targets);;
+		netdisk) targets=$(get_targets_netdisk);;
 		network) targets="$(osts_nodes)";;
 		*) error "unknown obdflter-survey case!" ;;
 	esac
