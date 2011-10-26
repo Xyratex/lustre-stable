@@ -1,4 +1,4 @@
-xxxx-xx-xx Oracle, Inc.
+2011-11-30 Oracle, Inc.
 	* version 1.8.7
 	* Support for kernels:
 	  2.6.16.60-0.42.8 (SLES 10),
@@ -12,6 +12,138 @@ xxxx-xx-xx Oracle, Inc.
 	* The async journal commit feature (bug 19128) and the cancel
 	  lock before replay feature (bug 16774) are disabled by default.
 
+Severity   : normal
+Bugzilla   : 19944 set $PTLDEBUG, $SUBSYSTEM and $DEBUG_SIZE values on every node
+Description: The current set_default_debug_nodes() could not pass the values of
+             $PTLDEBUG, $SUBSYSTEM and $DEBUG_SIZE to the remote nodes while they
+             are specified from the command line on the local node. This patch is
+             to fix this issue.
+
+Severity   : normal
+Bugzilla   : 24437 fix deadlock caused by original fix b=24525 LU-146
+Description: Get open lock inside mds_get_parent_child_locked() to avoid deadlock.
+             Never get open lock if child is newly created to avoid deadlock.
+
+Severity   : normal
+Bugzilla   : 24548 fix v1
+Description: canceling lock may contain data being sent to OSTs. Change find_cbdatax
+             iterator to take that into account
+
+Severity   : normal
+Bugzilla   : 24419
+Description: revert commit 381280b63103e777fca1b4f7fb6fb8b8fc3f9dca
+             it makes conf-sanity test_23a to fail
+
+Severity   : normal
+Bugzilla   : 24303 kernel BUG at fs/inode.c:323!
+Description: workaround patch to avoid the race at truncate_inode_pages_range()
+
+Severity   : normal
+Bugzilla   : 24536
+Description: IO Accounting of page reads
+             When CONFIG_TASK_IO_ACCOUNTING is used with Lustre, writes are accounted
+             for but not reads.
+Details    : The accounting it normally done in the kernels page writeback and
+             readahead functionality. Therefore as Lustre implements its own readahead,
+             it must also maintain its own accounting on reads (but not writes).
+
+Severity   : normal
+Bugzilla   : 24508 racer: general protection fault
+Description: LU-286 racer: general protection fault.
+
+Severity   : normal
+Bugzilla   : 23485
+Description: fsync for directories
+
+Severity   : normal
+Bugzilla   : 23884
+Description: allow lnet to talk to gnilnd
+             typo fix
+
+Severity   : normal
+Bugzilla   : 23884
+Description: allow lnet to talk to gnilnd
+
+Severity   : normal
+Bugzilla   : 24490
+Description: obdfilter-survey cleanup
+
+Severity   : normal
+Bugzilla   : 24050
+Description: add an -s option to set an altenative order of services start
+Details    : -s start services in the order MGS->OST(s)->MDT(s).
+             The default order is MGS->MDT(s)->OST(s).
+
+Severity   : normal
+Bugzilla   : 24419
+Description: avoid race between ldlm_pools_shrink and ldlm_namespace_free
+Details    : ldlm_namespace_free removes namespace from list and free memory
+             without checking namespace's refcount while ldlm_pools_shrink
+             might get namespace from the list and start ldlm_pool_shrink() for it.
+
+Severity   : normal
+Bugzilla   : 22638
+Description: add lst stat --count
+
+Severity   : normal
+Bugzilla   : 21103
+Description: ORNL LCE Router features\fixes
+             Only squawk when md->start is NULL on non-zero length v2
+
+Severity   : normal
+Bugzilla   : 24512
+Description: lfs find -s doesn't seem to work quite with >2GB args
+             fix the wrong size type in find_value_cmp()
+
+Severity   : normal
+Bugzilla   : 22221
+Description: client nodes crash on fs with inactive OST
+             take lov reference in lov_prep_async_page()
+
+Severity   : normal
+Bugzilla   : 20831
+Description: replay-dual: ldlm_lock.c:1622:ldlm_lock_cancel()) LBUG type: PLN
+             fix a race between do_requeue and client_disconnect_export
+
+Severity   : normal
+Bugzilla   : 24032
+Description: add lctl push
+
+Severity   : normal
+Bugzilla   : 18750
+Description: remove OBD_CHECK_FAIL_CHECK_ONCE
+
+Severity   : normal
+Bugzilla   : 24464
+Description: Load Lustre modules before mounting targets to avoid race conditions.
+
+Severity   : normal
+Bugzilla   : 24498
+Description: wait_osc_import_state () fixes
+             -- increase maxtime to wait the timeout of 1st request;
+                take into account at_min value;
+             -- cleanup wait_osc_import_state () to use _wait_import_state ();
+             -- ost-pools test_1 fix: use local var instead of global NAME
+
+Severity   : normal
+Bugzilla   : 24504
+Description: sanity test_133* and check_stats() fix
+
+Severity   : normal
+Bugzilla   : 24487
+Description: canonicalize the devices names
+
+Severity   : normal
+Bugzilla   : 21047
+Description: ->commit should always be called after successful ->prep on b1_8
+
+Severity   : normal
+Bugzilla   : 24488
+Description: LU-129 Skip quotacheck on administratively disabled OSTs
+             - skip quotacheck on administratively disabled OSTs.
+             - introduce OBD_NOTIFY_DEACTIVATE & OBD_NOTIFY_ACTIVATE event,
+               thus lov is now aware of administratively enable/disable import
+               event, and is able to udpate the 'ltd_activate' accordingly.
 
 -------------------------------------------------------------------------------
 
