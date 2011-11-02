@@ -143,12 +143,6 @@ void groups_free(struct group_info *ginfo);
 
 #endif /* LINUX_VERSION_CODE < KERNEL_VERSION(2,6,4) */
 
-#ifndef CONFIG_TASK_IO_ACCOUNTING
-#define task_io_account_read(bytes) do {} while (0)
-#else
-#include <linux/task_io_accounting_ops.h>
-#endif
-
 #ifndef page_private
 #define page_private(page) ((page)->private)
 #define set_page_private(page, v) ((page)->private = (v))
