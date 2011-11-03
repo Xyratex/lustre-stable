@@ -450,7 +450,6 @@ int ll_lookup_it_finish(struct ptlrpc_request *request,
         struct it_cb_data *icbd = data;
         struct dentry **de = icbd->icbd_childp;
         struct inode *parent = icbd->icbd_parent;
-        struct ll_sb_info *sbi = ll_i2sbi(parent);
         struct inode *inode = NULL;
         int rc;
         ENTRY;
@@ -459,16 +458,13 @@ int ll_lookup_it_finish(struct ptlrpc_request *request,
          * when I return */
         if (!it_disposition(it, DISP_LOOKUP_NEG)) {
                 struct dentry *save = *de;
-                __u32 bits;
+                __u64 bits = 0;
 
                 rc = ll_prep_inode(&inode, request, (*de)->d_sb);
                 if (rc)
                         RETURN(rc);
 
-                CDEBUG(D_DLMTRACE, "setting l_data to inode %p (%lu/%u)\n",
-                       inode, inode->i_ino, inode->i_generation);
-                md_set_lock_data(sbi->ll_md_exp,
-                                 &it->d.lustre.it_lock_handle, inode, &bits);
+                ll_set_lock_data(ll_i2sbi(parent)->ll_md_exp, inode, it, &bits);
 
                 /* We used to query real size from OSTs here, but actually
                    this is not needed. For stat() calls size would be updated
@@ -488,7 +484,8 @@ int ll_lookup_it_finish(struct ptlrpc_request *request,
                                 ll_dops_init(*de, 1, 1);
                 }
                 /* we have lookup look - unhide dentry */
-                if (bits & MDS_INODELOCK_LOOKUP) {
+                if ((*de)->d_flags & DCACHE_LUSTRE_INVALID &&
+                    bits & MDS_INODELOCK_LOOKUP) {
                         lock_dentry(*de);
                         (*de)->d_flags &= ~DCACHE_LUSTRE_INVALID;
                         unlock_dentry(*de);
@@ -768,8 +765,7 @@ static struct inode *ll_create_node(struct inode *dir, const char *name,
          * stuff it in the lock. */
         CDEBUG(D_DLMTRACE, "setting l_ast_data to inode %p (%lu/%u)\n",
                inode, inode->i_ino, inode->i_generation);
-        md_set_lock_data(sbi->ll_md_exp,
-                         &it->d.lustre.it_lock_handle, inode, NULL);
+        ll_set_lock_data(sbi->ll_md_exp, inode, it, NULL);
         EXIT;
  out:
         ptlrpc_req_finished(request);

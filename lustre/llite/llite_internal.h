@@ -51,6 +51,7 @@
 #include <cl_object.h>
 #include <lclient.h>
 #include <lustre_mdc.h>
+#include <linux/lustre_intent.h>
 
 #ifndef FMODE_EXEC
 #define FMODE_EXEC 0
@@ -1389,6 +1390,21 @@ static inline int ll_file_nolock(const struct file *file)
         LASSERT(fd != NULL);
         return ((fd->fd_flags & LL_FILE_IGNORE_LOCK) ||
                 (ll_i2sbi(inode)->ll_flags & LL_SBI_NOLCK));
+}
+
+static inline void ll_set_lock_data(struct obd_export *exp, struct inode *inode,
+                                    struct lookup_intent *it, __u64 *bits)
+{
+        if (!it->d.lustre.it_lock_set) {
+                CDEBUG(D_DLMTRACE, "setting l_data to inode %p (%lu/%u)\n",
+                       inode, inode->i_ino, inode->i_generation);
+                md_set_lock_data(exp, &it->d.lustre.it_lock_handle,
+                                 inode, &it->d.lustre.it_lock_bits);
+                it->d.lustre.it_lock_set = 1;
+        }
+
+        if (bits != NULL)
+                *bits = it->d.lustre.it_lock_bits;
 }
 
 #if LUSTRE_VERSION_CODE < OBD_OCD_VERSION(2,7,50,0)
