@@ -276,7 +276,6 @@ static int mgs_get_fsdb_from_llog(struct obd_device *obd, struct fs_db *fsdb)
         ctxt = llog_get_context(obd, LLOG_CONFIG_ORIG_CTXT);
         LASSERT(ctxt != NULL);
         name_create(&logname, fsdb->fsdb_name, "-client");
-        cfs_down(&fsdb->fsdb_sem);
         push_ctxt(&saved, &obd->obd_lvfs_ctxt, NULL);
         rc = llog_create(ctxt, &loghandle, NULL, logname, LLOG_CREATE_RO);
         if (rc) {
@@ -301,7 +300,6 @@ out_close:
                 rc = rc2;
 out_pop:
         pop_ctxt(&saved, &obd->obd_lvfs_ctxt, NULL);
-        cfs_up(&fsdb->fsdb_sem);
         name_destroy(&logname);
         llog_ctxt_put(ctxt);
 
@@ -452,27 +450,30 @@ int mgs_find_or_make_fsdb(struct obd_device *obd, char *name,
         struct fs_db *fsdb;
         int rc = 0;
 
+        ENTRY;
         cfs_down(&mgs->mgs_sem);
         fsdb = mgs_find_fsdb(obd, name);
         if (fsdb) {
                 cfs_up(&mgs->mgs_sem);
                 *dbh = fsdb;
-                return 0;
+                RETURN(0);
         }
 
         CDEBUG(D_MGS, "Creating new db\n");
         fsdb = mgs_new_fsdb(obd, name);
+        /* lock fsdb_sem until the db is loaded from llogs */
+        if (fsdb)
+                cfs_down(&fsdb->fsdb_sem);
         cfs_up(&mgs->mgs_sem);
         if (!fsdb)
-                return -ENOMEM;
+                RETURN(-ENOMEM);
 
         if (!cfs_test_bit(FSDB_MGS_SELF, &fsdb->fsdb_flags)) {
                 /* populate the db from the client llog */
                 rc = mgs_get_fsdb_from_llog(obd, fsdb);
                 if (rc) {
                         CERROR("Can't get db from client log %d\n", rc);
-                        mgs_free_fsdb(obd, fsdb);
-                        return rc;
+                        GOTO(out_free, rc);
                 }
         }
 
@@ -480,13 +481,18 @@ int mgs_find_or_make_fsdb(struct obd_device *obd, char *name,
         rc = mgs_get_fsdb_srpc_from_llog(obd, fsdb);
         if (rc) {
                 CERROR("Can't get db from params log %d\n", rc);
-                mgs_free_fsdb(obd, fsdb);
-                return rc;
+                GOTO(out_free, rc);
         }
 
+        cfs_up(&fsdb->fsdb_sem);
         *dbh = fsdb;
 
-        return 0;
+        RETURN(0);
+
+out_free:
+        cfs_up(&fsdb->fsdb_sem);
+        mgs_free_fsdb(obd, fsdb);
+        return rc;
 }
 
 /* 1 = index in use
@@ -550,6 +556,7 @@ static int mgs_set_index(struct obd_device *obd, struct mgs_target_info *mti)
                 RETURN(rc);
         }
 
+        cfs_down(&fsdb->fsdb_sem);
         if (mti->mti_flags & LDD_F_SV_TYPE_OST) {
                 imap = fsdb->fsdb_ost_index_map;
         } else if (mti->mti_flags & LDD_F_SV_TYPE_MDT) {
@@ -557,16 +564,16 @@ static int mgs_set_index(struct obd_device *obd, struct mgs_target_info *mti)
                 if (fsdb->fsdb_mdt_count >= MAX_MDT_COUNT) {
                         LCONSOLE_ERROR_MSG(0x13f, "The max mdt count"
                                            "is %d\n", (int)MAX_MDT_COUNT);
-                        RETURN(-ERANGE);
+                        GOTO(out_up, rc = -ERANGE);
                 }
         } else {
-                RETURN(-EINVAL);
+                GOTO(out_up, rc = -EINVAL);
         }
 
         if (mti->mti_flags & LDD_F_NEED_INDEX) {
                 rc = next_index(imap, INDEX_MAP_SIZE);
                 if (rc == -1)
-                        RETURN(-ERANGE);
+                        GOTO(out_up, rc = -ERANGE);
                 mti->mti_stripe_index = rc;
                 if (mti->mti_flags & LDD_F_SV_TYPE_MDT)
                         fsdb->fsdb_mdt_count ++;
@@ -577,7 +584,7 @@ static int mgs_set_index(struct obd_device *obd, struct mgs_target_info *mti)
                                    "but the max index is %d.\n",
                                    mti->mti_svname, mti->mti_stripe_index,
                                    INDEX_MAP_SIZE * 8);
-                RETURN(-ERANGE);
+                GOTO(out_up, rc = -ERANGE);
         }
 
         if (cfs_test_bit(mti->mti_stripe_index, imap)) {
@@ -588,16 +595,17 @@ static int mgs_set_index(struct obd_device *obd, struct mgs_target_info *mti)
                                            "use. Use --writeconf to force\n",
                                            mti->mti_svname,
                                            mti->mti_stripe_index);
-                        RETURN(-EADDRINUSE);
+                        GOTO(out_up, rc = -EADDRINUSE);
                 } else {
                         CDEBUG(D_MGS, "Server %s updating index %d\n",
                                mti->mti_svname, mti->mti_stripe_index);
-                        RETURN(EALREADY);
+                        GOTO(out_up, rc = EALREADY);
                 }
         }
 
         cfs_set_bit(mti->mti_stripe_index, imap);
         cfs_clear_bit(FSDB_LOG_EMPTY, &fsdb->fsdb_flags);
+        cfs_up(&fsdb->fsdb_sem);
         server_make_name(mti->mti_flags, mti->mti_stripe_index,
                          mti->mti_fsname, mti->mti_svname);
 
@@ -605,6 +613,9 @@ static int mgs_set_index(struct obd_device *obd, struct mgs_target_info *mti)
                mti->mti_stripe_index);
 
         RETURN(0);
+out_up:
+        cfs_up(&fsdb->fsdb_sem);
+        return rc;
 }
 
 struct mgs_modify_lookup {
