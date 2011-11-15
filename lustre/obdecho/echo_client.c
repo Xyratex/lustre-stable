@@ -50,6 +50,7 @@
 #include <lustre_debug.h>
 #include <lprocfs_status.h>
 #include <cl_object.h>
+#include <lustre_net.h>
 
 #include "echo_internal.h"
 
@@ -1730,6 +1731,10 @@ static int echo_client_brw_ioctl(int rw, struct obd_export *exp,
                 test_mode = 3;
                 data->ioc_plen1 = data->ioc_count;
         }
+
+        /* Truncate batch size to maximum */
+	if (data->ioc_plen1 > PTLRPC_MAX_BRW_SIZE)
+                data->ioc_plen1 = PTLRPC_MAX_BRW_SIZE;
 
         switch(test_mode) {
         case 1:

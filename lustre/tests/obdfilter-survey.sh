@@ -171,6 +171,11 @@ test_1c () {
 }
 run_test 1c "Object Storage Targets survey, verify"
 
+test_1d () {
+	nobjlo=1 nobjhi=1 thrlo=128 thrhi=128 rszlo=2048 rszhi=2048 size=8192 obdflter_survey_run disk
+}
+run_test 1d "Object Storage Targets survey, big batch"
+ 
 test_2a () {
 	obdflter_survey_run netdisk
 }
