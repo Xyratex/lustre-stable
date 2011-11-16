@@ -854,8 +854,8 @@ static int mdd_unlink(const struct lu_env *env, struct md_object *pobj,
         int rc;
         ENTRY;
 
-        LASSERTF(mdd_object_exists(mdd_cobj) > 0, "FID is "DFID"\n",
-                 PFID(mdd_object_fid(mdd_cobj)));
+        if (mdd_object_exists(mdd_cobj) <= 0)
+                RETURN(-ENOENT);
 
         rc = mdd_log_txn_param_build(env, cobj, ma, MDD_TXN_UNLINK_OP, 1);
         if (rc)
@@ -1440,7 +1440,7 @@ __mdd_lookup(const struct lu_env *env, struct md_object *pobj,
         else if (unlikely(rc < 0)) {
                 CERROR("Object "DFID" locates on remote server\n",
                         PFID(mdo2fid(mdd_obj)));
-                LBUG();
+                RETURN(-EINVAL);
         }
 
         /* The common filename length check. */
