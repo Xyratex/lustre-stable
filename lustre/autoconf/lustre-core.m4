@@ -2040,6 +2040,24 @@ LB_LINUX_TRY_COMPILE([
 ])
 ])
 
+#
+# 2.6.39 remove unplug_fn from request_queue.
+#
+AC_DEFUN([LC_REQUEST_QUEUE_UNPLUG_FN],
+[AC_MSG_CHECKING([if request_queue has unplug_fn field])
+LB_LINUX_TRY_COMPILE([
+        #include <linux/blkdev.h>
+],[
+        struct request_queue rq;
+        memset(rq.unplug_fn, 0, sizeof(rq.unplug_fn));
+],[
+        AC_DEFINE(HAVE_REQUEST_QUEUE_UNPLUG_FN, 1,
+                [request_queue has unplug_fn field]),
+        AC_MSG_RESULT([yes])
+],[
+        AC_MSG_RESULT([no])
+])
+])
 
 #
 # LC_PROG_LINUX
@@ -2196,6 +2214,9 @@ AC_DEFUN([LC_PROG_LINUX],
          LC_BLK_QUEUE_MAX_SEGMENTS
          LC_SET_CPUS_ALLOWED
          LC_CACHE_UPCALL
+
+         # 2.6.39
+         LC_REQUEST_QUEUE_UNPLUG_FN
 
          #
          if test x$enable_server = xyes ; then
