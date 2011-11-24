@@ -3317,14 +3317,14 @@ int osc_extent_blocking_cb(struct ldlm_lock *lock,
 }
 EXPORT_SYMBOL(osc_extent_blocking_cb);
 
-static void osc_set_data_with_check(struct lustre_handle *lockh, void *data,
-                                    int flags)
+static int osc_set_data_with_check(struct lustre_handle *lockh, void *data,
+                                   int flags)
 {
         struct ldlm_lock *lock = ldlm_handle2lock(lockh);
 
         if (lock == NULL) {
                 CERROR("lockh %p, data %p - client evicted?\n", lockh, data);
-                return;
+                return ELDLM_NO_LOCK_DATA;
         }
         lock_res_and_lock(lock);
 #if defined (__KERNEL__) && defined (__linux__)
@@ -3332,20 +3332,26 @@ static void osc_set_data_with_check(struct lustre_handle *lockh, void *data,
         if (lock->l_ast_data && lock->l_ast_data != data) {
                 struct inode *new_inode = data;
                 struct inode *old_inode = lock->l_ast_data;
-                if (!(old_inode->i_state & I_FREEING))
-                        LDLM_ERROR(lock, "inconsistent l_ast_data found");
-                LASSERTF(old_inode->i_state & I_FREEING,
-                         "Found existing inode %p/%lu/%u state %lu in lock: "
-                         "setting data to %p/%lu/%u\n", old_inode,
-                         old_inode->i_ino, old_inode->i_generation,
-                         old_inode->i_state,
-                         new_inode, new_inode->i_ino, new_inode->i_generation);
+                if (!(old_inode->i_state & I_FREEING)) {
+                        LCONSOLE_ERROR("Found existing inode in lock "
+                                       "%p/%lu/%u state %lu: "
+                                       "setting data to %p/%lu/%u\n",
+                                       old_inode, old_inode->i_ino,
+                                       old_inode->i_generation,
+                                       old_inode->i_state, new_inode,
+                                       new_inode->i_ino,
+                                       new_inode->i_generation);
+                        unlock_res_and_lock(lock);
+                        LDLM_LOCK_PUT(lock);
+                        return ELDLM_NO_LOCK_DATA;
+                }
         }
 #endif
         lock->l_ast_data = data;
         lock->l_flags |= (flags & LDLM_FL_NO_LRU);
         unlock_res_and_lock(lock);
         LDLM_LOCK_PUT(lock);
+        return ELDLM_OK;
 }
 
 static int osc_change_cbdata(struct obd_export *exp, struct lov_stripe_md *lsm,
@@ -3499,12 +3505,18 @@ static int osc_enqueue(struct obd_export *exp, struct obd_info *oinfo,
                                einfo->ei_type, &oinfo->oi_policy, mode,
                                oinfo->oi_lockh);
         if (mode) {
+                rc = osc_set_data_with_check(oinfo->oi_lockh, einfo->ei_cbdata,
+                                             oinfo->oi_flags);
+                if (rc != ELDLM_OK) {
+                        ldlm_lock_decref(oinfo->oi_lockh, mode);
+                        RETURN(-EIO);
+                }
+
                 /* addref the lock only if not async requests and PW lock is
                  * matched whereas we asked for PR. */
                 if (!rqset && einfo->ei_mode != mode)
                         ldlm_lock_addref(oinfo->oi_lockh, LCK_PR);
-                osc_set_data_with_check(oinfo->oi_lockh, einfo->ei_cbdata,
-                                        oinfo->oi_flags);
+
                 if (intent) {
                         /* I would like to be able to ASSERT here that rss <=
                          * kms, but I can't, for reasons which are explained in
@@ -3603,7 +3615,11 @@ static int osc_match(struct obd_export *exp, struct lov_stripe_md *lsm,
         rc = ldlm_lock_match(obd->obd_namespace, lflags | LDLM_FL_LVB_READY,
                              &res_id, type, policy, rc, lockh);
         if (rc) {
-                osc_set_data_with_check(lockh, data, lflags);
+                if (osc_set_data_with_check(lockh, data, lflags) != ELDLM_OK) {
+                        if (!(lflags & LDLM_FL_TEST_LOCK))
+                                ldlm_lock_decref(lockh, rc);
+                        RETURN(-EIO);
+                }
                 if (!(lflags & LDLM_FL_TEST_LOCK) && mode != rc) {
                         ldlm_lock_addref(lockh, LCK_PR);
                         ldlm_lock_decref(lockh, LCK_PW);
