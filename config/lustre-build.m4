@@ -30,6 +30,17 @@ AC_SUBST(lb_target_os)
 ])
 
 #
+# LB_DOWNSTREAM_VERSION
+#
+AC_DEFUN([LB_DOWNSTREAM_VERSION],
+[AC_ARG_WITH([downstream-version],
+	AC_HELP_STRING([--with-downstream-version=string],
+		       [set additional string at RPM Release: string (default is nothing)]),
+	[DOWNSTREAM_VERSION=$with_downstream_version],
+	[])
+])
+
+#
 # LB_DOWNSTREAM_RELEASE
 #
 AC_DEFUN([LB_DOWNSTREAM_RELEASE],
@@ -636,6 +647,7 @@ AC_DEFUN([LB_CONFIGURE],
 
 LB_CONFIG_DIST
 
+LB_DOWNSTREAM_VERSION
 LB_DOWNSTREAM_RELEASE
 LB_USES_DPKG
 LB_BUILDID

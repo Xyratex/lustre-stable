@@ -24,6 +24,8 @@ sub read_autoMakefile() {
             $modules = 1;
         } elsif ($line =~ /^VERSION = (.*)/) {
             $version = "$1";
+        } elsif ($line =~ /^DOWNSTREAM_VERSION = (.*)/) {
+            $version = "$version.$1";
         } elsif ($line =~ /^DOWNSTREAM_RELEASE = (.*)/ && $1 ne "") {
             $local_version = "$1";
         } elsif ($line =~ /^BUILDID = (.*)/ && $1 ne "") {
