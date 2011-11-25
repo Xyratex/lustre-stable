@@ -3200,7 +3200,7 @@ static int filter_getattr(struct obd_export *exp, struct obd_info *oinfo)
 
         /* Limit the valid bits in the return data to what we actually use */
         oinfo->oi_oa->o_valid = OBD_MD_FLID;
-        obdo_from_inode(oinfo->oi_oa, dentry->d_inode, NULL, FILTER_VALID_FLAGS);
+        obdo_from_inode(oinfo->oi_oa, dentry->d_inode, FILTER_VALID_FLAGS);
 
         f_dput(dentry);
         RETURN(rc);
@@ -3517,7 +3517,7 @@ int filter_setattr(struct obd_export *exp, struct obd_info *oinfo,
         oa->o_valid = OBD_MD_FLID;
 
         /* Quota release need uid/gid info */
-        obdo_from_inode(oa, dentry->d_inode, NULL,
+        obdo_from_inode(oa, dentry->d_inode,
                         FILTER_VALID_FLAGS | OBD_MD_FLUID | OBD_MD_FLGID);
 
         EXIT;
@@ -4289,7 +4289,7 @@ int filter_destroy(struct obd_export *exp, struct obdo *oa,
 	cleanup_phase = 4; /* fsfilt_commit */
 
         /* Quota release need uid/gid of inode */
-        obdo_from_inode(oa, dchild->d_inode, NULL, OBD_MD_FLUID|OBD_MD_FLGID);
+        obdo_from_inode(oa, dchild->d_inode, OBD_MD_FLUID | OBD_MD_FLGID);
 
         filter_fmd_drop(exp, oa->o_id, oa->o_seq);
 
@@ -4423,8 +4423,7 @@ static int filter_sync(struct obd_export *exp, struct obd_info *oinfo,
 	mutex_unlock(&dentry->d_inode->i_mutex);
 
         oinfo->oi_oa->o_valid = OBD_MD_FLID;
-        obdo_from_inode(oinfo->oi_oa, dentry->d_inode, NULL,
-                        FILTER_VALID_FLAGS);
+        obdo_from_inode(oinfo->oi_oa, dentry->d_inode, FILTER_VALID_FLAGS);
 
         pop_ctxt(&saved, &exp->exp_obd->obd_lvfs_ctxt, NULL);
 

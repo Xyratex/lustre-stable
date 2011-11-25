@@ -767,8 +767,8 @@ retry:
         CDEBUG(D_INFO, "set wait %d\n", sync_journal_commit);
         oti->oti_wait = sync_journal_commit;
 
-        obdo_from_inode(oa, inode, NULL, rc == 0 ? FILTER_VALID_FLAGS : 0 |
-                                                   OBD_MD_FLUID |OBD_MD_FLGID);
+        obdo_from_inode(oa, inode, (rc == 0 ? FILTER_VALID_FLAGS : 0) |
+                                   OBD_MD_FLUID | OBD_MD_FLGID);
 
         lquota_getflag(filter_quota_interface_ref, obd, oa);
 
