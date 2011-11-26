@@ -1154,6 +1154,38 @@ static void ll_ra_count_put(struct ll_sb_info *sbi, unsigned long len)
         atomic_sub(len, &ra->ra_cur_pages);
 }
 
+static void ll_dirty_page_discard_warn(struct page *page, int rc)
+{
+        char *buf, *path = NULL;
+        struct dentry *dentry = NULL;
+
+        buf = (char *)__get_free_page(GFP_KERNEL);
+        if (buf != NULL) {
+                dentry = d_find_alias(page->mapping->host);
+                if (dentry) {
+#ifdef HAVE_FS_STRUCT_USE_PATH
+                        struct path p;
+                        p.dentry = dentry;
+                        p.mnt = current->fs->root.mnt;
+                        path_get(&p);
+                        path = d_path(&p, buf, PAGE_SIZE);
+                        path_put(&p);
+#else
+                        path = d_path(dentry, current->fs->rootmnt, buf,
+                                      PAGE_SIZE);
+#endif
+                }
+        }
+        CWARN("dirty page discard: %s/[ino:%lu]/%s may get corrupted (rc %d)\n",
+              s2lsi(page->mapping->host->i_sb)->lsi_lmd->lmd_dev,
+              page->mapping->host->i_ino, (path && !IS_ERR(path)) ? path : "",
+              rc);
+        if (dentry)
+                dput(dentry);
+        if (buf)
+                free_page((unsigned long)buf);
+}
+
 /* called for each page in a completed rpc.*/
 int ll_ap_completion(void *data, int cmd, struct obdo *oa, int rc)
 {
@@ -1199,6 +1231,10 @@ int ll_ap_completion(void *data, int cmd, struct obdo *oa, int rc)
                         set_bit(AS_ENOSPC, &page->mapping->flags);
                 else
                         set_bit(AS_EIO, &page->mapping->flags);
+                if ((cmd & OBD_BRW_WRITE) && oa && oa->o_padding_1 == 1 &&
+                    (rc == -ESHUTDOWN || rc == -EINTR))
+                        /* warn about dirty page discard */
+                        ll_dirty_page_discard_warn(page, rc);
         }
 
         /* be carefull about clear WB.

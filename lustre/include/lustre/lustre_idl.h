@@ -2055,7 +2055,7 @@ struct obdo {
         __u32                   o_easize;       /* epoch in ost writes */
         __u32                   o_mds;
         __u32                   o_stripe_idx;   /* holds stripe idx */
-        __u32                   o_padding_1;
+        __u32                   o_padding_1;    /* brw: dirty page discards */
         struct lustre_handle    o_handle;       /* brw: lock handle to prolong locks */
         struct llog_cookie      o_lcookie;      /* destroy: unlink cookie from MDS */
 

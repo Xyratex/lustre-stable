@@ -2300,6 +2300,7 @@ static int brw_interpret(struct ptlrpc_request *request, void *data, int rc)
                  * we need to clean it up a little */
                 list_for_each_entry_safe(oap, tmp, &aa->aa_oaps, oap_rpc_item) {
                         list_del_init(&oap->oap_rpc_item);
+                        aa->aa_oa->o_padding_1 ++;
                         osc_ap_completion(cli, aa->aa_oa, oap, 1, rc);
                 }
                 OBDO_FREE(aa->aa_oa);
