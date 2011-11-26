@@ -300,6 +300,9 @@ static int quota_check_common(struct obd_device *obd, unsigned int uid,
                                                "blocks\n", obd->obd_name);
                                 else
                                         pending[i] += mb;
+                                LASSERTF(pending[i] >= 0, "pending is not valid,"
+                                                          " count=%d, mb=%d\n",
+                                                          count, mb);
                                 lqs->lqs_bwrite_pending += pending[i];
                         } else {
                                 pending[i] = count;
@@ -551,6 +554,7 @@ static int quota_pending_commit(struct obd_device *obd, unsigned int uid,
                 spin_lock(&lqs->lqs_lock);
                 if (isblk) {
                         if (lqs->lqs_bwrite_pending >= pending[i]) {
+                                LASSERT(pending[i] >= 0);
                                 lqs->lqs_bwrite_pending -= pending[i];
                                 flag = 1;
                         } else {
