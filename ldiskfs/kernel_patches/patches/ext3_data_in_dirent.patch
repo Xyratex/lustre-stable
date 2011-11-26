@@ -7,10 +7,10 @@ is present.
 make use of dentry->d_fsdata to pass fid to ext3. so no
 changes in ext3_add_entry() interface required.
 
-Index: b/fs/ext3/namei.c
+Index: linux-stage/fs/ext3/namei.c
 ===================================================================
---- a/fs/ext3/namei.c
-+++ b/fs/ext3/namei.c
+--- linux-stage.orig/fs/ext3/namei.c
++++ linux-stage/fs/ext3/namei.c
 @@ -174,7 +174,8 @@ static unsigned dx_get_count (struct dx_
  static unsigned dx_get_limit (struct dx_entry *entries);
  static void dx_set_count (struct dx_entry *entries, unsigned value);
@@ -75,7 +75,7 @@ Index: b/fs/ext3/namei.c
  	 		names++;
  		}
  		de = (struct ext3_dir_entry_2 *) ((char *) de + le16_to_cpu(de->rec_len));
-@@ -411,7 +422,9 @@ dx_probe(struct dentry *dentry, struct i
+@@ -412,7 +423,9 @@ dx_probe(struct dentry *dentry, struct i
  
  	entries = (struct dx_entry *) (((char *)info) + info->info_length);
  
@@ -83,10 +83,10 @@ Index: b/fs/ext3/namei.c
 +	if (dx_get_limit(entries) != dx_root_limit(dir->i_sb->s_blocksize,
 +						(struct ext3_dir_entry_2*)bh->b_data,
 +						info->info_length)) {
-		ext3_warning(dir->i_sb, __FUNCTION__,
-			     "dx entry: limit != root limit");
-		brelse(bh);
-@@ -583,7 +597,7 @@ static int htree_dirblock_to_tree(struct
+ 		ext3_warning(dir->i_sb, __FUNCTION__,
+ 			     "dx entry: limit != root limit");
+ 		brelse(bh);
+@@ -608,7 +621,7 @@ static int htree_dirblock_to_tree(struct
  	de = (struct ext3_dir_entry_2 *) bh->b_data;
  	top = (struct ext3_dir_entry_2 *) ((char *) de +
  					   dir->i_sb->s_blocksize -
@@ -95,16 +95,39 @@ Index: b/fs/ext3/namei.c
  	for (; de < top; de = ext3_next_entry(de)) {
  		if (!ext3_check_dir_entry("htree_dirblock_to_tree", dir, de, bh,
  					(block<<EXT3_BLOCK_SIZE_BITS(dir->i_sb))
-@@ -1001,7 +1015,7 @@ static struct buffer_head * ext3_dx_find
+@@ -1026,19 +1039,22 @@ static struct buffer_head * ext3_dx_find
  			goto errout;
  		de = (struct ext3_dir_entry_2 *) bh->b_data;
  		top = (struct ext3_dir_entry_2 *) ((char *) de + sb->s_blocksize -
 -				       EXT3_DIR_REC_LEN(0));
+-		for (; de < top; de = ext3_next_entry(de))
+-		if (ext3_match (namelen, name, de)) {
 +					__EXT3_DIR_REC_LEN(0));
- 		for (; de < top; de = ext3_next_entry(de))
- 		if (ext3_match (namelen, name, de)) {
++		for (; de < top; de = ext3_next_entry(de)) {
++			int off = (block << EXT3_BLOCK_SIZE_BITS(sb))
++				+ ((char *) de - bh->b_data);
++
  			if (!ext3_check_dir_entry("ext3_find_entry",
-@@ -1183,7 +1197,7 @@ dx_move_dirents(char *from, char *to, st
+-						  dir, de, bh,
+-				  (block<<EXT3_BLOCK_SIZE_BITS(sb))
+-					  +((char *)de - bh->b_data))) {
++						  dir, de, bh, off)) {
+ 				brelse (bh);
++				*err = ERR_BAD_DX_DIR;
+ 				goto errout;
+ 			}
+-			*res_dir = de;
+-			dx_release (frames);
+-			return bh;
++			if (ext3_match (namelen, name, de)) {
++				*res_dir = de;
++				dx_release (frames);
++				return bh;
++			}
+ 		}
+ 		brelse (bh);
+ 		/* Check to see if we should continue to search */
+@@ -1208,7 +1224,7 @@ dx_move_dirents(char *from, char *to, st
  
  	while (count--) {
  		struct ext3_dir_entry_2 *de = (struct ext3_dir_entry_2 *) (from + map->offs);
@@ -113,7 +136,7 @@ Index: b/fs/ext3/namei.c
  		memcpy (to, de, rec_len);
  		((struct ext3_dir_entry_2 *) to)->rec_len =
  				cpu_to_le16(rec_len);
-@@ -1208,7 +1222,7 @@ static struct ext3_dir_entry_2* dx_pack_
+@@ -1233,7 +1249,7 @@ static struct ext3_dir_entry_2* dx_pack_
  		next = (struct ext3_dir_entry_2 *) ((char *) de +
  						    le16_to_cpu(de->rec_len));
  		if (de->inode && de->name_len) {
@@ -122,7 +145,7 @@ Index: b/fs/ext3/namei.c
  			if (de > to)
  				memmove(to, de, rec_len);
  			to->rec_len = cpu_to_le16(rec_len);
-@@ -1334,12 +1348,18 @@ static int add_dirent_to_buf(handle_t *h
+@@ -1359,12 +1375,18 @@ static int add_dirent_to_buf(handle_t *h
  	struct inode	*dir = dentry->d_parent->d_inode;
  	const char	*name = dentry->d_name.name;
  	int		namelen = dentry->d_name.len;
@@ -143,7 +166,7 @@ Index: b/fs/ext3/namei.c
  	if (!de) {
  		de = (struct ext3_dir_entry_2 *)bh->b_data;
  		top = bh->b_data + dir->i_sb->s_blocksize - reclen;
-@@ -1353,7 +1373,7 @@ static int add_dirent_to_buf(handle_t *h
+@@ -1378,7 +1400,7 @@ static int add_dirent_to_buf(handle_t *h
  				brelse (bh);
  				return -EEXIST;
  			}
@@ -152,7 +175,7 @@ Index: b/fs/ext3/namei.c
  			rlen = le16_to_cpu(de->rec_len);
  			if ((de->inode? rlen - nlen: rlen) >= reclen)
  				break;
-@@ -1372,7 +1392,7 @@ static int add_dirent_to_buf(handle_t *h
+@@ -1397,7 +1419,7 @@ static int add_dirent_to_buf(handle_t *h
  	}
  
  	/* By now the buffer is marked for journaling */
@@ -161,7 +184,7 @@ Index: b/fs/ext3/namei.c
  	rlen = le16_to_cpu(de->rec_len);
  	if (de->inode) {
  		struct ext3_dir_entry_2 *de1 = (struct ext3_dir_entry_2 *)((char *)de + nlen);
-@@ -1388,6 +1408,11 @@ static int add_dirent_to_buf(handle_t *h
+@@ -1413,6 +1435,11 @@ static int add_dirent_to_buf(handle_t *h
  		de->inode = 0;
  	de->name_len = namelen;
  	memcpy (de->name, name, namelen);
@@ -173,7 +196,7 @@ Index: b/fs/ext3/namei.c
  	/*
  	 * XXX shouldn't update any times until successful
  	 * completion of syscall, but too many callers depend
-@@ -1474,7 +1499,8 @@ static int make_indexed_dir(handle_t *ha
+@@ -1499,7 +1526,8 @@ static int make_indexed_dir(handle_t *ha
  	entries = (void *)dx_info + sizeof(*dx_info);
  	dx_set_block (entries, 1);
  	dx_set_count (entries, 1);
@@ -183,7 +206,7 @@ Index: b/fs/ext3/namei.c
  
  	/* Initialize as for dx_probe */
  	hinfo.hash_version = dx_info->hash_version;
-@@ -1502,6 +1528,8 @@ static int ext3_update_dotdot(handle_t *
+@@ -1527,6 +1555,8 @@ static int ext3_update_dotdot(handle_t *
  	struct buffer_head * dir_block;
  	struct ext3_dir_entry_2 * de;
  	int len, journal = 0, err = 0;
@@ -192,7 +215,7 @@ Index: b/fs/ext3/namei.c
  
  	if (IS_ERR(handle))
  		return PTR_ERR(handle);
-@@ -1517,19 +1545,23 @@ static int ext3_update_dotdot(handle_t *
+@@ -1542,19 +1572,23 @@ static int ext3_update_dotdot(handle_t *
  	/* the first item must be "." */
  	assert(de->name_len == 1 && de->name[0] == '.');
  	len = le16_to_cpu(de->rec_len);
@@ -221,7 +244,7 @@ Index: b/fs/ext3/namei.c
  	de = (struct ext3_dir_entry_2 *)
  			((char *) de + le16_to_cpu(de->rec_len));
  	if (!journal) {
-@@ -1543,11 +1575,15 @@ static int ext3_update_dotdot(handle_t *
+@@ -1568,11 +1602,15 @@ static int ext3_update_dotdot(handle_t *
  	if (len > 0)
  		de->rec_len = cpu_to_le16(len);
  	else
@@ -239,7 +262,7 @@ Index: b/fs/ext3/namei.c
  out_journal:
  	if (journal) {
  		BUFFER_TRACE(dir_block, "call ext3_journal_dirty_metadata");
-@@ -1958,12 +1994,12 @@ retry:
+@@ -1983,12 +2021,12 @@ retry:
  
  /* Initialize @inode as a subdirectory of @dir, and add the
   * "." and ".." entries into the first directory block. */
@@ -255,7 +278,7 @@ Index: b/fs/ext3/namei.c
  
  	if (IS_ERR(handle))
  		return PTR_ERR(handle);
-@@ -1983,16 +2019,36 @@ int ext3_add_dot_dotdot(handle_t *handle
+@@ -2008,16 +2046,36 @@ int ext3_add_dot_dotdot(handle_t *handle
  	de = (struct ext3_dir_entry_2 *) dir_block->b_data;
  	de->inode = cpu_to_le32(inode->i_ino);
  	de->name_len = 1;
@@ -295,7 +318,7 @@ Index: b/fs/ext3/namei.c
  	inode->i_nlink = 2;
  	BUFFER_TRACE(dir_block, "call ext3_journal_dirty_metadata");
  	ext3_journal_dirty_metadata(handle, dir_block);
-@@ -2029,7 +2085,7 @@ retry:
+@@ -2054,7 +2112,7 @@ retry:
  	if (IS_ERR(inode))
  		goto out_stop;
  
@@ -304,7 +327,7 @@ Index: b/fs/ext3/namei.c
  	if (err) {
  		inode->i_nlink = 0;
  		ext3_mark_inode_dirty(handle, inode);
-@@ -2067,7 +2123,7 @@ static int empty_dir (struct inode * ino
+@@ -2092,7 +2150,7 @@ static int empty_dir (struct inode * ino
  	int err = 0;
  
  	sb = inode->i_sb;
@@ -313,11 +336,11 @@ Index: b/fs/ext3/namei.c
  	    !(bh = ext3_bread (NULL, inode, 0, 0, &err))) {
  		if (err)
  			ext3_error(inode->i_sb, __FUNCTION__,
-Index: b/include/linux/ext3_fs.h
+Index: linux-stage/include/linux/ext3_fs.h
 ===================================================================
---- a/include/linux/ext3_fs.h
-+++ b/include/linux/ext3_fs.h
-@@ -717,13 +717,16 @@ static inline int ext3_valid_inum(struct
+--- linux-stage.orig/include/linux/ext3_fs.h
++++ linux-stage/include/linux/ext3_fs.h
+@@ -713,13 +713,16 @@ static inline int ext3_valid_inum(struct
  #define EXT3_FEATURE_INCOMPAT_META_BG		0x0010
  #define EXT3_FEATURE_INCOMPAT_EXTENTS		0x0040 /* extents support */
  #define EXT3_FEATURE_INCOMPAT_MMP		0x0100
@@ -335,7 +358,7 @@ Index: b/include/linux/ext3_fs.h
  #define EXT3_FEATURE_RO_COMPAT_SUPP	(EXT3_FEATURE_RO_COMPAT_SPARSE_SUPER| \
  					 EXT3_FEATURE_RO_COMPAT_LARGE_FILE| \
  					 EXT4_FEATURE_RO_COMPAT_GDT_CSUM| \
-@@ -790,7 +793,44 @@ struct ext3_dir_entry_2 {
+@@ -786,7 +789,44 @@ struct ext3_dir_entry_2 {
  #define EXT3_FT_SYMLINK		7
  
  #define EXT3_FT_MAX		8
@@ -380,7 +403,7 @@ Index: b/include/linux/ext3_fs.h
  /*
   * EXT3_DIR_PAD defines the directory entries boundaries
   *
-@@ -798,8 +838,12 @@ struct ext3_dir_entry_2 {
+@@ -794,8 +834,12 @@ struct ext3_dir_entry_2 {
   */
  #define EXT3_DIR_PAD			4
  #define EXT3_DIR_ROUND			(EXT3_DIR_PAD - 1)
@@ -394,9 +417,9 @@ Index: b/include/linux/ext3_fs.h
  /*
   * Hash Tree Directory indexing
   * (c) Daniel Phillips, 2001
-@@ -1125,7 +1169,8 @@ extern struct buffer_head * ext3_find_en
- 					    struct ext3_dir_entry_2
+@@ -1133,7 +1177,8 @@ extern struct buffer_head * ext3_find_en
  					    ** res_dir);
+ #define ll_ext3_find_entry(inode, dentry, res_dir) ext3_find_entry(dentry, res_dir)
  extern int ext3_add_dot_dotdot(handle_t *handle, struct inode *dir,
 -			       struct inode *inode);
 +		struct inode *inode, const void *data1,
@@ -404,9 +427,9 @@ Index: b/include/linux/ext3_fs.h
  extern struct inode_operations ext3_dir_inode_operations;
  extern struct inode_operations ext3_special_inode_operations;
  extern struct buffer_head *ext3_append(handle_t *handle, struct inode *inode,
-@@ -1159,6 +1204,29 @@ ext3_get_blocks_wrap(handle_t *handle, s
- 	return ret;
+@@ -1168,6 +1213,29 @@ ext3_get_blocks_wrap(handle_t *handle, s
  }
+ 
  
 +/*
 + * Compute the total directory entry data length.
@@ -434,10 +457,10 @@ Index: b/include/linux/ext3_fs.h
  #endif	/* __KERNEL__ */
  
  /* EXT3_IOC_CREATE_INUM at bottom of file (visible to kernel and user). */
-Index: b/fs/ext3/dir.c
+Index: linux-stage/fs/ext3/dir.c
 ===================================================================
---- a/fs/ext3/dir.c
-+++ b/fs/ext3/dir.c
+--- linux-stage.orig/fs/ext3/dir.c
++++ linux-stage/fs/ext3/dir.c
 @@ -53,11 +53,17 @@ const struct file_operations ext3_dir_op
  
  static unsigned char get_dtype(struct super_block *sb, int filetype)
