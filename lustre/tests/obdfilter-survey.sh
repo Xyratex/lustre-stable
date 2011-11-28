@@ -42,14 +42,16 @@ get_devs() {
 get_targets () {
         local targets
         local devs
+        local nid
         local oss
 
         for oss in $(osts_nodes); do
                 devs=$(get_devs $oss)
+                nid=$(host_nids_address $oss $NETTYPE)
                 for d in $devs; do
                         # if oss is local -- obdfilter-survey needs dev wo/ host
                         target=$d
-                        [[ $oss = `hostname` ]] || target=$oss:$target
+                        [[ $oss = `hostname` ]] || target=$nid:$target
                         targets="$targets $target"
                 done
         done
@@ -79,7 +81,7 @@ obdflter_survey_targets () {
 	case $case in
 		disk)    targets=$(get_targets);;
 		netdisk) targets=$(get_targets_netdisk);;
-		network) targets="$(osts_nodes)";;
+		network) targets=$(host_nids_address $(comma_list $(osts_nodes)) $NETTYPE);;
 		*) error "unknown obdflter-survey case!" ;;
 	esac
 	echo $targets
