@@ -103,7 +103,7 @@ create_objects () {
             if test $(( count += 1 )) -gt 1 ; then
                 (( $6 != prev + 1 )) && error=1
             else
-                first=$6
+                first=$(( $6 + 0 ))
             fi
             prev=$6
             ;;
