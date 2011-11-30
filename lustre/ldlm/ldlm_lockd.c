@@ -921,6 +921,7 @@ int ldlm_server_glimpse_ast(struct ldlm_lock *lock, void *data)
         if (req == NULL)
                 RETURN(-ENOMEM);
 
+        req->rq_no_resend = 1;
         body = lustre_msg_buf(req->rq_reqmsg, DLM_LOCKREQ_OFF, sizeof(*body));
         body->lock_handle[0] = lock->l_remote_handle;
         ldlm_lock2desc(lock, &body->lock_desc);
