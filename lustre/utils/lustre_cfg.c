@@ -657,6 +657,30 @@ static void clean_path(char *path)
         }
 }
 
+/* Supporting file paths creates perilous behavoir: LU-888.
+ * Path support is deprecated.
+ * If a path is supplied it must begin with /proc.  */
+static void lprocfs_param_pattern(const char *cmd, const char *path, char *buf,
+        size_t buf_size)
+{
+        /* test path to see if it begins with '/proc/' */
+        if (strncmp(path, "/proc/", strlen("/proc/")) == 0) {
+                static int warned;
+                if (!warned) {
+                        fprintf(stderr, "%s: specifying parameters via "
+                                "full paths is deprecated.\n", cmd);
+#if LUSTRE_VERSION_CODE >= OBD_OCD_VERSION(2,6,50,0)
+#warning "remove deprecated full path tunable access"
+#endif
+                        warned = 1;
+                }
+                snprintf(buf, buf_size, "%s", path);
+        } else {
+                snprintf(buf, buf_size, "/proc/{fs,sys}/{lnet,lustre}/%s",
+                        path);
+        }
+}
+
 struct param_opts {
         int only_path:1;
         int show_path:1;
@@ -733,7 +757,6 @@ static int listparam_display(struct param_opts *popt, char *pattern)
 
 int jt_lcfg_listparam(int argc, char **argv)
 {
-        int fp;
         int rc = 0, i;
         struct param_opts popt;
         char pattern[PATH_MAX];
@@ -752,15 +775,7 @@ int jt_lcfg_listparam(int argc, char **argv)
 
                 clean_path(path);
 
-                /* If the entire path is specified as input */
-                fp = open(path, O_RDONLY);
-                if (fp < 0) {
-                        snprintf(pattern, PATH_MAX, "/proc/{fs,sys}/{lnet,lustre}/%s",
-                                 path);
-                } else {
-                        strcpy(pattern, path);
-                        close(fp);
-                }
+                lprocfs_param_pattern(argv[0], path, pattern, sizeof(pattern));
 
                 rc = listparam_display(&popt, pattern);
                 if (rc < 0)
@@ -888,8 +903,7 @@ int jt_lcfg_getparam(int argc, char **argv)
 
                 clean_path(path);
 
-                snprintf(pattern, PATH_MAX, "/proc/{fs,sys}/{lnet,lustre}/%s",
-                                 path);
+                lprocfs_param_pattern(argv[0], path, pattern, sizeof(pattern));
 
                 if (popt.only_path)
                         rc = listparam_display(&popt, pattern);
@@ -996,8 +1010,7 @@ int jt_lcfg_setparam(int argc, char **argv)
 
                 clean_path(path);
 
-                snprintf(pattern, PATH_MAX, "/proc/{fs,sys}/{lnet,lustre}/%s",
-                                 path);
+                lprocfs_param_pattern(argv[0], path, pattern, sizeof(pattern));
 
                 rc = setparam_display(&popt, pattern, value);
                 path = NULL;
@@ -1008,3 +1021,4 @@ int jt_lcfg_setparam(int argc, char **argv)
 
         return 0;
 }
+
