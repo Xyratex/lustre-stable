@@ -833,8 +833,13 @@ static int fsfilt_ext3_sync(struct super_block *sb)
 # define fsfilt_down_truncate_sem(inode)  down(&LDISKFS_I(inode)->truncate_sem);
 #else
 # ifdef HAVE_EXT4_LDISKFS
+#  ifdef WALK_SPACE_HAS_DATA_SEM /* We only use it in fsfilt_map_nblocks() for now */
+#   define fsfilt_up_truncate_sem(inode) do{ }while(0)
+#   define fsfilt_down_truncate_sem(inode) do{ }while(0)
+#  else
 #   define fsfilt_up_truncate_sem(inode) up_write((&EXT4_I(inode)->i_data_sem))
 #   define fsfilt_down_truncate_sem(inode) down_write((&EXT4_I(inode)->i_data_sem))
+#  endif
 # else
 #  define fsfilt_up_truncate_sem(inode)  mutex_unlock(&EXT3_I(inode)->truncate_mutex)
 #  define fsfilt_down_truncate_sem(inode)  mutex_lock(&EXT3_I(inode)->truncate_mutex)
@@ -986,7 +991,7 @@ static int ext3_ext_new_extent_cb(struct ext3_ext_base *base,
 #endif
         struct inode *inode = ext3_ext_base2inode(base);
         struct ext3_extent nex;
-#if defined(HAVE_EXT4_LDISKFS) && 0
+#if defined(HAVE_EXT4_LDISKFS) && defined(WALK_SPACE_HAS_DATA_SEM)
         struct ext4_ext_path *tmppath = NULL;
         struct ext4_extent *tmpex;
 #endif
@@ -1041,7 +1046,7 @@ static int ext3_ext_new_extent_cb(struct ext3_ext_base *base,
                 return EXT_REPEAT;
         }
 
-#if defined(HAVE_EXT4_LDISKFS) && 0
+#if defined(HAVE_EXT4_LDISKFS) && defined(WALK_SPACE_HAS_DATA_SEM)
         /* In 2.6.32 kernel, ext4_ext_walk_space()'s callback func is not
          * protected by i_data_sem, we need revalidate extent to be created */
         down_write((&EXT4_I(inode)->i_data_sem));
@@ -1098,7 +1103,7 @@ static int ext3_ext_new_extent_cb(struct ext3_ext_base *base,
         BUG_ON(le32_to_cpu(nex.ee_block) != cex->ec_block);
 
 out:
-#if defined(HAVE_EXT4_LDISKFS) && 0
+#if defined(HAVE_EXT4_LDISKFS) && defined(WALK_SPACE_HAS_DATA_SEM)
         ext4_ext_drop_refs(tmppath);
         kfree(tmppath);
         up_write((&EXT4_I(inode)->i_data_sem));

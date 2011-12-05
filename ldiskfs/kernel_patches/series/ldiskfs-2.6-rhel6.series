@@ -31,4 +31,3 @@ ext4-back-dquot-to-rhel6.patch
 ext4-nocmtime-2.6-rhel5.patch
 ext4-export-64bit-name-hash.patch
 ext4-vmalloc-rhel6.patch
-ext4-bug23780-remove-i_data_sem-from-walk_space.patch
