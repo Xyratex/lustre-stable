@@ -5100,7 +5100,7 @@ test_104a() {
 	OSC=`lctl get_param -n devices | awk '/-osc-/ {print $4}' | head -n 1`
 	lctl --device %$OSC deactivate
 	lfs df || error "lfs df with deactivated OSC failed"
-	lctl --device %$OSC activate
+	lctl --device %$OSC recover
 	lfs df || error "lfs df with reactivated OSC failed"
 	rm -f $DIR/$tfile
 }

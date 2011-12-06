@@ -447,9 +447,10 @@ int ptlrpc_reconnect_import(struct obd_import *imp)
         /* Remove 'invalid' flag */
         ptlrpc_activate_import(imp);
         /* Attempt a new connect */
-        ptlrpc_recover_import(imp, NULL, 0);
+        ptlrpc_recover_import(imp, NULL);
         return 0;
 }
+
 EXPORT_SYMBOL(ptlrpc_reconnect_import);
 
 /**
