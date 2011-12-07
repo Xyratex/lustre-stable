@@ -654,6 +654,7 @@ test_nfsread_orphan_file() {
     wait $NFSREADPID
 
     rmultiop_stop --uniq open $nfsserver
+    zconf_umount $nfsserver $MOUNT2
 }
 run_test nfsread_orphan_file "accessing files via nfs, bug 17764"
 
