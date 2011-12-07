@@ -20,3 +20,15 @@
 	- removed OSTS and ECHO_CLIENTS command line options, instead 
 	  used only 'targets' option for all three cases. 
 	- modified README-obdfilter-survey as per changes in 11171. 
+2010-12-30 -
+    Bugs committed:
+    15348  - check the .dat file correctness
+    23182  - lustre-iokit sgpdd-survey defect
+    LU-515 - canonicalize the devices names
+    18478  - a new osc is added for echo client purpose
+    15685  - fix obdfilter-survey script to work properly with remote oss-s
+    23363  - obdfilter-survey: no echo client and ost_name not set
+    LU-349 - set LC_ALL explicitly in obdfilter-survey
+    LU-843 - iokit: get_ec_devno returns trash
+2012-01-13
+    - Added mdt-survey script
