@@ -752,7 +752,42 @@ out:
         RETURN(rc);
 }
 
-/* When a lock is cancelled by a client, the KMS may undergo change if this
+struct kms_recalc {
+        __u64 old;
+        __u64 new;
+        __s32 stop;
+};
+
+static enum interval_iter ldlm_extent_shift_kms_cb(struct interval_node *n,
+                                                   void *data)
+{
+        struct kms_recalc *kms = data;
+        struct ldlm_interval *node = to_ldlm_interval(n);
+        struct ldlm_lock *lock;
+        ENTRY;
+
+        LASSERT(!list_empty(&node->li_group));
+
+        if (n->in_max_high < kms->new)
+                RETURN(INTERVAL_ITER_CONT);
+
+        list_for_each_entry(lock, &node->li_group, l_sl_policy) {
+                if (lock->l_flags & LDLM_FL_KMS_IGNORE)
+                        continue;
+                if ((lock->l_policy_data.l_extent.end + 1 >= kms->old) ||
+                    (lock->l_policy_data.l_extent.end == OBD_OBJECT_EOF)) {
+                        kms->new = kms->old;
+                        kms->stop = 1;
+                        RETURN(INTERVAL_ITER_STOP);
+                }
+                if (lock->l_policy_data.l_extent.end + 1 > kms->new)
+                        kms->new = lock->l_policy_data.l_extent.end + 1;
+                break;
+        }
+        RETURN(INTERVAL_ITER_CONT);
+}
+
+/* When a lock is canceled by a client, the KMS may undergo change if this
  * is the "highest lock".  This function returns the new KMS value.
  * Caller must hold ns_lock already.
  *
@@ -760,9 +795,9 @@ out:
 __u64 ldlm_extent_shift_kms(struct ldlm_lock *lock, __u64 old_kms)
 {
         struct ldlm_resource *res = lock->l_resource;
-        struct list_head *tmp;
-        struct ldlm_lock *lck;
-        __u64 kms = 0;
+        struct kms_recalc kms = {old_kms, 0, 0};
+        struct ldlm_interval_tree *tree;
+        int i;
         ENTRY;
 
         /* don't let another thread in ldlm_extent_shift_kms race in
@@ -770,23 +805,14 @@ __u64 ldlm_extent_shift_kms(struct ldlm_lock *lock, __u64 old_kms)
          * calculation of the kms */
         lock->l_flags |= LDLM_FL_KMS_IGNORE;
 
-        list_for_each(tmp, &res->lr_granted) {
-                lck = list_entry(tmp, struct ldlm_lock, l_res_link);
-
-                if (lck->l_flags & LDLM_FL_KMS_IGNORE)
-                        continue;
-
-                if (lck->l_policy_data.l_extent.end >= old_kms)
-                        RETURN(old_kms);
-
-                /* This extent _has_ to be smaller than old_kms (checked above)
-                 * so kms can only ever be smaller or the same as old_kms. */
-                if (lck->l_policy_data.l_extent.end + 1 > kms)
-                        kms = lck->l_policy_data.l_extent.end + 1;
+        for (i = 0; i < LCK_MODE_NUM && kms.stop == 0; i++) {
+                tree = &res->lr_itree[i];
+                interval_iterate_reverse(tree->lit_root,
+                                         ldlm_extent_shift_kms_cb, &kms);
         }
-        LASSERTF(kms <= old_kms, "kms "LPU64" old_kms "LPU64"\n", kms, old_kms);
-
-        RETURN(kms);
+        LASSERTF(kms.new <= old_kms, "kms "LPU64" old_kms "LPU64"\n", kms.new,
+                 old_kms);
+        RETURN(kms.new);
 }
 
 cfs_mem_cache_t *ldlm_interval_slab;
