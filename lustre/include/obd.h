@@ -780,7 +780,7 @@ struct lov_obd {
         struct lov_tgt_desc   **lov_tgts;              /* sparse array */
         struct ost_pool         lov_packed;            /* all OSTs in a packed
                                                           array */
-        struct semaphore        lov_lock;
+        struct rw_semaphore     lov_lock;
         struct obd_connect_data lov_ocd;
         struct lov_qos          lov_qos;               /* qos info per lov */
         atomic_t                lov_refcount;
@@ -1334,8 +1334,8 @@ struct obd_ops {
                           char *ostname);
         int (*o_pool_rem)(struct obd_device *obd, char *poolname,
                           char *ostname);
-        void (*o_getref)(struct obd_device *obd);
-        void (*o_putref)(struct obd_device *obd);
+        void (*o_getref)(struct obd_device *obd, int flag);
+        void (*o_putref)(struct obd_device *obd, int flag);
 
         /*
          * NOTE: If adding ops, add another LPROCFS_OBD_OP_INIT() line

@@ -72,7 +72,7 @@ int qos_add_tgt(struct obd_device *obd, __u32 index)
         }
 
         down_write(&lov->lov_qos.lq_rw_sem);
-        mutex_down(&lov->lov_lock);
+        down_write(&lov->lov_lock);
         list_for_each_entry(oss, &lov->lov_qos.lq_oss_list, lqo_oss_list) {
                 if (obd_uuid_equals(&oss->lqo_uuid,
                                     &exp->exp_connection->c_remote_uuid)) {
@@ -115,7 +115,7 @@ int qos_add_tgt(struct obd_device *obd, __u32 index)
                oss->lqo_ost_count);
 
 out:
-        mutex_up(&lov->lov_lock);
+        up_write(&lov->lov_lock);
         up_write(&lov->lov_qos.lq_rw_sem);
         RETURN(rc);
 }

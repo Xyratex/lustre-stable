@@ -846,25 +846,27 @@ static inline int obd_pool_rem(struct obd_device *obd, char *poolname, char *ost
         RETURN(rc);
 }
 
-static inline void obd_getref(struct obd_device *obd)
+static inline void obd_getref_flag(struct obd_device *obd, int flag)
 {
         ENTRY;
         if (OBT(obd) && OBP(obd, getref)) {
                 OBD_COUNTER_INCREMENT(obd, getref);
-                OBP(obd, getref)(obd);
+                OBP(obd, getref)(obd, flag);
         }
         EXIT;
 }
+#define obd_getref(obd) obd_getref_flag(obd, 0)
 
-static inline void obd_putref(struct obd_device *obd)
+static inline void obd_putref_flag(struct obd_device *obd, int flag)
 {
         ENTRY;
         if (OBT(obd) && OBP(obd, putref)) {
                 OBD_COUNTER_INCREMENT(obd, putref);
-                OBP(obd, putref)(obd);
+                OBP(obd, putref)(obd, flag);
         }
         EXIT;
 }
+#define obd_putref(obd) obd_putref_flag(obd, 0)
 
 static inline int obd_init_export(struct obd_export *exp)
 {
