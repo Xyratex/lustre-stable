@@ -1325,6 +1325,11 @@ ldlm_send_and_maybe_create_set(struct ldlm_cb_set_arg *arg, int do_create)
                 arg->set = ptlrpc_prep_set();
 }
 
+static int condition(struct ptlrpc_request_set *set)
+{
+        return (atomic_read(&set->set_remaining) < PARALLEL_AST_LIMIT) ? 1 : 0;
+}
+
 int ldlm_run_bl_ast_work(struct list_head *rpc_list)
 {
         struct ldlm_cb_set_arg arg;
@@ -1342,6 +1347,8 @@ int ldlm_run_bl_ast_work(struct list_head *rpc_list)
                 RETURN(-ERESTART);
         atomic_set(&arg.restart, 0);
         arg.type = LDLM_BL_CALLBACK;
+        arg.set->set_condition = condition;
+        arg.set->set_arg = &arg;
 
         ast_count = 0;
         list_for_each_safe(tmp, pos, rpc_list) {
@@ -1365,25 +1372,15 @@ int ldlm_run_bl_ast_work(struct list_head *rpc_list)
                 rc = lock->l_blocking_ast(lock, &d, (void *)&arg,
                                           LDLM_CB_BLOCKING);
                 LDLM_LOCK_PUT(lock);
-                ast_count++;
-
-                /* Send the request set if it exceeds the PARALLEL_AST_LIMIT,
-                 * and create a new set for requests that remained in
-                 * @rpc_list */
-                if (unlikely(ast_count == PARALLEL_AST_LIMIT)) {
-                        ldlm_send_and_maybe_create_set(&arg, 1);
-                        ast_count = 0;
-                }
+                if (atomic_read(&arg.set->set_remaining) == PARALLEL_AST_LIMIT)
+                        ptlrpc_set_wait(arg.set);
         }
 
-        if (ast_count > 0)
-                ldlm_send_and_maybe_create_set(&arg, 0);
-        else
-                /* In case when number of ASTs is multiply of
-                 * PARALLEL_AST_LIMIT or @rpc_list was initially empty,
-                 * @arg.set must be destroyed here, otherwise we get
-                 * write memory leaking. */
-                ptlrpc_set_destroy(arg.set);
+        arg.set->set_condition = NULL;
+        ptlrpc_set_wait(arg.set);
+        if (arg.type == LDLM_BL_CALLBACK)
+                OBD_FAIL_TIMEOUT(OBD_FAIL_LDLM_GLIMPSE, 2);
+        ptlrpc_set_destroy(arg.set);
 
         RETURN(atomic_read(&arg.restart) ? -ERESTART : 0);
 }
