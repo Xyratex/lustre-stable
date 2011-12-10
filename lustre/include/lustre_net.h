@@ -192,6 +192,7 @@ union ptlrpc_async_args {
 
 struct ptlrpc_request_set;
 typedef int (*set_interpreter_func)(struct ptlrpc_request_set *, void *, int);
+typedef int (*set_condition_func)(struct ptlrpc_request_set *);
 
 struct ptlrpc_request_set {
         atomic_t          set_remaining; /* # uncompleted requests */
@@ -205,6 +206,7 @@ struct ptlrpc_request_set {
          * the set holder who can then fold them into the lock-free set */
         spinlock_t        set_new_req_lock;
         struct list_head  set_new_requests;
+        set_condition_func set_condition;
 };
 
 struct ptlrpc_set_cbdata {

@@ -1193,6 +1193,7 @@ int ptlrpc_check_set(struct ptlrpc_request_set *set)
 {
         struct list_head *tmp;
         int force_timer_recalc = 0;
+        int rc;
         ENTRY;
 
         if (atomic_read(&set->set_remaining) == 0)
@@ -1470,7 +1471,11 @@ int ptlrpc_check_set(struct ptlrpc_request_set *set)
         }
 
         /* If we hit an error, we want to recover promptly. */
-        RETURN(atomic_read(&set->set_remaining) == 0 || force_timer_recalc);
+        if (set->set_condition)
+                rc = set->set_condition(set);
+        else
+                rc = (atomic_read(&set->set_remaining) == 0);
+        RETURN(rc || force_timer_recalc);
 }
 
 /* Return 1 if we should give up, else 0 */
@@ -1691,9 +1696,11 @@ int ptlrpc_set_wait(struct ptlrpc_request_set *set)
                                 spin_unlock(&req->rq_lock);
                         }
                 }
-        } while (rc != 0 || atomic_read(&set->set_remaining) != 0);
+        } while (rc != 0 || (set->set_condition ? !set->set_condition(set) : 
+                             (atomic_read(&set->set_remaining) != 0)));
 
-        LASSERT(atomic_read(&set->set_remaining) == 0);
+        if (atomic_read(&set->set_remaining) != 0)
+                RETURN(rc);
 
         rc = 0;
         list_for_each(tmp, &set->set_requests) {
