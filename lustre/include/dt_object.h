@@ -112,7 +112,7 @@ struct dt_device_operations {
          * Return device-wide statistics.
          */
         int   (*dt_statfs)(const struct lu_env *env,
-                           struct dt_device *dev, cfs_kstatfs_t *sfs);
+                           struct dt_device *dev, struct obd_statfs *osfs);
         /**
          * Start transaction, described by \a param.
          */

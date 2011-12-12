@@ -182,7 +182,7 @@ struct osd_device {
          * statfs optimization: we cache a bit.
          */
         cfs_time_t                od_osfs_age;
-        cfs_kstatfs_t             od_kstatfs;
+        struct obd_statfs         od_statfs;
         cfs_spinlock_t            od_osfs_lock;
 
         /**
@@ -315,6 +315,8 @@ struct osd_thread_info {
         /** pre-allocated buffer used by oti_it_ea, size OSD_IT_EA_BUFSIZE */
         void                  *oti_it_ea_buf;
 
+        cfs_kstatfs_t          oti_ksfs;
+
         /** IAM iterator for index operation. */
         struct iam_iterator    oti_idx_it;
 
@@ -358,7 +360,7 @@ void osd_lprocfs_time_end(const struct lu_env *env,
                           struct osd_device *osd, int op);
 #endif
 int osd_statfs(const struct lu_env *env, struct dt_device *dev,
-               cfs_kstatfs_t *sfs);
+               struct obd_statfs *sfs);
 
 /*
  * Invariants, assertions.
