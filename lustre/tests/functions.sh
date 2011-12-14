@@ -25,11 +25,19 @@ signaled() {
 }
 
 mpi_run () {
+    local quiet=false
+    # do not stripe off hostname if verbose, bug 19215
+    if [ x$1 = x--quiet ]; then
+        shift
+        quiet=true
+    fi
+
     local mpirun="$MPIRUN $MPIRUN_OPTIONS"
     local command="$mpirun $@"
     local mpilog=$TMP/mpi.log
     local rc
-    $LFS df -i
+
+    $quiet || $LFS df -i
 
     if [ -n "$MPI_USER" -a "$MPI_USER" != root -a -n "$mpirun" ]; then
         echo "+ chmod 0777 $MOUNT"
@@ -45,7 +53,7 @@ mpi_run () {
     if [ $rc -eq 0 ] && grep -q "p4_error:" $mpilog ; then
        rc=1
     fi
-    $LFS df -i
+    $quiet || $LFS df -i
     return $rc
 }
 

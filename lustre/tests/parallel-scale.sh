@@ -84,6 +84,8 @@ wdisjoint_THREADS=${wdisjoint_THREADS:-4}
 wdisjoint_REP=${wdisjoint_REP:-10000}
 [ "$SLOW" = "no" ] && wdisjoint_REP=100
 
+wdisjoint2_REP=${wdisjoint2_REP:-1000}
+
 #
 # parallel_grouplock
 #
@@ -467,6 +469,46 @@ test_write_disjoint() {
     rm -rf $testdir
 }
 run_test write_disjoint "write_disjoint"
+
+# bug 24548 regression test:
+# make sure that data written concurrently do not get discarded on file close
+# required space :
+# 1 Mb * <number of clients>
+test_write_disjoint2() {
+    if [ "$NFSCLIENT" ]; then
+        skip "skipped for NFSCLIENT mode"
+        return
+    fi
+
+    [ x$WRITE_DISJOINT = x ] &&
+        { skip_env "write_disjoint not found" && return; }
+
+    local clients=${CLIENTS:-$(hostname)}
+
+    local num_clients=$(get_node_count ${clients//,/ })
+
+    generate_machine_file $clients $MACHINEFILE || return $?
+
+    print_opts WRITE_DISJOINT clients wdisjoint2_REP MACHINEFILE
+    local testdir=$DIR/d0.write_disjoint
+    mkdir -p $testdir
+    # mpi_run uses mpiuser
+    chmod 0777 $testdir
+
+    local file=$testdir/$tfile
+    local cmd="$WRITE_DISJOINT -n $wdisjoint2_REP -l -s -t -c 1048576 -i -f $file"
+    echo "+ $cmd"
+
+    mpi_run --quiet -np $num_clients -machinefile ${MACHINEFILE} $cmd
+
+    local rc=$?
+    if [ $rc != 0 ] ; then
+        error "write_disjoint failed! $rc, bug 24548?"
+    fi
+
+    rm -rf $testdir
+}
+run_test write_disjoint2 "write_disjoint, bug24548"
 
 test_parallel_grouplock() {
     if [ "$NFSCLIENT" ]; then
