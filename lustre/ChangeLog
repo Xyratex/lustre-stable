@@ -1,4 +1,4 @@
-2011-11-30 Oracle, Inc.
+2011-12-23 Oracle, Inc.
 	* version 1.8.7
 	* Support for kernels:
 	  2.6.16.60-0.42.8 (SLES 10),
@@ -11,6 +11,147 @@
 	* Recommended e2fsprogs version: 1.41.10-sun3
 	* The async journal commit feature (bug 19128) and the cancel
 	  lock before replay feature (bug 16774) are disabled by default.
+
+Severity   : normal
+Bugzilla   : 24548 regression test: make sure that data written
+             concurrently do not get discarded on file close
+Description: write_disjoint.c modification :
+             -- several new options
+             -- minor cleanup (rank=0: open file once; close file at
+	        the end; add usage ()); new parallel-scale
+		write_disjoint2 () regression test; new mpi_run()
+		--quiet option to skip lfs df
+
+Severity   : normal
+Bugzilla   : 24450 ldlm_run_bl_ast_work: use ptlrpc_set_wait() with
+             condition
+Description: ldlm_run_bl_ast_work() sends ASTs in sets of
+             PARALLEL_AST_LIMIT requests and waits for whole set to
+	     complete and then sends another set of requests and waits
+	     again. If there is a least one request per set which
+	     timeouts, we have timeout serialization.
+
+             This patch changes ldlm_run_bl_ast_work() so that having
+	     sent request set it then waits for any of sent requests to
+	     complete and refills running request set with requests which
+	     are yet to be sent. For a case where number of timeout-ing
+	     requests is smaller than PARALLEL_AST_LIMIT it is supposed
+	     to eliminate possibility of timeout serailization.
+
+             This patch uses posibility to specify wait condition for
+	     ptlrpc_set_wait() (proposed in
+	     https://bugzilla.lustre.org/attachment.cgi?id=33099)
+
+Severity   : normal
+Bugzilla   : 24450 ptlrpc_set_wait flexibility
+Description: ptlrpc_set_wait() waits until all requests in a set complete.
+             This patch makes it possible to specify a condition on which
+	     ptlrpc_set_wait() will wait instead of default condition
+	     "no remaining requests"
+
+             With that it wiil be possible to add requests to a set as
+	     sent ones complete without waiting for all requests to finish.
+
+Severity   : normal
+Bugzilla   : 22936 remove wrong assertion
+Description: The assertion underestimates exp_refcount of obd_export.
+             The exp_refcount is incremented on adding a lock into
+	     export's hash table. For decent RAM there can be millions
+	     of locks in memory.
+
+             similar problem is reported in 23265, 17924, 24376
+
+Severity   : normal
+Bugzilla   : 22221 use read-write semaphore for lov_lock
+Description: After adding obd_getref() into lov_prep_async_page() it
+             appeared that read performance degradated. lov_getref()
+	     uses mutex_down(), so it looks like concurrent reads
+	     got stuck on than mutex.
+
+             This fix replaces the mutex with r/w semaphore, so that
+	     reads do not get blocked on it. That cured the performance.
+
+Severity   : normal
+Bugzilla   : 23978 avoid unnecessary dentry rehashing (v2)
+Description: In patchless case the sequence __d_drop(); d_rehash_cond()
+             creates race window where dentry incorrectly looks like
+	     unhashed when it is not.  If dentry is not unhashed, it
+	     seems that rehashing can be avoided.
+
+Severity   : normal
+Bugzilla   : 17764 accessing files via nfs test
+Description: -- add nfsserver MOUNT2 cleanup
+
+Severity   : normal
+Bugzilla   : 22060 use interval tree to calculate kms
+Description: with interval tree of locked extents granted list iteration
+             can be avoided which is supposed to save CPU in case of
+	     long granted lock lists
+
+Severity   : normal
+Bugzilla   : 17764 correct assertion
+Description: orphan inode can be reached on mds_open when opening by fid
+             which takes place on accessing files via nfs correct the
+	     assertion correspondingly
+
+Severity   : normal
+Bugzilla   : 17764 accessing files via nfs test
+Description: -- new nfsread_orphan_file test
+             -- rmultiop_start(), rmultiop_stop() modification:
+             add possibility to run several multiop_bg on remote node
+
+Severity   : normal
+Bugzilla   : 21937 never resend glimpse ASTs
+Description: when a connection to client fails glimpse ast gets resend
+             endlessly as the request does not have rq_noresend flag.
+	     Set the flag to avoid
+resends.
+
+Severity   : normal
+Bugzilla   : 21812 generate warnings in case of discarding dirty pages
+Description: When a client is evicted, dirty pages may get silently
+             discarded.  The caller of successful write(2) will not know
+	     that the data he wrote have been discarded due to eviction
+	     before they can be flushed to the OSS.
+
+             With this patch system administrator gets warned about
+	     dirty page discard.
+
+Severity   : normal
+Bugzilla   : 23858 do not compare unsigned < 0
+Description: this is also supposed to catch overflow of lqs_bwrite_pending
+
+Severity   : normal
+Bugzilla   : 24423 ext3_dx_find_entry: check directory entry consistency
+             before ext3_match
+Description: to avoid getting into infinite loop when directory block
+             contains wrong data
+
+Severity   : normal
+Bugzilla   : 24141 llite: -EIO instead of LBUG for multi-referenced object
+Description: Whenever an inode is used with a DLM lock, the client checks
+             that no other inodes are referencing the same OST object,
+	     since this is a sign of filesystem corruption on the MDS (or
+	     some other code bug that behaves in this way).  If the client
+	     detected the same OST object is referenced from multiple
+	     inodes at the same time, it will LASSERT() and print a
+	     message to this effect, rather than continue to corrupt the
+	     data files.
+	        osc_set_data_with_check() ASSERTION(old_inode->i_state &
+		I_FREEING) failed: Found existing inode
+		ffff880587d15d10/222311317/67781718 state 0 in lock:
+		setting data to ffff88046b7f8d50/223489633/67781099
+             Instead of LASSERTing on this condition, instead return EIO
+	     for this file.  This allows the problem to be analyzed and
+	     fixed without the need to reboot the client node.
+
+Severity   : normal
+Bugzilla   : 24264 Avoid corropt ldiskfs after MD rebuild on RHEL5/CentOS5.
+
+Severity   : normal
+Bugzilla   : 24546 limit bio size to BIO_MAX_PAGES
+Description: this is neede because bio_alloc_bioset()->bvec_alloc_bs() refuses to
+             allocate bigger bio-s
 
 Severity   : normal
 Bugzilla   : 19944 set $PTLDEBUG, $SUBSYSTEM and $DEBUG_SIZE values on every node
@@ -37,15 +178,6 @@ Description: revert commit 381280b63103e777fca1b4f7fb6fb8b8fc3f9dca
 Severity   : normal
 Bugzilla   : 24303 kernel BUG at fs/inode.c:323!
 Description: workaround patch to avoid the race at truncate_inode_pages_range()
-
-Severity   : normal
-Bugzilla   : 24536
-Description: IO Accounting of page reads
-             When CONFIG_TASK_IO_ACCOUNTING is used with Lustre, writes are accounted
-             for but not reads.
-Details    : The accounting it normally done in the kernels page writeback and
-             readahead functionality. Therefore as Lustre implements its own readahead,
-             it must also maintain its own accounting on reads (but not writes).
 
 Severity   : normal
 Bugzilla   : 24508 racer: general protection fault
