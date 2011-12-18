@@ -2261,6 +2261,7 @@ AC_DEFUN([LC_PROG_LINUX],
          fi
          LC_EXT4_DISCARD_PREALLOCATIONS
          LC_EXT_INSERT_EXTENT_WITH_5ARGS
+         LC_MIGRATEPAGE_FUNC_3_ARGS
 
          #2.6.18 + RHEL5 (fc6)
          LC_PG_FS_MISC
@@ -2272,6 +2273,7 @@ AC_DEFUN([LC_PROG_LINUX],
          LC_VFS_READDIR_U64_INO
          LC_FILE_WRITEV
          LC_FILE_READV
+         LC_BOOL_TYPE
 
          # 2.6.20
          LC_CANCEL_DIRTY_PAGE
@@ -2571,6 +2573,47 @@ AC_MSG_RESULT([$enable_split])
 if test x$enable_split != xno; then
    AC_DEFINE(HAVE_SPLIT_SUPPORT, 1, [enable split support])
 fi
+])
+
+#
+# LC_BOOL_TYPE
+# whether to define our own bool type
+# kernel >= 2.6.19
+#
+AC_DEFUN([LC_BOOL_TYPE],
+[AC_MSG_CHECKING([whether to have bool type defined])
+LB_LINUX_TRY_COMPILE([
+        #include <linux/fs.h>
+],[
+        bool do_io;
+],[
+        AC_MSG_RESULT([yes])
+        AC_DEFINE(HAVE_BOOL_TYPE, 1, [have bool type defined])
+],[
+        AC_MSG_RESULT([no])
+])
+])
+
+#
+# LC_MIGRATEPAGE_FUNC_3_ARGS
+# whether address_space_operations->migratepage() takes three args
+# kernel >= 2.6.18
+#
+AC_DEFUN([LC_MIGRATEPAGE_FUNC_3_ARGS],
+[AC_MSG_CHECKING([whether migratepage function has 3 args])
+LB_LINUX_TRY_COMPILE([
+        #include <linux/fs.h>
+],[
+        struct address_space *addr;
+
+        addr->a_ops->migratepage(NULL, NULL, NULL);
+],[
+        AC_MSG_RESULT([yes])
+        AC_DEFINE(HAVE_MIGRATEPAGE_3_ARGS, 1,
+                [address_space_operations->migratepage has three args])
+],[
+        AC_MSG_RESULT([no])
+])
 ])
 
 AC_DEFUN([LC_TASK_CLENV_TUX_INFO],

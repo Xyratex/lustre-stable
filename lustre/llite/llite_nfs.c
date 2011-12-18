@@ -198,8 +198,13 @@ static int ll_encode_fh(struct dentry *de, __u32 *fh, int *plen,
         RETURN(LUSTRE_NFS_FID);
 }
 
+#ifdef HAVE_VFS_READDIR_U64_INO
 static int ll_nfs_get_name_filldir(void *cookie, const char *name, int namelen,
                                    loff_t hash, u64 ino, unsigned type)
+#else
+static int ll_nfs_get_name_filldir(void *cookie, const char *name, int namelen,
+                                   loff_t hash, ino_t ino, unsigned type)
+#endif
 {
         /* It is hack to access lde_fid for comparison with lgd_fid.
          * So the input 'name' must be part of the 'lu_dirent'. */

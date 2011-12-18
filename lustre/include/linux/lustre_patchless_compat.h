@@ -129,4 +129,11 @@ static inline void d_rehash_cond(struct dentry * entry, int lock)
 #define ATTR_CTIME_SET (1 << 28)
 #endif
 
+#ifndef HAVE_BOOL_TYPE
+typedef enum {
+        false = 0,
+        true  = 1
+} bool;
+#endif
+
 #endif /* LUSTRE_PATCHLESS_COMPAT_H */

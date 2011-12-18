@@ -516,8 +516,12 @@ static int ll_write_end(struct file *file, struct address_space *mapping,
 #endif
 
 #ifdef CONFIG_MIGRATION
+#ifdef HAVE_MIGRATEPAGE_3_ARGS
 int ll_migratepage(struct address_space *mapping,
                    struct page *newpage, struct page *page)
+#else
+int ll_migratepage(struct page *newpage, struct page *page)
+#endif
 {
         /* Always fail page migration until we have a proper implementation */
         return -EIO;
