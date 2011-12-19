@@ -85,23 +85,6 @@ AC_TRY_COMPILE([
 ])
 
 #
-# only for Lustre-patched kernels
-#
-AC_DEFUN([LC_LUSTRE_VERSION_H],
-[LB_CHECK_FILE([$LINUX/include/linux/lustre_version.h],[
-	rm -f "$LUSTRE/include/linux/lustre_version.h"
-],[
-	touch "$LUSTRE/include/linux/lustre_version.h"
-	if test x$enable_server = xyes ; then
-        	AC_MSG_WARN([Unpatched kernel detected.])
-        	AC_MSG_WARN([Lustre servers cannot be built with an unpatched kernel;])
-        	AC_MSG_WARN([disabling server build])
-		enable_server='no'
-	fi
-])
-])
-
-#
 # LC_FUNC_DEV_SET_RDONLY
 #
 # check for the old-style dev_set_rdonly which took an extra "devno" param
@@ -2198,7 +2181,7 @@ LB_LINUX_TRY_COMPILE([
 # Lustre linux kernel checks
 #
 AC_DEFUN([LC_PROG_LINUX],
-         [LC_LUSTRE_VERSION_H
+         [
          LC_CONFIG_PINGER
          LC_CONFIG_CHECKSUM
          LC_CONFIG_LIBLUSTRE_RECOVERY
