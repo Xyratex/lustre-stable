@@ -1,3 +1,17 @@
+TBD Oracle, Inc.
+	* version 1.8.8
+	* Support for kernels:
+	  2.6.16.60-0.69.1 (SLES 10),
+	  2.6.32.19-0.2.1 (SLES11),
+	  2.6.18-194.17.1.el5 (RHEL 5)
+	  2.6.18-194.17.1.0.1.el5 (OEL 5)
+	* Client support for unpatched kernels:
+	  (see http://wiki.lustre.org/index.php?title=Patchless_Client)
+	  2.6.16 - 2.6.32 vanilla (kernel.org)
+	* Recommended e2fsprogs version: 1.41.12-ora1
+	* The async journal commit feature (bug 19128) and the cancel
+
+------------------------------------------------------------------------
 2011-12-23 Oracle, Inc.
 	* version 1.8.7
 	* Support for kernels:
