@@ -9,10 +9,6 @@ libcfs-linux-objs += linux-crypto.o linux-crypto-crc32.o
 libcfs-linux-objs += linux-crypto-adler.o
 
 
-ifeq ($(PATCHLEVEL),6)
-libcfs-linux-objs := $(addprefix linux/,$(libcfs-linux-objs))
-endif
-
 default: all
 
 ifeq (@linux25@,no)
@@ -24,6 +20,8 @@ sources:
 
 else
 sources:
+
+libcfs-linux-objs := $(addprefix linux/,$(libcfs-linux-objs))
 
 endif
 
