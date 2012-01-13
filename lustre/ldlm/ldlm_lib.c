@@ -469,7 +469,7 @@ int client_obd_cleanup(struct obd_device *obddev)
         obddev->obd_namespace = NULL;
 
         LASSERT(obddev->u.cli.cl_import == NULL);
- 
+
         ldlm_put_ref();
         RETURN(0);
 }
