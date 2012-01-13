@@ -35,7 +35,7 @@ AC_DEFUN([LB_DOWNSTREAM_VERSION],
 [AC_ARG_WITH([downstream-version],
 	AC_HELP_STRING([--with-downstream-version=string],
 		       [set additional string at RPM Release: string (default is nothing)]),
-	[VERSION="$VERSION.$with_downstream_version"],
+	[DOWNSTREAM_VERSION=$with_downstream_version],
 	[])
 ])
 

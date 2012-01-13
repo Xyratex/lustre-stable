@@ -1,5 +1,5 @@
 # lustre.spec
-%{!?lversion: %define lversion @VERSION@}
+%{!?version: %define version @VERSION@}
 %{!?kver: %define kver ""}
 %{!?kdir: %define kdir %(dir=$(echo "%configure_args" | sed -ne 's/.*--with-linux=\\([^ ][^ ]*\\).*$/\\1/p'); if [ -n "$dir" ]; then echo "$dir"; else if [ -n "%kver" ]; then kversion="%kver"; else kversion="$(uname -r)"; fi; echo "/lib/modules/$kversion/source"; fi)}
 
@@ -53,11 +53,11 @@
 
 Summary: Lustre File System
 Name: %{lustre_name}
-Version: %{lversion}
+Version: %{version}
 Release: %{fullrelease}
 License: GPL
 Group: Utilities/System
-Source: lustre-%{lversion}.tar.gz
+Source: lustre-%{version}.tar.gz
 URL: http://wiki.whamcloud.com/
 BuildRoot: %{_tmppath}/lustre-%{version}-root
 Obsoletes: lustre-lite, lustre-lite-utils, lustre-ldap nfs-utils-lustre
