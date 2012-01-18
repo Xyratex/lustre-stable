@@ -777,6 +777,20 @@ fi
 fi"
 }
 
+cleanup_nmntpts () {
+    local clients=$1
+    local mntpt_root=$2
+    local num_mntpts=$3
+
+    local i
+
+    for ((i = 0; i < $num_mntpts; i++)); do
+        zconf_umount_clients $clients ${mntpt_root}$i ||
+            error_exit "Failed to umount lustre on ${mntpt_root}$i"
+    done
+
+}
+
 shutdown_node () {
     local node=$1
     echo + $POWER_DOWN $node

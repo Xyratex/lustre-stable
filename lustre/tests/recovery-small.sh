@@ -1077,6 +1077,112 @@ test_61()
 }
 run_test 61 "Verify to not reuse orphan objects - bug 17485"
 
+cleanup_70 () {
+	trap 0
+	local clients=(${1//,/ })
+	local mntpt_root=$2
+	local num=(${3//,/ })
+	local i
+
+	[[ ${#clients[@]} -eq ${#num[@]} ]] ||
+		error "cleanup_70 incorrect call"
+
+	for ((i=0; i < ${#num[@]}; i++)); do
+		cleanup_nmntpts ${clients[i]} $mntpt_root ${num[i]}
+	done
+}
+
+test_70 () {
+	local clients=${CLIENTS:-$(hostname)}
+	local num_clients=$(get_node_count ${clients//,/ })
+
+	[[ $num_clients -ge 2 ]] ||
+		{ skip "need 2 clients" && return 0; }
+
+	local cl1=$(hostname)
+	local cl2=$CLIENT2
+
+	# number of mounts is forced by maximal number of ASTs in flight
+	# defined by PARALLEL_AST_LIMIT macro (200)
+	local cl1_num_mntpts=199
+	local cl2_num_mntpts=2
+
+	local mntpt_root=$TMP/mntpt/lustre
+
+	zconf_umount $cl2 $MOUNT
+
+	echo "Mounting $cl1_num_mntpts lustre clients starts on $cl1"
+	echo "Mounting $cl2_num_mntpts lustre clients starts on $cl2"
+
+	trap "cleanup_70 $cl1,$cl2 $mntpt_root \
+	  		$cl1_num_mntpts,$cl2_num_mntpts; \
+			zconf_mount $cl2 $MOUNT" EXIT ERR
+
+	local i
+	for ((i = 0; i < $cl1_num_mntpts; i++)); do
+		zconf_mount_clients $cl1 ${mntpt_root}$i ||
+			error_exit "Failed to mount lustre on ${mntpt_root}$i on $cl1"
+	done
+
+	for ((i = 0; i < $cl2_num_mntpts; i++)); do
+		zconf_mount_clients $cl2 ${mntpt_root}$i ||
+			error_exit "Failed to mount lustre on ${mntpt_root}$i on $cl2"
+	done
+
+	echo mounts on $cl2
+	do_nodev $cl2 mount | grep lustre
+
+	local failed_nid=$(do_node $CLIENT2 lctl list_nids)
+
+	do_facet mds lctl dk >/dev/null
+
+	# get PR lock BAST to which will timeout
+	do_nodev $cl2  ls ${mntpt_root}0
+
+	# get PR locks which will respond to BAST
+	for ((i = 0; i < $cl1_num_mntpts; i++)); do
+		do_node $cl1 ls ${mntpt_root}$i >/dev/null
+	done
+
+	# get second PR lock BAST to which will timeout
+	do_nodev $cl2  ls ${mntpt_root}1
+
+	# have cl2 not respond to BASTs
+	#define OBD_FAIL_LDLM_BL_CALLBACK        0x305
+	do_nodev $cl2 lctl set_param fail_loc=0x305
+
+	# get EX lock in order to cause 201 BASTs
+	local elapsed=$(do_and_time "touch $DIR/$tfile")
+	echo touch time $elapsed sec
+
+	do_nodev $cl2 lctl set_param fail_loc=0
+
+	# make sure that timeouts do not get serialized
+
+	local log=$TMP/lustre-log-$TESTNAME.log
+	do_facet mds lctl dk $log
+
+	local times=($(do_facet mds "grep \\\"$failed_nid was evicted due to a lock blocking callback\\\" $log " | awk -F: '{print $4}'))
+ 
+	do_facet mds grep \\\"$failed_nid was evicted due to a lock blocking callback\\\" $log
+
+	[[ ${#times[@]} -eq 2 ]] ||
+		error "expect $failed_nid evicted 2 times; have ${#times[@]}"
+
+	local rc=0
+	local diff=$(echo "(${times[1]} - ${times[0]})" | bc)
+
+	echo "2nd client was evicted in $diff sec after 1st client"
+
+	rc=$(echo "($diff < 1)" | bc)
+
+	[[ $rc -eq 1 ]] ||
+		error "timeouts serialized!"
+
+	cleanup_70 $cl1,$cl2 $mntpt_root $cl1_num_mntpts,$cl2_num_mntpts
+}
+run_test 70 "check bast timeout serialization, bug 24450"
+
 complete $(basename $0) $SECONDS
 check_and_cleanup_lustre
 exit_status
