@@ -582,6 +582,7 @@ build_lustre()
 	-e s^@VERSION@^${LUSTRE_VERSION}^g \
 	-e s^@LINUXRELEASE@^${FULL_VERSION}^g \
 	-e s^@RELEASE@^${FULL_VERSION//-/_}^g \
+	-e s^@DOWNSTREAM_RELEASE@^^g \
 	< lustre.spec.in \
 	> lustre.spec
     # convert the $LUSTRE_TESTS boolean to an empty/not-empty boolean

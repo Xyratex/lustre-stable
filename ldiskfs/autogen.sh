@@ -1,2 +1,2 @@
 #!/bin/bash
-exec bash build/autogen.sh $@ 
+exec bash build/autogen.sh $@

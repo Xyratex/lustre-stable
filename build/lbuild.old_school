@@ -168,6 +168,14 @@ clean_lustre() {
     rm -rf lustre
 }
 
+#generate LUSTRE_EXTRA_VERSION from EXTRA_VERSION
+gen_lustre_version() {
+
+    LUSTRE_EXTRA_VERSION="${lnxmaj}-${EXTRA_VERSION}${FLAVOR_DELIMITER}${RPMSMPTYPE}"
+    LUSTRE_EXTRA_VERSION=${LUSTRE_EXTRA_VERSION//-/_}
+
+}
+
 build_kernel() {
     echo "Building kernel + Lustre RPMs for: $BUILD_ARCHS..."
     targets=
@@ -338,7 +346,7 @@ find_linux_source_rpm() {
     local arch=
     local pathtorpms=
     [ ! "$TARGET_ARCH" = "" ] && arch=$TARGET_ARCH && findarch=false
-    
+
     if ! $findarch; then
         pathtorpms="${KERNELRPMSBASE}/${lnxmaj}/${DISTRO}/${arch}"
         [ -d $pathtorpms ] || return 255
@@ -681,7 +689,7 @@ build_sequence_reuse() {
             local reusedkernelsourcerpm=
             local reusedkernelibrpm=
             [ -d "$curdir" ] || continue
-            [ -n "$OFED_VERSION" -a "$OFED_VERSION" != "inkernel" -a 
+            [ -n "$OFED_VERSION" -a "$OFED_VERSION" != "inkernel" -a
 	      ! -d "${curdir%/*}/ofa_kernel" ] && continue
             local reusedkernelprefix="kernel-lustre-"
             ( $PATCHLESS ) && reusedkernelprefix=
@@ -689,13 +697,13 @@ build_sequence_reuse() {
                 reusedkernelrpm=$(ls ${curdir}/../${reusedkernelprefix}${REUSEDKERNELMASK}.rpm | head -1 )
             reusedkernelprefix="kernel-lustre-source-"
             [ -f ${curdir}/../${reusedkernelprefix}${REUSEDKERNELMASKnew}.rpm ] && \
-                reusedkernelsourcerpm=$(ls ${curdir}/../${reusedkernelprefix}${REUSEDKERNELMASKnew}.rpm | head -1 ) 
+                reusedkernelsourcerpm=$(ls ${curdir}/../${reusedkernelprefix}${REUSEDKERNELMASKnew}.rpm | head -1 )
             if [ -n "$OFED_VERSION" -a "$OFED_VERSION" != "inkernel" ]; then
                 gen_lustre_version
                 reusedkernelprefix="kernel-ib-"
                 [ -f ${curdir}/../${reusedkernelprefix}${OFED_VERSION}-${LUSTRE_EXTRA_VERSION}.${TARGET_ARCH}.rpm ] && \
-                    reusedkernelibrpm=$(ls ${curdir}/../${reusedkernelprefix}${OFED_VERSION}-${LUSTRE_EXTRA_VERSION}.${TARGET_ARCH}.rpm | head -1 ) 
-                    reusedkernelibdevelrpm=$(ls ${curdir}/../${reusedkernelprefix}devel-${OFED_VERSION}-${LUSTRE_EXTRA_VERSION}.${TARGET_ARCH}.rpm | head -1 ) 
+                    reusedkernelibrpm=$(ls ${curdir}/../${reusedkernelprefix}${OFED_VERSION}-${LUSTRE_EXTRA_VERSION}.${TARGET_ARCH}.rpm | head -1 )
+                    reusedkernelibdevelrpm=$(ls ${curdir}/../${reusedkernelprefix}devel-${OFED_VERSION}-${LUSTRE_EXTRA_VERSION}.${TARGET_ARCH}.rpm | head -1 )
             fi
             if ! ( $NORPM ) && ! [ -f "$reusedkernelrpm" ]; then #kernel rpm not found. Build all
                 continue
