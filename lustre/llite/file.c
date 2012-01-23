@@ -2115,14 +2115,11 @@ int ll_file_flock(struct file *file, int cmd, struct file_lock *file_lock)
 
         if ((file_lock->fl_flags & FL_FLOCK) &&
             (rc == 0 || file_lock->fl_type == F_UNLCK))
-		rc2  = ll_flock_lock_file_wait(file,
-					file_lock, (cmd == F_SETLKW));
-#ifdef HAVE_F_OP_FLOCK
+		rc2  = flock_lock_file_wait(file, file_lock);
         if ((file_lock->fl_flags & FL_POSIX) &&
             (rc == 0 || file_lock->fl_type == F_UNLCK) &&
             !(flags & LDLM_FL_TEST_LOCK))
 		rc2  = posix_lock_file_wait(file, file_lock);
-#endif
 
 	if (rc2 && file_lock->fl_type != F_UNLCK) {
 		einfo.ei_mode = LCK_NL;
@@ -2569,9 +2566,7 @@ struct file_operations ll_file_operations_flock = {
 #endif
         .fsync          = ll_fsync,
         .flush          = ll_flush,
-#ifdef HAVE_F_OP_FLOCK
         .flock          = ll_file_flock,
-#endif
         .lock           = ll_file_flock
 };
 
@@ -2594,9 +2589,7 @@ struct file_operations ll_file_operations_noflock = {
 #endif
         .fsync          = ll_fsync,
         .flush          = ll_flush,
-#ifdef HAVE_F_OP_FLOCK
         .flock          = ll_file_noflock,
-#endif
         .lock           = ll_file_noflock
 };
 
