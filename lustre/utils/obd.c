@@ -631,6 +631,25 @@ static int shmem_running(void)
 {
         return (shared_data == NULL || !shared_data->stopping);
 }
+
+static void shmem_end_time_locked(void)
+{
+        shared_data->body.stop_barrier--;
+        if (shared_data->body.stop_barrier == 0)
+                gettimeofday(&shared_data->body.end_time, NULL);
+}
+
+static void shmem_start_time_locked(void)
+{
+        shared_data->body.start_barrier--;
+        if (shared_data->body.start_barrier == 0) {
+                shmem_wakeup_all();
+                gettimeofday(&shared_data->body.start_time, NULL);
+        } else {
+                shmem_wait();
+        }
+}
+
 #else
 static int shmem_setup(void)
 {
@@ -1335,16 +1354,7 @@ int jt_obd_md_common(int argc, char **argv, int cmd)
                         child_base_id +=  (thread - 1) * \
                                           (MAX_BASE_ID / nthreads);
 
-                shared_data->body.start_barrier--;
-                if (shared_data->body.start_barrier == 0) {
-                        shmem_wakeup_all();
-
-                        gettimeofday(&shared_data->body.start_time, NULL);
-                        printf("%s: start at %s", jt_cmdname(argv[0]),
-                               ctime(&shared_data->body.start_time.tv_sec));
-                } else {
-                        shmem_wait();
-                }
+                shmem_start_time_locked();
                 shmem_unlock();
         }
 #endif
@@ -1477,12 +1487,7 @@ int jt_obd_md_common(int argc, char **argv, int cmd)
 #ifdef MAX_THREADS
         if (thread) {
                 shmem_lock();
-                shared_data->body.stop_barrier--;
-                if (shared_data->body.stop_barrier == 0) {
-                        gettimeofday(&shared_data->body.end_time, NULL);
-                        printf("%s: end at %s", jt_cmdname(argv[0]),
-                                ctime(&shared_data->body.end_time.tv_sec));
-                }
+                shmem_end_time_locked();
                 shmem_unlock();
         }
 #endif
@@ -2124,12 +2129,7 @@ int jt_obd_test_brw(int argc, char **argv)
                         thr_offset += (thread - 1) * len;
                 }
 
-                shared_data->body.start_barrier--;
-                if (shared_data->body.start_barrier == 0)
-                        shmem_wakeup_all();
-                else
-                        shmem_wait();
-
+                shmem_start_time_locked();
                 shmem_unlock ();
         }
 #endif
@@ -2212,6 +2212,13 @@ int jt_obd_test_brw(int argc, char **argv)
                                ctime(&end.tv_sec));
         }
 
+#ifdef MAX_THREADS
+        if (thread) {
+                shmem_lock();
+                shmem_end_time_locked();
+                shmem_unlock();
+        }
+#endif
         return rc;
 }
 
