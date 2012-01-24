@@ -88,6 +88,27 @@ cfs_user_write (cfs_file_t *filp, const char *buf, size_t count, loff_t *offset)
 	return size;
 }
 
+ssize_t
+cfs_user_read (cfs_file_t *filp, char *buf, size_t count, loff_t *offset)
+{
+        mm_segment_t    fs;
+        ssize_t         ret_size = 0, size = 0;
+
+        fs = get_fs();
+        set_fs(KERNEL_DS);
+        while ((ssize_t)count > 0) {
+                size = filp->f_op->read(filp, (char *)buf, count, offset);
+                if (size <= 0)
+                        break;
+                count -= size;
+                buf += size;
+                ret_size += size;
+                size = 0;
+        }
+        set_fs(fs);
+
+        return (size < 0 ? size : ret_size);
+}
 #if !(CFS_O_CREAT == O_CREAT && CFS_O_EXCL == O_EXCL &&	\
      CFS_O_NOACCESS == O_NOACCESS &&\
      CFS_O_TRUNC == O_TRUNC && CFS_O_APPEND == O_APPEND &&\
@@ -134,5 +155,6 @@ int cfs_univ2oflags(int flags)
 
 EXPORT_SYMBOL(cfs_filp_open);
 EXPORT_SYMBOL(cfs_user_write);
+EXPORT_SYMBOL(cfs_user_read);
 EXPORT_SYMBOL(cfs_oflags2univ);
 EXPORT_SYMBOL(cfs_univ2oflags);
