@@ -67,6 +67,7 @@ CFS_MODULE_PARM(at_extra, "i", int, 0644,
 
 /* forward ref */
 static int ptlrpc_server_post_idle_rqbds (struct ptlrpc_service *svc);
+static void ptlrpc_hpreq_fini(struct ptlrpc_request *req);
 
 static CFS_LIST_HEAD(ptlrpc_all_services);
 cfs_spinlock_t ptlrpc_all_services_lock;
@@ -464,6 +465,7 @@ static int ptlrpc_hpreq_check(struct ptlrpc_request *req)
 static struct ptlrpc_hpreq_ops ptlrpc_hpreq_common = {
         .hpreq_lock_match  = NULL,
         .hpreq_check       = ptlrpc_hpreq_check,
+        .hpreq_fini        = NULL,
 };
 
 /* Hi-Priority RPC check by RPC operation code. */
@@ -471,11 +473,15 @@ int ptlrpc_hpreq_handler(struct ptlrpc_request *req)
 {
         int opc = lustre_msg_get_opc(req->rq_reqmsg);
 
-        if (opc == OBD_PING || opc == MDS_CONNECT || opc == OST_CONNECT)
+        /* Check for export to let only reconnects for not yet evicted
+         * export to become a HP rpc. */
+        if ((req->rq_export != NULL) &&
+            (opc == OBD_PING || opc == MDS_CONNECT || opc == OST_CONNECT))
                 req->rq_ops = &ptlrpc_hpreq_common;
 
         return 0;
 }
+EXPORT_SYMBOL(ptlrpc_hpreq_handler);
 
 /**
  * Initialize service on a given portal.
@@ -756,6 +762,8 @@ void ptlrpc_server_drop_request(struct ptlrpc_request *req)
 static void ptlrpc_server_finish_request(struct ptlrpc_service *svc,
                                          struct ptlrpc_request *req)
 {
+        ptlrpc_hpreq_fini(req);
+
         cfs_spin_lock(&svc->srv_rq_lock);
         svc->srv_n_active_reqs--;
         if (req->rq_hp)
@@ -1230,7 +1238,7 @@ static int ptlrpc_at_check_timed(struct ptlrpc_service *svc)
 static int ptlrpc_hpreq_init(struct ptlrpc_service *svc,
                              struct ptlrpc_request *req)
 {
-        int rc;
+        int rc = 0;
         ENTRY;
 
         if (svc->srv_hpreq_handler) {
@@ -1239,13 +1247,19 @@ static int ptlrpc_hpreq_init(struct ptlrpc_service *svc,
                         RETURN(rc);
         }
         if (req->rq_export && req->rq_ops) {
+                /* Perform request specific check. We should do this check
+                 * before the request is added into exp_hp_rpcs list otherwise
+                 * it may hit swab race at LU-1044. */
+                if (req->rq_ops->hpreq_check)
+                        rc = req->rq_ops->hpreq_check(req);
+
                 cfs_spin_lock_bh(&req->rq_export->exp_rpc_lock);
                 cfs_list_add(&req->rq_exp_list,
-                             &req->rq_export->exp_queued_rpc);
+                             &req->rq_export->exp_hp_rpcs);
                 cfs_spin_unlock_bh(&req->rq_export->exp_rpc_lock);
         }
 
-        RETURN(0);
+        RETURN(rc);
 }
 
 /** Remove the request from the export list. */
@@ -1253,6 +1267,11 @@ static void ptlrpc_hpreq_fini(struct ptlrpc_request *req)
 {
         ENTRY;
         if (req->rq_export && req->rq_ops) {
+                /* refresh lock timeout again so that client has more
+                 * room to send lock cancel RPC. */
+                if (req->rq_ops->hpreq_fini)
+                        req->rq_ops->hpreq_fini(req);
+
                 cfs_spin_lock_bh(&req->rq_export->exp_rpc_lock);
                 cfs_list_del_init(&req->rq_exp_list);
                 cfs_spin_unlock_bh(&req->rq_export->exp_rpc_lock);
@@ -1283,7 +1302,7 @@ static void ptlrpc_hpreq_reorder_nolock(struct ptlrpc_service *svc,
                 cfs_list_move_tail(&req->rq_list, &svc->srv_request_hpq);
                 req->rq_hp = 1;
                 if (opc != OBD_PING)
-                        DEBUG_REQ(D_NET, req, "high priority req");
+                        DEBUG_REQ(D_RPCTRACE, req, "high priority req");
         }
         cfs_spin_unlock(&req->rq_lock);
         EXIT;
@@ -1309,14 +1328,10 @@ void ptlrpc_hpreq_reorder(struct ptlrpc_request *req)
 }
 
 /** Check if the request is a high priority one. */
-static int ptlrpc_server_hpreq_check(struct ptlrpc_request *req)
+static int ptlrpc_server_hpreq_check(struct ptlrpc_service *svc,
+                                     struct ptlrpc_request *req)
 {
-        int rc = 0;
-        ENTRY;
-        /* Perform request specific check. */
-        if (req->rq_ops && req->rq_ops->hpreq_check)
-                rc = req->rq_ops->hpreq_check(req);
-        RETURN(rc);
+        return ptlrpc_hpreq_init(svc, req);
 }
 
 /** Check if a request is a high priority one. */
@@ -1326,7 +1341,7 @@ static int ptlrpc_server_request_add(struct ptlrpc_service *svc,
         int rc;
         ENTRY;
 
-        rc = ptlrpc_server_hpreq_check(req);
+        rc = ptlrpc_server_hpreq_check(svc, req);
         if (rc < 0)
                 RETURN(rc);
 
@@ -1534,7 +1549,7 @@ ptlrpc_server_handle_req_in(struct ptlrpc_service *svc)
                 break;
         }
 
-        CDEBUG(D_NET, "got req "LPU64"\n", req->rq_xid);
+        CDEBUG(D_RPCTRACE, "got req x"LPU64"\n", req->rq_xid);
 
         req->rq_export = class_conn2export(
                 lustre_msg_get_handle(req->rq_reqmsg));
@@ -1570,9 +1585,6 @@ ptlrpc_server_handle_req_in(struct ptlrpc_service *svc)
         }
 
         ptlrpc_at_add_timed(req);
-        rc = ptlrpc_hpreq_init(svc, req);
-        if (rc)
-                GOTO(err_req, rc);
 
         /* Move it over to the request processing queue */
         rc = ptlrpc_server_request_add(svc, req);
@@ -1652,7 +1664,6 @@ ptlrpc_server_handle_request(struct ptlrpc_service *svc,
         cfs_spin_unlock(&svc->srv_rq_lock);
 
         ptlrpc_rqphase_move(request, RQ_PHASE_INTERPRET);
-        ptlrpc_hpreq_fini(request);
 
         if(OBD_FAIL_CHECK(OBD_FAIL_PTLRPC_DUMP_LOG))
                 libcfs_debug_dumplog();
@@ -2717,7 +2728,6 @@ int ptlrpc_unregister_service(struct ptlrpc_service *service)
                 req = ptlrpc_server_request_get(service, 1);
                 cfs_list_del(&req->rq_list);
                 service->srv_n_active_reqs++;
-                ptlrpc_hpreq_fini(req);
                 ptlrpc_server_finish_request(service, req);
         }
         LASSERT(service->srv_n_queued_reqs == 0);
