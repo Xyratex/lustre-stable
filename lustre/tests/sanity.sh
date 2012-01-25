@@ -7296,7 +7296,7 @@ test_154() {
 	$TRUNCATE $ffid 777 || error "truncate $ffid failed."
 	echo "link fid $fid"
 	ln -f $ffid $DIR/tfile.lnk || error "link $ffid failed."
-	if [ -n $(lctl get_param -n mdc.*-mdc-*.connect_flags | grep acl) ]; then
+	if [ -n "$(lctl get_param -n mdc.*-mdc-*.connect_flags | grep acl)" ]; then
 		echo "setfacl fid $fid"
 		setfacl -R -m u:bin:rwx $ffid || error "setfacl $ffid failed."
 		echo "getfacl fid $fid"

@@ -602,13 +602,13 @@ set_debug_size () {
 
 set_default_debug () {
     local debug=${1:-"$PTLDEBUG"}
-    local subsystem_debug=${2:-"$SUBSYSTEM"}
+    local subsys=${2:-"$SUBSYSTEM"}
     local debug_size=${3:-$DEBUG_SIZE}
 
-    lctl set_param debug="$debug"
-    lctl set_param subsystem_debug="${subsystem_debug# }"
+    [ -n "$debug" ] && lctl set_param debug="$debug" >/dev/null
+    [ -n "$subsys" ] && lctl set_param subsystem_debug="${subsys# }" >/dev/null
 
-    set_debug_size $debug_size
+    [ -n "$debug_size" ] && set_debug_size $debug_size > /dev/null
     sync
 }
 
@@ -943,18 +943,16 @@ zconf_umount_clients() {
     do_nodes $clients "running=\\\$(grep -c $mnt' ' /proc/mounts);
 if [ \\\$running -ne 0 ] ; then
 echo Stopping client \\\$(hostname) $mnt opts:$force;
-lsof -t $mnt || need_kill=no;
+lsof $mnt || need_kill=no;
 if [ "x$force" != "x" -a "x\\\$need_kill" != "xno" ]; then
     pids=\\\$(lsof -t $mnt | sort -u);
     if [ -n \\\"\\\$pids\\\" ]; then
              kill -9 \\\$pids;
     fi
 fi;
-busy=\\\$(umount $force $mnt 2>&1 | grep -c "busy");
-if [ \\\$busy -ne 0 ] ; then
+while umount $force $mnt 2>&1 | grep -q "busy"; do
     echo "$mnt is still busy, wait one second" && sleep 1;
-    umount $force $mnt;
-fi
+done;
 fi"
 }
 
@@ -1332,7 +1330,8 @@ wait_update () {
 
         local RESULT
         local WAIT=0
-        local sleep=5
+        local sleep=1
+        local print=10
         while [ true ]; do
             RESULT=$(do_node $node "$TEST")
             if [ "$RESULT" == "$FINAL" ]; then
@@ -1341,7 +1340,8 @@ wait_update () {
                 return 0
             fi
             [ $WAIT -ge $MAX ] && break
-            echo "Waiting $((MAX - WAIT)) secs for update"
+            [ $((WAIT % print)) -eq 0 ] &&
+                echo "Waiting $((MAX - WAIT)) secs for update"
             WAIT=$((WAIT + sleep))
             sleep $sleep
         done
