@@ -226,7 +226,7 @@ struct page *ll_get_dir_page(struct inode *dir, unsigned long n)
         if (!rc) {
                 struct lookup_intent it = { .it_op = IT_READDIR };
                 struct ldlm_enqueue_info einfo = { LDLM_IBITS, LCK_CR,
-                       ll_mdc_blocking_ast, ldlm_completion_ast, NULL, dir };
+                       ll_mdc_blocking_ast, ldlm_completion_ast, NULL, NULL };
                 struct ptlrpc_request *request;
                 struct mdc_op_data data = { { 0 } };
 
@@ -242,6 +242,10 @@ struct page *ll_get_dir_page(struct inode *dir, unsigned long n)
                         CERROR("lock enqueue: rc: %d\n", rc);
                         return ERR_PTR(rc);
                 }
+
+                CDEBUG(D_INODE, "setting lr_lvb_inode to inode %p (%lu/%u)\n",
+                       dir, dir->i_ino, dir->i_generation);
+                mdc_set_lock_data(&it.d.lustre.it_lock_handle, dir, NULL);
         }
         ldlm_lock_dump_handle(D_OTHER, &lockh);
 
@@ -709,7 +713,7 @@ static struct page *ll_get_dir_page_20(struct inode *dir, __u64 hash, int exact,
         if (!rc) {
                 struct lookup_intent it = { .it_op = IT_READDIR };
                 struct ldlm_enqueue_info einfo = { LDLM_IBITS, mode,
-                       ll_mdc_blocking_ast, ldlm_completion_ast, NULL, dir };
+                       ll_mdc_blocking_ast, ldlm_completion_ast, NULL, NULL };
                 struct ptlrpc_request *request;
                 struct mdc_op_data op_data = { { 0 } };
 
@@ -725,6 +729,11 @@ static struct page *ll_get_dir_page_20(struct inode *dir, __u64 hash, int exact,
                         CERROR("lock enqueue: rc: %d\n", rc);
                         RETURN(ERR_PTR(rc));
                 }
+
+                CDEBUG(D_INODE, "setting l_data to inode %p (%lu/%u)\n",
+                       dir, dir->i_ino, dir->i_generation);
+                mdc_set_lock_data(&it.d.lustre.it_lock_handle, dir, NULL);
+
         }
         ldlm_lock_dump_handle(D_OTHER, &lockh);
 

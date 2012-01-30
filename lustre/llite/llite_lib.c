@@ -1251,6 +1251,31 @@ int ll_cache_shrink(SHRINKER_FIRST_ARG int nr_to_scan,
         return count;
 }
 
+struct inode *ll_inode_from_resource(struct ldlm_lock *lock)
+{
+        struct inode *inode = NULL;
+        /* NOTE: we depend on atomic igrab() -bzzz */
+        lock_res_and_lock(lock);
+        if (lock->l_resource->lr_lvb_inode) {
+                struct ll_inode_info *lli;
+
+                lli = ll_i2info(lock->l_resource->lr_lvb_inode);
+                if (lli->lli_inode_magic == LLI_INODE_MAGIC) {
+                        inode = igrab(lock->l_resource->lr_lvb_inode);
+                } else {
+                        inode = lock->l_resource->lr_lvb_inode;
+                        LDLM_DEBUG_LIMIT(inode->i_state & I_FREEING ?  D_INFO :
+                                         D_WARNING, lock, "lr_lvb_inode %p is "
+                                         "bogus: magic %08x",
+                                         lock->l_resource->lr_lvb_inode,
+                                         lli->lli_inode_magic);
+                        inode = NULL;
+                }
+        }
+        unlock_res_and_lock(lock);
+        return inode;
+}
+
 struct inode *ll_inode_from_lock(struct ldlm_lock *lock)
 {
         struct inode *inode = NULL;
@@ -1304,7 +1329,7 @@ void ll_clear_inode(struct inode *inode)
 
         ll_inode2fid(&fid, inode);
         clear_bit(LLI_F_HAVE_MDS_SIZE_LOCK, &lli->lli_flags);
-        mdc_change_cbdata(sbi->ll_mdc_exp, &fid, null_if_equal, inode);
+        mdc_change_cbdata(sbi->ll_mdc_exp, &fid, NULL, inode);
 
         LASSERT(!lli->lli_open_fd_write_count);
         LASSERT(!lli->lli_open_fd_read_count);

@@ -1593,19 +1593,6 @@ void ldlm_lock_cancel(struct ldlm_lock *lock)
         EXIT;
 }
 
-int ldlm_lock_set_data(struct lustre_handle *lockh, void *data)
-{
-        struct ldlm_lock *lock = ldlm_handle2lock(lockh);
-        ENTRY;
-
-        if (lock == NULL)
-                RETURN(-EINVAL);
-
-        lock->l_ast_data = data;
-        LDLM_LOCK_PUT(lock);
-        RETURN(0);
-}
-
 void ldlm_cancel_locks_for_export_cb(void *obj, void *data)
 {
         struct obd_export     *exp = data;

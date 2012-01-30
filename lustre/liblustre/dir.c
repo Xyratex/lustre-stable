@@ -105,7 +105,7 @@ static int llu_dir_do_readpage(struct inode *inode, struct page *page)
                              &res_id, LDLM_IBITS, &policy, LCK_CR, &lockh);
         if (!rc) {
                 struct ldlm_enqueue_info einfo = {LDLM_IBITS, LCK_CR,
-                        llu_mdc_blocking_ast, ldlm_completion_ast, NULL, inode};
+                        llu_mdc_blocking_ast, ldlm_completion_ast, NULL, NULL};
 
                 llu_prepare_mdc_op_data(&data, inode, NULL, NULL, 0, 0);
 
@@ -119,6 +119,8 @@ static int llu_dir_do_readpage(struct inode *inode, struct page *page)
                         CERROR("lock enqueue: err: %d\n", rc);
                         RETURN(rc);
                 }
+
+               mdc_set_lock_data((__u64 *) &lockh, inode, NULL);
         }
         ldlm_lock_dump_handle(D_OTHER, &lockh);
 
