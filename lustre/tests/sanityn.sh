@@ -1872,6 +1872,33 @@ test_50() {
 }
 run_test 50 "osc lvb attrs: enqueue vs. CP AST =============="
 
+test_51() {
+        local obj1
+        local obj2
+        local old_rr
+
+        mkdir -p $DIR1/$tfile-1/
+        mkdir -p $DIR2/$tfile-2/
+        old_rr=$(do_facet $SINGLEMDS lctl get_param -n 'lov.lustre-MDT*/qos_threshold_rr' | sed -e 's/%//')
+        do_facet $SINGLEMDS lctl set_param -n 'lov.lustre-MDT*/qos_threshold_rr' 100
+#define OBD_FAIL_MDS_LOV_CREATE_RACE     0x148
+        do_facet $SINGLEMDS "lctl set_param fail_loc=0x80000148"
+        touch $DIR1/$tfile-1/file1 &
+        PID1=$!
+        touch $DIR2/$tfile-2/file2 &
+        PID2=$!
+        wait $PID2
+        wait $PID1
+        do_facet $SINGLEMDS "lctl set_param fail_loc=0x0"
+        do_facet $SINGLEMDS "lctl set_param -n 'lov.lustre-MDT*/qos_threshold_rr' $old_rr"
+
+        obj1=$($GETSTRIPE -o $DIR1/$tfile-1/file1)
+        obj2=$($GETSTRIPE -o $DIR1/$tfile-2/file2)
+        [ $obj1 -ne $obj2 ] || error "must different ost used"
+}
+run_test 51 "alloc_rr should be allocate on correct order"
+
+
 log "cleanup: ======================================================"
 
 [ "$(mount | grep $MOUNT2)" ] && umount $MOUNT2

@@ -67,6 +67,18 @@
 /* XXX need AT adjust ? */
 #define osc_create_timeout      (obd_timeout / 2)
 
+cfs_spinlock_t oscc_create_lock;
+CFS_LIST_HEAD(oscc_create);
+cfs_waitq_t oscc_create_wq;
+unsigned long oscc_thr_flags = 0;
+enum {
+        OSCC_THR_START,
+        OSCC_THR_STOP,
+        OSCC_THR_NR
+};
+cfs_completion_t oscc_thr_start;
+cfs_completion_t oscc_thr_stop;
+
 struct osc_create_async_args {
         struct osc_creator      *rq_oscc;
         struct lov_stripe_md    *rq_lsm;
@@ -188,30 +200,33 @@ static int osc_interpret_create(const struct lu_env *env,
                         oscc_internal_create(oscc);
                         /* sending request should be never fail because
                          * osc use preallocated requests pool */
-                        GOTO(exit_wakeup, rc);
+                        break;
                 }
         }
         cfs_spin_unlock(&oscc->oscc_lock);
 
-exit_wakeup:
         cfs_waitq_signal(&oscc->oscc_waitq);
         RETURN(rc);
 }
 
+/**
+ * Check whether it is possible to get more objects and it has not been started
+ * yet by another thread.
+ *
+ * \retval 0 the OST has no remaining objects, and the sent precreation RPC
+ * has not been completed yet.
+ * \retval 1 the OST has no remaining object, and will not get any for a
+ * potentially very long time
+*/
 static int oscc_internal_create(struct osc_creator *oscc)
 {
-        struct osc_create_async_args *args;
-        struct ptlrpc_request *request;
-        struct ost_body *body;
         ENTRY;
 
         LASSERT_SPIN_LOCKED(&oscc->oscc_lock);
 
         /* Do not check for a degraded OST here - bug21563/bug18539 */
-        if (oscc->oscc_flags & OSCC_FLAG_RECOVERING) {
-                cfs_spin_unlock(&oscc->oscc_lock);
-                RETURN(0);
-        }
+        if (oscc->oscc_flags & OSCC_FLAG_RECOVERING)
+                RETURN(1);
 
         /* we need check it before OSCC_FLAG_CREATING - because need
          * see lower number of precreate objects */
@@ -223,61 +238,20 @@ static int oscc_internal_create(struct osc_creator *oscc)
                 oscc->oscc_grow_count *= 2;
         }
 
-        if (oscc->oscc_flags & OSCC_FLAG_CREATING) {
-                cfs_spin_unlock(&oscc->oscc_lock);
+        if (oscc->oscc_flags & OSCC_FLAG_CREATING)
                 RETURN(0);
-        }
 
         if (oscc->oscc_grow_count > oscc->oscc_max_grow_count / 2)
                 oscc->oscc_grow_count = oscc->oscc_max_grow_count / 2;
 
         oscc->oscc_flags |= OSCC_FLAG_CREATING;
-        cfs_spin_unlock(&oscc->oscc_lock);
 
-        request = ptlrpc_request_alloc_pack(oscc->oscc_obd->u.cli.cl_import,
-                                            &RQF_OST_CREATE,
-                                            LUSTRE_OST_VERSION, OST_CREATE);
-        if (request == NULL) {
-                cfs_spin_lock(&oscc->oscc_lock);
-                oscc->oscc_flags &= ~OSCC_FLAG_CREATING;
-                cfs_spin_unlock(&oscc->oscc_lock);
-                RETURN(-ENOMEM);
-        }
+        cfs_spin_lock(&oscc_create_lock);
+        cfs_list_add(&oscc->oscc_create_list, &oscc_create);
+        cfs_spin_unlock(&oscc_create_lock);
+        cfs_waitq_signal(&oscc_create_wq);
 
-        request->rq_request_portal = OST_CREATE_PORTAL;
-        ptlrpc_at_set_req_timeout(request);
-        body = req_capsule_client_get(&request->rq_pill, &RMF_OST_BODY);
-        args = ptlrpc_req_async_args(request);
-        args->rq_oscc = oscc;
-
-        cfs_spin_lock(&oscc->oscc_lock);
-        args->rq_grow_count = oscc->oscc_grow_count;
-
-        if (likely(fid_seq_is_mdt(oscc->oscc_oa.o_seq))) {
-                body->oa.o_oi.oi_seq = oscc->oscc_oa.o_seq;
-                body->oa.o_oi.oi_id  = oscc->oscc_last_id +
-                                       oscc->oscc_grow_count;
-        } else {
-                /*Just warning here currently, since not sure how fid-on-ost
-                 *will be implemented here */
-                CWARN("o_seq: "LPU64" is not indicate any MDTs.\n",
-                       oscc->oscc_oa.o_seq);
-        }
-        cfs_spin_unlock(&oscc->oscc_lock);
-
-        body->oa.o_valid |= OBD_MD_FLID | OBD_MD_FLGROUP;
-        CDEBUG(D_RPCTRACE, "prealloc through id "LPU64" (last seen "LPU64")\n",
-               body->oa.o_id, oscc->oscc_last_id);
-
-        /* we should not resend create request - anyway we will have delorphan
-         * and kill these objects */
-        request->rq_no_delay = request->rq_no_resend = 1;
-        ptlrpc_request_set_replen(request);
-
-        request->rq_interpret_reply = osc_interpret_create;
-        ptlrpcd_add_req(request, PSCOPE_OTHER);
-
-        RETURN(0);
+        RETURN(1);
 }
 
 static int oscc_has_objects_nolock(struct osc_creator *oscc, int count)
@@ -310,10 +284,8 @@ static int oscc_wait_for_objects(struct osc_creator *oscc, int count)
         have_objs = oscc_has_objects_nolock(oscc, count);
 
         if (!ost_unusable && !have_objs)
-                /* they release lock himself */
-                have_objs = oscc_internal_create(oscc);
-        else
-                cfs_spin_unlock(&oscc->oscc_lock);
+                oscc_internal_create(oscc);
+        cfs_spin_unlock(&oscc->oscc_lock);
 
         return have_objs || ost_unusable;
 }
@@ -347,13 +319,19 @@ static int oscc_in_sync(struct osc_creator *oscc)
         return sync;
 }
 
-/* decide if the OST has remaining object, return value :
-        0 : the OST has remaining objects, may or may not send precreation RPC.
-        1 : the OST has no remaining object, and the sent precreation RPC
-            has not been completed yet.
-        2 : the OST has no remaining object, and will not get any for
-            a potentially very long time
-     1000 : unusable
+/**
+ * Decide if the OST has remaining object.
+ *
+ * Called with lov_qos_rr::lqr_alloc spinlock held.
+ * MUST NON BLOCKING & SLEEPEING INSIDE.
+ *
+ * \retval 0    the OST has remaining objects, may or may not send precreation
+ *              RPC.
+ * \retval 1    the OST has no remaining object, and the sent precreation RPC
+ *              has not been completed yet.
+ * \retval 2    the OST has no remaining object, and will not get any for a
+ *              potentially very long time
+ * \retval 1000 OSC is unusable
  */
 int osc_precreate(struct obd_export *exp)
 {
@@ -364,7 +342,7 @@ int osc_precreate(struct obd_export *exp)
 
         LASSERT(oscc != NULL);
         if (imp != NULL && imp->imp_deactive)
-                GOTO(out_nolock, rc = 1000);
+                RETURN(1000);
 
         /* Handle critical states first */
         cfs_spin_lock(&oscc->oscc_lock);
@@ -392,13 +370,13 @@ int osc_precreate(struct obd_export *exp)
         if (oscc->oscc_flags & OSCC_FLAG_SYNC_IN_PROGRESS)
                 GOTO(out, rc);
 
-        if (oscc_internal_create(oscc))
-                GOTO(out_nolock, rc = 1000);
-
-        RETURN(rc);
+        /* creating new objects can long time due rpc processing
+         * but if rpc was send it need less time
+         */
+        rc = oscc_internal_create(oscc);
+        EXIT;
 out:
         cfs_spin_unlock(&oscc->oscc_lock);
-out_nolock:
         return rc;
 }
 
@@ -720,7 +698,7 @@ int osc_create(struct obd_export *exp, struct obdo *oa,
         RETURN(rc);
 }
 
-void oscc_init(struct obd_device *obd)
+void oscc_init_obd(struct obd_device *obd)
 {
         struct osc_creator *oscc;
 
@@ -742,19 +720,163 @@ void oscc_init(struct obd_device *obd)
         oscc->oscc_flags |= OSCC_FLAG_RECOVERING;
 
         CFS_INIT_LIST_HEAD(&oscc->oscc_wait_create_list);
+        CFS_INIT_LIST_HEAD(&oscc->oscc_create_list);
 
         /* XXX the export handle should give the oscc the last object */
         /* oed->oed_oscc.oscc_last_id = exph->....; */
 }
 
-void oscc_fini(struct obd_device *obd)
+void oscc_fini_obd(struct obd_device *obd)
 {
         struct osc_creator *oscc = &obd->u.cli.cl_oscc;
         ENTRY;
 
-
         cfs_spin_lock(&oscc->oscc_lock);
         oscc->oscc_flags &= ~OSCC_FLAG_RECOVERING;
         oscc->oscc_flags |= OSCC_FLAG_EXITING;
+        cfs_list_del_init(&oscc->oscc_create_list);
         cfs_spin_unlock(&oscc->oscc_lock);
+        cfs_waitq_signal(&oscc->oscc_waitq);
+}
+
+static int oscc_create_rpc(struct osc_creator *oscc)
+{
+        struct osc_create_async_args *args;
+        struct ptlrpc_request *request;
+        struct ost_body *body;
+        ENTRY;
+
+        /* XXX pool ? */
+        request = ptlrpc_request_alloc_pack(oscc->oscc_obd->u.cli.cl_import,
+                                            &RQF_OST_CREATE,
+                                            LUSTRE_OST_VERSION, OST_CREATE);
+        if (request == NULL)
+                RETURN(-ENOMEM);
+
+        request->rq_request_portal = OST_CREATE_PORTAL;
+        ptlrpc_at_set_req_timeout(request);
+        body = req_capsule_client_get(&request->rq_pill, &RMF_OST_BODY);
+        args = ptlrpc_req_async_args(request);
+        args->rq_oscc = oscc;
+
+        cfs_spin_lock(&oscc->oscc_lock);
+        args->rq_grow_count = oscc->oscc_grow_count;
+
+        if (likely(fid_seq_is_mdt(oscc->oscc_oa.o_seq))) {
+                body->oa.o_oi.oi_seq = oscc->oscc_oa.o_seq;
+                body->oa.o_oi.oi_id  = oscc->oscc_last_id +
+                                       oscc->oscc_grow_count;
+        } else {
+                /*Just warning here currently, since not sure how fid-on-ost
+                 *will be implemented here */
+                CWARN("o_seq: "LPU64" is not indicate any MDTs.\n",
+                       oscc->oscc_oa.o_seq);
+        }
+        cfs_spin_unlock(&oscc->oscc_lock);
+
+        body->oa.o_valid |= OBD_MD_FLID | OBD_MD_FLGROUP;
+        CDEBUG(D_RPCTRACE, "prealloc through id "LPU64" (last seen "LPU64")\n",
+               body->oa.o_id, oscc->oscc_last_id);
+
+        /* we should not resend create request - anyway we will have delorphan
+         * and kill these objects */
+        request->rq_no_delay = request->rq_no_resend = 1;
+        ptlrpc_request_set_replen(request);
+
+        request->rq_interpret_reply = osc_interpret_create;
+        ptlrpcd_add_req(request, PSCOPE_OTHER);
+
+        RETURN(0);
+}
+
+static int oscc_create_wake(void)
+{
+        int rc;
+
+        rc = !cfs_list_empty(&oscc_create);
+        return rc || (cfs_test_bit(OSCC_THR_STOP, &oscc_thr_flags));
+}
+
+int oscc_create_thread(void *data)
+{
+        ENTRY;
+
+        cfs_daemonize_ctxt("oscc_create");
+
+        cfs_set_bit(OSCC_THR_START, &oscc_thr_flags);
+        cfs_complete(&oscc_thr_start);
+        do {
+                struct l_wait_info lwi;
+                int timeout = 1;
+                int rc;
+                struct osc_creator *oscc;
+
+                lwi = LWI_TIMEOUT(cfs_time_seconds(timeout ? timeout : 1),
+                                  NULL, NULL);
+
+                rc = l_wait_event(oscc_create_wq, oscc_create_wake(), &lwi);
+                if (rc == -ETIMEDOUT)
+                        continue;
+
+                if (cfs_test_bit(OSCC_THR_STOP, &oscc_thr_flags))
+                        break;
+
+                oscc = NULL;
+                cfs_spin_lock(&oscc_create_lock);
+                if (!cfs_list_empty(&oscc_create))
+                        oscc = cfs_list_entry(oscc_create.next,
+                                              struct osc_creator,
+                                              oscc_create_list);
+                        cfs_list_del_init(&oscc->oscc_create_list);
+                cfs_spin_unlock(&oscc_create_lock);
+
+                if (oscc == NULL)
+                        continue;
+                rc = oscc_create_rpc(oscc);
+                if (rc != 0) {
+                        cfs_spin_lock(&oscc_create_lock);
+                        cfs_list_add(&oscc->oscc_create_list, &oscc_create);
+                        cfs_spin_unlock(&oscc_create_lock);
+                }
+        } while (1);
+
+        cfs_clear_bit(OSCC_THR_START, &oscc_thr_flags);
+        cfs_clear_bit(OSCC_THR_STOP, &oscc_thr_flags);
+        cfs_complete(&oscc_thr_stop);
+
+        return 0;
+}
+
+int oscc_init()
+{
+        int rc;
+
+        cfs_waitq_init(&oscc_create_wq);
+
+        CFS_INIT_LIST_HEAD(&oscc_create);
+        cfs_spin_lock_init(&oscc_create_lock);
+        cfs_init_completion(&oscc_thr_start);
+        cfs_init_completion(&oscc_thr_stop);
+
+        rc = cfs_create_thread(oscc_create_thread, NULL, 0);
+        if (rc > 0) {
+                rc = 0;
+                cfs_wait_for_completion(&oscc_thr_start);
+        }
+        if (rc)
+                cfs_clear_bit(OSCC_THR_START, &oscc_thr_flags);
+        RETURN(rc);
+
+}
+
+void oscc_fini()
+{
+        if (!cfs_test_bit(OSCC_THR_START, &oscc_thr_flags)) {
+                CERROR("OSCC create thread was not started\n");
+                return;
+        }
+
+        cfs_set_bit(OSCC_THR_STOP, &oscc_thr_flags);
+        cfs_waitq_signal(&oscc_create_wq);
+        cfs_wait_for_completion(&oscc_thr_stop);
 }

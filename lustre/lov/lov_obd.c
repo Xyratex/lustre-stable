@@ -808,16 +808,19 @@ int lov_setup(struct obd_device *obd, struct lustre_cfg *lcfg)
 
         cfs_sema_init(&lov->lov_lock, 1);
         cfs_atomic_set(&lov->lov_refcount, 0);
+        lov->lov_sp_me = LUSTRE_SP_CLI;
+
         CFS_INIT_LIST_HEAD(&lov->lov_qos.lq_oss_list);
         cfs_init_rwsem(&lov->lov_qos.lq_rw_sem);
-        lov->lov_sp_me = LUSTRE_SP_CLI;
         lov->lov_qos.lq_dirty = 1;
-        lov->lov_qos.lq_rr.lqr_dirty = 1;
         lov->lov_qos.lq_reset = 1;
         /* Default priority is toward free space balance */
         lov->lov_qos.lq_prio_free = 232;
         /* Default threshold for rr (roughly 17%) */
         lov->lov_qos.lq_threshold_rr = 43;
+        /* Init statfs fields */
+
+        lov_qos_rr_init(&lov->lov_qos.lq_rr);
         /* Init statfs fields */
         OBD_ALLOC_PTR(lov->lov_qos.lq_statfs_data);
         if (NULL == lov->lov_qos.lq_statfs_data)

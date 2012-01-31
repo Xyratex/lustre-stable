@@ -87,6 +87,7 @@ struct osc_creator {
         cfs_spinlock_t          oscc_lock;
         cfs_list_t              oscc_wait_create_list;
         struct obd_device      *oscc_obd;
+        cfs_list_t              oscc_create_list;
         obd_id                  oscc_last_id;//last available pre-created object
         obd_id                  oscc_next_id;// what object id to give out next
         int                     oscc_grow_count;

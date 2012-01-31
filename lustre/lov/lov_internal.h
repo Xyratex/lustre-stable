@@ -180,6 +180,7 @@ int lov_stripe_intersects(struct lov_stripe_md *lsm, int stripeno,
 int lov_stripe_number(struct lov_stripe_md *lsm, obd_off lov_off);
 
 /* lov_qos.c */
+struct lov_qos_rr;
 #define LOV_USES_ASSIGNED_STRIPE        0
 #define LOV_USES_DEFAULT_STRIPE         1
 int qos_add_tgt(struct obd_device *obd, __u32 index);
@@ -190,6 +191,7 @@ void qos_update(struct lov_obd *lov);
 void qos_statfs_done(struct lov_obd *lov);
 void qos_statfs_update(struct obd_device *obd, __u64 max_age, int wait);
 int qos_remedy_create(struct lov_request_set *set, struct lov_request *req);
+void lov_qos_rr_init(struct lov_qos_rr *lqr);
 
 /* lov_request.c */
 void lov_set_add_req(struct lov_request *req, struct lov_request_set *set);

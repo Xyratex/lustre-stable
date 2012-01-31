@@ -115,7 +115,13 @@ int osc_create_async(struct obd_export *exp, struct obd_info *oinfo,
                      struct lov_stripe_md **ea, struct obd_trans_info *oti);
 int osc_real_create(struct obd_export *exp, struct obdo *oa,
                     struct lov_stripe_md **ea, struct obd_trans_info *oti);
-void oscc_init(struct obd_device *obd);
+void oscc_init_obd(struct obd_device *obd);
+void oscc_fini_obd(struct obd_device *obd);
+/**
+ allocate a new create thread to non blocking precreation
+ */
+int oscc_init(void);
+void oscc_fini(void);
 void osc_wake_cache_waiters(struct client_obd *cli);
 int osc_shrink_grant_to_target(struct client_obd *cli, long target);
 

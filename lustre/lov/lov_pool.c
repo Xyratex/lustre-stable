@@ -457,7 +457,7 @@ int lov_pool_new(struct obd_device *obd, char *poolname)
         if (rc)
                GOTO(out_err, rc);
 
-        memset(&(new_pool->pool_rr), 0, sizeof(struct lov_qos_rr));
+        lov_qos_rr_init(&new_pool->pool_rr);
         rc = lov_ost_pool_init(&new_pool->pool_rr.lqr_pool, 0);
         if (rc)
                 GOTO(out_free_pool_obds, rc);

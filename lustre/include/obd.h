@@ -634,6 +634,7 @@ struct ost_pool {
 
 /* Round-robin allocator data */
 struct lov_qos_rr {
+        cfs_spinlock_t      lqr_alloc;       /* protect allocation index */
         __u32               lqr_start_idx;   /* start index of new inode */
         __u32               lqr_offset_idx;  /* aliasing for start_idx  */
         int                 lqr_start_count; /* reseed counter */
