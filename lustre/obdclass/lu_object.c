@@ -511,6 +511,7 @@ static struct lu_object *htable_lookup(struct lu_site *s,
         h = container_of0(hnode, struct lu_object_header, loh_hash);
         if (likely(!lu_object_is_dying(h))) {
                 lprocfs_counter_incr(s->ls_stats, LU_SS_CACHE_HIT);
+                cfs_list_del_init(&h->loh_lru);
                 return lu_object_top(h);
         }
 
