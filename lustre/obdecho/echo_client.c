@@ -994,7 +994,6 @@ static struct lu_device *echo_device_free(const struct lu_env *env,
 
         echo_client_cleanup(d->ld_obd);
         echo_fid_fini(d->ld_obd);
-
         while (next && !ed->ed_next_ismd)
                 next = next->ld_type->ldt_ops->ldto_device_free(env, next);
 
@@ -1955,6 +1954,9 @@ struct lu_object *echo_resolve_path(const struct lu_env *env,
         RETURN(parent);
 }
 
+#define ECHO_MD_CTX_TAG (LCT_REMEMBER | LCT_NOREF | LCT_MD_THREAD)
+#define ECHO_MD_SES_TAG (LCT_SESSION | LCT_REMEMBER | LCT_NOREF)
+
 static int echo_md_handler(struct echo_device *ed, int command,
                            char *path, int path_len, int id, int count,
                            struct obd_ioctl_data *data)
@@ -1965,7 +1967,7 @@ static int echo_md_handler(struct echo_device *ed, int command,
         struct lu_object      *parent;
         char                  *name = NULL;
         int                    namelen = data->ioc_plen2;
-        int rc = 0;
+        int                    rc = 0;
         ENTRY;
 
         if (ld == NULL) {
@@ -1981,7 +1983,12 @@ static int echo_md_handler(struct echo_device *ed, int command,
         env = cl_env_get(&refcheck);
         if (IS_ERR(env))
                 RETURN(PTR_ERR(env));
-        lu_env_refill(env);
+
+        rc = lu_env_refill_by_tags(env, ECHO_MD_CTX_TAG, ECHO_MD_SES_TAG);
+        if (rc != 0) {
+                cl_env_put(env, &refcheck);
+                RETURN(rc);
+        }
 
         parent = echo_resolve_path(env, ed, path, path_len);
         if (IS_ERR(parent)) {
@@ -2656,7 +2663,14 @@ echo_client_iocontrol(unsigned int cmd, struct obd_export *exp,
                 env = cl_env_get(&refcheck);
                 if (IS_ERR(env))
                         GOTO(out, rc = PTR_ERR(env));
-                lu_env_refill(env);
+
+                rc = lu_env_refill_by_tags(env, ECHO_MD_CTX_TAG,
+                                            ECHO_MD_SES_TAG);
+                if (rc != 0) {
+                        cl_env_put(env, &refcheck);
+                        GOTO(out, rc);
+                }
+
                 rc = seq_client_get_seq(env, ed->ed_cl_seq, &seq);
                 cl_env_put(env, &refcheck);
                 if (rc < 0) {
@@ -2816,8 +2830,8 @@ static int echo_client_setup(const struct lu_env *env,
         ec->ec_nstripes = 0;
 
         if (!strcmp(tgt->obd_type->typ_name, LUSTRE_MDT_NAME)) {
-                cl_set_ctx_tags(LCT_REMEMBER | LCT_NOREF | LCT_MD_THREAD);
-                cl_set_ses_tags(LCT_SESSION | LCT_REMEMBER | LCT_NOREF);
+                lu_context_tags_update(ECHO_MD_CTX_TAG);
+                lu_session_tags_update(ECHO_MD_SES_TAG);
                 RETURN(0);
         }
 
@@ -2861,8 +2875,14 @@ static int echo_client_cleanup(struct obd_device *obddev)
         ENTRY;
 
         /*Do nothing for Metadata echo client*/
-        if (!ed || ed->ed_next_ismd)
+        if (ed == NULL )
                 RETURN(0);
+
+        if (ed->ed_next_ismd) {
+                lu_context_tags_clear(ECHO_MD_CTX_TAG);
+                lu_session_tags_clear(ECHO_MD_SES_TAG);
+                RETURN(0);
+        }
 
         if (!cfs_list_empty(&obddev->obd_exports)) {
                 CERROR("still has clients!\n");
