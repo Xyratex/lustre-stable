@@ -40,6 +40,7 @@
 #define DEBUG_SUBSYSTEM S_LNET
 
 #include <libcfs/libcfs.h>
+#include <libcfs/libcfs_crypto.h>
 #include <lnet/lib-lnet.h>
 #include <lnet/lnet.h>
 #include "tracefile.h"
@@ -413,15 +414,23 @@ static int init_libcfs_module(void)
                 goto cleanup_deregister;
         }
 
-        rc = insert_proc();
+        rc = cfs_crypto_register();
         if (rc) {
-                CERROR("insert_proc: error %d\n", rc);
+                CERROR("cfs_crypto_regster: error %d\n", rc);
                 goto cleanup_wi;
         }
 
-        CDEBUG (D_OTHER, "portals setup OK\n");
-        return (0);
+        rc = insert_proc();
+        if (rc) {
+                CERROR("insert_proc: error %d\n", rc);
+                goto cleanup_crypto;
+        }
 
+        CDEBUG (D_OTHER, "portals setup OK\n");
+
+        return (0);
+ cleanup_crypto:
+        cfs_crypto_unregister();
  cleanup_wi:
         cfs_wi_shutdown();
  cleanup_deregister:
@@ -444,6 +453,7 @@ static void exit_libcfs_module(void)
         CDEBUG(D_MALLOC, "before Portals cleanup: kmem %d\n",
                cfs_atomic_read(&libcfs_kmemory));
 
+        cfs_crypto_unregister();
         cfs_wi_shutdown();
         rc = cfs_psdev_deregister(&libcfs_dev);
         if (rc)
