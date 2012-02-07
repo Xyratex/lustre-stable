@@ -2445,6 +2445,10 @@ static int ldlm_setup(void)
         if (ldlm_state == NULL)
                 RETURN(-ENOMEM);
 
+        rc = ldlm_flock_setup();
+        if (rc != 0)
+                GOTO(out_free, rc);
+
 #ifdef LPROCFS
         rc = ldlm_proc_setup();
         if (rc != 0)
@@ -2556,8 +2560,8 @@ static int ldlm_setup(void)
  out_proc:
 #ifdef LPROCFS
         ldlm_proc_cleanup();
- out_free:
 #endif
+ out_free:
         OBD_FREE(ldlm_state, sizeof(*ldlm_state));
         ldlm_state = NULL;
         return rc;

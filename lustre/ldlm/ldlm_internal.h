@@ -159,6 +159,7 @@ void ldlm_extent_add_lock(struct ldlm_resource *res, struct ldlm_lock *lock);
 void ldlm_extent_unlink_lock(struct ldlm_lock *lock);
 
 /* ldlm_flock.c */
+int ldlm_flock_setup(void);
 int ldlm_process_flock_lock(struct ldlm_lock *req, int *flags, int first_enq,
                             ldlm_error_t *err, cfs_list_t *work_list);
 
