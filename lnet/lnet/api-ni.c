@@ -96,7 +96,7 @@ static char *lnet_read_file_mem(const char *name, size_t max_size)
         file = vmalloc(max_size);
         if (file == NULL) {
                 CERROR("Failed to allocate memory for "
-                       "file, size = %ld\n", max_size);
+                       "file, size = %lu\n", (long unsigned)max_size);
                 return ERR_PTR(-ENOMEM);
         }
 
