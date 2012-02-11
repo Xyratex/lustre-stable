@@ -279,8 +279,9 @@ int plain_ctx_verify(struct ptlrpc_cli_ctx *ctx, struct ptlrpc_request *req)
                                  lustre_msg_buflen(msg, PLAIN_PACK_MSG_OFF),
                                  NULL, 0, (unsigned char *)&cksum, &hsize);
                 if (cksum != msg->lm_cksum) {
-                        CWARN("early reply checksum mismatch: %08x != %08x\n",
-                              cpu_to_le32(cksum), msg->lm_cksum);
+                        CDEBUG(D_SEC,
+                               "early reply checksum mismatch: %08x != %08x\n",
+                               cpu_to_le32(cksum), msg->lm_cksum);
                         RETURN(-EINVAL);
                 }
         } else {
