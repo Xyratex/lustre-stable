@@ -2336,6 +2336,9 @@ test_35() {
         REFORMAT=""
         cleanup_and_setup_lustre
         REFORMAT=$ORIG_REFORMAT
+        for num in `seq $OSTCOUNT`; do
+                wait_osc_import_state mds ost$num FULL
+        done
         quota_init
 
         echo "Verify disk usage after restart"
