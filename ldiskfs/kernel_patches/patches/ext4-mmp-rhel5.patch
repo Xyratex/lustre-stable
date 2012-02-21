@@ -157,13 +157,12 @@ Index: linux-stage/fs/ext4/mmp.c
 ===================================================================
 --- /dev/null
 +++ linux-stage/fs/ext4/mmp.c
-@@ -0,0 +1,364 @@
+@@ -0,0 +1,351 @@
 +#include <linux/fs.h>
 +#include <linux/random.h>
 +#include <linux/buffer_head.h>
 +#include <linux/utsname.h>
 +#include <linux/kthread.h>
-+#include <linux/string.h>
 +
 +#include "ext4.h"
 +
@@ -449,12 +448,6 @@ Index: linux-stage/fs/ext4/mmp.c
 +       if (seq != le32_to_cpu(mmp->mmp_seq)) {
 +               dump_mmp_msg(sb, mmp,
 +                            "Device is already active on another node.");
-+			     /* Xyratex: Debug print-out for MRP-143; use this
-+					 only on test builds for Trinity, MFG,
-+					 or other group.
-+			      */
-+			     BUG_ON(!strcmp(mmp->mmp_nodename,
-+				    init_utsname()->nodename));
 +               goto failed;
 +       }
 +
@@ -483,12 +476,6 @@ Index: linux-stage/fs/ext4/mmp.c
 +       if (seq != le32_to_cpu(mmp->mmp_seq)) {
 +               dump_mmp_msg(sb, mmp,
 +                            "Device is already active on another node.");
-+			     /* Xyratex: Debug print-out for MRP-143; use this
-+					 only on test builds for Trinity, MFG,
-+					 or other group.
-+			      */
-+			     BUG_ON(!strcmp(mmp->mmp_nodename,
-+				    init_utsname()->nodename));
 +               goto failed;
 +       }
 +

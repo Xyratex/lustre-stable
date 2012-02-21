@@ -2,13 +2,12 @@ Index: linux-stage/fs/ext4/super.c
 ===================================================================
 --- linux-stage.orig/fs/ext4/super.c
 +++ linux-stage/fs/ext4/super.c
-@@ -39,6 +39,9 @@
+@@ -39,6 +39,8 @@
  #include <linux/log2.h>
  #include <linux/crc16.h>
  #include <asm/uaccess.h>
 +#include <linux/kthread.h>
 +#include <linux/utsname.h>
-+#include <linux/string.h>
  
  #include "ext4.h"
  #include "ext4_jbd2.h"
@@ -29,7 +28,7 @@ Index: linux-stage/fs/ext4/super.c
  	if (sbi->s_stripe)
  		seq_printf(seq, ",stripe=%lu", sbi->s_stripe);
  	/*
-@@ -831,6 +834,352 @@ static int ext4_show_options(struct seq_
+@@ -831,6 +834,340 @@ static int ext4_show_options(struct seq_
  }
  
  
@@ -315,12 +314,6 @@ Index: linux-stage/fs/ext4/super.c
 +	if (seq != le32_to_cpu(mmp->mmp_seq)) {
 +		dump_mmp_msg(sb, mmp, __func__,
 +			     "Device is already active on another node.");
-+			     /* Xyratex: Debug print-out for MRP-143; use this
-+					 only on test builds for Trinity, MFG,
-+					 or other group.
-+			      */
-+			     BUG_ON(!strcmp(mmp->mmp_nodename,
-+				    init_utsname()->nodename));
 +		goto failed;
 +	}
 +
@@ -349,12 +342,6 @@ Index: linux-stage/fs/ext4/super.c
 +	if (seq != le32_to_cpu(mmp->mmp_seq)) {
 +		dump_mmp_msg(sb, mmp, __func__,
 +			     "Device is already active on another node.");
-+			     /* Xyratex: Debug print-out for MRP-143; use this
-+					 only on test builds for Trinity, MFG,
-+					 or other group.
-+			      */
-+			     BUG_ON(!strcmp(mmp->mmp_nodename,
-+				    init_utsname()->nodename));
 +		goto failed;
 +	}
 +
