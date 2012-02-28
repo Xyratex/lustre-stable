@@ -107,7 +107,7 @@ static struct ptlrpcd_scope_ctl ptlrpcd_scopes[PSCOPE_NR] = {
         }
 };
 
-cfs_semaphore_t ptlrpcd_sem;
+cfs_mutex_t ptlrpcd_mutex;
 static int ptlrpcd_users = 0;
 
 void ptlrpcd_wake(struct ptlrpc_request *req)
@@ -506,7 +506,7 @@ int ptlrpcd_addref(void)
         int j;
         ENTRY;
 
-        cfs_mutex_down(&ptlrpcd_sem);
+        cfs_mutex_lock(&ptlrpcd_mutex);
         if (++ptlrpcd_users == 1) {
                 for (i = 0; rc == 0 && i < PSCOPE_NR; ++i) {
                         for (j = 0; rc == 0 && j < PT_NR; ++j) {
@@ -525,15 +525,15 @@ int ptlrpcd_addref(void)
                         ptlrpcd_fini();
                 }
         }
-        cfs_mutex_up(&ptlrpcd_sem);
+        cfs_mutex_unlock(&ptlrpcd_mutex);
         RETURN(rc);
 }
 
 void ptlrpcd_decref(void)
 {
-        cfs_mutex_down(&ptlrpcd_sem);
+        cfs_mutex_lock(&ptlrpcd_mutex);
         if (--ptlrpcd_users == 0)
                 ptlrpcd_fini();
-        cfs_mutex_up(&ptlrpcd_sem);
+        cfs_mutex_unlock(&ptlrpcd_mutex);
 }
 /** @} ptlrpcd */

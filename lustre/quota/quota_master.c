@@ -64,7 +64,7 @@
 
 #ifdef HAVE_QUOTA_SUPPORT
 
-/* lock ordering: mds->mds_qonoff_sem > dquot->dq_sem > lqs->lqs_lock */
+/* lock ordering: mds->mds_qonoff_sem > dquot->dq_mutex > lqs->lqs_lock */
 static cfs_list_t lustre_dquot_hash[NR_DQHASH];
 static cfs_rwlock_t dquot_hash_lock = CFS_RW_LOCK_UNLOCKED;
 
@@ -145,7 +145,8 @@ static struct lustre_dquot *alloc_dquot(struct lustre_quota_info *lqi,
                 RETURN(NULL);
 
         CFS_INIT_LIST_HEAD(&dquot->dq_hash);
-        cfs_init_mutex_locked(&dquot->dq_sem);
+        cfs_mutex_init(&dquot->dq_mutex);
+        cfs_mutex_lock(&dquot->dq_mutex);
         cfs_atomic_set(&dquot->dq_refcnt, 1);
         dquot->dq_info = lqi;
         dquot->dq_id = id;
@@ -203,6 +204,7 @@ static struct lustre_dquot *lustre_dqget(struct obd_device *obd,
         if ((dquot = find_dquot(hashent, lqi, id, type)) != NULL) {
                 cfs_atomic_inc(&dquot->dq_refcnt);
                 cfs_read_unlock(&dquot_hash_lock);
+                cfs_mutex_unlock(&empty->dq_mutex);
                 free_dq = 1;
         } else {
                 int rc;
@@ -211,7 +213,7 @@ static struct lustre_dquot *lustre_dqget(struct obd_device *obd,
 
                 dquot = empty;
                 rc = fsfilt_dquot(obd, dquot, QFILE_RD_DQUOT);
-                cfs_up(&dquot->dq_sem);
+                cfs_mutex_unlock(&dquot->dq_mutex);
                 if (rc) {
                         CERROR("can't read dquot from admin quotafile! "
                                "(rc:%d)\n", rc);
@@ -293,7 +295,7 @@ int dqacq_adjust_qunit_sz(struct obd_device *obd, qid_t id, int type,
         if (!oqaq)
                 GOTO(out, rc = -ENOMEM);
 
-        cfs_down(&dquot->dq_sem);
+        cfs_mutex_lock(&dquot->dq_mutex);
         init_oqaq(oqaq, qctxt, id, type);
 
         rc = dquot_create_oqaq(qctxt, dquot, ost_num, mdt_num,
@@ -327,7 +329,7 @@ int dqacq_adjust_qunit_sz(struct obd_device *obd, qid_t id, int type,
         else
                 qid[USRQUOTA] = dquot->dq_id;
 
-        cfs_up(&dquot->dq_sem);
+        cfs_mutex_unlock(&dquot->dq_mutex);
 
         rc = qctxt_adjust_qunit(obd, qctxt, qid, is_blk, 0, NULL);
         if (rc == -EDQUOT || rc == -EBUSY) {
@@ -351,7 +353,7 @@ out:
 
         RETURN(rc);
 out_sem:
-        cfs_up(&dquot->dq_sem);
+        cfs_mutex_unlock(&dquot->dq_mutex);
 	goto out;
 }
 
@@ -403,7 +405,7 @@ int dqacq_handler(struct obd_device *obd, struct qunit_data *qdata, int opc)
         DQUOT_DEBUG(dquot, "get dquot in dqacq_handler\n");
         QINFO_DEBUG(dquot->dq_info, "get dquot in dqadq_handler\n");
 
-        cfs_down(&dquot->dq_sem);
+        cfs_mutex_lock(&dquot->dq_mutex);
 
         if (QDATA_IS_BLK(qdata)) {
                 grace = info->qi_info[QDATA_IS_GRP(qdata)].dqi_bgrace;
@@ -470,7 +472,7 @@ int dqacq_handler(struct obd_device *obd, struct qunit_data *qdata, int opc)
         rc = fsfilt_dquot(obd, dquot, QFILE_WR_DQUOT);
         EXIT;
 out:
-        cfs_up(&dquot->dq_sem);
+        cfs_mutex_unlock(&dquot->dq_mutex);
         cfs_up_write(&mds->mds_qonoff_sem);
         lustre_dqput(dquot);
         if (rc != -EDQUOT)
@@ -1031,7 +1033,7 @@ int dquot_create_oqaq(struct lustre_quota_ctxt *qctxt,
 
         if (!dquot || !oqaq)
                 RETURN(-EINVAL);
-        LASSERT_SEM_LOCKED(&dquot->dq_sem);
+        LASSERT_MUTEX_LOCKED(&dquot->dq_mutex);
         LASSERT(oqaq->qaq_iunit_sz);
         LASSERT(oqaq->qaq_bunit_sz);
 
@@ -1343,11 +1345,11 @@ int mds_set_dqblk(struct obd_device *obd, struct obd_quotactl *oqctl)
         if (rc)
                 GOTO(out, rc);
 
-        cfs_down(&dquot->dq_sem);
+        cfs_mutex_lock(&dquot->dq_mutex);
         cfs_spin_lock(&lqs->lqs_lock);
         if (LQS_IS_SETQUOTA(lqs) || LQS_IS_RECOVERY(lqs)) {
                 cfs_spin_unlock(&lqs->lqs_lock);
-                cfs_up(&dquot->dq_sem);
+                cfs_mutex_unlock(&dquot->dq_mutex);
                 GOTO(skip, rc = -EBUSY);
         }
         LQS_SET_SETQUOTA(lqs);
@@ -1412,7 +1414,7 @@ int mds_set_dqblk(struct obd_device *obd, struct obd_quotactl *oqctl)
 
         rc = fsfilt_dquot(obd, dquot, QFILE_WR_DQUOT);
 
-        cfs_up(&dquot->dq_sem);
+        cfs_mutex_unlock(&dquot->dq_mutex);
 
         if (rc) {
                 CERROR("set limit failed! (rc:%d)\n", rc);
@@ -1425,9 +1427,9 @@ int mds_set_dqblk(struct obd_device *obd, struct obd_quotactl *oqctl)
         orig_set = ihardlimit || isoftlimit;
         now_set  = dqblk->dqb_ihardlimit || dqblk->dqb_isoftlimit;
         if (dqblk->dqb_valid & QIF_ILIMITS && orig_set != now_set) {
-                cfs_down(&dquot->dq_sem);
+                cfs_mutex_lock(&dquot->dq_mutex);
                 dquot->dq_dqb.dqb_curinodes = 0;
-                cfs_up(&dquot->dq_sem);
+                cfs_mutex_unlock(&dquot->dq_mutex);
                 rc = mds_init_slave_ilimits(obd, oqctl, orig_set);
                 if (rc) {
                         CERROR("init slave ilimits failed! (rc:%d)\n", rc);
@@ -1438,9 +1440,9 @@ int mds_set_dqblk(struct obd_device *obd, struct obd_quotactl *oqctl)
         orig_set = bhardlimit || bsoftlimit;
         now_set  = dqblk->dqb_bhardlimit || dqblk->dqb_bsoftlimit;
         if (dqblk->dqb_valid & QIF_BLIMITS && orig_set != now_set) {
-                cfs_down(&dquot->dq_sem);
+                cfs_mutex_lock(&dquot->dq_mutex);
                 dquot->dq_dqb.dqb_curspace = 0;
-                cfs_up(&dquot->dq_sem);
+                cfs_mutex_unlock(&dquot->dq_mutex);
                 rc = mds_init_slave_blimits(obd, oqctl, orig_set);
                 if (rc) {
                         CERROR("init slave blimits failed! (rc:%d)\n", rc);
@@ -1450,7 +1452,7 @@ int mds_set_dqblk(struct obd_device *obd, struct obd_quotactl *oqctl)
 
 revoke_out:
         cfs_down_write(&mds->mds_qonoff_sem);
-        cfs_down(&dquot->dq_sem);
+        cfs_mutex_lock(&dquot->dq_mutex);
         if (rc) {
                 /* cancel previous setting */
                 dquot->dq_dqb.dqb_ihardlimit = ihardlimit;
@@ -1461,7 +1463,7 @@ revoke_out:
                 dquot->dq_dqb.dqb_itime = itime;
         }
         rc2 = fsfilt_dquot(obd, dquot, QFILE_WR_DQUOT);
-        cfs_up(&dquot->dq_sem);
+        cfs_mutex_unlock(&dquot->dq_mutex);
 update_fail:
         cfs_spin_lock(&lqs->lqs_lock);
         LQS_CLEAR_SETQUOTA(lqs);
@@ -1544,7 +1546,7 @@ int mds_get_dqblk(struct obd_device *obd, struct obd_quotactl *oqctl)
         if (IS_ERR(dquot))
                 GOTO(out, rc = PTR_ERR(dquot));
 
-        cfs_down(&dquot->dq_sem);
+        cfs_mutex_lock(&dquot->dq_mutex);
         dqblk->dqb_ihardlimit = dquot->dq_dqb.dqb_ihardlimit;
         dqblk->dqb_isoftlimit = dquot->dq_dqb.dqb_isoftlimit;
         dqblk->dqb_bhardlimit = dquot->dq_dqb.dqb_bhardlimit;
@@ -1552,7 +1554,7 @@ int mds_get_dqblk(struct obd_device *obd, struct obd_quotactl *oqctl)
         dqblk->dqb_btime = dquot->dq_dqb.dqb_btime;
         dqblk->dqb_itime = dquot->dq_dqb.dqb_itime;
         dqblk->dqb_valid |= QIF_LIMITS | QIF_TIMES;
-        cfs_up(&dquot->dq_sem);
+        cfs_mutex_unlock(&dquot->dq_mutex);
 
         lustre_dqput(dquot);
         cfs_up_read(&mds->mds_qonoff_sem);
@@ -1628,20 +1630,20 @@ dquot_recovery(struct obd_device *obd, unsigned int id, unsigned short type)
         if (rc)
                 GOTO(skip, rc);
 
-        cfs_down(&dquot->dq_sem);
+        cfs_mutex_lock(&dquot->dq_mutex);
 
         /* don't recover the dquot without limits or quota is setting or
          * another recovery is already going on */
         if (!(dquot->dq_dqb.dqb_bhardlimit || dquot->dq_dqb.dqb_bsoftlimit) ||
             LQS_IS_SETQUOTA(lqs) || LQS_IS_RECOVERY(lqs)) {
-                cfs_up(&dquot->dq_sem);
+                cfs_mutex_unlock(&dquot->dq_mutex);
                 GOTO(skip1, rc = 0);
         }
 
         cfs_spin_lock(&lqs->lqs_lock);
         LQS_SET_RECOVERY(lqs);
         cfs_spin_unlock(&lqs->lqs_lock);
-        cfs_up(&dquot->dq_sem);
+        cfs_mutex_unlock(&dquot->dq_mutex);
 
         /* release mds_qonoff_sem during obd_quotactl ops here */
         cfs_up_write(&mds->mds_qonoff_sem);
@@ -1664,7 +1666,7 @@ dquot_recovery(struct obd_device *obd, unsigned int id, unsigned short type)
         total_limits += qctl->qc_dqblk.dqb_bhardlimit;
 
         /* amend the usage of the administrative quotafile */
-        cfs_down(&dquot->dq_sem);
+        cfs_mutex_lock(&dquot->dq_mutex);
 
         dquot->dq_dqb.dqb_curspace = total_limits << QUOTABLOCK_BITS;
 
@@ -1672,7 +1674,7 @@ dquot_recovery(struct obd_device *obd, unsigned int id, unsigned short type)
         if (rc)
                 CERROR("write dquot failed! (rc:%d)\n", rc);
 
-        cfs_up(&dquot->dq_sem);
+        cfs_mutex_unlock(&dquot->dq_mutex);
         EXIT;
 out:
         cfs_spin_lock(&lqs->lqs_lock);
@@ -1757,15 +1759,15 @@ int mds_quota_recovery(struct obd_device *obd)
         if (unlikely(!mds->mds_quota || obd->obd_stopping))
                 RETURN(rc);
 
-        cfs_mutex_down(&obd->obd_dev_sem);
+        cfs_mutex_lock(&obd->obd_dev_mutex);
         if (mds->mds_lov_desc.ld_active_tgt_count != mds->mds_lov_objid_count) {
                 CWARN("Only %u/%u OSTs are active, abort quota recovery\n",
                       mds->mds_lov_desc.ld_active_tgt_count,
                       mds->mds_lov_objid_count);
-                cfs_mutex_up(&obd->obd_dev_sem);
+                cfs_mutex_unlock(&obd->obd_dev_mutex);
                 RETURN(rc);
         }
-        cfs_mutex_up(&obd->obd_dev_sem);
+        cfs_mutex_unlock(&obd->obd_dev_mutex);
 
         data.obd = obd;
         cfs_init_completion(&data.comp);

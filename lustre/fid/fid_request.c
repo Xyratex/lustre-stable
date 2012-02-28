@@ -149,7 +149,7 @@ int seq_client_alloc_super(struct lu_client_seq *seq,
         int rc;
         ENTRY;
 
-        cfs_down(&seq->lcs_sem);
+        cfs_mutex_lock(&seq->lcs_mutex);
 
 #ifdef __KERNEL__
         if (seq->lcs_srv) {
@@ -163,7 +163,7 @@ int seq_client_alloc_super(struct lu_client_seq *seq,
 #ifdef __KERNEL__
         }
 #endif
-        cfs_up(&seq->lcs_sem);
+        cfs_mutex_unlock(&seq->lcs_mutex);
         RETURN(rc);
 }
 
@@ -227,24 +227,24 @@ static int seq_fid_alloc_prep(struct lu_client_seq *seq,
         if (seq->lcs_update) {
                 cfs_waitq_add(&seq->lcs_waitq, link);
                 cfs_set_current_state(CFS_TASK_UNINT);
-                cfs_up(&seq->lcs_sem);
+                cfs_mutex_unlock(&seq->lcs_mutex);
 
                 cfs_waitq_wait(link, CFS_TASK_UNINT);
 
-                cfs_down(&seq->lcs_sem);
+                cfs_mutex_lock(&seq->lcs_mutex);
                 cfs_waitq_del(&seq->lcs_waitq, link);
                 cfs_set_current_state(CFS_TASK_RUNNING);
                 return -EAGAIN;
         }
         ++seq->lcs_update;
-        cfs_up(&seq->lcs_sem);
+        cfs_mutex_unlock(&seq->lcs_mutex);
         return 0;
 }
 
 static void seq_fid_alloc_fini(struct lu_client_seq *seq)
 {
         LASSERT(seq->lcs_update == 1);
-        cfs_down(&seq->lcs_sem);
+        cfs_mutex_lock(&seq->lcs_mutex);
         --seq->lcs_update;
         cfs_waitq_signal(&seq->lcs_waitq);
 }
@@ -257,7 +257,7 @@ int seq_client_get_seq(const struct lu_env *env,
         int rc;
 
         LASSERT(seqnr != NULL);
-        cfs_down(&seq->lcs_sem);
+        cfs_mutex_lock(&seq->lcs_mutex);
         cfs_waitlink_init(&link);
 
         while (1) {
@@ -271,7 +271,7 @@ int seq_client_get_seq(const struct lu_env *env,
                 CERROR("%s: Can't allocate new sequence, "
                        "rc %d\n", seq->lcs_name, rc);
                 seq_fid_alloc_fini(seq);
-                cfs_up(&seq->lcs_sem);
+                cfs_mutex_unlock(&seq->lcs_mutex);
                 return rc;
         }
 
@@ -289,7 +289,7 @@ int seq_client_get_seq(const struct lu_env *env,
          * to setup FLD for it.
          */
         seq_fid_alloc_fini(seq);
-        cfs_up(&seq->lcs_sem);
+        cfs_mutex_unlock(&seq->lcs_mutex);
 
         return rc;
 }
@@ -307,7 +307,7 @@ int seq_client_alloc_fid(const struct lu_env *env,
         LASSERT(fid != NULL);
 
         cfs_waitlink_init(&link);
-        cfs_down(&seq->lcs_sem);
+        cfs_mutex_lock(&seq->lcs_mutex);
 
         while (1) {
                 seqno_t seqnr;
@@ -329,7 +329,7 @@ int seq_client_alloc_fid(const struct lu_env *env,
                         CERROR("%s: Can't allocate new sequence, "
                                "rc %d\n", seq->lcs_name, rc);
                         seq_fid_alloc_fini(seq);
-                        cfs_up(&seq->lcs_sem);
+                        cfs_mutex_unlock(&seq->lcs_mutex);
                         RETURN(rc);
                 }
 
@@ -351,7 +351,7 @@ int seq_client_alloc_fid(const struct lu_env *env,
         }
 
         *fid = seq->lcs_fid;
-        cfs_up(&seq->lcs_sem);
+        cfs_mutex_unlock(&seq->lcs_mutex);
 
         CDEBUG(D_INFO, "%s: Allocated FID "DFID"\n", seq->lcs_name,  PFID(fid));
         RETURN(rc);
@@ -368,16 +368,16 @@ void seq_client_flush(struct lu_client_seq *seq)
 
         LASSERT(seq != NULL);
         cfs_waitlink_init(&link);
-        cfs_down(&seq->lcs_sem);
+        cfs_mutex_lock(&seq->lcs_mutex);
 
         while (seq->lcs_update) {
                 cfs_waitq_add(&seq->lcs_waitq, &link);
                 cfs_set_current_state(CFS_TASK_UNINT);
-                cfs_up(&seq->lcs_sem);
+                cfs_mutex_unlock(&seq->lcs_mutex);
 
                 cfs_waitq_wait(&link, CFS_TASK_UNINT);
 
-                cfs_down(&seq->lcs_sem);
+                cfs_mutex_lock(&seq->lcs_mutex);
                 cfs_waitq_del(&seq->lcs_waitq, &link);
                 cfs_set_current_state(CFS_TASK_RUNNING);
         }
@@ -391,7 +391,7 @@ void seq_client_flush(struct lu_client_seq *seq)
         seq->lcs_space.lsr_index = -1;
 
         range_init(&seq->lcs_space);
-        cfs_up(&seq->lcs_sem);
+        cfs_mutex_unlock(&seq->lcs_mutex);
 }
 EXPORT_SYMBOL(seq_client_flush);
 
@@ -466,7 +466,7 @@ int seq_client_init(struct lu_client_seq *seq,
         seq->lcs_exp = exp;
         seq->lcs_srv = srv;
         seq->lcs_type = type;
-        cfs_sema_init(&seq->lcs_sem, 1);
+        cfs_mutex_init(&seq->lcs_mutex);
         seq->lcs_width = LUSTRE_SEQ_MAX_WIDTH;
         cfs_waitq_init(&seq->lcs_waitq);
 

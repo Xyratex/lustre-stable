@@ -703,7 +703,7 @@ EXPORT_SYMBOL(lu_types_stop);
  * Global list of all sites on this node
  */
 static CFS_LIST_HEAD(lu_sites);
-static CFS_DECLARE_MUTEX(lu_sites_guard);
+static CFS_DEFINE_MUTEX(lu_sites_guard);
 
 /**
  * Global environment used by site shrinker.
@@ -939,9 +939,9 @@ EXPORT_SYMBOL(lu_site_init);
  */
 void lu_site_fini(struct lu_site *s)
 {
-        cfs_down(&lu_sites_guard);
+        cfs_mutex_lock(&lu_sites_guard);
         cfs_list_del_init(&s->ls_linkage);
-        cfs_up(&lu_sites_guard);
+        cfs_mutex_unlock(&lu_sites_guard);
 
         if (s->ls_obj_hash != NULL) {
                 cfs_hash_putref(s->ls_obj_hash);
@@ -966,11 +966,11 @@ EXPORT_SYMBOL(lu_site_fini);
 int lu_site_init_finish(struct lu_site *s)
 {
         int result;
-        cfs_down(&lu_sites_guard);
+        cfs_mutex_lock(&lu_sites_guard);
         result = lu_context_refill(&lu_shrink_env.le_ctx);
         if (result == 0)
                 cfs_list_add(&s->ls_linkage, &lu_sites);
-        cfs_up(&lu_sites_guard);
+        cfs_mutex_unlock(&lu_sites_guard);
         return result;
 }
 EXPORT_SYMBOL(lu_site_init_finish);
@@ -1651,7 +1651,7 @@ static int lu_cache_shrink(SHRINKER_FIRST_ARG int nr_to_scan,
                 CDEBUG(D_INODE, "Shrink %d objects\n", nr_to_scan);
         }
 
-        cfs_down(&lu_sites_guard);
+        cfs_mutex_lock(&lu_sites_guard);
         cfs_list_for_each_entry_safe(s, tmp, &lu_sites, ls_linkage) {
                 if (nr_to_scan != 0) {
                         remain = lu_site_purge(&lu_shrink_env, s, remain);
@@ -1669,7 +1669,7 @@ static int lu_cache_shrink(SHRINKER_FIRST_ARG int nr_to_scan,
                         break;
         }
         cfs_list_splice(&splice, lu_sites.prev);
-        cfs_up(&lu_sites_guard);
+        cfs_mutex_unlock(&lu_sites_guard);
 
         cached = (cached / 100) * sysctl_vfs_cache_pressure;
         if (nr_to_scan == 0)
@@ -1765,9 +1765,9 @@ int lu_global_init(void)
          * conservatively. This should not be too bad, because this
          * environment is global.
          */
-        cfs_down(&lu_sites_guard);
+        cfs_mutex_lock(&lu_sites_guard);
         result = lu_env_init(&lu_shrink_env, LCT_SHRINKER);
-        cfs_up(&lu_sites_guard);
+        cfs_mutex_unlock(&lu_sites_guard);
         if (result != 0)
                 return result;
 
@@ -1821,9 +1821,9 @@ void lu_global_fini(void)
          * Tear shrinker environment down _after_ de-registering
          * lu_global_key, because the latter has a value in the former.
          */
-        cfs_down(&lu_sites_guard);
+        cfs_mutex_lock(&lu_sites_guard);
         lu_env_fini(&lu_shrink_env);
-        cfs_up(&lu_sites_guard);
+        cfs_mutex_unlock(&lu_sites_guard);
 
         lu_ref_global_fini();
 }

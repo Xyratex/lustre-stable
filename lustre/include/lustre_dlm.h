@@ -267,7 +267,7 @@ static inline int lockmode_compat(ldlm_mode_t exist_mode, ldlm_mode_t new_mode)
  * lr_lock
  *     ns_lock
  *
- * lr_lvb_sem
+ * lr_lvb_mutex
  *     lr_lock
  *
  */
@@ -816,7 +816,7 @@ struct ldlm_resource {
 
         /* Server-side-only lock value block elements */
         /** to serialize lvbo_init */
-        cfs_semaphore_t        lr_lvb_sem;
+        cfs_mutex_t            lr_lvb_mutex;
         __u32                  lr_lvb_len;
         /** protect by lr_lock */
         void                  *lr_lvb_data;

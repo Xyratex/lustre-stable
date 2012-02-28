@@ -65,7 +65,7 @@ static void (*kill_super_cb)(struct super_block *sb) = NULL;
 
 /*********** mount lookup *********/
 
-CFS_DECLARE_MUTEX(lustre_mount_info_lock);
+CFS_DEFINE_MUTEX(lustre_mount_info_lock);
 static CFS_LIST_HEAD(server_mount_info_list);
 
 static struct lustre_mount_info *server_find_mount(const char *name)
@@ -106,10 +106,10 @@ static int server_register_mount(const char *name, struct super_block *sb,
         }
         strcpy(name_cp, name);
 
-        cfs_down(&lustre_mount_info_lock);
+        cfs_mutex_lock(&lustre_mount_info_lock);
 
         if (server_find_mount(name)) {
-                cfs_up(&lustre_mount_info_lock);
+                cfs_mutex_unlock(&lustre_mount_info_lock);
                 OBD_FREE(lmi, sizeof(*lmi));
                 OBD_FREE(name_cp, strlen(name) + 1);
                 CERROR("Already registered %s\n", name);
@@ -120,7 +120,7 @@ static int server_register_mount(const char *name, struct super_block *sb,
         lmi->lmi_mnt = mnt;
         cfs_list_add(&lmi->lmi_list_chain, &server_mount_info_list);
 
-        cfs_up(&lustre_mount_info_lock);
+        cfs_mutex_unlock(&lustre_mount_info_lock);
 
         CDEBUG(D_MOUNT, "reg_mnt %p from %s, vfscount=%d\n",
                lmi->lmi_mnt, name, cfs_atomic_read(&lmi->lmi_mnt->mnt_count));
@@ -134,10 +134,10 @@ static int server_deregister_mount(const char *name)
         struct lustre_mount_info *lmi;
         ENTRY;
 
-        cfs_down(&lustre_mount_info_lock);
+        cfs_mutex_lock(&lustre_mount_info_lock);
         lmi = server_find_mount(name);
         if (!lmi) {
-                cfs_up(&lustre_mount_info_lock);
+                cfs_mutex_unlock(&lustre_mount_info_lock);
                 CERROR("%s not registered\n", name);
                 RETURN(-ENOENT);
         }
@@ -148,7 +148,7 @@ static int server_deregister_mount(const char *name)
         OBD_FREE(lmi->lmi_name, strlen(lmi->lmi_name) + 1);
         cfs_list_del(&lmi->lmi_list_chain);
         OBD_FREE(lmi, sizeof(*lmi));
-        cfs_up(&lustre_mount_info_lock);
+        cfs_mutex_unlock(&lustre_mount_info_lock);
 
         RETURN(0);
 }
@@ -162,9 +162,9 @@ struct lustre_mount_info *server_get_mount(const char *name)
         struct lustre_sb_info *lsi;
         ENTRY;
 
-        cfs_down(&lustre_mount_info_lock);
+        cfs_mutex_lock(&lustre_mount_info_lock);
         lmi = server_find_mount(name);
-        cfs_up(&lustre_mount_info_lock);
+        cfs_mutex_unlock(&lustre_mount_info_lock);
         if (!lmi) {
                 CERROR("Can't find mount for %s\n", name);
                 RETURN(NULL);
@@ -190,9 +190,9 @@ struct lustre_mount_info *server_get_mount_2(const char *name)
         struct lustre_mount_info *lmi;
         ENTRY;
 
-        cfs_down(&lustre_mount_info_lock);
+        cfs_mutex_lock(&lustre_mount_info_lock);
         lmi = server_find_mount(name);
-        cfs_up(&lustre_mount_info_lock);
+        cfs_mutex_unlock(&lustre_mount_info_lock);
         if (!lmi)
                 CERROR("Can't find mount for %s\n", name);
 
@@ -223,9 +223,9 @@ int server_put_mount(const char *name, struct vfsmount *mnt)
         /* This might be the last one, can't deref after this */
         unlock_mntput(mnt);
 
-        cfs_down(&lustre_mount_info_lock);
+        cfs_mutex_lock(&lustre_mount_info_lock);
         lmi = server_find_mount(name);
-        cfs_up(&lustre_mount_info_lock);
+        cfs_mutex_unlock(&lustre_mount_info_lock);
         if (!lmi) {
                 CERROR("Can't find mount for %s\n", name);
                 RETURN(-ENOENT);
@@ -581,7 +581,7 @@ static int server_stop_mgs(struct super_block *sb)
         RETURN(rc);
 }
 
-CFS_DECLARE_MUTEX(mgc_start_lock);
+CFS_DEFINE_MUTEX(mgc_start_lock);
 
 /** Set up a mgc obd to process startup logs
  *
@@ -643,7 +643,7 @@ static int lustre_start_mgc(struct super_block *sb)
 
         mgssec = lsi->lsi_lmd->lmd_mgssec ? lsi->lsi_lmd->lmd_mgssec : "";
 
-        cfs_mutex_down(&mgc_start_lock);
+        cfs_mutex_lock(&mgc_start_lock);
 
         obd = class_name2obd(mgcname);
         if (obd && !obd->obd_stopping) {
@@ -805,7 +805,7 @@ out:
            to the same mgc.*/
         lsi->lsi_mgc = obd;
 out_free:
-        cfs_mutex_up(&mgc_start_lock);
+        cfs_mutex_unlock(&mgc_start_lock);
 
         if (mgcname)
                 OBD_FREE(mgcname, len);
@@ -829,7 +829,7 @@ static int lustre_stop_mgc(struct super_block *sb)
                 RETURN(-ENOENT);
         lsi->lsi_mgc = NULL;
 
-        cfs_mutex_down(&mgc_start_lock);
+        cfs_mutex_lock(&mgc_start_lock);
         LASSERT(cfs_atomic_read(&obd->u.cli.cl_mgc_refcount) > 0);
         if (!cfs_atomic_dec_and_test(&obd->u.cli.cl_mgc_refcount)) {
                 /* This is not fatal, every client that stops
@@ -881,7 +881,7 @@ out:
                 OBD_FREE(niduuid, len);
 
         /* class_import_put will get rid of the additional connections */
-        cfs_mutex_up(&mgc_start_lock);
+        cfs_mutex_unlock(&mgc_start_lock);
         RETURN(rc);
 }
 
@@ -919,7 +919,7 @@ static int server_mgc_clear_fs(struct obd_device *mgc)
         RETURN(rc);
 }
 
-CFS_DECLARE_MUTEX(server_start_lock);
+CFS_DEFINE_MUTEX(server_start_lock);
 
 /* Stop MDS/OSS if nobody is using them */
 static int server_stop_servers(int lddflags, int lsiflags)
@@ -929,7 +929,7 @@ static int server_stop_servers(int lddflags, int lsiflags)
         int rc = 0;
         ENTRY;
 
-        cfs_mutex_down(&server_start_lock);
+        cfs_mutex_lock(&server_start_lock);
 
         /* Either an MDT or an OST or neither  */
         /* if this was an MDT, and there are no more MDT's, clean up the MDS */
@@ -953,7 +953,7 @@ static int server_stop_servers(int lddflags, int lsiflags)
                         rc = err;
         }
 
-        cfs_mutex_up(&server_start_lock);
+        cfs_mutex_unlock(&server_start_lock);
 
         RETURN(rc);
 }
@@ -1112,7 +1112,7 @@ static int server_start_targets(struct super_block *sb, struct vfsmount *mnt)
         /* If we're an MDT, make sure the global MDS is running */
         if (lsi->lsi_ldd->ldd_flags & LDD_F_SV_TYPE_MDT) {
                 /* make sure the MDS is started */
-                cfs_mutex_down(&server_start_lock);
+                cfs_mutex_lock(&server_start_lock);
                 obd = class_name2obd(LUSTRE_MDS_OBDNAME);
                 if (!obd) {
                         rc = lustre_start_simple(LUSTRE_MDS_OBDNAME,
@@ -1121,19 +1121,19 @@ static int server_start_targets(struct super_block *sb, struct vfsmount *mnt)
                                                  LUSTRE_MDS_OBDNAME"_uuid",
                                                  0, 0);
                         if (rc) {
-                                cfs_mutex_up(&server_start_lock);
+                                cfs_mutex_unlock(&server_start_lock);
                                 CERROR("failed to start MDS: %d\n", rc);
                                 RETURN(rc);
                         }
                 }
-                cfs_mutex_up(&server_start_lock);
+                cfs_mutex_unlock(&server_start_lock);
         }
 #endif
 
         /* If we're an OST, make sure the global OSS is running */
         if (lsi->lsi_ldd->ldd_flags & LDD_F_SV_TYPE_OST) {
                 /* make sure OSS is started */
-                cfs_mutex_down(&server_start_lock);
+                cfs_mutex_lock(&server_start_lock);
                 obd = class_name2obd(LUSTRE_OSS_OBDNAME);
                 if (!obd) {
                         rc = lustre_start_simple(LUSTRE_OSS_OBDNAME,
@@ -1141,12 +1141,12 @@ static int server_start_targets(struct super_block *sb, struct vfsmount *mnt)
                                                  LUSTRE_OSS_OBDNAME"_uuid",
                                                  0, 0);
                         if (rc) {
-                                cfs_mutex_up(&server_start_lock);
+                                cfs_mutex_unlock(&server_start_lock);
                                 CERROR("failed to start OSS: %d\n", rc);
                                 RETURN(rc);
                         }
                 }
-                cfs_mutex_up(&server_start_lock);
+                cfs_mutex_unlock(&server_start_lock);
         }
 
         /* Set the mgc fs to our server disk.  This allows the MGC to

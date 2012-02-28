@@ -562,7 +562,7 @@ int mdt_client_new(const struct lu_env *env, struct mdt_device *mdt)
         ted->ted_lr_idx = cl_idx;
         ted->ted_lr_off = lsd->lsd_client_start +
                           (cl_idx * lsd->lsd_client_size);
-        cfs_init_mutex(&ted->ted_lcd_lock);
+        cfs_mutex_init(&ted->ted_lcd_lock);
 
         LASSERTF(ted->ted_lr_off > 0, "ted_lr_off = %llu\n", ted->ted_lr_off);
 
@@ -641,7 +641,7 @@ int mdt_client_add(const struct lu_env *env,
         ted->ted_lr_idx = cl_idx;
         ted->ted_lr_off = lsd->lsd_client_start +
                           (cl_idx * lsd->lsd_client_size);
-        cfs_init_mutex(&ted->ted_lcd_lock);
+        cfs_mutex_init(&ted->ted_lcd_lock);
 
         LASSERTF(ted->ted_lr_off > 0, "ted_lr_off = %llu\n", ted->ted_lr_off);
 
@@ -706,10 +706,11 @@ int mdt_client_del(const struct lu_env *env, struct mdt_device *mdt)
         if (IS_ERR(th))
                 GOTO(free, rc = PTR_ERR(th));
 
-        cfs_mutex_down(&ted->ted_lcd_lock);
+        cfs_mutex_lock(&ted->ted_lcd_lock);
         memset(ted->ted_lcd->lcd_uuid, 0, sizeof ted->ted_lcd->lcd_uuid);
         rc = mdt_last_rcvd_write(env, mdt, ted->ted_lcd, &off, th);
-        cfs_mutex_up(&ted->ted_lcd_lock);
+        cfs_mutex_unlock(&ted->ted_lcd_lock);
+
         mdt_trans_stop(env, mdt, th);
 
         CDEBUG(rc == 0 ? D_INFO : D_ERROR, "Zeroing out client idx %u in "
@@ -740,12 +741,12 @@ static int mdt_last_rcvd_update(struct mdt_thread_info *mti,
         ted = &req->rq_export->exp_target_data;
         LASSERT(ted);
 
-        cfs_mutex_down(&ted->ted_lcd_lock);
+        cfs_mutex_lock(&ted->ted_lcd_lock);
         lcd = ted->ted_lcd;
         /* if the export has already been disconnected, we have no last_rcvd slot,
          * update server data with latest transno then */
         if (lcd == NULL) {
-                cfs_mutex_up(&ted->ted_lcd_lock);
+                cfs_mutex_unlock(&ted->ted_lcd_lock);
                 CWARN("commit transaction for disconnected client %s: rc %d\n",
                       req->rq_export->exp_client_uuid.uuid, rc);
                 err = mdt_last_rcvd_header_write(mti->mti_env, mdt, th);
@@ -768,7 +769,7 @@ static int mdt_last_rcvd_update(struct mdt_thread_info *mti,
                                         req->rq_export->exp_vbr_failed = 1;
                                         cfs_spin_unlock(&req->rq_export->exp_lock);
                                 }
-                                cfs_mutex_up(&ted->ted_lcd_lock);
+                                cfs_mutex_unlock(&ted->ted_lcd_lock);
                                 RETURN(req_is_replay(req) ? -EOVERFLOW : 0);
                         }
                         lcd->lcd_last_close_transno = mti->mti_transno;
@@ -796,7 +797,7 @@ static int mdt_last_rcvd_update(struct mdt_thread_info *mti,
                                         req->rq_export->exp_vbr_failed = 1;
                                         cfs_spin_unlock(&req->rq_export->exp_lock);
                                 }
-                                cfs_mutex_up(&ted->ted_lcd_lock);
+                                cfs_mutex_unlock(&ted->ted_lcd_lock);
                                 RETURN(req_is_replay(req) ? -EOVERFLOW : 0);
                         }
                         lcd->lcd_last_transno = mti->mti_transno;
@@ -815,7 +816,7 @@ static int mdt_last_rcvd_update(struct mdt_thread_info *mti,
         } else {
                 err = mdt_last_rcvd_write(mti->mti_env, mdt, lcd, &off, th);
         }
-        cfs_mutex_up(&ted->ted_lcd_lock);
+        cfs_mutex_unlock(&ted->ted_lcd_lock);
         RETURN(err);
 }
 

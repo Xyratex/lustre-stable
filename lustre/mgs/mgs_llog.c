@@ -262,7 +262,7 @@ static int mgs_fsdb_handler(struct llog_handle *llh, struct llog_rec_hdr *rec,
         RETURN(rc);
 }
 
-/* fsdb->fsdb_sem is already held  in mgs_find_or_make_fsdb*/
+/* fsdb->fsdb_mutex is already held  in mgs_find_or_make_fsdb*/
 static int mgs_get_fsdb_from_llog(struct obd_device *obd, struct fs_db *fsdb)
 {
         char *logname;
@@ -358,7 +358,7 @@ static struct fs_db *mgs_new_fsdb(struct obd_device *obd, char *fsname)
                 RETURN(NULL);
 
         strcpy(fsdb->fsdb_name, fsname);
-        cfs_sema_init(&fsdb->fsdb_sem, 1);
+        cfs_mutex_init(&fsdb->fsdb_mutex);
         cfs_set_bit(FSDB_UDESC, &fsdb->fsdb_flags);
 
         if (strcmp(fsname, MGSSELF_NAME) == 0) {
@@ -406,7 +406,7 @@ err:
 static void mgs_free_fsdb(struct obd_device *obd, struct fs_db *fsdb)
 {
         /* wait for anyone with the sem */
-        cfs_down(&fsdb->fsdb_sem);
+        cfs_mutex_lock(&fsdb->fsdb_mutex);
         lproc_mgs_del_live(obd, fsdb);
         cfs_list_del(&fsdb->fsdb_list);
         if (fsdb->fsdb_ost_index_map)
@@ -419,6 +419,7 @@ static void mgs_free_fsdb(struct obd_device *obd, struct fs_db *fsdb)
         name_destroy(&fsdb->fsdb_mdtlmv);
         name_destroy(&fsdb->fsdb_mdc);
         mgs_free_fsdb_srpc(fsdb);
+        cfs_mutex_unlock(&fsdb->fsdb_mutex);
         OBD_FREE_PTR(fsdb);
 }
 
@@ -434,12 +435,12 @@ int mgs_cleanup_fsdb_list(struct obd_device *obd)
         struct mgs_obd *mgs = &obd->u.mgs;
         struct fs_db *fsdb;
         cfs_list_t *tmp, *tmp2;
-        cfs_down(&mgs->mgs_sem);
+        cfs_mutex_lock(&mgs->mgs_mutex);
         cfs_list_for_each_safe(tmp, tmp2, &mgs->mgs_fs_db_list) {
                 fsdb = cfs_list_entry(tmp, struct fs_db, fsdb_list);
                 mgs_free_fsdb(obd, fsdb);
         }
-        cfs_up(&mgs->mgs_sem);
+        cfs_mutex_unlock(&mgs->mgs_mutex);
         return 0;
 }
 
@@ -451,20 +452,20 @@ int mgs_find_or_make_fsdb(struct obd_device *obd, char *name,
         int rc = 0;
 
         ENTRY;
-        cfs_down(&mgs->mgs_sem);
+        cfs_mutex_lock(&mgs->mgs_mutex);
         fsdb = mgs_find_fsdb(obd, name);
         if (fsdb) {
-                cfs_up(&mgs->mgs_sem);
+                cfs_mutex_unlock(&mgs->mgs_mutex);
                 *dbh = fsdb;
                 RETURN(0);
         }
 
         CDEBUG(D_MGS, "Creating new db\n");
         fsdb = mgs_new_fsdb(obd, name);
-        /* lock fsdb_sem until the db is loaded from llogs */
+        /* lock fsdb_mutex until the db is loaded from llogs */
         if (fsdb)
-                cfs_down(&fsdb->fsdb_sem);
-        cfs_up(&mgs->mgs_sem);
+                cfs_mutex_lock(&fsdb->fsdb_mutex);
+        cfs_mutex_unlock(&mgs->mgs_mutex);
         if (!fsdb)
                 RETURN(-ENOMEM);
 
@@ -484,13 +485,13 @@ int mgs_find_or_make_fsdb(struct obd_device *obd, char *name,
                 GOTO(out_free, rc);
         }
 
-        cfs_up(&fsdb->fsdb_sem);
+        cfs_mutex_unlock(&fsdb->fsdb_mutex);
         *dbh = fsdb;
 
         RETURN(0);
 
 out_free:
-        cfs_up(&fsdb->fsdb_sem);
+        cfs_mutex_unlock(&fsdb->fsdb_mutex);
         mgs_free_fsdb(obd, fsdb);
         return rc;
 }
@@ -556,7 +557,7 @@ static int mgs_set_index(struct obd_device *obd, struct mgs_target_info *mti)
                 RETURN(rc);
         }
 
-        cfs_down(&fsdb->fsdb_sem);
+        cfs_mutex_lock(&fsdb->fsdb_mutex);
         if (mti->mti_flags & LDD_F_SV_TYPE_OST) {
                 imap = fsdb->fsdb_ost_index_map;
         } else if (mti->mti_flags & LDD_F_SV_TYPE_MDT) {
@@ -605,7 +606,7 @@ static int mgs_set_index(struct obd_device *obd, struct mgs_target_info *mti)
 
         cfs_set_bit(mti->mti_stripe_index, imap);
         cfs_clear_bit(FSDB_LOG_EMPTY, &fsdb->fsdb_flags);
-        cfs_up(&fsdb->fsdb_sem);
+        cfs_mutex_unlock(&fsdb->fsdb_mutex);
         server_make_name(mti->mti_flags, mti->mti_stripe_index,
                          mti->mti_fsname, mti->mti_svname);
 
@@ -614,7 +615,7 @@ static int mgs_set_index(struct obd_device *obd, struct mgs_target_info *mti)
 
         RETURN(0);
 out_up:
-        cfs_up(&fsdb->fsdb_sem);
+        cfs_mutex_unlock(&fsdb->fsdb_mutex);
         return rc;
 }
 
@@ -1245,7 +1246,7 @@ static int mgs_steal_llog_handler(struct llog_handle *llh,
         RETURN(rc);
 }
 
-/* fsdb->fsdb_sem is already held  in mgs_write_log_target*/
+/* fsdb->fsdb_mutex is already held  in mgs_write_log_target*/
 /* stealed from mgs_get_fsdb_from_llog*/
 static int mgs_steal_llog_for_mdt_from_client(struct obd_device *obd,
                                               char *client_name,
@@ -2706,9 +2707,9 @@ int mgs_check_failnid(struct obd_device *obd, struct mgs_target_info *mti)
            the failover list.  Modify mti->params for rewriting back at
            server_register_target(). */
 
-        cfs_down(&fsdb->fsdb_sem);
+        cfs_mutex_lock(&fsdb->fsdb_mutex);
         rc = mgs_write_log_add_failnid(obd, fsdb, mti);
-        cfs_up(&fsdb->fsdb_sem);
+        cfs_mutex_unlock(&fsdb->fsdb_mutex);
 
         RETURN(rc);
 #endif
@@ -2763,7 +2764,7 @@ int mgs_write_log_target(struct obd_device *obd,
                 }
         }
 
-        cfs_down(&fsdb->fsdb_sem);
+        cfs_mutex_lock(&fsdb->fsdb_mutex);
 
         if (mti->mti_flags &
             (LDD_F_VIRGIN | LDD_F_UPGRADE14 | LDD_F_WRITECONF)) {
@@ -2812,7 +2813,7 @@ int mgs_write_log_target(struct obd_device *obd,
         OBD_FREE(buf, strlen(mti->mti_params) + 1);
 
 out_up:
-        cfs_up(&fsdb->fsdb_sem);
+        cfs_mutex_unlock(&fsdb->fsdb_mutex);
         RETURN(rc);
 }
 
@@ -2929,7 +2930,7 @@ int mgs_erase_logs(struct obd_device *obd, char *fsname)
                 RETURN(rc);
         }
 
-        cfs_down(&mgs->mgs_sem);
+        cfs_mutex_lock(&mgs->mgs_mutex);
 
         /* Delete the fs db */
         fsdb = mgs_find_fsdb(obd, fsname);
@@ -2950,7 +2951,7 @@ int mgs_erase_logs(struct obd_device *obd, char *fsname)
                 OBD_FREE(dirent, sizeof(*dirent));
         }
 
-        cfs_up(&mgs->mgs_sem);
+        cfs_mutex_unlock(&mgs->mgs_mutex);
 
         RETURN(rc);
 }
@@ -3059,9 +3060,9 @@ int mgs_setparam(struct obd_device *obd, struct lustre_cfg *lcfg, char *fsname)
 
         mti->mti_flags = rc | LDD_F_PARAM;
 
-        cfs_down(&fsdb->fsdb_sem);
+        cfs_mutex_lock(&fsdb->fsdb_mutex);
         rc = mgs_write_log_param(obd, fsdb, mti, mti->mti_params);
-        cfs_up(&fsdb->fsdb_sem);
+        cfs_mutex_unlock(&fsdb->fsdb_mutex);
 
         /*
          * Revoke lock so everyone updates.  Should be alright if
@@ -3171,7 +3172,7 @@ int mgs_pool_cmd(struct obd_device *obd, enum lcfg_command_type cmd,
         }
         }
 
-        cfs_down(&fsdb->fsdb_sem);
+        cfs_mutex_lock(&fsdb->fsdb_mutex);
 
         if (canceled_label != NULL) {
                 OBD_ALLOC_PTR(mti);
@@ -3207,7 +3208,7 @@ int mgs_pool_cmd(struct obd_device *obd, enum lcfg_command_type cmd,
                            cmd, fsname, poolname, ostname, label);
         name_destroy(&logname);
 
-        cfs_up(&fsdb->fsdb_sem);
+        cfs_mutex_unlock(&fsdb->fsdb_mutex);
         /* request for update */
         mgs_revoke_lock(obd, fsdb);
 

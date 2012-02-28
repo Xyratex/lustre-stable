@@ -128,9 +128,9 @@ static int mgsself_srpc_seq_show(struct seq_file *seq, void *v)
         if (rc)
                 return rc;
 
-        cfs_down(&fsdb->fsdb_sem);
+        cfs_mutex_lock(&fsdb->fsdb_mutex);
         seq_show_srpc_rules(seq, fsdb->fsdb_name, &fsdb->fsdb_srpc_gen);
-        cfs_up(&fsdb->fsdb_sem);
+        cfs_mutex_unlock(&fsdb->fsdb_mutex);
         return 0;
 }
 
@@ -193,7 +193,7 @@ static int mgs_live_seq_show(struct seq_file *seq, void *v)
         struct mgs_tgt_srpc_conf *srpc_tgt;
         int i;
 
-        cfs_down(&fsdb->fsdb_sem);
+        cfs_mutex_lock(&fsdb->fsdb_mutex);
 
         seq_printf(seq, "fsname: %s\n", fsdb->fsdb_name);
         seq_printf(seq, "flags: %#lx     gen: %d\n",
@@ -217,7 +217,7 @@ static int mgs_live_seq_show(struct seq_file *seq, void *v)
         }
         seq_show_srpc_rules(seq, fsdb->fsdb_name, &fsdb->fsdb_srpc_gen);
 
-        cfs_up(&fsdb->fsdb_sem);
+        cfs_mutex_unlock(&fsdb->fsdb_mutex);
         return 0;
 }
 

@@ -66,7 +66,7 @@ static int filter_lvbo_free(struct ldlm_resource *res) {
         return 0;
 }
 
-/* Called with res->lr_lvb_sem held */
+/* Called with res->lr_lvb_mutex held */
 static int filter_lvbo_init(struct ldlm_resource *res)
 {
         struct ost_lvb *lvb = NULL;
@@ -76,7 +76,7 @@ static int filter_lvbo_init(struct ldlm_resource *res)
         ENTRY;
 
         LASSERT(res);
-        LASSERT_SEM_LOCKED(&res->lr_lvb_sem);
+        LASSERT_MUTEX_LOCKED(&res->lr_lvb_mutex);
 
         if (res->lr_lvb_data)
                 RETURN(0);

@@ -144,7 +144,7 @@ struct lloop_device {
         struct bio          *lo_biotail;
         int                  lo_state;
         cfs_semaphore_t      lo_sem;
-        cfs_semaphore_t      lo_ctl_mutex;
+        cfs_mutex_t          lo_ctl_mutex;
         cfs_atomic_t         lo_pending;
         cfs_waitq_t          lo_bh_wait;
 
@@ -173,7 +173,7 @@ static int lloop_major;
 static int max_loop = MAX_LOOP_DEFAULT;
 static struct lloop_device *loop_dev;
 static struct gendisk **disks;
-static cfs_semaphore_t lloop_mutex;
+static cfs_mutex_t lloop_mutex;
 static void *ll_iocontrol_magic = NULL;
 
 static loff_t get_loop_size(struct lloop_device *lo, struct file *file)
@@ -614,9 +614,9 @@ static int lo_open(struct inode *inode, struct file *file)
         struct lloop_device *lo = inode->i_bdev->bd_disk->private_data;
 #endif
 
-        cfs_down(&lo->lo_ctl_mutex);
+        cfs_mutex_lock(&lo->lo_ctl_mutex);
         lo->lo_refcnt++;
-        cfs_up(&lo->lo_ctl_mutex);
+        cfs_mutex_unlock(&lo->lo_ctl_mutex);
 
         return 0;
 }
@@ -631,9 +631,9 @@ static int lo_release(struct inode *inode, struct file *file)
         struct lloop_device *lo = inode->i_bdev->bd_disk->private_data;
 #endif
 
-        cfs_down(&lo->lo_ctl_mutex);
+        cfs_mutex_lock(&lo->lo_ctl_mutex);
         --lo->lo_refcnt;
-        cfs_up(&lo->lo_ctl_mutex);
+        cfs_mutex_unlock(&lo->lo_ctl_mutex);
 
         return 0;
 }
@@ -654,7 +654,7 @@ static int lo_ioctl(struct inode *inode, struct file *unused,
 #endif
         int err = 0;
 
-        cfs_down(&lloop_mutex);
+        cfs_mutex_lock(&lloop_mutex);
         switch (cmd) {
         case LL_IOC_LLOOP_DETACH: {
                 err = loop_clr_fd(lo, bdev, 2);
@@ -680,7 +680,7 @@ static int lo_ioctl(struct inode *inode, struct file *unused,
                 err = -EINVAL;
                 break;
         }
-        cfs_up(&lloop_mutex);
+        cfs_mutex_unlock(&lloop_mutex);
 
         return err;
 }
@@ -716,7 +716,7 @@ static enum llioc_iter lloop_ioctl(struct inode *unused, struct file *file,
 
         CWARN("Enter llop_ioctl\n");
 
-        cfs_down(&lloop_mutex);
+        cfs_mutex_lock(&lloop_mutex);
         switch (cmd) {
         case LL_IOC_LLOOP_ATTACH: {
                 struct lloop_device *lo_free = NULL;
@@ -786,7 +786,7 @@ static enum llioc_iter lloop_ioctl(struct inode *unused, struct file *file,
         }
 
 out:
-        cfs_up(&lloop_mutex);
+        cfs_mutex_unlock(&lloop_mutex);
 out1:
         if (rcp)
                 *rcp = err;
@@ -832,7 +832,7 @@ static int __init lloop_init(void)
                         goto out_mem3;
         }
 
-        cfs_init_mutex(&lloop_mutex);
+        cfs_mutex_init(&lloop_mutex);
 
         for (i = 0; i < max_loop; i++) {
                 struct lloop_device *lo = &loop_dev[i];
@@ -842,8 +842,8 @@ static int __init lloop_init(void)
                 if (!lo->lo_queue)
                         goto out_mem4;
 
-                cfs_init_mutex(&lo->lo_ctl_mutex);
-                cfs_init_mutex_locked(&lo->lo_sem);
+                cfs_mutex_init(&lo->lo_ctl_mutex);
+                cfs_sema_init(&lo->lo_sem, 0);
                 cfs_waitq_init(&lo->lo_bh_wait);
                 lo->lo_number = i;
                 cfs_spin_lock_init(&lo->lo_lock);

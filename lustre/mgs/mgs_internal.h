@@ -73,7 +73,7 @@ struct mgs_tgt_srpc_conf {
 struct fs_db {
         char              fsdb_name[9];
         cfs_list_t        fsdb_list;           /* list of databases */
-        cfs_semaphore_t   fsdb_sem;
+        cfs_mutex_t       fsdb_mutex;
         void             *fsdb_ost_index_map;  /* bitmap of used indicies */
         void             *fsdb_mdt_index_map;  /* bitmap of used indicies */
         int               fsdb_mdt_count;
@@ -87,7 +87,7 @@ struct fs_db {
         unsigned long     fsdb_flags;
         __u32             fsdb_gen;
 
-        /* in-memory copy of the srpc rules, guarded by fsdb_sem */
+        /* in-memory copy of the srpc rules, guarded by fsdb_mutex */
         struct sptlrpc_rule_set   fsdb_srpc_gen;
         struct mgs_tgt_srpc_conf *fsdb_srpc_tgt;
 };

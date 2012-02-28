@@ -654,7 +654,7 @@ lnet_router_checker_event (lnet_event_t *event)
                 LASSERT (the_lnet.ln_rc_state == LNET_RC_STATE_UNLINKING);
                 the_lnet.ln_rc_state = LNET_RC_STATE_UNLINKED;
 #ifdef __KERNEL__
-                cfs_mutex_up(&the_lnet.ln_rc_signal);
+                cfs_up(&the_lnet.ln_rc_signal);
 #endif
                 return;
         }
@@ -970,7 +970,7 @@ lnet_router_checker_start(void)
                 return 0;
 
 #ifdef __KERNEL__
-        cfs_init_mutex_locked(&the_lnet.ln_rc_signal);
+        cfs_sema_init(&the_lnet.ln_rc_signal, 0);
         /* EQ size doesn't matter; the callback is guaranteed to get every
          * event */
         eqsz = 1;
@@ -1010,7 +1010,7 @@ lnet_router_checker_start(void)
                 rc = LNetMDUnlink(the_lnet.ln_rc_mdh);
                 LASSERT (rc == 0);
                 /* block until event callback signals exit */
-                cfs_mutex_down(&the_lnet.ln_rc_signal);
+                cfs_down(&the_lnet.ln_rc_signal);
                 rc = LNetEQFree(the_lnet.ln_rc_eqh);
                 LASSERT (rc == 0);
                 the_lnet.ln_rc_state = LNET_RC_STATE_SHUTDOWN;
@@ -1041,7 +1041,7 @@ lnet_router_checker_stop (void)
 
 #ifdef __KERNEL__
         /* block until event callback signals exit */
-        cfs_mutex_down(&the_lnet.ln_rc_signal);
+        cfs_down(&the_lnet.ln_rc_signal);
 #else
         while (the_lnet.ln_rc_state != LNET_RC_STATE_UNLINKED) {
                 lnet_router_checker();
