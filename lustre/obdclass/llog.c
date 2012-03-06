@@ -296,6 +296,12 @@ static int llog_process_thread(void *arg)
                         if (rec->lrh_index == 0)
                                 GOTO(out, 0); /* no more records */
 
+                        if ((rec->lrh_type & LLOG_OP_MASK) != LLOG_OP_MAGIC) {
+                                CERROR("Invalid record type %u, "
+                                       "index %u, len %u", rec->lrh_type,
+                                       rec->lrh_index, rec->lrh_len);
+                                GOTO(out, rc = -EIO);
+                        }
                         if (rec->lrh_len == 0 || rec->lrh_len >LLOG_CHUNK_SIZE){
                                 CWARN("invalid length %d in llog record for "
                                       "index %d/%d\n", rec->lrh_len,
@@ -447,9 +453,20 @@ int llog_reverse_process(struct llog_handle *loghandle, llog_cb_t cb,
 
                 rec = buf;
                 idx = le32_to_cpu(rec->lrh_index);
-                if (idx < index)
-                        CDEBUG(D_RPCTRACE, "index %u : idx %u\n", index, idx);
+                CDEBUG(D_RPCTRACE, "index %u : idx %u\n", index, idx);
                 while (idx < index) {
+                        if ((void*)rec >= buf + LLOG_CHUNK_SIZE || (void*)rec < buf) {
+                                CERROR("Attempt to navigate outside llog block, "
+                                       "index %u, idx %u", index, idx);
+                                GOTO(out, rc = -EIO);
+                        }
+                        if ((le32_to_cpu(rec->lrh_type) &  LLOG_OP_MASK)
+                            != LLOG_OP_MAGIC) {
+                                CERROR("Invalid llog record, type %u,len %u\n",
+                                       le32_to_cpu(rec->lrh_type),
+                                       le32_to_cpu(rec->lrh_len));
+                                GOTO(out, rc = -EIO);
+                        }
                         rec = ((void *)rec + le32_to_cpu(rec->lrh_len));
                         idx ++;
                 }
