@@ -3482,7 +3482,6 @@ test_56r() {
 	[ $NUMS -eq $EXPECTED ] || \
 		error "lfs find $TDIR ! -size 0 wrong: found $NUMS, expected $EXPECTED"
 	echo "test" > $TDIR/56r && sync
-	echo "test2" > $TDIR/56r2 && sync
 	EXPECTED=1
 	NUMS=`$LFIND -size 5 -t f $TDIR | wc -l`
 	[ $NUMS -eq $EXPECTED ] || \
@@ -3491,11 +3490,11 @@ test_56r() {
 	NUMS=`$LFIND -size +5 -t f $TDIR | wc -l`
 	[ $NUMS -eq $EXPECTED ] || \
 		error "lfs find $TDIR -size +5 wrong: found $NUMS, expected $EXPECTED"
-	EXPECTED=2
+	EXPECTED=13
 	NUMS=`$LFIND -size +0 -t f $TDIR | wc -l`
 	[ $NUMS -eq $EXPECTED ] || \
 		error "lfs find $TDIR -size +0 wrong: found $NUMS, expected $EXPECTED"
-	EXPECTED=2
+	EXPECTED=0
 	NUMS=`$LFIND ! -size -5 -t f $TDIR | wc -l`
 	[ $NUMS -eq $EXPECTED ] || \
 		error "lfs find $TDIR ! -size -5 wrong: found $NUMS, expected $EXPECTED"
