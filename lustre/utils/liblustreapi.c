@@ -173,19 +173,18 @@ void llapi_printf(int level, char *fmt, ...)
  * size_units is unchanged if no specifier used
  */
 int parse_size(char *optarg, unsigned long long *size,
-               unsigned long long *size_units, int def_units,
-               int bytes_spec)
+               unsigned long long *size_units, int bytes_spec)
 {
         char *end;
 
-        LASSERT(def_units != 0);
         *size = strtoull(optarg, &end, 0);
-        *size_units = def_units;
+        *size_units = 1;
 
         if (*end != '\0') {
                 if ((*end == 'b') && *(end+1) == '\0' &&
                     (*size & (~0ULL << (64 - 9))) == 0 &&
                     !bytes_spec) {
+                        *size <<= 9;
                         *size_units = 1 << 9;
                 } else if ((*end == 'b') && *(end+1) == '\0' &&
                            bytes_spec) {
@@ -193,32 +192,38 @@ int parse_size(char *optarg, unsigned long long *size,
                 } else if ((*end == 'k' || *end == 'K') &&
                            *(end+1) == '\0' && (*size &
                            (~0ULL << (64 - 10))) == 0) {
+                        *size <<= 10;
                         *size_units = 1 << 10;
                 } else if ((*end == 'm' || *end == 'M') &&
                            *(end+1) == '\0' && (*size &
                            (~0ULL << (64 - 20))) == 0) {
+                        *size <<= 20;
                         *size_units = 1 << 20;
                 } else if ((*end == 'g' || *end == 'G') &&
                            *(end+1) == '\0' && (*size &
                            (~0ULL << (64 - 30))) == 0) {
+                        *size <<= 30;
                         *size_units = 1 << 30;
                 } else if ((*end == 't' || *end == 'T') &&
                            *(end+1) == '\0' && (*size &
                            (~0ULL << (64 - 40))) == 0) {
+                        *size <<= 40;
                         *size_units = 1ULL << 40;
                 } else if ((*end == 'p' || *end == 'P') &&
                            *(end+1) == '\0' && (*size &
                            (~0ULL << (64 - 50))) == 0) {
+                        *size <<= 50;
                         *size_units = 1ULL << 50;
                 } else if ((*end == 'e' || *end == 'E') &&
                            *(end+1) == '\0' && (*size &
                            (~0ULL << (64 - 60))) == 0) {
+                        *size <<= 60;
                         *size_units = 1ULL << 60;
                 } else {
                         return -1;
                 }
         }
-        *size *= *size_units;
+
         return 0;
 }
 

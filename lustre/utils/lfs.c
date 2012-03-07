@@ -358,8 +358,7 @@ static int lfs_setstripe(int argc, char **argv)
 
         /* get the stripe size */
         if (stripe_size_arg != NULL) {
-                result = parse_size(stripe_size_arg, &st_size,
-                                    &size_units, 1, 0);
+                result = parse_size(stripe_size_arg, &st_size, &size_units, 0);
                 if (result) {
                         fprintf(stderr, "error: %s: bad size '%s'\n",
                                 argv[0], stripe_size_arg);
@@ -727,7 +726,7 @@ static int lfs_find(int argc, char **argv)
                         if (param.size_sign)
                                 optarg++;
                         ret = parse_size(optarg, &param.size,
-                                         &param.size_units, 1, 0);
+                                         &param.size_units, 0);
                         if (ret) {
                                 fprintf(stderr,"error: bad size '%s'\n",
                                         optarg);
@@ -1566,17 +1565,17 @@ error:
         return ULONG_MAX;
 }
 
-#define ARG2ULL(nr, str, def_units)                                     \
+#define ARG2ULL(nr, str, defscale)                                      \
 do {                                                                    \
         unsigned long long limit, units = 0;                            \
         int rc;                                                         \
                                                                         \
-        rc = parse_size(str, &limit, &units, def_units, 1);             \
+        rc = parse_size(str, &limit, &units, 1);                        \
         if (rc < 0) {                                                   \
                 fprintf(stderr, "error: bad limit value %s\n", str);    \
                 return CMD_HELP;                                        \
         }                                                               \
-        nr = limit;                                                     \
+        nr = ((units == 0) ? (defscale) : 1) * limit;                   \
 } while (0)
 
 static inline int has_times_option(int argc, char **argv)

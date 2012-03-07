@@ -189,8 +189,7 @@ extern int llapi_is_lustre_mnttype(const char *type);
 extern int llapi_search_ost(char *fsname, char *poolname, char *ostname);
 extern int llapi_get_obd_count(char *mnt, int *count, int is_mdt);
 extern int parse_size(char *optarg, unsigned long long *size,
-                      unsigned long long *size_units, int def_units,
-                      int bytes_spec);
+                      unsigned long long *size_units, int bytes_spec);
 extern int llapi_path2fid(const char *path, lustre_fid *fid);
 extern int llapi_search_mounts(const char *pathname, int index,
                                char *mntdir, char *fsname);
