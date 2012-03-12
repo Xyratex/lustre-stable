@@ -79,8 +79,6 @@ void ll_truncate(struct inode *inode)
         CDEBUG(D_VFSTRACE, "VFS Op:inode=%lu/%u(%p) to %Lu\n",inode->i_ino,
                inode->i_generation, inode, i_size_read(inode));
 
-        ll_stats_ops_tally(ll_i2sbi(inode), LPROC_LL_TRUNC, 1);
-
         EXIT;
         return;
 } /* ll_truncate */
