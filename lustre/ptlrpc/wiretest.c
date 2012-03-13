@@ -522,11 +522,14 @@ void lustre_assert_wire_constants(void)
         CLASSERT(OBD_CONNECT_MAXBYTES ==         0x8000000000ULL);
         LASSERTF(OBD_CONNECT_JOBSTATS ==  0x20000000000ULL, "found 0x%.16llxULL\n",
                  OBD_CONNECT_JOBSTATS);
-        LASSERTF(OBD_CONNECT_GRANT_PARAM == 0x40000000000ULL, "found 0x%.16llxULL\n",
-                 OBD_CONNECT_GRANT_PARAM);
+        LASSERTF(OBD_CONNECT_UMASK == 0x40000000000ULL, "found 0x%.16llxULL\n",
+                 OBD_CONNECT_UMASK);
         LASSERTF(OBD_CONNECT_EINPROGRESS == 0x80000000000ULL, "found 0x%.16llxULL\n",
                  OBD_CONNECT_EINPROGRESS);
-	CLASSERT(OBD_CONNECT_SHORTIO ==       0x2000000000000ULL);
+        LASSERTF(OBD_CONNECT_GRANT_PARAM == 0x100000000000ULL, "found 0x%.16llxULL\n",
+                 OBD_CONNECT_GRANT_PARAM);
+	LASSERTF(OBD_CONNECT_SHORTIO == 0x2000000000000ULL, "found 0x%.16llxULL\n",
+                 OBD_CONNECT_SHORTIO);
 
         /* Checks for struct obdo */
         LASSERTF((int)sizeof(struct obdo) == 208, " found %lld\n",

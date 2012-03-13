@@ -840,6 +840,8 @@ static const char *obd_connect_names[] = {
 	"unknown",
         "imp_recov",
         "jobstats",
+        "umask",
+        "einprogress",
         "grant_param",
 	"unknown",
 	"unknown",
