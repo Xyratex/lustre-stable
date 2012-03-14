@@ -615,6 +615,10 @@ static int llog_lvfs_create(struct llog_ctxt *ctxt, struct llog_handle **res,
                         rc = PTR_ERR(dchild);
                         CERROR("error looking up logfile "LPX64":0x%x: rc %d\n",
                                logid->lgl_oid, logid->lgl_ogen, rc);
+                        if (rc == -ESTALE)
+                                /* handle reused inode same way as
+                                   non-existing one */
+                                GOTO(out, rc = -ENOENT);
                         GOTO(out, rc);
                 }
 
