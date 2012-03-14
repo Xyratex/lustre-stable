@@ -332,7 +332,13 @@ int llog_cat_cancel_records(struct llog_handle *cathandle, int count,
 
                 rc = llog_cat_id2handle(cathandle, &loghandle, lgl);
                 if (rc) {
-                        CERROR("Cannot find log "LPX64"\n", lgl->lgl_oid);
+                        if (rc == -ENOENT) {
+                                CERROR("Ignoring missing llog file "LPX64"\n",
+                                        lgl->lgl_oid);
+                                rc = 0;
+                                continue;
+                        }
+                        CERROR("Cannot open log "LPX64"\n", lgl->lgl_oid);
                         break;
                 }
 
@@ -380,6 +386,11 @@ int llog_cat_process_cb(struct llog_handle *cat_llh, struct llog_rec_hdr *rec,
 
         rc = llog_cat_id2handle(cat_llh, &llh, &lir->lid_id);
         if (rc) {
+                if (rc == -ENOENT) {
+                        CERROR("Skipping non-existing log "LPX64"\n",
+                                 lir->lid_id.lgl_oid);
+                        RETURN(0);
+                }
                 CERROR("Cannot find handle for log "LPX64"\n",
                        lir->lid_id.lgl_oid);
                 RETURN(rc);
@@ -523,7 +534,12 @@ static int llog_cat_reverse_process_cb(struct llog_handle *cat_llh,
 
         rc = llog_cat_id2handle(cat_llh, &llh, &lir->lid_id);
         if (rc) {
-                CERROR("Cannot find handle for log "LPX64"\n",
+                if (rc == -ENOENT) {
+                        CERROR("Skipping non-existing log at index %u\n",
+                                le32_to_cpu(rec->lrh_index));
+                        RETURN(0);
+                }
+                CERROR("Error open handle for log "LPX64"\n",
                        lir->lid_id.lgl_oid);
                 RETURN(rc);
         }
