@@ -52,7 +52,7 @@ test_0a() {
     $LCTL set_param fail_loc=0x80000514
     facet_failover $SINGLEMDS
     client_up || return 1
-    umount -f $MOUNT2
+    zconf_umount `hostname` $MOUNT2 -f
     client_up || return 1
     zconf_mount `hostname` $MOUNT2 || error "mount2 fais"
     unlinkmany $MOUNT1/$tfile- 50 || return 2
@@ -65,9 +65,9 @@ test_0b() {
     replay_barrier $SINGLEMDS
     touch $MOUNT2/$tfile
     touch $MOUNT1/$tfile-2
-    umount $MOUNT2
+    zconf_umount `hostname` $MOUNT2
     facet_failover $SINGLEMDS
-    umount -f $MOUNT1
+    zconf_umount `hostname` $MOUNT1 -f
     zconf_mount `hostname` $MOUNT1 || error "mount1 fais"
     zconf_mount `hostname` $MOUNT2 || error "mount2 fais"
     checkstat $MOUNT1/$tfile-2 && return 1
@@ -299,7 +299,7 @@ test_14b() {
     $SETSTRIPE -o 0 $MOUNT2/f14b-3
     echo "data" > $MOUNT2/f14b-3
     createmany -o $MOUNT1/$tdir/$tfile-3- 5
-    umount $MOUNT2
+    zconf_umount `hostname` $MOUNT2
 
     fail $SINGLEMDS
     wait_recovery_complete $SINGLEMDS || error "MDS recovery not done"
@@ -325,7 +325,7 @@ test_15a() { # was test_15
     replay_barrier $SINGLEMDS
     createmany -o $MOUNT1/$tfile- 25
     createmany -o $MOUNT2/$tfile-2- 1
-    umount $MOUNT2
+    zconf_umount `hostname` $MOUNT2
 
     fail $SINGLEMDS
 
@@ -342,7 +342,7 @@ test_15c() {
     for ((i = 0; i < 2000; i++)); do
         echo "data" > "$MOUNT2/${tfile}-$i" || error "create ${tfile}-$i failed"
     done
-    umount $MOUNT2
+    zconf_umount `hostname` $MOUNT2
 
     fail $SINGLEMDS
 
@@ -355,7 +355,7 @@ test_16() {
     replay_barrier $SINGLEMDS
     createmany -o $MOUNT1/$tfile- 25
     createmany -o $MOUNT2/$tfile-2- 1
-    umount $MOUNT2
+    zconf_umount `hostname` $MOUNT2
 
     facet_failover $SINGLEMDS
     sleep $TIMEOUT
@@ -377,7 +377,7 @@ test_17() {
 
     # Make sure the disconnect is lost
     replay_barrier ost1
-    umount $MOUNT2
+    zconf_umount `hostname` $MOUNT2
 
     facet_failover ost1
     sleep $TIMEOUT
@@ -433,7 +433,7 @@ test_20() { #16389
     replay_barrier $SINGLEMDS
     touch $MOUNT1/a
     touch $MOUNT2/b
-    umount $MOUNT2
+    zconf_umount `hostname` $MOUNT2
     fail $SINGLEMDS
     rm $MOUNT1/a
     zconf_mount `hostname` $MOUNT2 || error "mount $MOUNT2 fail"
@@ -442,7 +442,7 @@ test_20() { #16389
     replay_barrier $SINGLEMDS
     touch $MOUNT1/a
     touch $MOUNT2/b
-    umount $MOUNT2
+    zconf_umount `hostname` $MOUNT2
     fail $SINGLEMDS
     rm $MOUNT1/a
     zconf_mount `hostname` $MOUNT2 || error "mount $MOUNT2 fail"
@@ -463,7 +463,7 @@ test_21a() {
     mv  $MOUNT2/$tfile-1 $MOUNT2/$tfile-2
     mv  $MOUNT1/$tfile-2 $MOUNT1/$tfile-3
     replay_barrier_nosync $SINGLEMDS
-    umount $MOUNT2
+    zconf_umount `hostname`  $MOUNT2
 
     facet_failover $SINGLEMDS
 

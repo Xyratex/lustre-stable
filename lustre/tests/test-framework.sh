@@ -831,6 +831,7 @@ zconf_umount() {
         busy=$(do_node $client "umount $force $mnt 2>&1" | grep -c "busy") || true
         if [ $busy -ne 0 ] ; then
             echo "$mnt is still busy, wait one second" && sleep 1
+            echo "$($do_node $client lsof $mnt)"
             do_node $client umount $force $mnt
         fi
     fi
