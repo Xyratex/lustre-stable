@@ -130,7 +130,7 @@
 #define LDLM_MAXREPSIZE (1024)
 
 /** Absolute limits */
-#define MDT_MIN_THREADS 2UL
+#define MDT_MIN_THREADS 3UL     /* difficult replies, HPQ, others */
 #ifndef MDT_MAX_THREADS
 #define MDT_MAX_THREADS 512UL
 #endif
@@ -1459,6 +1459,7 @@ struct ptlrpc_service_conf {
         int psc_min_threads;
         int psc_max_threads;
         __u32 psc_ctx_tags;
+        int (*psc_hpreq_handler)(struct ptlrpc_request *);
 };
 
 /* ptlrpc/service.c */
@@ -1473,6 +1474,7 @@ void ptlrpc_save_lock (struct ptlrpc_request *req,
 void ptlrpc_commit_replies(struct obd_export *exp);
 void ptlrpc_dispatch_difficult_reply (struct ptlrpc_reply_state *rs);
 void ptlrpc_schedule_difficult_reply (struct ptlrpc_reply_state *rs);
+int ptlrpc_hpreq_handler(struct ptlrpc_request *req);
 struct ptlrpc_service *ptlrpc_init_svc_conf(struct ptlrpc_service_conf *c,
                                             svc_handler_t h, char *name,
                                             struct proc_dir_entry *proc_entry,

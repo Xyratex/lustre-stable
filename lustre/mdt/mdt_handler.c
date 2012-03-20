@@ -3864,17 +3864,18 @@ static int mdt_start_ptlrpc_service(struct mdt_device *m)
                  */
                 .psc_min_threads     = mdt_min_threads,
                 .psc_max_threads     = mdt_max_threads,
-                .psc_ctx_tags        = LCT_MD_THREAD
+                .psc_ctx_tags        = LCT_MD_THREAD,
+                .psc_hpreq_handler   = ptlrpc_hpreq_handler,
         };
 
         m->mdt_ldlm_client = &m->mdt_md_dev.md_lu_dev.ld_obd->obd_ldlm_client;
         ptlrpc_init_client(LDLM_CB_REQUEST_PORTAL, LDLM_CB_REPLY_PORTAL,
                            "mdt_ldlm_client", m->mdt_ldlm_client);
-
         m->mdt_regular_service =
                 ptlrpc_init_svc_conf(&conf, mdt_regular_handle, LUSTRE_MDT_NAME,
                                      procfs_entry, target_print_req,
                                      LUSTRE_MDT_NAME);
+
         if (m->mdt_regular_service == NULL)
                 RETURN(-ENOMEM);
 
@@ -3896,7 +3897,8 @@ static int mdt_start_ptlrpc_service(struct mdt_device *m)
                 .psc_watchdog_factor = MDT_SERVICE_WATCHDOG_FACTOR,
                 .psc_min_threads     = mdt_min_threads,
                 .psc_max_threads     = mdt_max_threads,
-                .psc_ctx_tags        = LCT_MD_THREAD
+                .psc_ctx_tags        = LCT_MD_THREAD,
+                .psc_hpreq_handler   = NULL,
         };
         m->mdt_readpage_service =
                 ptlrpc_init_svc_conf(&conf, mdt_readpage_handle,
@@ -3927,7 +3929,8 @@ static int mdt_start_ptlrpc_service(struct mdt_device *m)
                 .psc_watchdog_factor = MDT_SERVICE_WATCHDOG_FACTOR,
                 .psc_min_threads     = mdt_min_threads,
                 .psc_max_threads     = mdt_max_threads,
-                .psc_ctx_tags        = LCT_MD_THREAD
+                .psc_ctx_tags        = LCT_MD_THREAD,
+                .psc_hpreq_handler   = NULL,
         };
 
         m->mdt_setattr_service =
@@ -3957,7 +3960,8 @@ static int mdt_start_ptlrpc_service(struct mdt_device *m)
                 .psc_watchdog_factor = MDT_SERVICE_WATCHDOG_FACTOR,
                 .psc_min_threads     = mdt_min_threads,
                 .psc_max_threads     = mdt_max_threads,
-                .psc_ctx_tags        = LCT_MD_THREAD|LCT_DT_THREAD
+                .psc_ctx_tags        = LCT_MD_THREAD|LCT_DT_THREAD,
+                .psc_hpreq_handler   = NULL,
         };
 
         m->mdt_mdsc_service =
@@ -3986,7 +3990,8 @@ static int mdt_start_ptlrpc_service(struct mdt_device *m)
                 .psc_watchdog_factor = MDT_SERVICE_WATCHDOG_FACTOR,
                 .psc_min_threads     = mdt_min_threads,
                 .psc_max_threads     = mdt_max_threads,
-                .psc_ctx_tags        = LCT_MD_THREAD|LCT_DT_THREAD
+                .psc_ctx_tags        = LCT_MD_THREAD|LCT_DT_THREAD,
+                .psc_hpreq_handler   = NULL,
         };
 
         m->mdt_mdss_service =
@@ -4018,7 +4023,8 @@ static int mdt_start_ptlrpc_service(struct mdt_device *m)
                 .psc_watchdog_factor = MDT_SERVICE_WATCHDOG_FACTOR,
                 .psc_min_threads     = mdt_min_threads,
                 .psc_max_threads     = mdt_max_threads,
-                .psc_ctx_tags        = LCT_MD_THREAD|LCT_DT_THREAD
+                .psc_ctx_tags        = LCT_MD_THREAD|LCT_DT_THREAD,
+                .psc_hpreq_handler   = NULL,
         };
 
         m->mdt_dtss_service =
@@ -4045,7 +4051,8 @@ static int mdt_start_ptlrpc_service(struct mdt_device *m)
                 .psc_watchdog_factor = MDT_SERVICE_WATCHDOG_FACTOR,
                 .psc_min_threads     = mdt_min_threads,
                 .psc_max_threads     = mdt_max_threads,
-                .psc_ctx_tags        = LCT_DT_THREAD|LCT_MD_THREAD
+                .psc_ctx_tags        = LCT_DT_THREAD|LCT_MD_THREAD,
+                .psc_hpreq_handler   = NULL,
         };
 
         m->mdt_fld_service =
@@ -4075,8 +4082,10 @@ static int mdt_start_ptlrpc_service(struct mdt_device *m)
                 .psc_watchdog_factor = MDT_SERVICE_WATCHDOG_FACTOR,
                 .psc_min_threads     = mdt_min_threads,
                 .psc_max_threads     = mdt_max_threads,
-                .psc_ctx_tags        = LCT_MD_THREAD
+                .psc_ctx_tags        = LCT_MD_THREAD,
+                .psc_hpreq_handler   = ptlrpc_hpreq_handler,
         };
+
         m->mdt_xmds_service =
                 ptlrpc_init_svc_conf(&conf, mdt_xmds_handle,
                                      LUSTRE_MDT_NAME "_mds",
