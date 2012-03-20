@@ -2461,7 +2461,7 @@ static int ost_setup(struct obd_device *obd, struct lustre_cfg* lcfg)
                                 ost_handle, LUSTRE_OSS_NAME,
                                 obd->obd_proc_entry, target_print_req,
                                 oss_min_threads, oss_max_threads,
-                                "ll_ost", LCT_DT_THREAD, NULL);
+                                "ll_ost", LCT_DT_THREAD, ptlrpc_hpreq_handler);
         if (ost->ost_service == NULL) {
                 CERROR("failed to start service\n");
                 GOTO(out_lprocfs, rc = -ENOMEM);
