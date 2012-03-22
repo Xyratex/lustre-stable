@@ -299,6 +299,11 @@ Severity   : normal
 Bugzilla   : 20153
 Description: o2ib configuration issues with IB bonding
 
+Severity   : normal
+Bugzilla   : 22065
+Description: LNET hang
+Details    : fix deadlock with ko2iblnd failover
+
 -------------------------------------------------------------------------------
 
 2011-05-12 Oracle, Inc.
