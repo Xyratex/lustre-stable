@@ -291,6 +291,14 @@ Description: LU-129 Skip quotacheck on administratively disabled OSTs
                thus lov is now aware of administratively enable/disable import
                event, and is able to udpate the 'ltd_activate' accordingly.
 
+Severity   : normal
+Bugzilla   : 20288
+Description: kiblnd_check_conns can deadlock
+
+Severity   : normal
+Bugzilla   : 20153
+Description: o2ib configuration issues with IB bonding
+
 -------------------------------------------------------------------------------
 
 2011-05-12 Oracle, Inc.
