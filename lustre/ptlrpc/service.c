@@ -471,8 +471,7 @@ int ptlrpc_hpreq_handler(struct ptlrpc_request *req)
 {
         int opc = lustre_msg_get_opc(req->rq_reqmsg);
 
-        if (req->rq_export &&
-            (opc == OBD_PING || opc == MDS_CONNECT || opc == OST_CONNECT))
+        if (opc == OBD_PING || opc == MDS_CONNECT || opc == OST_CONNECT)
                 req->rq_ops = &ptlrpc_hpreq_common;
 
         return 0;
