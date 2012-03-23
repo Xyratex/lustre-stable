@@ -168,14 +168,6 @@ clean_lustre() {
     rm -rf lustre
 }
 
-#generate LUSTRE_EXTRA_VERSION from EXTRA_VERSION
-gen_lustre_version() {
-
-    LUSTRE_EXTRA_VERSION="${lnxmaj}-${EXTRA_VERSION}${FLAVOR_DELIMITER}${RPMSMPTYPE}"
-    LUSTRE_EXTRA_VERSION=${LUSTRE_EXTRA_VERSION//-/_}
-
-}
-
 build_kernel() {
     echo "Building kernel + Lustre RPMs for: $BUILD_ARCHS..."
     targets=

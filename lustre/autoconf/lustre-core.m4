@@ -582,28 +582,31 @@ LB_LINUX_TRY_COMPILE([
 
 #
 # LC_STATFS_DENTRY_PARAM
-# starting from 2.6.18 linux kernel uses dentry instead of
-# super_block for first vfs_statfs argument
+# starting from 2.6.18 linux kernel uses dentry instead of super_block
+# for the first parameter of the super_operations->statfs() callback.
 #
 AC_DEFUN([LC_STATFS_DENTRY_PARAM],
-[AC_MSG_CHECKING([first vfs_statfs parameter is dentry])
+[AC_MSG_CHECKING([if super_ops.statfs() first parameter is dentry])
+tmp_flags="$EXTRA_KCFLAGS"
+EXTRA_KCFLAGS="-Werror"
 LB_LINUX_TRY_COMPILE([
         #include <linux/fs.h>
 ],[
-	int vfs_statfs(struct dentry *, struct kstatfs *);
+	((struct super_operations *)0)->statfs((struct dentry *)0, (struct kstatfs*)0);
 ],[
         AC_DEFINE(HAVE_STATFS_DENTRY_PARAM, 1,
-                [first parameter of vfs_statfs is dentry])
+                [super_ops.statfs() first parameter is dentry])
         AC_MSG_RESULT([yes])
 ],[
         AC_MSG_RESULT([no])
 ])
+EXTRA_KCFLAGS="$tmp_flags"
 ])
 
 #
 # LC_VFS_KERN_MOUNT
 # starting from 2.6.18 kernel don't export do_kern_mount
-# and want to use vfs_kern_mount instead.
+ and want to use vfs_kern_mount instead.
 #
 AC_DEFUN([LC_VFS_KERN_MOUNT],
 [AC_MSG_CHECKING([vfs_kern_mount exist in kernel])
@@ -1176,27 +1179,29 @@ AC_DEFUN([LC_REGISTER_SHRINKER],
 [mm/vmscan.c],[
         AC_DEFINE(HAVE_REGISTER_SHRINKER, 1,
                   [kernel exports register_shrinker])
-],[
-        AC_MSG_CHECKING([if kernel using gfp_t for shrinker second paramter])
+# 2.6.32 added another argument to struct shrinker->shrink
+        AC_MSG_CHECKING([if passing shrinker as first argument])
         tmp_flags="$EXTRA_KCFLAGS"
         EXTRA_KCFLAGS="-Werror"
         LB_LINUX_TRY_COMPILE([
                 #include <linux/mm.h>
+                int test_shrink(struct shrinker *, int, gfp_t);
         ],[
-                struct shrinker *scb(int nts, gfp_t mask) {
-                        return 0;
-                }
-                shrinter_t fp = scb;
+                struct shrinker *shr = NULL;
+                shr->shrink = test_shrink;
         ],[
                 AC_MSG_RESULT([yes])
-                AC_DEFINE(SHRINKER_MASK_T, gfp_t, 
-                        [kernel using gfp_t for shrinker callback])
+                AC_DEFINE(SHRINKER_FIRST_ARG, [struct shrinker *shrinker,],
+                        [kernel is passing shrinker as first argument])
         ],[
                 AC_MSG_RESULT([no])
-                AC_DEFINE(SHRINKER_MASK_T, unsigned int,
-                        [kernel using unsigned for shrinker callback])
+                AC_DEFINE(SHRINKER_FIRST_ARG, ,
+                        [kernel doesn't have shrinker as first argument])
         ])
         EXTRA_KCFLAGS="$tmp_flags"
+        ],[
+                AC_DEFINE(SHRINKER_FIRST_ARG, ,
+                        [kernel doesn't have shrinker as first argument])
 ])
 ])
 
@@ -1825,7 +1830,7 @@ LB_LINUX_TRY_COMPILE([
 ])
 ])
 
-# 2.6.32 add a limits member in struct request_queue.
+# 2.6.32 adds struct queue_limits limits field into struct request_queue.
 AC_DEFUN([LC_REQUEST_QUEUE_LIMITS],
 [AC_MSG_CHECKING([if request_queue has a limits field])
 LB_LINUX_TRY_COMPILE([
@@ -1837,6 +1842,22 @@ LB_LINUX_TRY_COMPILE([
         AC_MSG_RESULT(yes)
         AC_DEFINE(HAVE_REQUEST_QUEUE_LIMITS, 1,
                   [request_queue has a limits field])
+
+        # rhel6 replaces max_hw_segments and max_phys_segments
+        # with max_segments in struct queue_limits
+        AC_MSG_CHECKING([if struct queue_limits has max_segments field])
+        LB_LINUX_TRY_COMPILE([
+                #include <linux/blkdev.h>
+        ],[
+                struct queue_limits ql;
+                ql.max_segments = 0;
+        ],[
+                AC_DEFINE(HAVE_QUEUE_LIMITS_MAX_SEGMENTS, 1,
+                          [queue_limits has max_segments field])
+                AC_MSG_RESULT([yes])
+        ],[
+                AC_MSG_RESULT([no])
+        ])
 ],[
         AC_MSG_RESULT(no)
 ])
@@ -2458,6 +2479,7 @@ lustre/include/lustre/Makefile
 lustre/kernel_patches/targets/2.6-suse.target
 lustre/kernel_patches/targets/2.6-vanilla.target
 lustre/kernel_patches/targets/2.6-rhel4.target
+lustre/kernel_patches/targets/2.6-rhel6.target
 lustre/kernel_patches/targets/2.6-rhel5.target
 lustre/kernel_patches/targets/2.6-fc5.target
 lustre/kernel_patches/targets/2.6-patchless.target

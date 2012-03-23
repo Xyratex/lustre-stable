@@ -57,6 +57,7 @@ AC_SUBST(DOWNSTREAM_RELEASE)
 AC_DEFUN([LB_BUILDID],
 [
 AC_MSG_CHECKING([for buildid])
+BUILDID=""
 if git branch >/dev/null 2>&1; then
 	ffw=0
 	hash=""
@@ -70,7 +71,7 @@ if git branch >/dev/null 2>&1; then
 	# it's tempting to use [[ $ver =~ ^v([0-9]+_)+([0-9]+|RC[0-9]+)$ ]]
 	# here but the portability of the regex on the right is dismal
 	# (thanx suse)
-	if echo "$ver" | egrep -q "^v([0-9]+_)+([0-9]+|RC[0-9]+)$"; then
+	if echo "$ver" | egrep -q "^v([[0-9]]+_)+([[0-9]]+|RC[[0-9]]+)$"; then
 		ver=$(echo $ver | sed -e 's/^v\(.*\)/\1/' \
 				      -e 's/_RC[[0-9]].*$//' -e 's/_/./g')
 	fi
@@ -102,7 +103,6 @@ elif test -f META; then
 	AC_MSG_RESULT([$msg])
 else
 	AC_MSG_WARN([FIXME: I don't know how to deal with source trees outside of git that don't have a META file.  Not setting a buildid.])
-	BUILDID=""
 fi
 AC_SUBST(BUILDID)
 ])

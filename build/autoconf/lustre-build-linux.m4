@@ -176,7 +176,7 @@ done
 if test "$DEFAULT_LINUX" = "/lib/modules/$(uname -r)/source"; then
 	PATHS="/lib/modules/$(uname -r)/build"
 fi
-PATHS+="$DEFAULT_LINUX"
+PATHS+=" $DEFAULT_LINUX"
 for DEFAULT_LINUX_OBJ in $PATHS; do
 	if readlink -q -e $DEFAULT_LINUX_OBJ; then
 		break
@@ -373,7 +373,9 @@ _ACEOF
 # LB_LANG_PROGRAM(C)([PROLOGUE], [BODY])
 # --------------------------------------
 m4_define([LB_LANG_PROGRAM],
-[$1
+[
+#include <linux/kernel.h>
+$1
 int
 main (void)
 {

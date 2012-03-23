@@ -17,6 +17,7 @@ shopt -s extdebug
 
 # include the exit_traps library
 . ${0%/lbuild}/exit_traps.sh
+. ${0%/lbuild}/funcs.sh
 
 # our children should die when we do
 push_exit_trap "kill -INT -$$ || true" kill_children
@@ -44,15 +45,14 @@ DOWNLOAD=true
 TAG=
 CANONICAL_TARGET=
 TARGET=
-TARGET_ARCH=$(uname -m)
-TARGET_ARCHS=
-TARGET_ARCHS_ALL=$TARGET_ARCH
+TARGET_ARCH="$(uname -m)"
+# change default behavior to only build for the current arch
+TARGET_ARCHS="$TARGET_ARCH"
+TARGET_ARCHS_ALL="$TARGET_ARCH"
 [ "$TARGET_ARCH" = "i686" ] && TARGET_ARCHS_ALL="i686 i586 i386"
 CONFIGURE_FLAGS=
 EXTERNAL_PATCHES=
 EXTRA_VERSION=
-# only used by lbuild.old-school
-LUSTRE_EXTRA_VERSION=
 STAGEDIR=
 TMPDIR=${TMPDIR:-"/var/tmp"}
 TIMESTAMP=
@@ -75,6 +75,8 @@ DISTRO=
 KERNELTREE=
 # default to not adding -lustre- into the kernel RPM package names
 KERNEL_LUSTRE_NAMING=false
+# default not use kabi check.
+USE_KABI=false
 
 # patchless build
 KERNELRPMSBASE=
@@ -121,26 +123,6 @@ readlink() {
     else
         return 1
     fi
-}
-
-cleanup() {
-
-    true
-}
-
-error() {
-    local msg="$1"
-
-    [ -n "$msg" ] && echo -e "\n${0##*/}: $msg" >&3
-
-}
-
-fatal() {
-
-    cleanup
-    error "$2"
-    exit $1
-
 }
 
 usage() {
@@ -311,6 +293,8 @@ check_options() {
             usage 1 "A branch/tag name must be specified with --tag when not building from a tarball."
     fi
 
+    [ -z "$DISTRO" ] && DISTRO=$(autodetect_distro)
+
     if [ -z "$LINUX" ]; then
         [ "$KERNELDIR" -o "$KERNELTREE" ] || \
             usage 1 "A kernel directory must be specified with --kerneldir or --kerneltree."
@@ -323,13 +307,16 @@ check_options() {
                 usage 1 "When building a snapshot, a tag name must be used."
         fi
 
-        [ "$TARGET" ] || usage 1 "A target must be specified with --target."
+        [ "$TARGET" ] || TARGET=$(autodetect_target "$DISTRO")
 #       TARGET_FILE="$TOPDIR/lustre/kernel_patches/targets/$TARGET.target"
 #       [ -r "$TARGET_FILE" ] || \
 #               usage 1 "Target '$TARGET' was not found."
     fi
 
     case $TARGET in
+        2.6-rhel6)
+            CANONICAL_TARGET="rhel6"
+            ;;
         2.6-rhel5)
             CANONICAL_TARGET="rhel5"
             ;;
@@ -406,32 +393,6 @@ check_options() {
         fi
     fi
 
-    [ -z "$DISTRO" ] && DISTRO=$(autodetect_distro)
-
-    return 0
-
-}
-
-# autodetect used Distro
-autodetect_distro() {
-
-    local name
-    local version
-
-    if [ -f /etc/SuSE-release ]; then
-        name=sles
-        version=$(grep ^VERSION /etc/SuSE-release)
-        version=${version#*= }
-    elif [ -f /etc/redhat-release ]; then
-        name=$(head -1 /etc/redhat-release)
-        version=$(echo "$distroname" |
-                  sed -e 's/^[^0-9.]*//g' | sed -e 's/[ \.].*//')
-    fi
-    if [ -z "$name" -o -z "$version" ]; then
-        fatal 1 "I don't know how to determine distro type/version.\nEither update autodetect_distro() or use the --distro argument"
-    fi
-
-    echo ${name}${version}
     return 0
 
 }
@@ -826,15 +787,18 @@ build_lustre() {
 
     ( $(skeep_ldiskfs_rpm $TAG) ) || {
 
-        pushd ldiskfs || return 255
+        pushd ldiskfs > /dev/null || return 255
 
         if !  ./configure --enable-dist; then
             echo "failed to configure in ldiskfs"
+            popd >/dev/null # pushd ldiskfs
+            popd >/dev/null # pushd lustre
             return 255
         fi
 
         if ! make dist 2>&1; then
-            popd
+            popd >/dev/null # pushd ldiskfs
+            popd >/dev/null # pushd lustre
             return 255
         fi
 
@@ -847,7 +811,8 @@ build_lustre() {
             ${linuxobj:+--define "kobjdir $linuxobj"} \
             --define "_tmppath /var/tmp" \
             --define "_topdir $TOPDIR" 2>&1; then
-            popd
+            popd >/dev/null # pushd ldiskfs
+            popd >/dev/null # pushd lustre
             return 255
         fi
 
@@ -858,11 +823,12 @@ build_lustre() {
                 ${linuxobj:+--define "kobjdir $linuxobj"} \
                 --define "_tmppath /var/tmp" \
                 --define "_topdir $TOPDIR" 2>&1; then
-                popd
+                popd >/dev/null # pushd ldiskfs
+                popd >/dev/null # pushd lustre
                 return 255
             fi
         fi
-        popd
+        popd >/dev/null # pushd ldiskfs
 
         # tell lustre where ldiskfs is
         # XXX - pointing to the RPM BUILD dir is a hack.  we need to flesh
@@ -896,6 +862,21 @@ build_lustre() {
         --define "_tmppath $TMPDIR" \
         --define "_topdir $TOPDIR" 2>&1 || \
         fatal 1 "Error building rpms for $BUILD_ARCHS."
+
+    if $DO_SRC; then
+        if ! $RPMBUILD -ts "$LUSTRE" \
+                 ${is_patchless:+--define "lustre_name lustre-client"} \
+                 ${lustre_tests:+--define "build_lustre_tests 0"} \
+                 ${FIND_REQUIRES:+--define "__find_requires $FIND_REQUIRES"} \
+                 --define "configure_args $confoptions ${CONFIGURE_FLAGS}" \
+                 --define "kdir $linux" \
+                 ${linuxobj:+--define "kobjdir $linuxobj"} \
+                 --define "_tmppath $TMPDIR" \
+                 --define "_topdir $TOPDIR" 2>&1; then
+            popd
+            return 255
+        fi
+    fi
 
     popd >/dev/null
 }
@@ -934,10 +915,6 @@ skeep_ldiskfs_rpm() {
         done
     fi
 
-    if $PATCHLESS; then
-        skip=true
-    fi
- 
     echo $skip
 
 }
@@ -979,36 +956,6 @@ find_linux_release() {
     fi
 
     sed -ne 's/#define UTS_RELEASE "\(.*\)"$/\1/p' $LINUXRELEASEHEADER
-
-}
-
-# XXX this needs to be re-written as a wrapper around find_rpm
-#     or just gotten rid of.  :-)
-find_linux_rpm() {
-    local prefix="$1"
-
-    local pathtorpms="${KERNELRPMSBASE}/${lnxmaj}/${DISTRO}"
-    [ -d $pathtorpms ] || return 255
-
-    local kernelbinaryrpm rpmfile
-    local wanted_kernel="${lnxmaj}${lnxmin}-${lnxrel}"
-
-    local arch ret=1
-    for arch in $TARGET_ARCHS_ALL; do
-        local found_rpm="" rpm
-        for rpm in ${pathtorpms}/${arch}/*.rpm; do
-            if rpm -q --provides -p "$rpm" 2>&3 | grep -q "kernel${prefix} = $wanted_kernel" 2>&3; then
-
-                found_rpm="$rpm"
-                ret=0
-                break
-            fi
-        done
-        [ -f "$found_rpm" ] && break
-    done
-
-    echo "$found_rpm"
-    return $ret
 
 }
 
@@ -1120,45 +1067,60 @@ EOF
 }
 
 store_for_reuse() {
-        local articles="$1"
-        local module="$2"
-        local location="$3"
-        local signature="$4"
-        local use_links="$5"
+    local articles="$1"
+    local module="$2"
+    local location="$3"
+    local signature="$4"
+    local use_links="$5"
 
-        local linkflag=""
-        if $use_links; then
-            linkflag="l"
+    local linkflag=""
+    if $use_links; then
+        linkflag="l"
+    fi
+
+    local default_iface=$(/sbin/ip route get 192.1.1.1 | sed -ne 's/.* dev \(.*\)  * src .*/\1/p')
+    if [ -z "$default_iface" ]; then
+        fatal 1 "Failed to determine the default route interface"
+    fi
+    local unique_id=$(/sbin/ip addr show dev $default_iface | sed -ne '/ inet /s/ *inet \(.*\)\/.*/\1/p' | head -1)
+    if [ -z "$unique_id" ]; then
+        fatal 1 "Failed to determine a unique id from interface $default_interface"
+    fi
+
+    local finallocation="$location"/"$signature"/"$module"
+    location="$location"/"$signature-${unique_id}"/"$module"
+    mkdir -p "$location"
+    # the cleanup script removes any directory that doesn't have a
+    # .lastused, so let's try to prevent that as soon as we can
+    # this solution still slightly racy with the cleanup script
+    # but the race is a lot tighter now
+    touch -t 197001010000 "$location/.lastused"
+    ## use eval/echo here to make sure shell expansions are performed
+    #if ! cp -a${linkflag} $(eval echo $articles) "$location"; then
+    local article
+    for article in $(eval echo $articles); do
+        if ! cp -a${linkflag} "$article" "$location"; then
+            error "Failed to copy \"$article\" to \"$location\" in store_for_reuse()"
+            # rename the cache location so that it's not cached
+            # product, but is around for analysis
+            mv "$location"{,-bad-$(date +%s)} ||
+                error "failed to clean up a failed cache attempt" \
+                      "in \"$location\" -- manual cleanup will be" \
+                      "necessary"
+            return 1
         fi
+    done
 
-        location="$location"/"$signature"/"$module"
-        mkdir -p "$location"
-        # the cleanup script removes any directory that doesn't have a
-        # .lastused, so let's try to prevent that as soon as we can
-        # this solution still slightly racy with the cleanup script
-        # but the race is a lot tighter now
-        touch -t 197001010000 "$location/.lastused"
-        ## use eval/echo here to make sure shell expansions are performed
-        #if ! cp -a${linkflag} $(eval echo $articles) "$location"; then
-        local article
-        for article in $(eval echo $articles); do
-            if ! cp -a${linkflag} "$article" "$location"; then
-                error "Failed to copy \"$article\" to \"$location\" in store_for_reuse()"
-                # rename the cache location so that it's not cached
-                # product, but is around for analysis
-                mv "$location"{,-bad-$(date +%s)} ||
-                    error "failed to clean up a failed cache attempt" \
-                          "in \"$location\" -- manual cleanup will be" \
-                          "necessary"
-                return 1
-            fi
-        done
+    # flag the cache as complete (i.e. in case lbuild was previously
+    # interrupted while caching)
+    touch "$location/.lastused"
 
-        # flag the cache as complete (i.e. in case lbuild was previously
-        # interrupted while caching)
-        touch "$location/.lastused"
-
-        return 0
+    # put the temporary location into the final location
+    # (last one wins)
+    mkdir -p "${finallocation%/*}"
+    mv "$location" "$finallocation"
+    rmdir "${location%/*}"
+    return 0
 
 }
 
@@ -1227,42 +1189,6 @@ basearch() {
         echo "$arch"
     fi
 
-}
-
-#
-# in a given directory, find the first rpm matching given requirements
-#
-find_rpm() {
-    local dir="$1"
-    local match_type="$2"
-    local match="$3"
-
-    pushd "$dir" > /dev/null || \
-        fatal 1 "Unable to chdir to directory \"$dir\" in find_rpm()"
-
-    local file
-    for file in $(ls *.rpm); do
-        if [ ! -f "$file" ]; then
-            continue
-        fi
-        case "$match_type" in
-            provides)
-                # match is any valid ERE (i.e. given to egrep) match
-                if rpm -q --provides -p "$file" 2>&3 | egrep -q "$match"; then
-                    echo "$file"
-                    popd >/dev/null
-                    return 0
-                fi
-                ;;
-            *)
-                popd >/dev/null
-                fatal 1 "Unknown match type \"$match_type\" given to find_rpm()"
-                ;;
-        esac
-    done
-
-    popd >/dev/null
-    return 1
 }
 
 build_kernel_with_srpm() {

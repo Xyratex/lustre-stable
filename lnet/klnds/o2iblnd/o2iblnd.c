@@ -429,7 +429,7 @@ kiblnd_unlink_peer_locked (kib_peer_t *peer)
 }
 
 int
-kiblnd_get_peer_info (lnet_ni_t *ni, int index, 
+kiblnd_get_peer_info (lnet_ni_t *ni, int index,
                       lnet_nid_t *nidp, int *count)
 {
         kib_peer_t        *peer;
@@ -847,7 +847,7 @@ kiblnd_create_conn(kib_peer_t *peer, struct rdma_cm_id *cmid,
                         /* Make posted receives complete */
                         kiblnd_abort_receives(conn);
 
-                        /* correct # of posted buffers 
+                        /* correct # of posted buffers
                          * NB locking needed now I'm racing with completion */
                         spin_lock_irqsave(&kiblnd_data.kib_sched_lock, flags);
                         conn->ibc_nrx -= IBLND_RX_MSGS(version) - i;
@@ -2375,15 +2375,15 @@ kiblnd_dev_need_failover(kib_dev_t *dev)
         /* XXX: it's UGLY, but I don't have better way to find
          * ib-bonding HCA failover because:
          *
-         * a. no reliable CM event for HCA failover... 
+         * a. no reliable CM event for HCA failover...
          * b. no OFED API to get ib_device for current net_device...
          *
          * We have only two choices at this point:
          *
          * a. rdma_bind_addr(), it will conflict with listener cmid
          * b. rdma_resolve_addr() to zero addr */
-        cmid = rdma_create_id(kiblnd_dummy_callback,
-                              dev, RDMA_PS_TCP);
+        cmid = kiblnd_rdma_create_id(kiblnd_dummy_callback, dev,
+                                     RDMA_PS_TCP, IB_QPT_RC);
         if (IS_ERR(cmid)) {
                 rc = PTR_ERR(cmid);
                 CERROR("Failed to create cmid for failover: %d\n", rc);
@@ -2455,7 +2455,8 @@ kiblnd_dev_failover(kib_dev_t *dev)
                 rdma_destroy_id(cmid);
         }
 
-        cmid = rdma_create_id(kiblnd_cm_callback, dev, RDMA_PS_TCP);
+        cmid = kiblnd_rdma_create_id(kiblnd_cm_callback, dev,
+                                     RDMA_PS_TCP, IB_QPT_RC);
         if (IS_ERR(cmid)) {
                 rc = PTR_ERR(cmid);
                 CERROR("Failed to create cmid for failover: %d\n", rc);
