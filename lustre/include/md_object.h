@@ -182,6 +182,7 @@ struct md_attr {
         struct md_hsm           ma_hsm;
         struct md_som_data     *ma_som;
         struct lu_fid           ma_pfid;
+        int                     ma_big_lmm_used:1;
 };
 
 /** Additional parameters for create */

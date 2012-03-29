@@ -1624,7 +1624,7 @@ int mdt_close(struct mdt_thread_info *info)
         rc = req_capsule_server_pack(info->mti_pill);
         if (mdt_check_resent(info, mdt_reconstruct_generic, NULL)) {
                 if (rc == 0)
-                        mdt_shrink_reply(info);
+                        mdt_fix_reply(info);
                 mdt_exit_ucred(info);
                 RETURN(lustre_msg_get_status(req->rq_repmsg));
         }
@@ -1675,7 +1675,7 @@ int mdt_close(struct mdt_thread_info *info)
                 mdt_object_put(info->mti_env, o);
         }
         if (repbody != NULL)
-                mdt_shrink_reply(info);
+                rc = mdt_fix_reply(info);
 
         mdt_exit_ucred(info);
         if (OBD_FAIL_CHECK(OBD_FAIL_MDS_CLOSE_PACK))
