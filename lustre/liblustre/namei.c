@@ -436,21 +436,6 @@ struct inode *llu_inode_from_resource(struct ldlm_lock *lock)
         return inode;
 }
 
-struct inode *llu_inode_from_lock(struct ldlm_lock *lock)
-{
-        struct inode *inode;
-        lock_res_and_lock(lock);
-
-        if (lock->l_ast_data) {
-                inode = (struct inode *)lock->l_ast_data;
-                I_REF(inode);
-        } else
-                inode = NULL;
-
-        unlock_res_and_lock(lock);
-        return inode;
-}
-
 static int llu_lookup_it(struct inode *parent, struct pnode *pnode,
                          struct lookup_intent *it, int flags)
 {

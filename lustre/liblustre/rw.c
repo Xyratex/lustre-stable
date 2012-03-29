@@ -162,7 +162,7 @@ int llu_extent_lock_cancel_cb(struct ldlm_lock *lock,
                 if (lock->l_req_mode != lock->l_granted_mode)
                         RETURN(0);
 
-                inode = llu_inode_from_lock(lock);
+                inode = llu_inode_from_resource(lock);
                 if (!inode)
                         RETURN(0);
                 lli= llu_i2info(inode);
@@ -195,7 +195,7 @@ iput:
 static int llu_glimpse_callback(struct ldlm_lock *lock, void *reqp)
 {
         struct ptlrpc_request *req = reqp;
-        struct inode *inode = llu_inode_from_lock(lock);
+        struct inode *inode = llu_inode_from_resource(lock);
         struct llu_inode_info *lli;
         struct ost_lvb *lvb;
         __u32 size[2] = { sizeof(struct ptlrpc_body), sizeof(*lvb) };

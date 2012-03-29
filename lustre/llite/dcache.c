@@ -350,7 +350,7 @@ void ll_lookup_finish_locks(struct lookup_intent *it, struct dentry *dentry)
 
         if (it->d.lustre.it_lock_mode && dentry->d_inode != NULL) {
                 struct inode *inode = dentry->d_inode;
-                CDEBUG(D_DLMTRACE, "setting l_data to inode %p (%lu/%u)\n",
+                CDEBUG(D_DLMTRACE, "setting resource to inode %p (%lu/%u)\n",
                        inode, inode->i_ino, inode->i_generation);
                 mdc_set_lock_data(&it->d.lustre.it_lock_handle, inode, NULL);
         }

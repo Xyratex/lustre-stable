@@ -1390,7 +1390,7 @@ static int mdc_cancel_for_recovery(struct ldlm_lock *lock)
         RETURN(1);
 }
 
-static int mdc_resource_inode_free(struct ldlm_resource *res)
+static int mdc_resource_null_data(struct ldlm_resource *res)
 {
         if (res->lr_lvb_inode)
                 res->lr_lvb_inode = NULL;
@@ -1398,8 +1398,8 @@ static int mdc_resource_inode_free(struct ldlm_resource *res)
         return 0;
 }
 
-struct ldlm_valblock_ops inode_lvbo = {
-        lvbo_free: mdc_resource_inode_free
+static struct ldlm_valblock_ops mdc_inode_lvbo = {
+        lvbo_free: mdc_resource_null_data
 };
 
 static int mdc_setup(struct obd_device *obd, obd_count len, void *buf)
@@ -1435,7 +1435,7 @@ static int mdc_setup(struct obd_device *obd, obd_count len, void *buf)
 
         ns_register_cancel(obd->obd_namespace, mdc_cancel_for_recovery);
 
-        obd->obd_namespace->ns_lvbo = &inode_lvbo;
+        obd->obd_namespace->ns_lvbo = &mdc_inode_lvbo;
 
         rc = obd_llog_init(obd, obd, NULL);
         if (rc) {
@@ -1687,6 +1687,7 @@ struct obd_ops mdc_obd_ops = {
         .o_llog_init    = mdc_llog_init,
         .o_llog_finish  = mdc_llog_finish,
         .o_process_config = mdc_process_config,
+        .o_null_data    = mdc_null_data,
 };
 
 int __init mdc_init(void)
@@ -1721,7 +1722,7 @@ MODULE_LICENSE("GPL");
 
 EXPORT_SYMBOL(mdc_req2lustre_md);
 EXPORT_SYMBOL(mdc_free_lustre_md);
-EXPORT_SYMBOL(mdc_change_cbdata);
+EXPORT_SYMBOL(mdc_null_data);
 EXPORT_SYMBOL(mdc_find_cbdata);
 EXPORT_SYMBOL(mdc_getstatus);
 EXPORT_SYMBOL(mdc_getattr);

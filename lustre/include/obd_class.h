@@ -1415,17 +1415,16 @@ static inline int obd_match(struct obd_export *exp, struct lov_stripe_md *ea,
         RETURN(rc);
 }
 
-static inline int obd_change_cbdata(struct obd_export *exp,
-                                    struct lov_stripe_md *lsm,
-                                    ldlm_iterator_t it, void *data)
+static inline int obd_null_data(struct obd_export *exp,
+                                void *index)
 {
         int rc;
         ENTRY;
 
-        EXP_CHECK_OP(exp, change_cbdata);
-        EXP_COUNTER_INCREMENT(exp, change_cbdata);
+        EXP_CHECK_OP(exp, null_data);
+        EXP_COUNTER_INCREMENT(exp, null_data);
 
-        rc = OBP(exp->exp_obd, change_cbdata)(exp, lsm, it, data);
+        rc = OBP(exp->exp_obd, null_data)(exp, index);
         RETURN(rc);
 }
 

@@ -533,18 +533,6 @@ static int llu_iop_getattr(struct pnode *pno,
         RETURN(rc);
 }
 
-static int null_if_equal(struct ldlm_lock *lock, void *data)
-{
-        if (data == lock->l_ast_data) {
-                lock->l_ast_data = NULL;
-
-                if (lock->l_req_mode != lock->l_granted_mode)
-                        LDLM_ERROR(lock,"clearing inode with ungranted lock\n");
-        }
-
-        return LDLM_ITER_CONTINUE;
-}
-
 void llu_clear_inode(struct inode *inode)
 {
         struct ll_fid fid;
@@ -558,11 +546,10 @@ void llu_clear_inode(struct inode *inode)
 
         llu_inode2fid(&fid, inode);
         clear_bit(LLI_F_HAVE_MDS_SIZE_LOCK, &(lli->lli_flags));
-        mdc_change_cbdata(sbi->ll_mdc_exp, &fid, NULL, inode);
+        obd_null_data(sbi->ll_mdc_exp, &fid);
 
         if (lli->lli_smd)
-                obd_change_cbdata(sbi->ll_osc_exp, lli->lli_smd,
-                                  null_if_equal, inode);
+                obd_null_data(sbi->ll_osc_exp, lli->lli_smd);
 
         if (lli->lli_smd) {
                 obd_free_memmd(sbi->ll_osc_exp, &lli->lli_smd);

@@ -118,7 +118,7 @@ void mdc_set_lock_data(__u64 *l, void *data, __u32 *bits)
                 struct inode *old_inode = lock->l_resource->lr_lvb_inode;
                 LASSERTF(old_inode->i_state & I_FREEING,
                          "Found existing inode %p/%lu/%u state %lu in lock: "
-                         "setting data to %p/%lu/%u\n", old_inode,
+                         "setting inode to %p/%lu/%u\n", old_inode,
                          old_inode->i_ino, old_inode->i_generation,
                          old_inode->i_state,
                          new_inode, new_inode->i_ino, new_inode->i_generation);
@@ -134,9 +134,9 @@ void mdc_set_lock_data(__u64 *l, void *data, __u32 *bits)
 }
 EXPORT_SYMBOL(mdc_set_lock_data);
 
-int mdc_change_cbdata(struct obd_export *exp, struct ll_fid *fid, 
-                      ldlm_iterator_t it, void *data)
+int mdc_null_data(struct obd_export *exp, void *index)
 {
+        struct ll_fid *fid = index;
         struct ldlm_res_id res_id;
         struct ldlm_resource *res;
         struct ldlm_namespace *ns = class_exp2obd(exp)->obd_namespace;

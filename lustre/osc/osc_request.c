@@ -3316,8 +3316,12 @@ int osc_extent_blocking_cb(struct ldlm_lock *lock,
                                   &lockh);
 
                 if (lock->l_conn_export->exp_obd->u.cli.cl_ext_lock_cancel_cb)
-                        lock->l_conn_export->exp_obd->u.cli.cl_ext_lock_cancel_cb(
-                                                          lock, new, data,flag);
+                {
+                        struct obd_export *export = lock->l_conn_export;
+                        struct obd_device *obd = export->exp_obd;
+
+                        obd->u.cli.cl_ext_lock_cancel_cb(lock, new, data,flag);
+                }
                 break;
         }
         default:
@@ -3340,39 +3344,56 @@ static int osc_set_data_with_check(struct lustre_handle *lockh, void *data,
         lock_res_and_lock(lock);
 #if defined (__KERNEL__) && defined (__linux__)
         /* Liang XXX: Darwin and Winnt checking should be added */
-        if (lock->l_ast_data && lock->l_ast_data != data) {
+        if (lock->l_resource->lr_lvb_inode
+            && lock->l_resource->lr_lvb_inode != data) {
                 struct inode *new_inode = data;
-                struct inode *old_inode = lock->l_ast_data;
+                struct inode *old_inode = lock->l_resource->lr_lvb_inode;
                 if (!(old_inode->i_state & I_FREEING)) {
                         LCONSOLE_ERROR("Found existing inode in lock "
                                        "%p/%lu/%u state %lu: "
-                                       "setting data to %p/%lu/%u\n",
+                                       "setting inode to %p/%lu/%u\n",
                                        old_inode, old_inode->i_ino,
                                        old_inode->i_generation,
                                        old_inode->i_state, new_inode,
-                                       new_inode->i_ino,
-                                       new_inode->i_generation);
+                                       new_inode ? new_inode->i_ino : 0,
+                                       new_inode ? new_inode->i_generation : 0);
                         unlock_res_and_lock(lock);
                         LDLM_LOCK_PUT(lock);
                         return ELDLM_NO_LOCK_DATA;
                 }
         }
 #endif
-        lock->l_ast_data = data;
+        lock->l_resource->lr_lvb_inode = data;
         lock->l_flags |= (flags & LDLM_FL_NO_LRU);
         unlock_res_and_lock(lock);
         LDLM_LOCK_PUT(lock);
         return ELDLM_OK;
 }
 
-static int osc_change_cbdata(struct obd_export *exp, struct lov_stripe_md *lsm,
-                             ldlm_iterator_t replace, void *data)
+static int osc_null_data(struct obd_export *exp, void *index)
 {
+        struct lov_stripe_md *lsm = index;
         struct ldlm_res_id res_id;
-        struct obd_device *obd = class_exp2obd(exp);
+        struct ldlm_resource *res;
+        struct ldlm_namespace *ns = class_exp2obd(exp)->obd_namespace;
+
+        if (ns == NULL) {
+                CERROR("must pass namespace\n");
+                LBUG();
+        }
 
         osc_build_res_name(lsm->lsm_object_id, lsm->lsm_object_gr, &res_id);
-        ldlm_resource_iterate(obd->obd_namespace, &res_id, replace, data);
+
+        res = ldlm_resource_get(ns, NULL, res_id, 0, 0);
+        if (res == NULL)
+                RETURN(0);
+
+        lock_res(res);
+        res->lr_lvb_inode = NULL;
+        unlock_res(res);
+
+        ldlm_resource_putref(res);
+
         return 0;
 }
 
@@ -3572,6 +3593,13 @@ static int osc_enqueue(struct obd_export *exp, struct obd_info *oinfo,
                               sizeof(oinfo->oi_md->lsm_oinfo[0]->loi_lvb),
                               lustre_swab_ost_lvb, oinfo->oi_lockh,
                               rqset ? 1 : 0);
+
+        /* ll_glimpse_ioct does not set cbdata */
+        if (einfo->ei_cbdata) {
+                osc_set_data_with_check(oinfo->oi_lockh, einfo->ei_cbdata,
+                                        oinfo->oi_flags);
+        }
+
         if (rqset) {
                 if (!rc) {
                         struct osc_enqueue_args *aa;
@@ -4510,6 +4538,19 @@ static int osc_cancel_for_recovery(struct ldlm_lock *lock)
         RETURN(0);       
 }
 
+static int osc_resource_null_data(struct ldlm_resource *res)
+{
+        if (res->lr_lvb_inode)
+                res->lr_lvb_inode = NULL;
+
+        return 0;
+}
+
+static struct ldlm_valblock_ops osc_inode_lvbo = {
+        lvbo_free: osc_resource_null_data
+};
+
+
 int osc_setup(struct obd_device *obd, obd_count len, void *buf)
 {
         int rc;
@@ -4553,6 +4594,8 @@ int osc_setup(struct obd_device *obd, obd_count len, void *buf)
                 sema_init(&cli->cl_grant_sem, 1);
 
                 ns_register_cancel(obd->obd_namespace, osc_cancel_for_recovery);
+
+                obd->obd_namespace->ns_lvbo = &osc_inode_lvbo;
         }
 
         RETURN(rc);
@@ -4720,7 +4763,7 @@ struct obd_ops osc_obd_ops = {
         .o_sync                 = osc_sync,
         .o_enqueue              = osc_enqueue,
         .o_match                = osc_match,
-        .o_change_cbdata        = osc_change_cbdata,
+        .o_null_data            = osc_null_data,
         .o_find_cbdata          = osc_find_cbdata,
         .o_cancel               = osc_cancel,
         .o_cancel_unused        = osc_cancel_unused,

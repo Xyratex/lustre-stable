@@ -120,7 +120,7 @@ static int llu_dir_do_readpage(struct inode *inode, struct page *page)
                         RETURN(rc);
                 }
 
-               mdc_set_lock_data((__u64 *) &lockh, inode, NULL);
+                mdc_set_lock_data((__u64 *) &lockh, inode, NULL);
         }
         ldlm_lock_dump_handle(D_OTHER, &lockh);
 

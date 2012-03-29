@@ -1276,40 +1276,6 @@ struct inode *ll_inode_from_resource(struct ldlm_lock *lock)
         return inode;
 }
 
-struct inode *ll_inode_from_lock(struct ldlm_lock *lock)
-{
-        struct inode *inode = NULL;
-        /* NOTE: we depend on atomic igrab() -bzzz */
-        lock_res_and_lock(lock);
-        if (lock->l_ast_data) {
-                struct ll_inode_info *lli = ll_i2info(lock->l_ast_data);
-                if (lli->lli_inode_magic == LLI_INODE_MAGIC) {
-                        inode = igrab(lock->l_ast_data);
-                } else {
-                        inode = lock->l_ast_data;
-                        LDLM_DEBUG_LIMIT(inode->i_state & I_FREEING ?  D_INFO :
-                                         D_WARNING, lock, "l_ast_data %p is "
-                                         "bogus: magic %08x", lock->l_ast_data,
-                                         lli->lli_inode_magic);
-                        inode = NULL;
-                }
-        }
-        unlock_res_and_lock(lock);
-        return inode;
-}
-
-static int null_if_equal(struct ldlm_lock *lock, void *data)
-{
-        if (data == lock->l_ast_data) {
-                lock->l_ast_data = NULL;
-
-                if (lock->l_req_mode != lock->l_granted_mode)
-                        LDLM_ERROR(lock,"clearing inode with ungranted lock");
-        }
-
-        return LDLM_ITER_CONTINUE;
-}
-
 void ll_clear_inode(struct inode *inode)
 {
         struct ll_fid fid;
@@ -1329,7 +1295,7 @@ void ll_clear_inode(struct inode *inode)
 
         ll_inode2fid(&fid, inode);
         clear_bit(LLI_F_HAVE_MDS_SIZE_LOCK, &lli->lli_flags);
-        mdc_change_cbdata(sbi->ll_mdc_exp, &fid, NULL, inode);
+        obd_null_data(sbi->ll_mdc_exp, &fid);
 
         LASSERT(!lli->lli_open_fd_write_count);
         LASSERT(!lli->lli_open_fd_read_count);
@@ -1348,8 +1314,7 @@ void ll_clear_inode(struct inode *inode)
 
 
         if (lli->lli_smd) {
-                obd_change_cbdata(sbi->ll_osc_exp, lli->lli_smd,
-                                  null_if_equal, inode);
+                obd_null_data(sbi->ll_osc_exp, lli->lli_smd);
 
                 obd_free_memmd(sbi->ll_osc_exp, &lli->lli_smd);
                 lli->lli_smd = NULL;

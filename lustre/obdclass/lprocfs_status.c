@@ -1430,7 +1430,7 @@ void lprocfs_init_ops_stats(int num_private_stats, struct lprocfs_stats *stats)
         LPROCFS_OBD_OP_INIT(num_private_stats, stats, commitrw);
         LPROCFS_OBD_OP_INIT(num_private_stats, stats, enqueue);
         LPROCFS_OBD_OP_INIT(num_private_stats, stats, match);
-        LPROCFS_OBD_OP_INIT(num_private_stats, stats, change_cbdata);
+        LPROCFS_OBD_OP_INIT(num_private_stats, stats, null_data);
         LPROCFS_OBD_OP_INIT(num_private_stats, stats, find_cbdata);
         LPROCFS_OBD_OP_INIT(num_private_stats, stats, cancel);
         LPROCFS_OBD_OP_INIT(num_private_stats, stats, cancel_unused);
