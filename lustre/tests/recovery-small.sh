@@ -338,28 +338,41 @@ test_18c() {
 run_test 18c "Dropped connect reply after eviction handing (14755)"
 
 test_19a() {
-    f=$DIR/$tfile
-    do_facet client mcreate $f        || return 1
-    drop_ldlm_cancel "chmod 0777 $f"  || echo "evicted as expected"
+    local BEFORE=`date +%s`
 
-    do_facet client checkstat -v -p 0777 $f  || echo evicted
+    mount_client $DIR2
+
+    do_facet client mcreate $DIR/$tfile        || return 1
+    drop_ldlm_cancel "chmod 0777 $DIR2"
+
+    umount_client $DIR2
+    do_facet client "munlink $DIR/$tfile"
+
     # let the client reconnect
     sleep 5
-    do_facet client "munlink $f"
+    EVICT=`do_facet client $LCTL get_param mdc.$FSNAME-MDT*.state | \
+        awk -F"[ [,]" '/EVICTED]$/ { if (mx<$4) {mx=$4;} } END { print mx }'`
+
+    [ ! -z "$EVICT" ] && [[ $EVICT -gt $BEFORE ]] || error "no eviction"
 }
 run_test 19a "test expired_lock_main on mds (2867)"
 
 test_19b() {
-    f=$DIR/$tfile
-    do_facet client multiop $f Ow  || return 1
-    do_facet client multiop $f or  || return 2
+    local BEFORE=`date +%s`
 
-    cancel_lru_locks osc
+    mount_client $DIR2
 
-    do_facet client multiop $f or  || return 3
-    drop_ldlm_cancel multiop $f Ow  || echo "client evicted, as expected"
+    do_facet client multiop $DIR/$tfile Ow  || return 1
+    drop_ldlm_cancel multiop $DIR2/$tfile Ow
+    umount_client $DIR2
+    do_facet client munlink $DIR/$tfile  || return 4
 
-    do_facet client munlink $f  || return 4
+    # let the client reconnect
+    sleep 5
+    EVICT=`do_facet client $LCTL get_param osc.$FSNAME-OST*.state | \
+        awk -F"[ [,]" '/EVICTED]$/ { if (mx<$4) {mx=$4;} } END { print mx }'`
+
+    [ ! -z "$EVICT" ] && [[ $EVICT -gt $BEFORE ]] || error "no eviction"
 }
 run_test 19b "test expired_lock_main on ost (2867)"
 
