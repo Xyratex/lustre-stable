@@ -860,7 +860,7 @@ test_7()
 
         $LFS setquota -u $TSTUSR -b 0 -B $LIMIT -i 0 -I 0 $DIR
 
-        $LFS setstripe $TESTFILE -c 1
+        $LFS setstripe $TESTFILE -c 1 -i 0
         chown $TSTUSR.$TSTUSR $TESTFILE
 
         echo "  Write to OST0..."
@@ -876,7 +876,23 @@ test_7()
         echo "  Trigger recovery..."
         OSC0_UUID="`$LCTL dl | awk '$3 ~ /osc/ { print $1 }'`"
         for i in $OSC0_UUID; do
-                $LCTL --device $i activate || error "activate osc failed!"
+                local rc=0
+                while [ true ]; do
+                        $LCTL --device $i activate
+                        rc=$?
+                        # lctl activate can race with activation originated by
+                        # pinger thread. That makes lctl to return 114
+                        # (EALREADY). Restart lctl activate in that case.
+                        # bug 24515
+                        if [[ $rc -eq 114 ]]; then
+                                echo "got EALREADY, activate $i again ..."
+                                continue
+                        else
+                                [[ $rc -eq 0 ]] || \
+                                        error "activate osc failed! rc=$rc"
+                                break
+                        fi
+                done
         done
 
         # sleep a while to wait for recovery done
