@@ -694,25 +694,17 @@ static struct dentry *ll_lookup_nd(struct inode *parent, struct dentry *dentry,
                                                        (struct ptlrpc_request *)
                                                           it->d.lustre.it_data);
                                 } else {
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,17))
-/* 2.6.1[456] have a bug in open_namei() that forgets to check
- * nd->intent.open.file for error, so we need to return it as lookup's result
- * instead */
-                                        struct file *filp;
-                                        nd->intent.open.file->private_data = it;
-                                        filp =lookup_instantiate_filp(nd,dentry,
-                                                                      NULL);
-                                        if (IS_ERR(filp)) {
-                                                if (de)
-                                                        dput(de);
-                                                de = (struct dentry *) filp;
-                                        }
-#else
-                                        nd->intent.open.file->private_data = it;
-                                        (void)lookup_instantiate_filp(nd,dentry,
-                                                                      NULL);
-#endif
+					struct file *filp;
 
+					nd->intent.open.file->private_data = it;
+					filp = lookup_instantiate_filp(nd,
+								       dentry,
+								       NULL);
+					if (IS_ERR(filp)) {
+						if (de)
+							dput(de);
+						de = (struct dentry *)filp;
+					}
                                 }
 #else /* HAVE_FILE_IN_STRUCT_INTENT */
                                 /* Release open handle as we have no way to
@@ -939,8 +931,12 @@ static int ll_create_nd(struct inode *dir, struct dentry *dentry,
         rc = ll_create_it(dir, dentry, mode, it);
 #ifdef HAVE_FILE_IN_STRUCT_INTENT
         if (nd && (nd->flags & LOOKUP_OPEN) && dentry->d_inode) { /* Open */
-                nd->intent.open.file->private_data = it;
-                lookup_instantiate_filp(nd, dentry, NULL);
+		struct file *filp;
+
+		nd->intent.open.file->private_data = it;
+		filp = lookup_instantiate_filp(nd, dentry, NULL);
+		if (IS_ERR(filp))
+			rc = PTR_ERR(filp);
         }
 #else
         ll_release_openhandle(dentry,it);
