@@ -163,6 +163,19 @@ test_metabench() {
     local clients=$CLIENTS
     [ -z $clients ] && clients=$(hostname)
 
+    if [ "$NFSCLIENT" ]; then
+        local cl
+        for cl in ${clients//,/ }; do
+            local version=$(do_node $cl "uname -r")
+            local n=$(echo $version | awk -F "[.-]" '{print $4}')
+            if [[ $version = 2.6.32-*el6* ]] && [[ $n -le 220 ]]; then
+                skip "nfs client $cl is running kernel $version, \
+see https://bugzilla.redhat.com/show_bug.cgi?id=790729"
+                return
+            fi
+        done
+    fi
+
     num_clients=$(get_node_count ${clients//,/ })
 
     # FIXME
