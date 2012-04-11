@@ -11,6 +11,69 @@ TBD Oracle, Inc.
 	* Recommended e2fsprogs version: 1.41.12-ora1
 	* The async journal commit feature (bug 19128) and the cancel
 
+Severity   : normal
+Bugzilla   : 24596 skip metabench for rhel 6.2 nfs client
+Description: rhel 6.2 nfs client bug
+Details    : https://bugzilla.redhat.com/show_bug.cgi?id=790729
+
+Severity   : normal
+Bugzilla   : 24515 test_7 activate osc failed
+Description: take into account the possible race between activation from lctl
+	     and activation from pinger thread
+
+Severity   : normal
+Bugzilla   : 24580 RHEL6 support in b1_8 branch
+Description: RHEL6.2 support along with build code refactor.
+Details    : This patch is largely based on the patches in the following bugs:
+		22375 RHEL6 patchless client support.
+		24089 Avoid reuse cache storage collisions.
+		24090 Distro and target autodetection.
+		24091 Find_linux_rpms utility.
+		24092 Build src.rpm for lustre if requested.
+		24300 Don't run autogen.sh in the spl and zfs repos.
+		LU-62   Adds support to build RHEL6 patchless client.
+		LU-73   Re-org of rhel* build code to max code reuse.
+		LU-402  Check if dump_trace wants address argument
+		LU-1116 Update RHEL6.2 kernel to 2.6.32-220.7.1.el6.
+	     For more information, please refer to the individual bug.
+
+Severity   : normal
+Bugzilla   : 22065 ko2iblnd failover deadlock fix
+
+Severity   : normal
+Bugzilla   : 20288 IB bonding & fix kiblnd_check_conns deadlock
+Bugzilla   : 20153 IB bonding & fix kiblnd_check_conns deadlock
+Description: Combined patch for IB bonding issues of Bug 20288 (att 25001)
+	     and Bug 20153 (att 26145) from Atul.
+
+Severity   : normal
+Bugzilla   : LU-278 build: Only warn for tag/version mismatch
+Description: The configure process should NOT abort just because the most
+	     recent tag is not of the form that upstream uses to tag Lustre.
+	     Downstream developers may use their own tags, or just add
+	     extensions to upsteam's version tags.
+
+Severity   : normal
+Bugzilla   : 24458 files sometimes show up as zero size or missing
+Description: LU-274 Update LVB from disk when glimpse callback return error
+Details    : Client ll_glimpse_callback() could fail to get inode if the
+	     inode is already been cleared, and this glimpse callback will
+	     fail for -ELDLM_NO_LOCK_DATA, so server should update LVB from
+	     disk (in filter_intent_policy()) when it received such error
+	     from client.
+
+Severity   : normal
+Bugzilla   : 22281 This patch combines patches from bug 22281
+Description: This patch combines all the patches from bug 22281.
+Details    : It mainly deals with the build subsystem:
+	- add config opts like --downstream-release, --enable-dist, etc.
+	- add BUILDID support.
+	- build lustre with an external ldiskfs package.
+Check bug 22281 for details.
+
+Severity   : normal
+Bugzilla   : 24450 new test: check bast timeout serialization
+
 ------------------------------------------------------------------------
 2011-12-23 Oracle, Inc.
 	* version 1.8.7
