@@ -868,7 +868,7 @@ sanity_mount_check_nodes () {
     local rc=0
     for mnt in $mnts ; do
         do_nodes $nodes "running=\\\$(grep -c $mnt' ' /proc/mounts);
-mpts=\\\$(mount | grep -w -c $mnt);
+mpts=\\\$(mount | grep -c $mnt' ');
 if [ \\\$running -ne \\\$mpts ]; then
     echo \\\$(hostname) env are INSANE!;
     exit 1;
@@ -938,7 +938,7 @@ fi;
 exit \\\$rc" || return ${PIPESTATUS[0]}
 
     echo "Started clients $clients: "
-    do_nodes $clients "mount | grep -w $mnt"
+    do_nodes $clients "mount | grep $mnt' '"
 
     set_default_debug_nodes $clients
 
