@@ -437,11 +437,11 @@ static int parse_buffer(int fdin, int fdout)
         struct dbg_line **linev = NULL;
         int linev_len = 0;
         int rc;
+        int first_bad = 1;
  
         hdr = (void *)buf;
   
         while (1) {
-                int first_bad = 1;
                 int count;
  
                 count = HDR_SIZE;
@@ -462,28 +462,33 @@ static int parse_buffer(int fdin, int fdout)
                     hdr->ph_sec < (1 << 30) ||
                     hdr->ph_usec > 1000000000 ||
                     hdr->ph_line_num > 65536) {
+                        int left;
+                        char *nlp;
+
                         if (first_bad)
-                                dump_hdr(lseek(fdin, 0, SEEK_CUR), hdr);
+                                dump_hdr(lseek(fdin, 0, SEEK_CUR) - HDR_SIZE,
+                                         hdr);
                         bad += first_bad;
-                        first_bad = 0;
  
-                        /* try to restart on next line */
-                        while (count < HDR_SIZE && buf[count] != '\n')
-                                count++;
-                        if (buf[count] == '\n')
-                                count++; /* move past '\n' */
-                        if (HDR_SIZE - count > 0) {
-                                int left = HDR_SIZE - count;
-
-                                memmove(buf, buf + count, left);
-                                ptr = buf + left;
-
-                                goto readhdr;
+                        /* check whether beginning of next line is read, read
+                         * the rest of header if yes */
+                        nlp = memchr(buf, '\n', HDR_SIZE);
+                        if (nlp == NULL) {
+                                first_bad = 0;
+                                continue;
                         }
+                        /* move past '\n' */
+                        nlp ++;
+                        left = buf + HDR_SIZE - nlp;
 
-                        continue;
+                        memmove(buf, nlp, left);
+                        ptr = buf + left;
+
+                        first_bad = 1;
+                        count = HDR_SIZE - left;
+                        goto readhdr;
                 }
-  
+
                 if (hdr->ph_len == 0)
                         continue;
 
