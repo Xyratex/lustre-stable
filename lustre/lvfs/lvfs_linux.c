@@ -66,6 +66,7 @@ __u64 obd_max_pages = 0;
 __u64 obd_max_alloc = 0;
 struct lprocfs_stats *obd_memory = NULL;
 DEFINE_SPINLOCK(obd_updatemax_lock);
+EXPORT_SYMBOL(obd_memory);
 /* refine later and change to seqlock or simlar from libcfs */
 
 /* Debugging check only needed during development */
@@ -549,6 +550,7 @@ void obd_update_maxusage()
         cfs_spin_unlock(&obd_updatemax_lock);
 
 }
+EXPORT_SYMBOL(obd_update_maxusage);
 
 __u64 obd_memory_max(void)
 {
@@ -560,6 +562,7 @@ __u64 obd_memory_max(void)
 
         return ret;
 }
+EXPORT_SYMBOL(obd_memory_max);
 
 __u64 obd_pages_max(void)
 {
@@ -571,11 +574,7 @@ __u64 obd_pages_max(void)
 
         return ret;
 }
-
-EXPORT_SYMBOL(obd_update_maxusage);
 EXPORT_SYMBOL(obd_pages_max);
-EXPORT_SYMBOL(obd_memory_max);
-EXPORT_SYMBOL(obd_memory);
 
 #ifdef LPROCFS
 __s64 lprocfs_read_helper(struct lprocfs_counter *lc,
