@@ -36,8 +36,8 @@
  * Author: Eric Barton <eric@bartonsoftware.com>
  */
 
-#ifndef EXPORT_SYMTAB
-# define EXPORT_SYMTAB
+#ifndef AUTOCONF_INCLUDED
+#include <linux/config.h>
 #endif
 
 #include <linux/module.h>

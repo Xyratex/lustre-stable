@@ -38,10 +38,6 @@
  * Author: Nathan Rutman <nathan.rutman@sun.com>
  */
 
-#ifndef EXPORT_SYMTAB
-# define EXPORT_SYMTAB
-#endif
-
 #include <libcfs/libcfs.h>
 
 /* non-0 = don't match */
