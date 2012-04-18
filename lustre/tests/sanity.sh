@@ -6558,49 +6558,60 @@ run_test 156 "Verification of ROC tunables ========================"
 
 test_170() {
         $LCTL clear	# bug 18514
-        $LCTL debug_daemon start $TMP/${tfile}_log_good
+
+        local good=$TMP/${tfile}_log_good
+        local bad=$TMP/${tfile}_log_bad
+        local corrupted=$TMP/${tfile}_log_corrupt
+
+        $LCTL debug_daemon start $good
         touch $DIR/$tfile
         $LCTL debug_daemon stop
-        sed -e "s/^...../a/g" $TMP/${tfile}_log_good > $TMP/${tfile}_log_bad ||
-               error "sed failed to read log_good"
+        perl -p -e "s/^...../a/g" $good > $bad ||
+                error "failed to process $good"
 
-        $LCTL debug_daemon start $TMP/${tfile}_log_good
+        diff -q $good $bad > /dev/null &&
+                error "$good and $bad files not differ"
+
+        $LCTL df $bad > $bad.out 2>&1 ||
+                error "lctl df $bad failed"
+        local expected_bad=$(tail -n 1 $bad.out | awk '{print $9}')
+
+        $LCTL debug_daemon start $good
         rm -rf $DIR/$tfile
         $LCTL debug_daemon stop
 
-        $LCTL df $TMP/${tfile}_log_bad > $TMP/${tfile}_log_bad.out 2>&1 ||
-               error "lctl df log_bad failed"
+        $LCTL df $good > $good.out 2>&1
+        local expected_good=$(( $(tail -n 1 $good.out | awk '{print $5}') * 2 ))
 
-        local bad_line=$(tail -n 1 $TMP/${tfile}_log_bad.out | awk '{print $9}')
-        local good_line1=$(tail -n 1 $TMP/${tfile}_log_bad.out | awk '{print $5}')
+        [ "$expected_bad" ] && [ "$expected_good" ] ||
+                error "expected_bad expected_good are empty"
 
-        $LCTL df $TMP/${tfile}_log_good > $TMP/${tfile}_log_good.out 2>&1
-        local good_line2=$(tail -n 1 $TMP/${tfile}_log_good.out | awk '{print $5}')
+        [[ $expected_bad -ne 0 ]] ||
+                error "unexpected value expected_bad=$expected_bad"
 
-	[ "$bad_line" ] && [ "$good_line1" ] && [ "$good_line2" ] ||
-		error "bad_line good_line1 good_line2 are empty"
+        [[ $expected_good -ne 0 ]] ||
+                error "unexpected value expected_good=$expected_good"
 
-        cat $TMP/${tfile}_log_good >> $TMP/${tfile}_logs_corrupt
-        cat $TMP/${tfile}_log_bad >> $TMP/${tfile}_logs_corrupt
-        cat $TMP/${tfile}_log_good >> $TMP/${tfile}_logs_corrupt
+        cat $good > $corrupted
+        cat $bad >> $corrupted
+        cat $good >> $corrupted
 
-        $LCTL df $TMP/${tfile}_logs_corrupt > $TMP/${tfile}_log_bad.out 2>&1
-        local bad_line_new=$(tail -n 1 $TMP/${tfile}_log_bad.out | awk '{print $9}')
-        local good_line_new=$(tail -n 1 $TMP/${tfile}_log_bad.out | awk '{print $5}')
+        $LCTL df $corrupted > $corrupted.out 2>&1
+        local new_bad=$(tail -n 1 $corrupted.out | awk '{print $9}')
+        local new_good=$(tail -n 1 $corrupted.out | awk '{print $5}')
 
-	[ "$bad_line_new" ] && [ "$good_line_new" ] ||
-		error "bad_line_new good_line_new are empty"
-
-        local expected_good=$((good_line1 + good_line2*2))
+        [ "$new_bad" ] && [ "$new_good" ] ||
+                error "new_bad new_good are empty"
 
         rm -f $TMP/${tfile}*
-        if [ $bad_line -ne $bad_line_new ]; then
-                error "expected $bad_line bad lines, but got $bad_line_new"
+
+        if [[ $expected_bad -ne $new_bad ]]; then
+                error "expected $expected_bad bad lines, but got $new_bad"
                 return 1
         fi
 
-        if [ $expected_good -ne $good_line_new ]; then
-                error "expected $expected_good good lines, but got $good_line_new"
+        if [[ $expected_good -ne $new_good ]]; then
+                error "expected $expected_good good lines, but got $new_good"
                 return 2
         fi
         true
