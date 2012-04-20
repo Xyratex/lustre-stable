@@ -599,6 +599,8 @@ struct ldlm_flock {
         __u64 owner;
         __u64 blocking_owner;
         struct obd_export *blocking_export;
+        /* Protected by the hash lock */
+        __u32 blocking_refs;
         __u32 pid;
 };
 
@@ -653,6 +655,12 @@ struct ldlm_lock {
         /**
          * Protected by lr_lock. Requested mode.
          */
+        /**
+         * Protected by per-bucket exp->exp_flock_hash locks. Per export hash
+         * of locks.
+         */
+        cfs_hlist_node_t         l_exp_flock_hash;
+
         ldlm_mode_t              l_req_mode;
         /**
          * Granted mode, also protected by lr_lock.
@@ -951,6 +959,8 @@ int ldlm_resource_iterate(struct ldlm_namespace *, const struct ldlm_res_id *,
 
 /* ldlm_flock.c */
 int ldlm_flock_completion_ast(struct ldlm_lock *lock, int flags, void *data);
+int ldlm_init_flock_export(struct obd_export *exp);
+void ldlm_destroy_flock_export(struct obd_export *exp);
 
 /* ldlm_extent.c */
 __u64 ldlm_extent_shift_kms(struct ldlm_lock *lock, __u64 old_kms);
