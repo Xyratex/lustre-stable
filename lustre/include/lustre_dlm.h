@@ -121,6 +121,8 @@ typedef enum {
 /* Used to be LDLM_FL_LOCAL      0x004000  moved to non-wire flags */
 /* was LDLM_FL_WARN  until 2.0.0  0x008000 */
 
+#define LDLM_FL_FLOCK_DEADLOCK 0x008000 /* deadlock detected */
+
 #define LDLM_FL_DISCARD_DATA   0x010000 /* discard (no writeback) on cancel */
 
 #define LDLM_FL_NO_TIMEOUT     0x020000 /* Blocked by group lock - wait
@@ -157,7 +159,7 @@ typedef enum {
 #define LDLM_AST_DISCARD_DATA  0x80000000 /* Add FL_DISCARD to blocking ASTs */
 
 /* Flags sent in AST lock_flags to be mapped into the receiving lock. */
-#define LDLM_AST_FLAGS         (LDLM_FL_DISCARD_DATA)
+#define LDLM_AST_FLAGS         (LDLM_FL_DISCARD_DATA|LDLM_FL_FLOCK_DEADLOCK)
 
 /*
  * --------------------------------------------------------------------------

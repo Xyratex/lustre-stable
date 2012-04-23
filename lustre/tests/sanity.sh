@@ -9668,6 +9668,20 @@ test_231b() {
 }
 run_test 231b "must not assert on fully utilized OST request buffer"
 
+test_226() {
+	flock_deadlock $DIR/$tfile
+	local RC=$?
+	case $RC in
+		0)
+		;;
+	      124) error "process hangs on a deadlock"
+		;;
+		*) error "error executing flock_deadlock $DIR/$tfile"
+		;;
+	esac
+}
+run_test 226 "MRP-393: flock deadlock detection does not work properly"
+
 #
 # tests that do cleanup/setup should be run at the end
 #
