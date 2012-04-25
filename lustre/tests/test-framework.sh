@@ -2976,6 +2976,10 @@ at_max_get() {
     at_get $1 at_max
 }
 
+at_min_get() {
+	at_get $1 at_min
+}
+
 at_max_set() {
     local at_max=$1
     shift
