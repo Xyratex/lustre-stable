@@ -1834,7 +1834,7 @@ static inline void ldlm_callback_errmsg(struct ptlrpc_request *req,
                                         const char *msg, int rc,
                                         struct lustre_handle *handle)
 {
-        DEBUG_REQ((req->rq_no_reply || rc) ? D_WARNING : D_DLMTRACE, req,
+        DEBUG_REQ(D_DLMTRACE, req,
                   "%s: [nid %s] [rc %d] [lock "LPX64"]",
                   msg, libcfs_id2str(req->rq_peer), rc,
                   handle ? handle->cookie : 0);
