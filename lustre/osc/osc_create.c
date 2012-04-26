@@ -76,6 +76,7 @@ enum {
         OSCC_THR_STOP,
         OSCC_THR_NR
 };
+
 cfs_completion_t oscc_thr_start;
 cfs_completion_t oscc_thr_stop;
 
@@ -86,7 +87,7 @@ struct osc_create_async_args {
         int                      rq_grow_count;
 };
 
-static int oscc_internal_create(struct osc_creator *oscc);
+static obd_precr_status_t oscc_internal_create(struct osc_creator *oscc);
 static int handle_async_create(struct ptlrpc_request *req, int rc);
 
 static int osc_interpret_create(const struct lu_env *env,
@@ -212,13 +213,8 @@ static int osc_interpret_create(const struct lu_env *env,
 /**
  * Check whether it is possible to get more objects and it has not been started
  * yet by another thread.
- *
- * \retval 0 the OST has no remaining objects, and the sent precreation RPC
- * has not been completed yet.
- * \retval 1 the OST has no remaining object, and will not get any for a
- * potentially very long time
-*/
-static int oscc_internal_create(struct osc_creator *oscc)
+ */
+static obd_precr_status_t oscc_internal_create(struct osc_creator *oscc)
 {
         ENTRY;
 
@@ -226,7 +222,7 @@ static int oscc_internal_create(struct osc_creator *oscc)
 
         /* Do not check for a degraded OST here - bug21563/bug18539 */
         if (oscc->oscc_flags & OSCC_FLAG_RECOVERING)
-                RETURN(1);
+                RETURN(OBD_PRECR_LONG);
 
         /* we need check it before OSCC_FLAG_CREATING - because need
          * see lower number of precreate objects */
@@ -239,7 +235,7 @@ static int oscc_internal_create(struct osc_creator *oscc)
         }
 
         if (oscc->oscc_flags & OSCC_FLAG_CREATING)
-                RETURN(0);
+                RETURN(OBD_PRECR_WAIT);
 
         if (oscc->oscc_grow_count > oscc->oscc_max_grow_count / 2)
                 oscc->oscc_grow_count = oscc->oscc_max_grow_count / 2;
@@ -251,7 +247,7 @@ static int oscc_internal_create(struct osc_creator *oscc)
         cfs_spin_unlock(&oscc_create_lock);
         cfs_waitq_signal(&oscc_create_wq);
 
-        RETURN(1);
+        RETURN(OBD_PRECR_LONG);
 }
 
 static int oscc_has_objects_nolock(struct osc_creator *oscc, int count)
@@ -325,44 +321,42 @@ static int oscc_in_sync(struct osc_creator *oscc)
  * Called with lov_qos_rr::lqr_alloc spinlock held.
  * MUST NON BLOCKING & SLEEPEING INSIDE.
  *
- * \retval 0    the OST has remaining objects, may or may not send precreation
- *              RPC.
- * \retval 1    the OST has no remaining object, and the sent precreation RPC
- *              has not been completed yet.
- * \retval 2    the OST has no remaining object, and will not get any for a
- *              potentially very long time
- * \retval 1000 OSC is unusable
  */
-int osc_precreate(struct obd_export *exp)
+obd_precr_status_t osc_precreate(struct obd_export *exp)
 {
         struct osc_creator *oscc = &exp->exp_obd->u.cli.cl_oscc;
         struct obd_import *imp = exp->exp_imp_reverse;
-        int rc;
+        obd_precr_status_t rc;
+        obd_precr_status_t rc2;
         ENTRY;
 
         LASSERT(oscc != NULL);
         if (imp != NULL && imp->imp_deactive)
-                RETURN(1000);
+                RETURN(OBD_PRECR_UNUSABLE);
 
         /* Handle critical states first */
         cfs_spin_lock(&oscc->oscc_lock);
         if (oscc->oscc_flags & OSCC_FLAG_NOSPC_BLK ||
             oscc->oscc_flags & OSCC_FLAG_RDONLY ||
             oscc->oscc_flags & OSCC_FLAG_EXITING)
-                GOTO(out, rc = 1000);
+                GOTO(out, rc = OBD_PRECR_UNUSABLE);
 
         if ((oscc->oscc_flags & OSCC_FLAG_RECOVERING) ||
             (oscc->oscc_flags & OSCC_FLAG_DEGRADED))
-                GOTO(out, rc = 2);
+                GOTO(out, rc = OBD_PRECR_LONG);
 
         if (oscc_has_objects_nolock(oscc, oscc->oscc_grow_count / 2))
-                GOTO(out, rc = 0);
+                GOTO(out, rc = OBD_PRECR_EXISTS);
 
         /* Return 0, if we have at least one object - bug 22884 */
-        rc = oscc_has_objects_nolock(oscc, 1) ? 0 : 1;
+        rc = oscc_has_objects_nolock(oscc, 1) ?
+                OBD_PRECR_EXISTS : OBD_PRECR_WAIT;
 
-        if (oscc->oscc_flags & OSCC_FLAG_NOSPC)
-                GOTO(out, (rc == 0) ? 0 : 1000);
+        if (oscc->oscc_flags & OSCC_FLAG_NOSPC) {
+                if (rc != OBD_PRECR_EXISTS)
+                        rc = OBD_PRECR_UNUSABLE;
+                GOTO(out, rc);
+        }
 
         /* Do not check for OSCC_FLAG_CREATING flag here, let
          * osc_precreate() call oscc_internal_create() and
@@ -373,7 +367,9 @@ int osc_precreate(struct obd_export *exp)
         /* creating new objects can long time due rpc processing
          * but if rpc was send it need less time
          */
-        rc = oscc_internal_create(oscc);
+        rc2 = oscc_internal_create(oscc);
+        if (rc != OBD_PRECR_EXISTS)
+                rc = rc2;
         EXIT;
 out:
         cfs_spin_unlock(&oscc->oscc_lock);

@@ -108,7 +108,7 @@ struct osc_cache_waiter {
 #define OSCC_FLAG_RDONLY             0x80
 #define OSCC_FLAG_NOSPC_BLK          0x100 /* no more block space on OST */
 
-int osc_precreate(struct obd_export *exp);
+obd_precr_status_t osc_precreate(struct obd_export *exp);
 int osc_create(struct obd_export *exp, struct obdo *oa,
                struct lov_stripe_md **ea, struct obd_trans_info *oti);
 int osc_create_async(struct obd_export *exp, struct obd_info *oinfo,

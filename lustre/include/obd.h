@@ -1257,6 +1257,19 @@ struct md_enqueue_info {
         void                   *mi_cbdata;
 };
 
+typedef enum {
+        /* the target has remaining objects, may or may not send precreation */
+        OBD_PRECR_EXISTS = 0,
+        /* the target has no remaining object, and the sent precreation RPC
+         *              has not been completed yet. */
+        OBD_PRECR_WAIT = 1,
+        /* the target has no remaining object, and will not get any for a
+         *              potentially very long time */
+        OBD_PRECR_LONG = 2,
+        /* the target is unusable */
+        OBD_PRECR_UNUSABLE = 1000,
+} obd_precr_status_t;
+
 struct obd_ops {
         cfs_module_t *o_owner;
         int (*o_iocontrol)(unsigned int cmd, struct obd_export *exp, int len,
@@ -1318,7 +1331,7 @@ struct obd_ops {
         int (*o_preallocate)(struct lustre_handle *, obd_count *req,
                              obd_id *ids);
         /* FIXME: add fid capability support for create & destroy! */
-        int (*o_precreate)(struct obd_export *exp);
+        obd_precr_status_t (*o_precreate)(struct obd_export *exp);
         int (*o_create)(struct obd_export *exp,  struct obdo *oa,
                         struct lov_stripe_md **ea, struct obd_trans_info *oti);
         int (*o_create_async)(struct obd_export *exp,  struct obd_info *oinfo,
