@@ -882,7 +882,7 @@ static int mdt_getattr_name_lock(struct mdt_thread_info *info,
 
         rc = mdt_object_exists(parent);
         if (unlikely(rc == 0)) {
-                LU_OBJECT_DEBUG(D_WARNING, info->mti_env,
+                LU_OBJECT_DEBUG(D_INODE, info->mti_env,
                                 &parent->mot_obj.mo_lu,
                                 "Parent doesn't exist!\n");
                 RETURN(-ESTALE);
@@ -2780,7 +2780,7 @@ static int mdt_recovery(struct mdt_thread_info *info)
         }
 
         if (unlikely(!class_connected_export(req->rq_export))) {
-                CERROR("operation %d on unconnected MDS from %s\n",
+                CDEBUG(D_DLMTRACE, "operation %d on unconnected MDS from %s\n",
                        lustre_msg_get_opc(req->rq_reqmsg),
                        libcfs_id2str(req->rq_peer));
                 /* FIXME: For CMD cleanup, when mds_B stop, the req from
