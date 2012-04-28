@@ -9535,23 +9535,46 @@ test_225b () {
 }
 run_test 225b "Metadata survey sanity with stripe_count = 1"
 
-test_226() {
-	local p="$TMP/$TESTSUITE-$TESTNAME.parameters"
-        save_lustre_params client "llite.*.xattr_cache" > $p
-        lctl set_param llite.*.xattr_cache 1 || { skip "xattr cache is not supported"; return 0; }
+mcreate_path2fid () {
+	local mode=$1
+	local major=$2
+	local minor=$3
+	local name=$4
+	local desc=$5
+	local path=$DIR/$tdir/$name
+	local fid
+	local rc
+	local fid_path
 
-        mkdir -p $DIR/$tdir
-        touch $DIR/$tdir/$tfile
-        $LCTL set_param fail_loc=0x1402
-        # attr pre-2.4.44-7 had a bug: http://git.savannah.gnu.org/cgit/attr.git/commit/?id=93c92ed
-        getfattr -n user.attr $DIR/$tdir/$tfile && error
-        $LCTL set_param fail_loc=0x0
-        rm -rf $DIR/$tdir
+	$MCREATE --mode=$1 --major=$2 --minor=$3 $path || \
+		error "error: cannot create $desc"
 
-        restore_lustre_params < $p
-        rm -f $p
+	fid=$($LFS path2fid $path)
+	rc=$?
+	[ $rc -ne 0 ] && error "error: cannot get fid of a $desc"
+
+	fid_path=$($LFS fid2path $DIR $fid)
+	rc=$?
+	[ $rc -ne 0 ] && error "error: cannot get path of a $desc by fid"
+
+	[ "$path" == "$fid_path" ] || \
+		error "error: fid2path returned \`$fid_path', expected \`$path'"
 }
-run_test 226 "xattr cache should not crash on ENOMEM"
+
+test_226 () {
+	rm -rf $DIR/$tdir
+	mkdir -p $DIR/$tdir
+
+	mcreate_path2fid 0010666 0 0 fifo "FIFO"
+	mcreate_path2fid 0020666 1 3 null "character special file (null)"
+	mcreate_path2fid 0020666 1 255 none "character special file (no device)"
+	mcreate_path2fid 0040666 0 0 dir "directory"
+	mcreate_path2fid 0060666 7 0 loop0 "block special file (loop)"
+	mcreate_path2fid 0100666 0 0 file "regular file"
+	mcreate_path2fid 0120666 0 0 link "symbolic link"
+	mcreate_path2fid 0140666 0 0 sock "socket"
+}
+run_test 226 "call path2fid and fid2path on files of all type"
 
 # LU-1512 try to reuse idle OI blocks
 test_228a() {
@@ -9732,6 +9755,24 @@ test_231b() {
 	sync
 }
 run_test 231b "must not assert on fully utilized OST request buffer"
+
+test_234() {
+	local p="$TMP/$TESTSUITE-$TESTNAME.parameters"
+        save_lustre_params client "llite.*.xattr_cache" > $p
+        lctl set_param llite.*.xattr_cache 1 || { skip "xattr cache is not supported"; return 0; }
+
+        mkdir -p $DIR/$tdir
+        touch $DIR/$tdir/$tfile
+        $LCTL set_param fail_loc=0x1402
+        # attr pre-2.4.44-7 had a bug: http://git.savannah.gnu.org/cgit/attr.git/commit/?id=93c92ed
+        getfattr -n user.attr $DIR/$tdir/$tfile && error
+        $LCTL set_param fail_loc=0x0
+        rm -rf $DIR/$tdir
+
+        restore_lustre_params < $p
+        rm -f $p
+}
+run_test 234 "xattr cache should not crash on ENOMEM"
 
 test_235() {
 	flock_deadlock $DIR/$tfile
