@@ -1767,7 +1767,7 @@ out:
         RETURN(rc);
 }
 
-static int lov_change_cbdata(struct obd_export *exp,
+static int lov_null_data(struct obd_export *exp,
                              struct lov_stripe_md *lsm, ldlm_iterator_t it,
                              void *data)
 {
@@ -1794,7 +1794,7 @@ static int lov_change_cbdata(struct obd_export *exp,
                 submd.lsm_object_id = loi->loi_id;
                 submd.lsm_object_seq = loi->loi_seq;
                 submd.lsm_stripe_count = 0;
-                rc = obd_change_cbdata(lov->lov_tgts[loi->loi_ost_idx]->ltd_exp,
+                rc = obd_null_data(lov->lov_tgts[loi->loi_ost_idx]->ltd_exp,
                                        &submd, it, data);
         }
         RETURN(rc);
@@ -3012,7 +3012,7 @@ struct obd_ops lov_obd_ops = {
         .o_punch               = lov_punch,
         .o_sync                = lov_sync,
         .o_enqueue             = lov_enqueue,
-        .o_change_cbdata       = lov_change_cbdata,
+        .o_null_data           = lov_null_data,
         .o_find_cbdata         = lov_find_cbdata,
         .o_cancel              = lov_cancel,
         .o_cancel_unused       = lov_cancel_unused,

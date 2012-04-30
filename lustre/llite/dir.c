@@ -387,7 +387,7 @@ struct page *ll_get_dir_page(struct file *filp, struct inode *dir, __u64 hash,
         if (!rc) {
                 struct ldlm_enqueue_info einfo = { LDLM_IBITS, mode,
                        ll_md_blocking_ast, ldlm_completion_ast,
-                       NULL, NULL, dir };
+                       NULL, NULL, NULL };
                 struct lookup_intent it = { .it_op = IT_READDIR };
                 struct ptlrpc_request *request;
                 struct md_op_data *op_data;
@@ -410,6 +410,11 @@ struct page *ll_get_dir_page(struct file *filp, struct inode *dir, __u64 hash,
                                PFID(ll_inode2fid(dir)), hash, rc);
                         return ERR_PTR(rc);
                 }
+
+                CDEBUG(D_INODE, "setting lr_lvb_inode to inode %p (%lu/%u)\n",
+                       dir, dir->i_ino, dir->i_generation);
+                md_set_lock_data(ll_i2sbi(dir)->ll_md_exp,
+                                 &it.d.lustre.it_lock_handle, dir, NULL);
         } else {
                 /* for cross-ref object, l_ast_data of the lock may not be set,
                  * we reset it here */

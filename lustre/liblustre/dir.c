@@ -100,6 +100,9 @@ static int llu_dir_do_readpage(struct inode *inode, struct page *page)
                         CERROR("lock enqueue: err: %d\n", rc);
                         RETURN(rc);
                 }
+
+                md_set_lock_data(sbi->ll_md_exp, &it.d.lustre.it_lock_handle,
+                                 inode, NULL);
         }
         ldlm_lock_dump_handle(D_OTHER, &lockh);
 

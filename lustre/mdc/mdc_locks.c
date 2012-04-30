@@ -134,9 +134,10 @@ int mdc_set_lock_data(struct obd_export *exp, __u64 *lockh, void *data,
         LASSERT(lock != NULL);
         lock_res_and_lock(lock);
 #ifdef __KERNEL__
-        if (lock->l_ast_data && lock->l_ast_data != data) {
+        if (lock->l_resource->lr_lvb_inode &&
+            lock->l_resource->lr_lvb_inode != data) {
                 struct inode *new_inode = data;
-                struct inode *old_inode = lock->l_ast_data;
+                struct inode *old_inode = lock->l_resource->lr_lvb_inode;
                 LASSERTF(old_inode->i_state & I_FREEING,
                          "Found existing inode %p/%lu/%u state %lu in lock: "
                          "setting data to %p/%lu/%u\n", old_inode,
@@ -145,7 +146,7 @@ int mdc_set_lock_data(struct obd_export *exp, __u64 *lockh, void *data,
                          new_inode, new_inode->i_ino, new_inode->i_generation);
         }
 #endif
-        lock->l_ast_data = data;
+        lock->l_resource->lr_lvb_inode = data;
         if (bits)
                 *bits = lock->l_policy_data.l_inodebits.bits;
 
@@ -189,19 +190,32 @@ int mdc_cancel_unused(struct obd_export *exp,
         RETURN(rc);
 }
 
-int mdc_change_cbdata(struct obd_export *exp,
+int mdc_null_data(struct obd_export *exp,
                       const struct lu_fid *fid,
                       ldlm_iterator_t it, void *data)
 {
         struct ldlm_res_id res_id;
+        struct ldlm_resource *res;
+        struct ldlm_namespace *ns = class_exp2obd(exp)->obd_namespace;
         ENTRY;
 
-        fid_build_reg_res_name(fid, &res_id);
-        ldlm_resource_iterate(class_exp2obd(exp)->obd_namespace,
-                              &res_id, it, data);
+        if (ns == NULL) {
+                CERROR("must pass in namespace\n");
+                LBUG();
+        }
 
-        EXIT;
-        return 0;
+        fid_build_reg_res_name(fid, &res_id);
+
+        res = ldlm_resource_get(ns, NULL, &res_id, 0, 0);
+        if(res == NULL)
+                RETURN(0);
+
+        lock_res(res);
+        res->lr_lvb_inode = NULL;
+        unlock_res(res);
+
+        ldlm_resource_putref(res);
+        RETURN(0);
 }
 
 /* find any ldlm lock of the inode in mdc

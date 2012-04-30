@@ -2073,6 +2073,18 @@ static int mdc_cancel_for_recovery(struct ldlm_lock *lock)
         RETURN(1);
 }
 
+static int mdc_resource_inode_free(struct ldlm_resource *res)
+{
+        if (res->lr_lvb_inode)
+                res->lr_lvb_inode = NULL;
+
+        return 0;
+}
+
+struct ldlm_valblock_ops inode_lvbo = {
+        lvbo_free: mdc_resource_inode_free
+};
+
 static int mdc_setup(struct obd_device *obd, struct lustre_cfg *cfg)
 {
         struct client_obd *cli = &obd->u.cli;
@@ -2101,6 +2113,8 @@ static int mdc_setup(struct obd_device *obd, struct lustre_cfg *cfg)
         ptlrpc_lprocfs_register_obd(obd);
 
         ns_register_cancel(obd->obd_namespace, mdc_cancel_for_recovery);
+
+        obd->obd_namespace->ns_lvbo = &inode_lvbo;
 
         rc = obd_llog_init(obd, &obd->obd_olg, obd, NULL);
         if (rc) {
@@ -2389,7 +2403,7 @@ struct obd_ops mdc_obd_ops = {
 
 struct md_ops mdc_md_ops = {
         .m_getstatus        = mdc_getstatus,
-        .m_change_cbdata    = mdc_change_cbdata,
+        .m_null_data        = mdc_null_data,
         .m_find_cbdata      = mdc_find_cbdata,
         .m_close            = mdc_close,
         .m_create           = mdc_create,

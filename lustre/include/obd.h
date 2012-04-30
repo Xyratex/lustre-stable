@@ -1371,7 +1371,7 @@ struct obd_ops {
         int (*o_enqueue)(struct obd_export *, struct obd_info *oinfo,
                          struct ldlm_enqueue_info *einfo,
                          struct ptlrpc_request_set *rqset);
-        int (*o_change_cbdata)(struct obd_export *, struct lov_stripe_md *,
+        int (*o_null_data)(struct obd_export *, struct lov_stripe_md *,
                                ldlm_iterator_t it, void *data);
         int (*o_find_cbdata)(struct obd_export *, struct lov_stripe_md *,
                              ldlm_iterator_t it, void *data);
@@ -1473,7 +1473,7 @@ struct lookup_intent;
 struct md_ops {
         int (*m_getstatus)(struct obd_export *, struct lu_fid *,
                            struct obd_capa **);
-        int (*m_change_cbdata)(struct obd_export *, const struct lu_fid *,
+        int (*m_null_data)(struct obd_export *, const struct lu_fid *,
                                ldlm_iterator_t, void *);
         int (*m_find_cbdata)(struct obd_export *, const struct lu_fid *,
                              ldlm_iterator_t, void *);

@@ -3191,7 +3191,7 @@ static int osc_set_data_with_check(struct lustre_handle *lockh,
         return set;
 }
 
-static int osc_change_cbdata(struct obd_export *exp, struct lov_stripe_md *lsm,
+static int osc_null_data(struct obd_export *exp, struct lov_stripe_md *lsm,
                              ldlm_iterator_t replace, void *data)
 {
         struct ldlm_res_id res_id;
@@ -4608,7 +4608,7 @@ struct obd_ops osc_obd_ops = {
         .o_punch                = osc_punch,
         .o_sync                 = osc_sync,
         .o_enqueue              = osc_enqueue,
-        .o_change_cbdata        = osc_change_cbdata,
+        .o_null_data            = osc_null_data,
         .o_find_cbdata          = osc_find_cbdata,
         .o_cancel               = osc_cancel,
         .o_cancel_unused        = osc_cancel_unused,

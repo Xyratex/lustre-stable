@@ -1361,7 +1361,7 @@ static int lmv_getattr(struct obd_export *exp, struct md_op_data *op_data,
         RETURN(rc);
 }
 
-static int lmv_change_cbdata(struct obd_export *exp, const struct lu_fid *fid,
+static int lmv_null_data(struct obd_export *exp, const struct lu_fid *fid,
                              ldlm_iterator_t it, void *data)
 {
         struct obd_device   *obd = exp->exp_obd;
@@ -1382,7 +1382,7 @@ static int lmv_change_cbdata(struct obd_export *exp, const struct lu_fid *fid,
          * space of mds storing inode.
          */
         for (i = 0; i < lmv->desc.ld_tgt_count; i++)
-                md_change_cbdata(lmv->tgts[i].ltd_exp, fid, it, data);
+                md_null_data(lmv->tgts[i].ltd_exp, fid, it, data);
 
         RETURN(0);
 }
@@ -3215,7 +3215,7 @@ struct obd_ops lmv_obd_ops = {
 
 struct md_ops lmv_md_ops = {
         .m_getstatus            = lmv_getstatus,
-        .m_change_cbdata        = lmv_change_cbdata,
+        .m_null_data            = lmv_null_data,
         .m_find_cbdata          = lmv_find_cbdata,
         .m_close                = lmv_close,
         .m_create               = lmv_create,

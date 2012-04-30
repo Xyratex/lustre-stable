@@ -1453,28 +1453,6 @@ static inline int obd_iocontrol(unsigned int cmd, struct obd_export *exp,
         RETURN(rc);
 }
 
-static inline int obd_enqueue_rqset(struct obd_export *exp,
-                                    struct obd_info *oinfo,
-                                    struct ldlm_enqueue_info *einfo)
-{
-        struct ptlrpc_request_set *set = NULL;
-        int rc;
-        ENTRY;
-
-        EXP_CHECK_DT_OP(exp, enqueue);
-        EXP_COUNTER_INCREMENT(exp, enqueue);
-
-        set =  ptlrpc_prep_set();
-        if (set == NULL)
-                RETURN(-ENOMEM);
-
-        rc = OBP(exp->exp_obd, enqueue)(exp, oinfo, einfo, set);
-        if (rc == 0)
-                rc = ptlrpc_set_wait(set);
-        ptlrpc_set_destroy(set);
-        RETURN(rc);
-}
-
 static inline int obd_enqueue(struct obd_export *exp,
                               struct obd_info *oinfo,
                               struct ldlm_enqueue_info *einfo,
@@ -1490,17 +1468,17 @@ static inline int obd_enqueue(struct obd_export *exp,
         RETURN(rc);
 }
 
-static inline int obd_change_cbdata(struct obd_export *exp,
+static inline int obd_null_data(struct obd_export *exp,
                                     struct lov_stripe_md *lsm,
                                     ldlm_iterator_t it, void *data)
 {
         int rc;
         ENTRY;
 
-        EXP_CHECK_DT_OP(exp, change_cbdata);
-        EXP_COUNTER_INCREMENT(exp, change_cbdata);
+        EXP_CHECK_DT_OP(exp, null_data);
+        EXP_COUNTER_INCREMENT(exp, null_data);
 
-        rc = OBP(exp->exp_obd, change_cbdata)(exp, lsm, it, data);
+        rc = OBP(exp->exp_obd, null_data)(exp, lsm, it, data);
         RETURN(rc);
 }
 
@@ -1861,15 +1839,15 @@ static inline int md_getattr(struct obd_export *exp, struct md_op_data *op_data,
         RETURN(rc);
 }
 
-static inline int md_change_cbdata(struct obd_export *exp,
+static inline int md_null_data(struct obd_export *exp,
                                    const struct lu_fid *fid,
                                    ldlm_iterator_t it, void *data)
 {
         int rc;
         ENTRY;
-        EXP_CHECK_MD_OP(exp, change_cbdata);
-        EXP_MD_COUNTER_INCREMENT(exp, change_cbdata);
-        rc = MDP(exp->exp_obd, change_cbdata)(exp, fid, it, data);
+        EXP_CHECK_MD_OP(exp, null_data);
+        EXP_MD_COUNTER_INCREMENT(exp, null_data);
+        rc = MDP(exp->exp_obd, null_data)(exp, fid, it, data);
         RETURN(rc);
 }
 
