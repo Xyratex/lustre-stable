@@ -1096,10 +1096,11 @@ static int osc_lock_enqueue_wait(const struct lu_env *env,
                 /* Now @scan is conflicting with @lock, this means current
                  * thread have to sleep for @scan being destroyed. */
                 if (scan_ols->ols_owner == osc_env_io(env)) {
-                        CERROR("DEADLOCK POSSIBLE!\n");
-                        CL_LOCK_DEBUG(D_ERROR, env, scan, "queued.\n");
-                        CL_LOCK_DEBUG(D_ERROR, env, lock, "queuing.\n");
-                        libcfs_debug_dumpstack(NULL);
+                        CDEBUG(D_DLMTRACE, "DEADLOCK POSSIBLE!\n");
+                        CL_LOCK_DEBUG(D_DLMTRACE, env, scan, "queued.\n");
+                        CL_LOCK_DEBUG(D_DLMTRACE, env, lock, "queuing.\n");
+                        if (cfs_cdebug_show(D_DLMTRACE, DEBUG_SUBSYSTEM))
+                                libcfs_debug_dumpstack(NULL);
                 }
                 cl_lock_get_trust(scan);
                 conflict = scan;
