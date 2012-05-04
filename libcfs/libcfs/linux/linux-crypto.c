@@ -32,12 +32,80 @@
 #include <linux/scatterlist.h>
 #include <libcfs/libcfs.h>
 #include <libcfs/linux/linux-crypto.h>
-
 /**
  *  Array of  hash algorithm speed in MByte per second
  */
 static int cfs_crypto_hash_speeds[CFS_HASH_ALG_MAX];
 
+
+#ifndef HAVE_STRUCT_HASH_DESC
+/** 2.6.18 kernel have no crypto_hash function
+ *  this part was copied from lustre_compat25.h */
+#define crypto_hash     crypto_tfm
+struct hash_desc {
+        struct crypto_hash      *tfm;
+        unsigned int            flags;
+};
+
+static inline
+struct crypto_hash *crypto_alloc_hash(const char *alg, unsigned int type,
+                                      unsigned int mask)
+{
+       return crypto_alloc_tfm(alg, 0);
+}
+
+static inline void crypto_free_hash(struct crypto_hash *tfm)
+{
+        crypto_free_tfm(tfm);
+}
+
+static inline int crypto_hash_init(struct hash_desc *desc)
+{
+       crypto_digest_init(desc->tfm);
+       return 0;
+}
+
+static inline int crypto_hash_update(struct hash_desc *desc,
+                                        struct scatterlist *sg,
+                                        unsigned int nbytes)
+{
+
+        if (desc->tfm->crt_digest.dit_update == NULL)
+                return -1;
+
+        /* Our self-made scatter list has only one segment,
+         * see cfs_crypto_hash_update_page cfs_crypto_hash_update
+         * cfs_crypto_hash_digest */
+        LASSERT(nbytes == sg->length);
+        crypto_digest_update(desc->tfm, sg, 1);
+
+        return 0;
+}
+static inline int crypto_hash_digest(struct hash_desc *desc,
+                                     struct scatterlist *sg,
+                                     unsigned int nbytes, unsigned char *out)
+{
+        crypto_hash_update(desc, sg, nbytes);
+        crypto_digest_final(desc->tfm, out);
+        return 0;
+}
+
+static inline int crypto_hash_final(struct hash_desc *desc, unsigned char *out)
+{
+        crypto_digest_final(desc->tfm, out);
+        return 0;
+}
+
+static inline struct crypto_tfm *crypto_hash_tfm(struct crypto_hash *tfm)
+{
+        return tfm;
+}
+
+#define crypto_hash_setkey(tfm, key, keylen) \
+                        crypto_digest_setkey(tfm, key, keylen)
+#define crypto_hash_digestsize(tfm)  crypto_tfm_alg_digestsize(tfm)
+#define crypto_hash_blocksize(tfm)   crypto_tfm_alg_blocksize(tfm)
+#endif
 
 static int cfs_crypto_hash_alloc(unsigned char alg_id,
                                  const struct cfs_crypto_hash_type **type,
@@ -54,6 +122,10 @@ static int cfs_crypto_hash_alloc(unsigned char alg_id,
                 return -EINVAL;
         }
         desc->tfm = crypto_alloc_hash((*type)->cht_fmt_name, 0, 0);
+
+        if (desc->tfm == NULL)
+                return -EINVAL;
+
         if (IS_ERR(desc->tfm)) {
                 CDEBUG(D_INFO, "Failed to alloc crypto hash %s\n",
                        (*type)->cht_fmt_name);
@@ -61,6 +133,15 @@ static int cfs_crypto_hash_alloc(unsigned char alg_id,
         }
 
         desc->flags = 0;
+
+        /** Shash have different logic for initialization then digest
+         * shash: crypto_hash_setkey, crypto_hash_init
+         * digest: crypto_digest_init, crypto_digest_setkey
+         */
+
+#ifndef HAVE_STRUCT_SHASH_ALG
+        crypto_hash_init(desc);
+#endif
         if (key != NULL) {
                 err = crypto_hash_setkey(desc->tfm, key, key_len);
         } else if ((*type)->cht_key != 0) {
@@ -73,7 +154,17 @@ static int cfs_crypto_hash_alloc(unsigned char alg_id,
                 crypto_free_hash(desc->tfm);
                 return err;
         }
+
+        CDEBUG(D_INFO, "Using crypto hash: %s (%s) speed %d MB/s\n",
+               crypto_tfm_alg_name(crypto_hash_tfm(desc->tfm)),
+               crypto_tfm_alg_driver_name(crypto_hash_tfm(desc->tfm)),
+               cfs_crypto_hash_speeds[alg_id]);
+
+#ifdef HAVE_STRUCT_SHASH_ALG
         return crypto_hash_init(desc);
+#else
+        return 0;
+#endif
 }
 
 int cfs_crypto_hash_digest(unsigned char alg_id,
@@ -81,7 +172,7 @@ int cfs_crypto_hash_digest(unsigned char alg_id,
                            unsigned char *key, unsigned int key_len,
                            unsigned char *hash, unsigned int *hash_len)
 {
-        struct scatterlist      sl;
+        struct scatterlist      sl = {0};
         struct hash_desc        hdesc;
         int                     err;
         const struct cfs_crypto_hash_type    *type;
@@ -98,7 +189,7 @@ int cfs_crypto_hash_digest(unsigned char alg_id,
                 crypto_free_hash(hdesc.tfm);
                 return -ENOSPC;
         }
-        sg_init_one(&sl, buf, buf_len);
+        sg_set_buf(&sl, (void *)buf, buf_len);
 
         hdesc.flags = 0;
         err = crypto_hash_digest(&hdesc, &sl, sl.length, hash);
@@ -148,7 +239,7 @@ int cfs_crypto_hash_update(struct cfs_crypto_hash_desc *hdesc,
 {
         struct scatterlist      sl = {0};
 
-        sg_set_buf(&sl, buf, buf_len);
+        sg_set_buf(&sl, (void *)buf, buf_len);
 
         return crypto_hash_update((struct hash_desc *)hdesc, &sl, sl.length);
 }
@@ -185,7 +276,7 @@ static void cfs_crypto_performance_test(unsigned char alg_id,
                                         unsigned int buf_len)
 {
         unsigned long                   start, end;
-        int                             bcount, err;
+        int                             bcount, err = 0;
         int                             sec = 1; /* do test only 1 sec */
         unsigned char                   hash[64];
         unsigned int                    hash_len = 64;
@@ -230,7 +321,10 @@ static int cfs_crypto_test_hashes(void)
 {
         unsigned char           i;
         unsigned char           *data;
-        unsigned int            j, data_len = 1 * 1024 * 1024;
+        unsigned int            j;
+        /* Data block size for testing hash. Maximum
+         * kmalloc size for 2.6.18 kernel is 128K */
+        unsigned int            data_len = 128 * 1024;
 
         data = cfs_alloc(data_len, 0);
         if (data == NULL) {

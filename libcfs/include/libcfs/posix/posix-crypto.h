@@ -33,8 +33,8 @@
 /**
  *      CRC32 functions.
  */
-int crc32init_le();
-unsigned int crc32_le();
+int crc32init_le(void);
+unsigned int crc32_le(unsigned int crc, unsigned char const *p, size_t len);
 
 /**
  *      Adler32 functions.

@@ -28,7 +28,7 @@ void crc32init_le(void)
         }
 }
 
-unsigned int  crc32_le(unsigned int crc, unsigned char const *p, size_t len)
+unsigned int crc32_le(unsigned int crc, unsigned char const *p, size_t len)
 {
         const unsigned int      *b = (unsigned int *)p;
         const unsigned int      *tab = crc32table_le;
