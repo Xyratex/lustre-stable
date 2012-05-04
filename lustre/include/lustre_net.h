@@ -278,6 +278,7 @@ union ptlrpc_async_args {
 
 struct ptlrpc_request_set;
 typedef int (*set_interpreter_func)(struct ptlrpc_request_set *, void *, int);
+typedef int (*set_producer_func)(struct ptlrpc_request_set *, void *);
 
 /**
  * Definition of request set structure.
@@ -308,6 +309,8 @@ struct ptlrpc_request_set {
         set_interpreter_func  set_interpret;
         /** opaq argument passed to completion \a set_interpret callback. */
         void                 *set_arg;
+	/** rq_status of requests that have been freed already */
+	int                   set_rc;
         /**
          * Lock for \a set_new_requests manipulations
          * locked so that any old caller can communicate requests to
@@ -316,6 +319,14 @@ struct ptlrpc_request_set {
         cfs_spinlock_t        set_new_req_lock;
         /** List of new yet unsent requests. Only used with ptlrpcd now. */
         cfs_list_t            set_new_requests;
+
+	/** Additional fields used by the flow control extension */
+	/** Maximum number of RPCs in flight */
+	int                   set_max_inflight;
+	/** Callback function used to generate RPCs */
+	set_producer_func     set_producer;
+	/** opaq argument passed to the producer callback */
+	void                 *set_producer_arg;
 };
 
 /**
@@ -1422,6 +1433,8 @@ void ptlrpc_cleanup_imp(struct obd_import *imp);
 void ptlrpc_abort_set(struct ptlrpc_request_set *set);
 
 struct ptlrpc_request_set *ptlrpc_prep_set(void);
+struct ptlrpc_request_set *ptlrpc_prep_fcset(int max, set_producer_func func,
+					     void *arg);
 int ptlrpc_set_add_cb(struct ptlrpc_request_set *set,
                       set_interpreter_func fn, void *data);
 int ptlrpc_set_next_timeout(struct ptlrpc_request_set *);
