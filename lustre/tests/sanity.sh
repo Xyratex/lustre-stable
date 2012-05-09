@@ -1,6 +1,4 @@
 #!/bin/bash
-# -*- mode: Bash; tab-width: 8; indent-tabs-mode: t; -*-
-# vim:autoindent:shiftwidth=8:tabstop=8:
 #
 # Run select tests by setting ONLY, or as arguments to the script.
 # Skip specific tests by setting EXCEPT.
