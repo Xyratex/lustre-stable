@@ -2843,6 +2843,47 @@ test_62() {
 }
 run_test 62 "start with disabled journal"
 
+test_63() { # MRP-153
+	local paramkey="mgsnode"
+	local paramval1="192.0.2.254@tcp" # Reserved IPs, see RFC 5735
+	local paramval2="192.0.2.255@tcp"
+	local params
+	local count
+
+	stopall
+
+	do_facet mds "$TUNEFS --erase-params `mdsdevname 1` >/dev/null" || error "tunefs failed"
+
+	# Check that parameter is added correctly
+	do_facet mds "$TUNEFS --param $paramkey=$paramval1 `mdsdevname 1` >/dev/null" \
+		|| error "tunefs failed"
+	params=`do_facet mds "$TUNEFS --print \`mdsdevname 1\`" || error "tunefs failed" `
+	params=${params#*Permanent}
+	count=`echo $params | tr ' ' '\n' | grep -c $paramkey=$paramval1`
+	[ $count = "1" ] || error "on-disk parameter not added correctly via tunefs"
+
+	# Check that parameter replaces existing instances when added
+	do_facet mds "$TUNEFS --param $paramkey=$paramval2 `mdsdevname 1` >/dev/null" \
+		|| error "tunefs failed"
+	params=`do_facet mds "$TUNEFS --print \`mdsdevname 1\`" || error "tunefs failed" `
+	params=${params#*Permanent}
+	count=`echo $params | tr ' ' '\n' | grep -c $paramkey=`
+	[ $count = "1" ] || error "on-disk parameter not replaced correctly via tunefs"
+	count=`echo $params | tr ' ' '\n' | grep -c $paramkey=$paramval2`
+	[ $count = "1" ] || error "on-disk parameter not replaced correctly via tunefs"
+
+	#Check that a parameter is erased properly
+	do_facet mds "$TUNEFS --erase-param $paramkey `mdsdevname 1` >/dev/null" \
+		|| error "tunefs failed"
+	params=`do_facet mds "$TUNEFS --print \`mdsdevname 1\`" || error "tunefs failed" `
+	params=${params#*Permanent}
+	count=`echo $params | tr ' ' '\n' | grep -c $paramkey=`
+	[ $count = "0" ] || error "on-disk parameter not erased correctly via tunefs"
+
+	reformat
+}
+run_test 63 "check tunefs correctly handles parameter addition and removal"
+
 if ! combined_mgs_mds ; then
 	stop mgs
 fi

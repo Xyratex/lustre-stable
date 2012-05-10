@@ -86,6 +86,8 @@
 #define PATH_MAX 4096
 #endif
 
+/* Maximum length of on-disk parameters in the form key=<value>. */
+#define PARAM_MAX 256
 #define MAX_LOOP_DEVICES 16
 #define L_BLOCK_SIZE 4096
 #define INDEX_UNASSIGNED 0xFFFF
@@ -143,6 +145,7 @@ void usage(FILE *out)
                 "\t\t--stripe-count-hint=#N : for optimizing MDT inode size\n"
                 "\t\t--iam-dir: use IAM directory format, not ext3 compatible\n"
 #else
+                "\t\t--erase-param <key> : erase all old instances of param <key>\n"
                 "\t\t--erase-params : erase all old parameter settings\n"
                 "\t\t--nomgs: turn off MGS service on this MDT\n"
                 "\t\t--writeconf: erase all config logs for this fs.\n"
@@ -1364,11 +1367,13 @@ static int add_param(char *buf, char *key, char *val)
 {
         int end = sizeof(((struct lustre_disk_data *)0)->ldd_params);
         int start = strlen(buf);
+        int vallen = strlen(val);
         int keylen = 0;
 
         if (key)
                 keylen = strlen(key);
-        if (start + 1 + keylen + strlen(val) >= end) {
+        if (start + 1 + keylen + vallen >= end ||
+            keylen + vallen > PARAM_MAX) {
                 fprintf(stderr, "%s: params are too long-\n%s %s%s\n",
                         progname, buf, key ? key : "", val);
                 return 1;
@@ -1377,6 +1382,148 @@ static int add_param(char *buf, char *key, char *val)
         sprintf(buf + start, " %s%s", key ? key : "", val);
         return 0;
 }
+
+/**
+ * Used to discriminate between parameters given in an "--erase-param" option,
+ * and those given in a "--param" option.
+ */
+enum param_type {
+        /** Parameter is argument in an "--erase-param" option. */
+        PT_ERASE,
+        /** Parameter is argument in a "--param" option. */
+        PT_NEW
+};
+
+/**
+ * Removes all existing instances of the parameter passed in \a param, that are
+ * in the form of " key=<value>", from the character buffer at \a buf.
+
+ * The parameter in \a param can be either in the form of "key" when the call is
+ * made from \a parse_opts() when handling an "--erase-param" option, or in the
+ * form of "key=<value>" when the call is made from \a parse_opts() handling a
+ * "--param" option.
+ *
+ * \param buf the buffer holding on-disk server parameters.
+ * \param param the parameter whose instances are to be removed from \a buf.
+ * \param type denotes the type of option the parameter in \a param is being
+ * used with, "--erase-param" or "--param".
+ *
+ * \retval 0 success.
+ * \retval EINVAL failure, invalid input parameter.
+ */
+static int erase_param(const char * const buf, const char * const param,
+                       enum param_type type)
+{
+        char *found;
+        char *space;
+        char search[PARAM_MAX + 2];
+
+        if (!strlen(buf))
+                return EINVAL;
+        if (strlen(param) > PARAM_MAX) {
+                fprintf(stderr, "%s: param to erase is too long-\n%s\n",
+                        progname, param);
+                return EINVAL;
+        }
+
+        search[0] = ' ';
+
+        /* Populate the rest of the 'search' array depending on what type of
+         * option is being handled in parse_opts().
+         */
+        if (type == PT_NEW) {
+                char *keyend;
+                keyend = strchr(param, '=');
+                if (!keyend)
+                        return EINVAL;
+                strncpy(search + 1, param, keyend - param + 1);
+                search[keyend - param + 2] = '\0';
+        } else if (type == PT_ERASE) {
+                strcpy(search + 1, param);
+                strcat(search, "=");
+        } else {
+                return EINVAL;
+        }
+
+        while (1) {
+                found = strstr(buf, search);
+                if (!found)
+                        return 0;
+                space = strchr(found + 1, ' ');
+                if (space) {
+                        memmove(found, space, strlen(space) + 1);
+                        continue;
+                } else {
+                        /* Reached the end of the string at buf; parameter at
+                         * found is the last one.
+                         */
+                        *found = '\0';
+                        return 0;
+                }
+        }
+}
+
+#ifdef TUNEFS
+/**
+ * Checks whether the parameter at \a param, given in the form of "key=<value>"
+ * is the first instance of this parameter type specified in the command line.
+ *
+ * \param argv array of program argument strings from \a main().
+ * \param argvidx index in \a argv of the parameter currently being handled in
+ * \a parse_opts().
+ * \param param the parameter to be searched, in the form of
+ * \a "key=<value>".
+ *
+ * \retval 0 parameter instance is not the first parameter instance of this
+ * type specified in the command line.
+ * \retval 1 parameter instance is the first parameter instance of this
+ * type specified in the command line.
+ * \retval EINVAL invalid input parameter.
+ */
+static int param_is_first(char * const argv[], const int argvidx,
+                          const char *const param)
+{
+        int i;
+        char *keyend;
+        size_t keylen;
+        size_t longkeylen;
+        char key[PARAM_MAX + 1];
+        char longkey[PARAM_MAX + 9];
+
+        if (strlen(param) > PARAM_MAX) {
+                fprintf(stderr, "%s: param to erase is too long-\n%s\n",
+                        progname, param);
+                return EINVAL;
+        }
+
+        keyend = strchr(param, '=');
+
+        /* All parameters handled by tunefs.lustre are of the form "key=value".
+         */
+        if (!keyend)
+                return EINVAL;
+
+        /* Get the parameter key. */
+        strncpy(key, param, keyend - param + 1);
+        key[keyend - param + 1] = '\0';
+        keylen = strlen(key);
+
+        /* Command line options can be given either in the form
+         * "--param key=<value>", or in the form "--param=key=value"; in the
+         * latter case, the string in argv will also contain the "--param="
+         * substring; produce a longkey to cover the latter case.
+         */
+        strcpy(longkey, "--param=");
+        strcat(longkey, key);
+        longkeylen = strlen(longkey);
+
+        for (i = argvidx - 1; i > 0; i--)
+                if (!strncmp(argv[i], key, keylen) ||
+                    !strncmp(argv[i], longkey, longkeylen))
+                        return 0;
+        return 1;
+}
+#endif
 
 /* from mount_lustre */
 /* Get rid of symbolic hostnames for tcp, since kernel can't do lookups */
@@ -1436,6 +1583,7 @@ int parse_opts(int argc, char *const argv[], struct mkfs_opts *mop,
                 {"configdev", 1, 0, 'C'},
                 {"device-size", 1, 0, 'd'},
                 {"dryrun", 0, 0, 'n'},
+                {"erase-param", 1, 0, 'E'},
                 {"erase-params", 0, 0, 'e'},
                 {"failnode", 1, 0, 'f'},
                 {"failover", 1, 0, 'f'},
@@ -1462,7 +1610,7 @@ int parse_opts(int argc, char *const argv[], struct mkfs_opts *mop,
                 {"network", 1, 0, 't'},
                 {0, 0, 0, 0}
         };
-        char *optstring = "b:c:C:d:ef:Ghi:k:L:m:MnNo:Op:Pqrs:t:Uu:vw";
+        char *optstring = "b:c:C:d:E:ef:Ghi:k:L:m:MnNo:Op:Pqrs:t:Uu:vw";
         int opt;
         int rc, longidx;
         int failnode_set = 0, servicenode_set = 0;
@@ -1506,6 +1654,14 @@ int parse_opts(int argc, char *const argv[], struct mkfs_opts *mop,
                         return 1;
                 case 'd':
                         mop->mo_device_sz = atol(optarg);
+                        break;
+                case 'E':
+                        rc = erase_param(mop->mo_ldd.ldd_params, optarg,
+                                         PT_ERASE);
+                        if (rc == EINVAL)
+                                return rc;
+                        /* Must update the mgs logs */
+                        mop->mo_ldd.ldd_flags |= LDD_F_UPDATE;
                         break;
                 case 'e':
                         mop->mo_ldd.ldd_params[0] = '\0';
@@ -1621,6 +1777,21 @@ int parse_opts(int argc, char *const argv[], struct mkfs_opts *mop,
                         mop->mo_ldd.ldd_flags |= LDD_F_SV_TYPE_OST;
                         break;
                 case 'p':
+#ifdef TUNEFS
+                        /* Erase all stored instances of the parameter, when the
+                         * first parameter instance in the command line is
+                         * handled.
+                         */
+                        rc = param_is_first(argv, optind - 1, optarg);
+                        if (rc == EINVAL)
+                                return rc;
+                        if (rc == 1) {
+                                erase_param(mop->mo_ldd.ldd_params, optarg,
+                                            PT_NEW);
+                                if (rc == EINVAL)
+                                        return rc;
+                        }
+#endif
                         rc = add_param(mop->mo_ldd.ldd_params, NULL, optarg);
                         if (rc)
                                 return rc;
