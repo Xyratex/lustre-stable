@@ -8,22 +8,6 @@ libcfs-linux-objs += linux-utils.o linux-module.o
 libcfs-linux-objs += linux-crypto.o linux-crypto-crc32.o
 libcfs-linux-objs += linux-crypto-adler.o
 
-libcfs-pclmul-obj :=
-
-ifeq ($(ARCH),x86)
-libcfs-linux-objs += linux-crypto-crc32pclmul.o
-libcfs-pclmul-obj += crc32-pclmul_asm.o
-endif
-ifeq ($(ARCH),i386)
-libcfs-linux-objs += linux-crypto-crc32pclmul.o
-libcfs-pclmul-obj += crc32-pclmul_asm.o
-endif
-ifeq ($(ARCH),x86_64)
-libcfs-linux-objs += linux-crypto-crc32pclmul.o
-libcfs-pclmul-obj += crc32-pclmul_asm.o
-endif
-
-
 
 default: all
 
@@ -43,7 +27,7 @@ endif
 
 libcfs-all-objs := debug.o fail.o nidstrings.o lwt.o module.o tracefile.o watchdog.o \
 		libcfs_string.o hash.o kernel_user_comm.o prng.o workitem.o \
-		upcall_cache.o $(libcfs-pclmul-obj)
+		upcall_cache.o
 
 libcfs-objs := $(libcfs-linux-objs) $(libcfs-all-objs)
 

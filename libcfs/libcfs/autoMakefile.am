@@ -46,11 +46,6 @@ libcfs_a_SOURCES= posix/posix-debug.c user-prim.c user-lock.c user-tcpip.c \
                   prng.c user-bitops.c user-mem.c hash.c kernel_user_comm.c \
                   workitem.c fail.c user-crypto.c posix/posix-crc32.c \
                   posix/posix-adler.c
-
-if ARCH_x86
-libcfs_a_SOURCES += user-crc32pclmul.c crc32-pclmul_asm.S
-endif
-
 libcfs_a_CPPFLAGS = $(LLCPPFLAGS)
 libcfs_a_CFLAGS = $(LLCFLAGS)
 endif

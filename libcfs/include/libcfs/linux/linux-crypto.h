@@ -41,9 +41,3 @@ void cfs_crypto_crc32_unregister(void);
  */
 int cfs_crypto_adler32_register(void);
 void cfs_crypto_adler32_unregister(void);
-
-/**
- * Functions for start/stop shash crc32 pclmulqdq
- */
-int cfs_crypto_crc32_pclmul_register(void);
-void cfs_crypto_crc32_pclmul_unregister(void);
