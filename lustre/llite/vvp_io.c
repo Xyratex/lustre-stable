@@ -666,16 +666,16 @@ static int vvp_io_kernel_fault(struct vvp_fault_io *cfio)
                 return 0;
         }
 
+        if (unlikely (cfio->fault.ft_flags & (VM_FAULT_NOPAGE|VM_FAULT_OOM))) {
+                CDEBUG(D_PAGE, "got addr %p - OOM\n",
+                       cfio->fault.ft_vmf->virtual_address);
+                return -ENOMEM;
+        }
+
         if (unlikely (cfio->fault.ft_flags & VM_FAULT_ERROR)) {
                 CDEBUG(D_PAGE, "got addr %p - SIGBUS\n",
                        cfio->fault.ft_vmf->virtual_address);
                 return -EFAULT;
-        }
-
-        if (unlikely (cfio->fault.ft_flags & VM_FAULT_NOPAGE)) {
-                CDEBUG(D_PAGE, "got addr %p - OOM\n",
-                       cfio->fault.ft_vmf->virtual_address);
-                return -ENOMEM;
         }
 
         if (unlikely(cfio->fault.ft_flags & VM_FAULT_RETRY))
