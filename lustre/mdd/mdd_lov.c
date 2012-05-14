@@ -301,7 +301,7 @@ static int mdd_lov_set_dir_md(const struct lu_env *env,
 int mdd_lsm_sanity_check(const struct lu_env *env,  struct mdd_object *obj)
 {
         struct lu_attr   *tmp_la = &mdd_env_info(env)->mti_la;
-        struct md_ucred  *uc     = md_ucred(env);
+        struct md_ucred  *uc     = md_ucred_assert(env);
         int rc;
         ENTRY;
 

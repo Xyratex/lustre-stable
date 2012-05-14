@@ -115,6 +115,8 @@ struct md_quota {
  * related definitions.
  */
 struct md_ucred *md_ucred(const struct lu_env *env);
+struct md_ucred *md_ucred_check(const struct lu_env *env);
+struct md_ucred *md_ucred_assert(const struct lu_env *env);
 struct md_capainfo *md_capainfo(const struct lu_env *env);
 struct md_quota *md_quota(const struct lu_env *env);
 

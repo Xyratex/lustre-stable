@@ -1070,10 +1070,9 @@ static int mdd_fix_attr(const struct lu_env *env, struct mdd_object *obj,
 
         /* export destroy does not have ->le_ses, but we may want
          * to drop LUSTRE_SOM_FL. */
-        if (!env->le_ses)
+        uc = md_ucred_check(env);
+        if (uc == NULL)
                 RETURN(0);
-
-        uc = md_ucred(env);
 
         rc = mdd_la_get(env, obj, tmp_la, BYPASS_CAPA);
         if (rc)
@@ -1655,7 +1654,7 @@ static int mdd_xattr_sanity_check(const struct lu_env *env,
                                   struct mdd_object *obj)
 {
         struct lu_attr  *tmp_la = &mdd_env_info(env)->mti_la;
-        struct md_ucred *uc     = md_ucred(env);
+        struct md_ucred *uc     = md_ucred_assert(env);
         int rc;
         ENTRY;
 
@@ -2033,10 +2032,9 @@ int accmode(const struct lu_env *env, struct lu_attr *la, int flags)
          * owner can write to a file even if it is marked readonly to hide
          * its brokenness. (bug 5781) */
         if (flags & MDS_OPEN_OWNEROVERRIDE) {
-                struct md_ucred *uc = md_ucred(env);
+                struct md_ucred *uc = md_ucred_check(env);
 
-                if ((uc == NULL) || (uc->mu_valid == UCRED_INIT) ||
-                    (la->la_uid == uc->mu_fsuid))
+                if ((uc == NULL) || (la->la_uid == uc->mu_fsuid))
                         return 0;
         }
 

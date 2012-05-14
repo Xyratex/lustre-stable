@@ -441,12 +441,12 @@ void mdt_body_reverse_idmap(struct mdt_thread_info *info, struct mdt_body *body)
 int mdt_fix_attr_ucred(struct mdt_thread_info *info, __u32 op)
 {
         struct ptlrpc_request     *req = mdt_info_req(info);
-        struct md_ucred           *uc = mdt_ucred(info);
+        struct md_ucred           *uc = mdt_ucred_check(info);
         struct lu_attr            *attr = &info->mti_attr.ma_attr;
         struct mdt_export_data    *med = mdt_req2med(req);
         struct lustre_idmap_table *idmap = med->med_idmap;
 
-        if ((uc->mu_valid != UCRED_OLD) && (uc->mu_valid != UCRED_NEW))
+        if (uc == NULL)
                 return -EINVAL;
 
         if (op != REINT_SETATTR) {

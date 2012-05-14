@@ -5707,6 +5707,11 @@ struct md_ucred *mdt_ucred(const struct mdt_thread_info *info)
         return md_ucred(info->mti_env);
 }
 
+struct md_ucred *mdt_ucred_check(const struct mdt_thread_info *info)
+{
+        return md_ucred_check(info->mti_env);
+}
+
 /**
  * Enable/disable COS (Commit On Sharing).
  *

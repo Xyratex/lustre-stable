@@ -287,7 +287,7 @@ __u32 mdt_identity_get_perm(struct md_identity *identity,
 int mdt_pack_remote_perm(struct mdt_thread_info *info, struct mdt_object *o,
                          void *buf)
 {
-        struct md_ucred         *uc = mdt_ucred(info);
+        struct md_ucred         *uc = mdt_ucred_check(info);
         struct md_object        *next = mdt_object_child(o);
         struct mdt_remote_perm  *perm = buf;
 
@@ -299,7 +299,7 @@ int mdt_pack_remote_perm(struct mdt_thread_info *info, struct mdt_object *o,
         if (!exp_connect_rmtclient(info->mti_exp))
                 RETURN(-EBADE);
 
-        if ((uc->mu_valid != UCRED_OLD) && (uc->mu_valid != UCRED_NEW))
+        if (uc == NULL)
                 RETURN(-EINVAL);
 
         perm->rp_uid = uc->mu_o_uid;

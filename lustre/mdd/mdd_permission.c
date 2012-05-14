@@ -180,7 +180,7 @@ static int mdd_check_acl(const struct lu_env *env, struct mdd_object *obj,
                          struct lu_attr *la, int mask)
 {
 #ifdef CONFIG_FS_POSIX_ACL
-        struct md_ucred  *uc  = md_ucred(env);
+        struct md_ucred  *uc  = md_ucred_assert(env);
         posix_acl_xattr_header *head;
         posix_acl_xattr_entry *entry;
         struct lu_buf   *buf;
@@ -343,7 +343,7 @@ int mdd_permission(const struct lu_env *env,
         }
 
         if (!rc && (check_vtx_part || check_vtx_full)) {
-                uc = md_ucred(env);
+                uc = md_ucred_assert(env);
                 LASSERT(ma);
                 if (likely(!la)) {
                         la = &mdd_env_info(env)->mti_la;
@@ -365,7 +365,7 @@ int mdd_permission(const struct lu_env *env,
 
         if (unlikely(!rc && check_rgetfacl)) {
                 if (likely(!uc))
-                        uc = md_ucred(env);
+                        uc = md_ucred_assert(env);
 
                 if (likely(!la)) {
                         la = &mdd_env_info(env)->mti_la;
