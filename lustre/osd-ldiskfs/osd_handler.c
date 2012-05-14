@@ -4516,6 +4516,7 @@ static int osd_process_config(const struct lu_env *env,
                 err = osd_mount(env, o, cfg);
                 break;
         case LCFG_CLEANUP:
+		lu_dev_del_linkage(d->ld_site, d);
                 err = osd_shutdown(env, o);
                 break;
         default:
