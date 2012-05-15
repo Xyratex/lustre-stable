@@ -3489,6 +3489,8 @@ set_last_id:
                 }
         }
         *num = i;
+        if (*num)
+                rc = 0;
 
         CDEBUG(D_RPCTRACE,
                "%s: created %d objects for group "LPU64": "LPU64" rc %d\n",
