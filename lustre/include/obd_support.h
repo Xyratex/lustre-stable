@@ -376,6 +376,7 @@ int obd_alloc_fail(const void *ptr, const char *name, const char *type,
 #define OBD_FAIL_MGC_PAUSE_PROCESS_LOG   0x903
 #define OBD_FAIL_MGS_PAUSE_REQ           0x904
 #define OBD_FAIL_MGS_PAUSE_TARGET_REG    0x905
+#define OBD_FAIL_MGS_PAUSE_TARGET_CON	 0x906
 
 #define OBD_FAIL_QUOTA_RET_QDATA         0xA02
 #define OBD_FAIL_QUOTA_DELAY_REL         0xA03

@@ -629,9 +629,8 @@ static int mgs_modify_handler(struct llog_handle *llh, struct llog_rec_hdr *rec,
 {
         struct mgs_modify_lookup *mml = (struct mgs_modify_lookup *)data;
         struct cfg_marker *marker;
-        struct lustre_cfg *lcfg = (struct lustre_cfg *)(rec + 1);
-        int cfg_len = rec->lrh_len - sizeof(struct llog_rec_hdr) -
-                sizeof(struct llog_rec_tail);
+        struct lustre_cfg *lcfg = REC_DATA(rec);
+        int cfg_len = REC_DATA_LEN(rec);
         int rc;
         ENTRY;
 
@@ -732,6 +731,445 @@ out_pop:
         RETURN(rc);
 }
 
+/** This structure is passed to mgs_replace_handler */
+struct mgs_replace_uuid_lookup {
+        /* Nids are replaced for this target device */
+        struct mgs_target_info target;
+        /* Temporary modified llog */
+        struct llog_handle *temp_llh;
+        /* Flag is set if in target block*/
+        int in_target_device;
+        /* Nids already added. Just skip (multiple nids) */
+        int device_nids_added;
+        /* Flag is set if this block should not be copied */
+        int skip_it;
+};
+
+/**
+ * Check: a) if block should be skiped
+ * b) is it target block
+ *
+ * \param[in] lcfg
+ * \param[in] mrul
+ *
+ * \retval 0 should not to be skipped
+ * \retval 1 should to be skipped
+ **/
+static int check_markers(struct lustre_cfg *lcfg,
+                         struct mgs_replace_uuid_lookup *mrul)
+{
+         struct cfg_marker *marker;
+
+        /* Track markers. Find given device */
+        if (lcfg->lcfg_command == LCFG_MARKER) {
+                marker = lustre_cfg_buf(lcfg, 1);
+                /* Clean llog from records marked as CM_EXCLUDE.
+                   CM_SKIP records are used for "active" command
+                   and can be restored if needed */
+                if (marker->cm_flags & CM_EXCLUDE & CM_START) {
+                        mrul->skip_it = 1;
+                        return 1;
+                }
+
+                if (marker->cm_flags & CM_EXCLUDE & CM_END) {
+                        mrul->skip_it = 0;
+                        return 1;
+                }
+
+                if (strcmp(mrul->target.mti_svname, marker->cm_tgtname) == 0) {
+                        LASSERT(!(marker->cm_flags & CM_START) ||
+                                !(marker->cm_flags & CM_END));
+                        if (marker->cm_flags & CM_START) {
+                                mrul->in_target_device = 1;
+                                mrul->device_nids_added = 0;
+                        }
+                        else if (marker->cm_flags & CM_END) {
+                                mrul->in_target_device = 0;
+                        }
+                }
+        }
+
+        return 0;
+}
+
+static int record_add_uuid(struct obd_device *obd,
+                           struct llog_handle *llh,
+                           uint64_t nid, char *uuid);
+
+static int record_setup(struct obd_device *obd, struct llog_handle *llh,
+                        char *devname,
+                        char *s1, char *s2, char *s3, char *s4);
+
+/**
+ * \retval <0 record processing error
+ * \retval n record is processed. No need copy original one.
+ * \retval 0 record is not processed.
+ **/
+static int process_command(struct llog_handle *llh, struct lustre_cfg *lcfg, struct mgs_replace_uuid_lookup *mrul)
+{
+        int nids_added = 0;
+        lnet_nid_t nid;
+        char *ptr;
+        int rc;
+
+        if (lcfg->lcfg_command == LCFG_ADD_UUID) {
+                /* LCFG_ADD_UUID command found. Let's skip original command
+                   and add passed nids */
+                ptr = mrul->target.mti_params;
+                while (class_parse_nid(ptr, &nid, &ptr) == 0) {
+                        CDEBUG(D_MGS, "add nid %s with uuid %s, "
+                               "device %s\n", libcfs_nid2str(nid),
+                               mrul->target.mti_params, mrul->target.mti_svname);
+                        rc = record_add_uuid(llh->lgh_ctxt->loc_obd,
+                                             mrul->temp_llh, nid,
+                                             mrul->target.mti_params);
+                        if (!rc)
+                                nids_added++;
+                }
+
+                if (nids_added == 0) {
+                        CERROR("No new nids were added\n");
+                        RETURN(-ENXIO);
+                } else
+                        mrul->device_nids_added = 1;
+
+                return nids_added;
+        }
+
+        if (mrul->device_nids_added && lcfg->lcfg_command == LCFG_SETUP) {
+                /* LCFG_SETUP command found. UUID should be changed */
+                rc = record_setup(llh->lgh_ctxt->loc_obd,
+                                  mrul->temp_llh,
+                                  /* devname the same */
+                                  lustre_cfg_string(lcfg, 0),
+                                  /* s1 is not changed */
+                                  lustre_cfg_string(lcfg, 1),
+                                  /* new uuid should be
+                                     the full nidlist */
+                                  mrul->target.mti_params,
+                                  /* s3 is not changed */
+                                  lustre_cfg_string(lcfg, 3),
+                                  /* s4 is not changed */
+                                  lustre_cfg_string(lcfg, 4));
+                return rc ? rc : 1;
+        }
+
+        /* Another commands in target device block */
+        return 0;
+}
+
+/**
+ * Handler that called for every record in llog.
+ * Records are processed in order they placed in llog.
+ *
+ * \param[in] llh       log to be processed
+ * \param[in] rec       current record
+ * \param[in] data      mgs_replace_uuid_lookup structure
+ *
+ * \retval 0    success
+ **/
+static int mgs_replace_handler(struct llog_handle *llh, struct llog_rec_hdr *rec,
+                               void *data)
+{
+        struct llog_rec_hdr local_rec = *rec;
+        struct mgs_replace_uuid_lookup *mrul;
+        struct lustre_cfg *lcfg = REC_DATA(rec);
+        int cfg_len = REC_DATA_LEN(rec);
+        int rc;
+        ENTRY;
+
+        mrul = (struct mgs_replace_uuid_lookup *)data;
+
+        if (rec->lrh_type != OBD_CFG_REC) {
+                CERROR("unhandled lrh_type: %#x\n", rec->lrh_type);
+                RETURN(-EINVAL);
+        }
+
+        rc = lustre_cfg_sanity_check(lcfg, cfg_len);
+        if (rc) {
+                CWARN("Insane cfg\n");
+                /* Do not copy any invalidated records */
+                GOTO(skip_out, rc = 0);
+        }
+
+        rc = check_markers(lcfg, mrul);
+        if (rc || mrul->skip_it)
+                GOTO(skip_out, rc = 0);
+
+        /* Write to temp log all commands outside target device block */
+        if (!mrul->in_target_device)
+                GOTO(copy_out, rc = 0);
+
+        /* Skip all other LCFG_ADD_UUID and LCFG_ADD_CONN records
+           (failover nids) for this target, assuming that if then
+           primary is changing then so is the failover */
+        if (mrul->device_nids_added &&
+            (lcfg->lcfg_command == LCFG_ADD_UUID ||
+             lcfg->lcfg_command == LCFG_ADD_CONN))
+                GOTO(skip_out, rc = 0);
+
+        rc = process_command(llh, lcfg, mrul);
+        if (rc < 0 )
+                RETURN(rc);
+
+        if (rc)
+                RETURN(0);
+copy_out:
+        /* Record is placed in temporary llog as is */
+        local_rec.lrh_len -= sizeof(*rec) + sizeof(struct llog_rec_tail);
+        rc = llog_write_rec(mrul->temp_llh, &local_rec, NULL, 0,
+                            (void *)lcfg, -1);
+
+        CDEBUG(D_MGS, "Copied idx=%d, rc=%d, len=%d, cmd %x %s %s\n",
+               rec->lrh_index, rc, rec->lrh_len, lcfg->lcfg_command,
+               lustre_cfg_string(lcfg, 0), lustre_cfg_string(lcfg, 1));
+        RETURN(rc);
+
+skip_out:
+        CDEBUG(D_MGS, "Skipped idx=%d, rc=%d, len=%d, cmd %x %s %s\n",
+               rec->lrh_index, rc, rec->lrh_len, lcfg->lcfg_command,
+               lustre_cfg_string(lcfg, 0), lustre_cfg_string(lcfg, 1));
+        RETURN(rc);
+}
+
+static int mgs_backup_llog(struct obd_device *obd, char* fsname);
+
+/**
+ * Rename orig_log to orig_log + ".old"
+ * Rename new_log to orig_log
+ **/
+static int mgs_replace_with_backup(struct obd_device *obd, struct mgs_obd *mgs,
+                                   char *new_log, char *orig_log)
+{
+        int rc = 0;
+        ENTRY;
+
+        LASSERT(mgs);
+        LASSERT(mgs->mgs_configs_dir);
+
+        rc = mgs_backup_llog(obd, orig_log);
+        if (rc < 0)
+                GOTO(out_free, rc=-EIO);
+
+        rc = lustre_rename(mgs->mgs_configs_dir, mgs->mgs_vfsmnt,
+                                   new_log, orig_log);
+
+out_free:
+        RETURN(rc);
+}
+
+static int mgs_log_is_empty(struct obd_device *obd, char *name);
+
+static int mgs_replace_nids_log(struct obd_device *obd, struct fs_db *fsdb,
+                                char *logname, char *devname, char *nids)
+{
+        struct llog_handle *orig_llh, *temp_llh;
+        char *temp_log;
+        struct lvfs_run_ctxt saved;
+        struct llog_ctxt *ctxt;
+        struct mgs_replace_uuid_lookup *mrul;
+        int rc, rc2;
+        ENTRY;
+
+        CDEBUG(D_MGS, "Replace nids for %s in %s\n", devname, logname);
+
+        push_ctxt(&saved, &obd->obd_lvfs_ctxt, NULL);
+
+        ctxt = llog_get_context(obd, LLOG_CONFIG_ORIG_CTXT);
+        LASSERT(ctxt != NULL);
+
+        if (mgs_log_is_empty(obd, logname)) {
+                /* Log is empty. Nothing to replace */
+                GOTO(out_pop, rc = 0);
+        }
+
+        /* Write new log to a temp name, then vfs_rename over logname
+           upon successful completion. */
+        OBD_ALLOC(temp_log, strlen(logname) + 1);
+        if (!temp_log)
+                RETURN(-ENOMEM);
+        sprintf(temp_log, "%sT", logname);
+
+        /* Make sure there's no old temp log */
+        rc = llog_delete(ctxt, temp_log);
+        if (rc)
+                GOTO(out_free, rc);
+
+        /* open local log */
+        rc = llog_create(ctxt, &temp_llh, NULL, temp_log, LLOG_CREATE_RW);
+        if (rc)
+                GOTO(out_free, rc);
+
+        rc = llog_init_handle(temp_llh, LLOG_F_IS_PLAIN, NULL);
+        if (rc)
+                GOTO(out_closel, rc);
+
+        /* open original llog */
+        rc = llog_create(ctxt, &orig_llh, NULL, logname, LLOG_CREATE_RW);
+        if (rc)
+                GOTO(out_closel, rc);
+
+        rc = llog_init_handle(orig_llh, LLOG_F_IS_PLAIN, NULL);
+        if (rc)
+                GOTO(out_close, rc);
+
+        if (llog_get_size(orig_llh) <= 1)
+                GOTO(out_close, rc = 0);
+
+        OBD_ALLOC_PTR(mrul);
+        if (!mrul)
+                GOTO(out_close, rc = -ENOMEM);
+        /* devname is only needed information to replace UUID records */
+        strncpy(mrul->target.mti_svname, devname, MTI_NAME_MAXLEN);
+        /* parse nids later */
+        strncpy(mrul->target.mti_params, nids, MTI_PARAM_MAXLEN);
+        /* Copy records to this temporary llog */
+        mrul->temp_llh = temp_llh;
+        rc = llog_process(orig_llh, mgs_replace_handler, (void *)mrul, NULL);
+        OBD_FREE_PTR(mrul);
+out_close:
+        rc2 = llog_close(orig_llh);
+        if (!rc)
+                rc = rc2;
+out_closel:
+        rc2 = llog_close(temp_llh);
+        if (!rc)
+                rc = rc2;
+
+        /* We've copied the modified log to the temp log, now
+           replace the old original log with the temp log. */
+        if (!rc)
+                rc = mgs_replace_with_backup(obd, &obd->u.mgs, temp_log, logname);
+
+        CDEBUG(D_MGS, "Modified log %s (%d)\n", logname, rc);
+
+out_free:
+        OBD_FREE(temp_log, strlen(logname) + 1);
+
+out_pop:
+        pop_ctxt(&saved, &obd->obd_lvfs_ctxt, NULL);
+        llog_ctxt_put(ctxt);
+
+        if (rc)
+                CERROR("Failed to replace nids in log %s (%d)\n", logname, rc);
+
+        RETURN(rc);
+}
+
+/**
+ * Parse device name and get file system name and/or device index
+ *
+ * \param[in]   devname device name (ex. lustre-MDT0000)
+ * \param[out]  fsname  file system name(optional)
+ * \param[out]  index   device index(optional)
+ *
+ * \retval 0    success
+ */
+static int mgs_parse_devname(char *devname, char *fsname, __u32 *index)
+{
+        char *ptr;
+        ENTRY;
+
+        /* Extract fsname */
+        ptr = strrchr(devname, '-');
+
+        if (fsname) {
+                if (!ptr) {
+                        CDEBUG(D_MGS, "Device name %s without fsname\n", devname);
+                        RETURN(-EINVAL);
+                }
+                memset(fsname, 0, MTI_NAME_MAXLEN);
+                strncpy(fsname, devname, ptr - devname);
+                fsname[MTI_NAME_MAXLEN - 1] = 0;
+        }
+
+        if (index) {
+                if (server_name2index(ptr, index, NULL) < 0) {
+                        CDEBUG(D_MGS, "Device name with wrong index\n");
+                        RETURN(-EINVAL);
+                }
+        }
+
+        RETURN(0);
+}
+
+static int only_mgs_is_running(struct obd_device *mgs_obd)
+{
+        /* TDB: Is global variable with devices count exists? */
+        int device_num = get_devices_count();
+        /* MGS and MGC + self_export
+           (wc -l /proc/fs/lustre/devices <= 2) && (num_exports <= 2) */
+        return (device_num <= 2) && (mgs_obd->obd_num_exports <= 2);
+}
+
+static void name_create_mdt(char **logname, char *fsname, int i);
+
+/**
+ * Replace nids for \a device to \a nids values
+ *
+ * \param obd           MGS obd device
+ * \param devname       nids need to be replaced for this device
+ * (ex. lustre-OST0000)
+ * \param nids          nids list (ex. nid1,nid2,nid3)
+ *
+ * \retval 0    success
+ **/
+int mgs_replace_nids(struct obd_device *obd, char *devname, char *nids)
+{
+        /* Assume fsname is part of device name */
+        char fsname[MTI_NAME_MAXLEN];
+        int rc;
+        __u32 index;
+        char *logname;
+        struct fs_db *fsdb;
+        unsigned int i;
+        ENTRY;
+
+        /* Prevent clients and servers from connecting to mgs */
+        obd->obd_no_conn = 1;
+
+        /* We can not change nids if not only MGS is started */
+        if (!only_mgs_is_running(obd)) {
+                CERROR("Only MGS is allowed to be started\n");
+                GOTO(out, rc = -EINPROGRESS);
+        }
+
+        /* Get fsname and index*/
+        rc = mgs_parse_devname(devname, fsname, &index);
+        if (rc)
+                GOTO(out, rc);
+
+        rc = mgs_find_or_make_fsdb(obd, fsname, &fsdb);
+        if (rc) {
+                CERROR("Can't get db for %s: %d\n", fsname, rc);
+                GOTO(out, rc);
+        }
+
+        /* Process client llogs */
+        name_create(&logname, fsname, "-client");
+        rc = mgs_replace_nids_log(obd, fsdb, logname, devname, nids);
+        name_destroy(&logname);
+        if (rc) {
+                CERROR("Error while replace nids in %s\n", logname);
+                GOTO(out, rc);
+        }
+
+        /* Process MDT llogs */
+        for (i = 0; i < INDEX_MAP_SIZE * 8; i++) {
+                if (!cfs_test_bit(i, fsdb->fsdb_mdt_index_map))
+                        continue;
+                name_create_mdt(&logname, fsname, i);
+                rc = mgs_replace_nids_log(obd, fsdb, logname, devname, nids);
+                name_destroy(&logname);
+                if (rc)
+                        GOTO(out, rc);
+        }
+
+out:
+        obd->obd_no_conn = 0;
+        RETURN(rc);
+}
+
 /******************** config log recording functions *********************/
 
 static int record_lcfg(struct obd_device *obd, struct llog_handle *llh,
@@ -806,10 +1244,10 @@ static inline int record_add_uuid(struct obd_device *obd,
 
 }
 
-static inline int record_add_conn(struct obd_device *obd,
-                                  struct llog_handle *llh,
-                                  char *devname,
-                                  char *uuid)
+static int record_add_conn(struct obd_device *obd,
+                           struct llog_handle *llh,
+                           char *devname,
+                           char *uuid)
 {
         return record_base(obd,llh,devname,0,LCFG_ADD_CONN,uuid,0,0,0);
 }
@@ -820,9 +1258,9 @@ static inline int record_attach(struct obd_device *obd, struct llog_handle *llh,
         return record_base(obd,llh,devname,0,LCFG_ATTACH,type,uuid,0,0);
 }
 
-static inline int record_setup(struct obd_device *obd, struct llog_handle *llh,
-                               char *devname,
-                               char *s1, char *s2, char *s3, char *s4)
+static int record_setup(struct obd_device *obd, struct llog_handle *llh,
+                        char *devname,
+                        char *s1, char *s2, char *s3, char *s4)
 {
         return record_base(obd,llh,devname,0,LCFG_SETUP,s1,s2,s3,s4);
 }
@@ -1567,7 +2005,7 @@ out:
         RETURN(rc);
 }
 
-static inline void name_create_mdt(char **logname, char *fsname, int i)
+static void name_create_mdt(char **logname, char *fsname, int i)
 {
         char mdt_index[9];
 
@@ -2294,7 +2732,7 @@ static int mgs_srpc_read_handler(struct llog_handle *llh,
 {
         struct mgs_srpc_read_data *msrd = (struct mgs_srpc_read_data *) data;
         struct cfg_marker         *marker;
-        struct lustre_cfg         *lcfg = (struct lustre_cfg *)(rec + 1);
+        struct lustre_cfg         *lcfg = REC_DATA(rec);
         char                      *svname, *param;
         int                        cfg_len, rc;
         ENTRY;
@@ -3014,20 +3452,17 @@ int mgs_setparam(struct obd_device *obd, struct lustre_cfg *lcfg, char *fsname)
                 RETURN(-ENOSYS);
         }
 
-        /* Extract fsname */
-        ptr = strrchr(devname, '-');
-        memset(fsname, 0, MTI_NAME_MAXLEN);
-        if (ptr && (server_name2index(ptr, &index, NULL) >= 0)) {
+        rc = mgs_parse_devname(devname, fsname, NULL);
+        if (!rc && !mgs_parse_devname(devname, NULL, &index)) {
                 /* param related to llite isn't allowed to set by OST or MDT */
-                if (strncmp(param, PARAM_LLITE, sizeof(PARAM_LLITE)) == 0)
+                if (!rc && strncmp(param, PARAM_LLITE, sizeof(PARAM_LLITE)) == 0)
                         RETURN(-EINVAL);
-
-                strncpy(fsname, devname, ptr - devname);
         } else {
                 /* assume devname is the fsname */
+                memset(fsname, 0, MTI_NAME_MAXLEN);
                 strncpy(fsname, devname, MTI_NAME_MAXLEN);
+                fsname[MTI_NAME_MAXLEN - 1] = 0;
         }
-        fsname[MTI_NAME_MAXLEN - 1] = 0;
         CDEBUG(D_MGS, "setparam fs='%s' device='%s'\n", fsname, devname);
 
         rc = mgs_find_or_make_fsdb(obd, fsname, &fsdb);
@@ -3226,8 +3661,6 @@ out:
         return rc;
 }
 
-#if 0
-/******************** unused *********************/
 static int mgs_backup_llog(struct obd_device *obd, char* fsname)
 {
         struct file *filp, *bak_filp;
@@ -3236,10 +3669,11 @@ static int mgs_backup_llog(struct obd_device *obd, char* fsname)
         loff_t soff = 0 , doff = 0;
         int count = 4096, len;
         int rc = 0;
+        ENTRY;
 
         OBD_ALLOC(logname, PATH_MAX);
         if (logname == NULL)
-                return -ENOMEM;
+                RETURN(-ENOMEM);
 
         OBD_ALLOC(buf, count);
         if (!buf)
@@ -3282,7 +3716,5 @@ out:
         if (buf)
                 OBD_FREE(buf, count);
         OBD_FREE(logname, PATH_MAX);
-        return rc;
+        RETURN(rc);
 }
-
-#endif

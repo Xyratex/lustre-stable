@@ -504,3 +504,28 @@ out:
         RETURN(rc);
 }
 EXPORT_SYMBOL(llog_reverse_process);
+
+/* The function hides a -ENOENT error, as log no exist,
+ *  that is same as we will unlink a file */
+int llog_delete (struct llog_ctxt *ctxt, char *logname)
+{
+        int rc;
+        struct llog_handle *temp_llh;
+        ENTRY;
+
+        rc = llog_create(ctxt, &temp_llh, NULL, logname, LLOG_CREATE_RW);
+        if (rc == -ENOENT)
+                RETURN(0);
+        if (rc)
+                RETURN(rc);
+        rc = llog_init_handle(temp_llh, LLOG_F_IS_PLAIN, NULL);
+        if (rc)
+                GOTO(out_free, rc);
+        rc = llog_destroy(temp_llh);
+
+out_free:
+        llog_free_handle(temp_llh);
+        RETURN(rc);
+}
+EXPORT_SYMBOL(llog_delete);
+

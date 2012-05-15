@@ -2884,6 +2884,48 @@ test_63() { # MRP-153
 }
 run_test 63 "check tunefs correctly handles parameter addition and removal"
 
+test_64() {
+    setup
+    local OST_NID=$($LCTL list_nids | head -1)
+    local MDS_NID=$($LCTL list_nids | head -1)
+    local MDSDEV=$(mdsdevname ${SINGLEMDS//mds/})
+
+    echo "replace_nids should fail if MDS, OSTs and clients are UP"
+    $LCTL replace_nids $FSNAME-OST0000 $OST_NID && error "replace_nids fail"
+    manual_umount_client
+    echo "replace_nids should fail if MDS and OSTs are UP"
+    $LCTL replace_nids $FSNAME-OST0000 $OST_NID && error "replace_nids fail" 
+    stop_ost2
+    stop_ost
+    echo "replace_nids should fail if MDS is UP"
+    $LCTL replace_nids $FSNAME-OST0000 $OST_NID && error "replace_nids fail"
+    stop_mds
+
+    start $SINGLEMDS $MDSDEV $MDS_MOUNT_OPTS -o nosvc -n
+    echo "command should accept two parameters"
+    $LCTL replace_nids $FSNAME-OST0000 && error "command should accept two params"
+    echo "correct device name should be passed"
+    $LCTL replace_nids $FSNAME-WRONG0000 $OST_NID && error "wrong devname"
+    echo "wrong nids list should not destroy the system"
+    $LCTL replace_nids $FSNAME-OST0000 "wrong nids list" && error "wrong parse"
+    echo "replace OST nid"
+    $LCTL replace_nids $FSNAME-OST0000 $OST_NID || error "replace nids failed"
+
+    echo "command should accept two parameters"
+    $LCTL replace_nids $FSNAME-MDT0000 && error "command should accept two params"
+    echo "wrong nids list should not destroy the system"
+    $LCTL replace_nids $FSNAME-MDT0000 "wrong nids list" && error "wrong parse"
+    echo "replace MDS nid"
+    $LCTL replace_nids $FSNAME-MDT0000 $MDS_NID || error "replace nids failed"
+    stop_mds -f
+
+    setup
+    check_mount || error "error after nid replace"
+    cleanup
+    reformat
+}
+run_test 63 "replace nids"
+
 if ! combined_mgs_mds ; then
 	stop mgs
 fi

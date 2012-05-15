@@ -1184,14 +1184,7 @@ static int mgc_copy_llog(struct obd_device *obd, struct llog_ctxt *rctxt,
         sprintf(temp_log, "%sT", logname);
 
         /* Make sure there's no old temp log */
-        rc = llog_create(lctxt, &local_llh, NULL, temp_log, LLOG_CREATE_RW);
-        if (rc)
-                GOTO(out, rc);
-        rc = llog_init_handle(local_llh, LLOG_F_IS_PLAIN, NULL);
-        if (rc)
-                GOTO(out, rc);
-        rc = llog_destroy(local_llh);
-        llog_free_handle(local_llh);
+        rc = llog_delete(lctxt, temp_log);
         if (rc)
                 GOTO(out, rc);
 
