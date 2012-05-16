@@ -7601,140 +7601,141 @@ test_155h() {
 run_test 155h "Verify big file correctness: read cache:off write_cache:off"
 
 test_156() {
-    local CPAGES=3
-    local BEFORE
-    local AFTER
-    local file="$DIR/$tfile"
+	remote_ost_nodsh && skip "remote OST with nodsh" && return
+	local CPAGES=3
+	local BEFORE
+	local AFTER
+	local file="$DIR/$tfile"
 
-    log "Turn on read and write cache"
-    set_cache read on
-    set_cache writethrough on
+	log "Turn on read and write cache"
+	set_cache read on
+	set_cache writethrough on
 
-    log "Write data and read it back."
-    log "Read should be satisfied from the cache."
-    dd if=/dev/urandom of=$file bs=4k count=$CPAGES || error "dd failed"
-    BEFORE=`roc_hit`
-    cancel_lru_locks osc
-    cat $file >/dev/null
-    AFTER=`roc_hit`
-    if ! let "AFTER - BEFORE == CPAGES"; then
-        error "NOT IN CACHE: before: $BEFORE, after: $AFTER"
-    else
-        log "cache hits:: before: $BEFORE, after: $AFTER"
-    fi
+	log "Write data and read it back."
+	log "Read should be satisfied from the cache."
+	dd if=/dev/urandom of=$file bs=4k count=$CPAGES || error "dd failed"
+	BEFORE=`roc_hit`
+	cancel_lru_locks osc
+	cat $file >/dev/null
+	AFTER=`roc_hit`
+	if ! let "AFTER - BEFORE == CPAGES"; then
+		error "NOT IN CACHE: before: $BEFORE, after: $AFTER"
+	else
+		log "cache hits:: before: $BEFORE, after: $AFTER"
+	fi
 
-    log "Read again; it should be satisfied from the cache."
-    BEFORE=$AFTER
-    cancel_lru_locks osc
-    cat $file >/dev/null
-    AFTER=`roc_hit`
-    if ! let "AFTER - BEFORE == CPAGES"; then
-        error "NOT IN CACHE: before: $BEFORE, after: $AFTER"
-    else
-        log "cache hits:: before: $BEFORE, after: $AFTER"
-    fi
-
-
-    log "Turn off the read cache and turn on the write cache"
-    set_cache read off
-    set_cache writethrough on
-
-    log "Read again; it should be satisfied from the cache."
-    BEFORE=`roc_hit`
-    cancel_lru_locks osc
-    cat $file >/dev/null
-    AFTER=`roc_hit`
-    if ! let "AFTER - BEFORE == CPAGES"; then
-        error "NOT IN CACHE: before: $BEFORE, after: $AFTER"
-    else
-        log "cache hits:: before: $BEFORE, after: $AFTER"
-    fi
-
-    log "Read again; it should not be satisfied from the cache."
-    BEFORE=$AFTER
-    cancel_lru_locks osc
-    cat $file >/dev/null
-    AFTER=`roc_hit`
-    if ! let "AFTER - BEFORE == 0"; then
-        error "IN CACHE: before: $BEFORE, after: $AFTER"
-    else
-        log "cache hits:: before: $BEFORE, after: $AFTER"
-    fi
-
-    log "Write data and read it back."
-    log "Read should be satisfied from the cache."
-    dd if=/dev/urandom of=$file bs=4k count=$CPAGES || error "dd failed"
-    BEFORE=`roc_hit`
-    cancel_lru_locks osc
-    cat $file >/dev/null
-    AFTER=`roc_hit`
-    if ! let "AFTER - BEFORE == CPAGES"; then
-        error "NOT IN CACHE: before: $BEFORE, after: $AFTER"
-    else
-        log "cache hits:: before: $BEFORE, after: $AFTER"
-    fi
-
-    log "Read again; it should not be satisfied from the cache."
-    BEFORE=$AFTER
-    cancel_lru_locks osc
-    cat $file >/dev/null
-    AFTER=`roc_hit`
-    if ! let "AFTER - BEFORE == 0"; then
-        error "IN CACHE: before: $BEFORE, after: $AFTER"
-    else
-        log "cache hits:: before: $BEFORE, after: $AFTER"
-    fi
+	log "Read again; it should be satisfied from the cache."
+	BEFORE=$AFTER
+	cancel_lru_locks osc
+	cat $file >/dev/null
+	AFTER=`roc_hit`
+	if ! let "AFTER - BEFORE == CPAGES"; then
+		error "NOT IN CACHE: before: $BEFORE, after: $AFTER"
+	else
+		log "cache hits:: before: $BEFORE, after: $AFTER"
+	fi
 
 
-    log "Turn off read and write cache"
-    set_cache read off
-    set_cache writethrough off
+	log "Turn off the read cache and turn on the write cache"
+	set_cache read off
+	set_cache writethrough on
 
-    log "Write data and read it back"
-    log "It should not be satisfied from the cache."
-    rm -f $file
-    dd if=/dev/urandom of=$file bs=4k count=$CPAGES || error "dd failed"
-    cancel_lru_locks osc
-    BEFORE=`roc_hit`
-    cat $file >/dev/null
-    AFTER=`roc_hit`
-    if ! let "AFTER - BEFORE == 0"; then
-        error_ignore 20762 "IN CACHE: before: $BEFORE, after: $AFTER"
-    else
-        log "cache hits:: before: $BEFORE, after: $AFTER"
-    fi
+	log "Read again; it should be satisfied from the cache."
+	BEFORE=`roc_hit`
+	cancel_lru_locks osc
+	cat $file >/dev/null
+	AFTER=`roc_hit`
+	if ! let "AFTER - BEFORE == CPAGES"; then
+		error "NOT IN CACHE: before: $BEFORE, after: $AFTER"
+	else
+		log "cache hits:: before: $BEFORE, after: $AFTER"
+	fi
+
+	log "Read again; it should not be satisfied from the cache."
+	BEFORE=$AFTER
+	cancel_lru_locks osc
+	cat $file >/dev/null
+	AFTER=`roc_hit`
+	if ! let "AFTER - BEFORE == 0"; then
+		error "IN CACHE: before: $BEFORE, after: $AFTER"
+	else
+		log "cache hits:: before: $BEFORE, after: $AFTER"
+	fi
+
+	log "Write data and read it back."
+	log "Read should be satisfied from the cache."
+	dd if=/dev/urandom of=$file bs=4k count=$CPAGES || error "dd failed"
+	BEFORE=`roc_hit`
+	cancel_lru_locks osc
+	cat $file >/dev/null
+	AFTER=`roc_hit`
+	if ! let "AFTER - BEFORE == CPAGES"; then
+		error "NOT IN CACHE: before: $BEFORE, after: $AFTER"
+	else
+		log "cache hits:: before: $BEFORE, after: $AFTER"
+	fi
+
+	log "Read again; it should not be satisfied from the cache."
+	BEFORE=$AFTER
+	cancel_lru_locks osc
+	cat $file >/dev/null
+	AFTER=`roc_hit`
+	if ! let "AFTER - BEFORE == 0"; then
+		error "IN CACHE: before: $BEFORE, after: $AFTER"
+	else
+		log "cache hits:: before: $BEFORE, after: $AFTER"
+	fi
 
 
-    log "Turn on the read cache and turn off the write cache"
-    set_cache read on
-    set_cache writethrough off
+	log "Turn off read and write cache"
+	set_cache read off
+	set_cache writethrough off
 
-    log "Write data and read it back"
-    log "It should not be satisfied from the cache."
-    rm -f $file
-    dd if=/dev/urandom of=$file bs=4k count=$CPAGES || error "dd failed"
-    BEFORE=`roc_hit`
-    cancel_lru_locks osc
-    cat $file >/dev/null
-    AFTER=`roc_hit`
-    if ! let "AFTER - BEFORE == 0"; then
-        error_ignore 20762 "IN CACHE: before: $BEFORE, after: $AFTER"
-    else
-        log "cache hits:: before: $BEFORE, after: $AFTER"
-    fi
+	log "Write data and read it back"
+	log "It should not be satisfied from the cache."
+	rm -f $file
+	dd if=/dev/urandom of=$file bs=4k count=$CPAGES || error "dd failed"
+	cancel_lru_locks osc
+	BEFORE=`roc_hit`
+	cat $file >/dev/null
+	AFTER=`roc_hit`
+	if ! let "AFTER - BEFORE == 0"; then
+		error_ignore 20762 "IN CACHE: before: $BEFORE, after: $AFTER"
+	else
+		log "cache hits:: before: $BEFORE, after: $AFTER"
+	fi
 
-    log "Read again; it should be satisfied from the cache."
-    BEFORE=`roc_hit`
-    cancel_lru_locks osc
-    cat $file >/dev/null
-    AFTER=`roc_hit`
-    if ! let "AFTER - BEFORE == CPAGES"; then
-        error "NOT IN CACHE: before: $BEFORE, after: $AFTER"
-    else
-        log "cache hits:: before: $BEFORE, after: $AFTER"
-    fi
 
-    rm -f $file
+	log "Turn on the read cache and turn off the write cache"
+	set_cache read on
+	set_cache writethrough off
+
+	log "Write data and read it back"
+	log "It should not be satisfied from the cache."
+	rm -f $file
+	dd if=/dev/urandom of=$file bs=4k count=$CPAGES || error "dd failed"
+	BEFORE=`roc_hit`
+	cancel_lru_locks osc
+	cat $file >/dev/null
+	AFTER=`roc_hit`
+	if ! let "AFTER - BEFORE == 0"; then
+		error_ignore 20762 "IN CACHE: before: $BEFORE, after: $AFTER"
+	else
+		log "cache hits:: before: $BEFORE, after: $AFTER"
+	fi
+
+	log "Read again; it should be satisfied from the cache."
+	BEFORE=`roc_hit`
+	cancel_lru_locks osc
+	cat $file >/dev/null
+	AFTER=`roc_hit`
+	if ! let "AFTER - BEFORE == CPAGES"; then
+		error "NOT IN CACHE: before: $BEFORE, after: $AFTER"
+	else
+		log "cache hits:: before: $BEFORE, after: $AFTER"
+	fi
+
+	rm -f $file
 }
 run_test 156 "Verification of tunables ============================"
 
@@ -8280,6 +8281,7 @@ test_200g() {
 run_test 200g "lfs df a pool ============================================"
 
 test_200h() { # b=24039
+	remote_mgs_nodsh && skip "remote MGS with nodsh" && return
 	mkdir -p $POOL_DIR || error "unable to create $POOL_DIR"
 
 	local file="/..$POOL_DIR/$tfile-1"
