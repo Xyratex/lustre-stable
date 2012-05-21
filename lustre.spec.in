@@ -1,54 +1,54 @@
 # lustre.spec
 %{!?version: %define version @VERSION@}
 %{!?kver: %define kver ""}
-%{!?kdir: %define kdir %(\
-  dir=$(echo "%configure_args" | \
-    sed -ne 's/.*--with-linux=\\([^ ][^ ]*\\).*$/\\1/p') \
-  if [ -n "$dir" ] \
-  then echo "$dir" \
-  else \
-    if [ -n "%kver" ] \
-    then kversion="%kver" \
-    else kversion="$(uname -r)" \
-    fi; \
-    echo "/lib/modules/$kversion/source" \
+%{!?kdir: %define kdir %(                                       \
+  dir=$(echo "%configure_args" |                                \
+    sed -ne 's/.*--with-linux=\\([^ ][^ ]*\\).*$/\\1/p')        \
+  if [ -n "$dir" ]                                              \
+  then echo "$dir"                                              \
+  else                                                          \
+    if [ -n "%kver" ]                                           \
+    then kversion="%kver"                                       \
+    else kversion="$(uname -r)"                                 \
+    fi;                                                         \
+    echo "/lib/modules/$kversion/source"                        \
   fi)}
 
-%{!?kobjdir: %define kobjdir %(\
-  dir=$(echo "%configure_args" | \
-    sed -ne 's/.*--with-linux-obj=\\([^ ][^ ]*\\).*$/\\1/p') \
-  if [ -n "$dir" ] \
-  then echo "$dir" \
-  else \
-    if [ -n "%kver" ] \
-    then kversion="%kver" \
-    else kversion="$(uname -r)" \
-    fi \
-\
-    if [ "%kdir" = "/lib/modules/$kversion/source" ] \
-    then echo "/lib/modules/$kversion/build" \
-    else echo "%kdir" \
-    fi \
+%{!?kobjdir: %define kobjdir %(                                 \
+  dir=$(echo "%configure_args" |                                \
+    sed -ne 's/.*--with-linux-obj=\\([^ ][^ ]*\\).*$/\\1/p')    \
+  if [ -n "$dir" ]                                              \
+  then echo "$dir"                                              \
+  else                                                          \
+    if [ -n "%kver" ]                                           \
+    then kversion="%kver"                                       \
+    else kversion="$(uname -r)"                                 \
+    fi                                                          \
+                                                                \
+    if [ "%kdir" = "/lib/modules/$kversion/source" ]            \
+    then echo "/lib/modules/$kversion/build"                    \
+    else echo "%kdir"                                           \
+    fi                                                          \
   fi)}
 
 # as an alternative to this implementation we could simply
 # "make -C $kdir kernelversion"
-%{!?kversion: %define kversion %(\
-  if test -s %kobjdir/include/linux/utsrelease.h \
-  then LINUXRELEASEHEADER=utsrelease.h \
-  else LINUXRELEASEHEADER=version.h \
-  fi \
-  sed -ne '/^#define UTS_RELEASE/s/.*"\\(.*\\)"$/\\1/p' \\\
+%{!?kversion: %define kversion %(                               \
+  if test -s %kobjdir/include/linux/utsrelease.h                \
+  then LINUXRELEASEHEADER=utsrelease.h                          \
+  else LINUXRELEASEHEADER=version.h                             \
+  fi                                                            \
+  sed -ne '/^#define UTS_RELEASE/s/.*"\\(.*\\)"$/\\1/p'       \\\
       %kobjdir/include/linux/$LINUXRELEASEHEADER )}
 
 %{!?downstream_release: %define downstream_release "@DOWNSTREAM_RELEASE@"}
 
 %define buildid %(if [ -n "@BUILDID@" ]; then echo "_@BUILDID@"; fi)
 
-%{!?myrelease: %define myrelease %(\
-  if [ -n "%downstream_release" ]; \
-  then echo -n "%{downstream_release}_"; \
-  fi; \
+%{!?myrelease: %define myrelease %(             \
+  if [ -n "%downstream_release" ];              \
+  then echo -n "%{downstream_release}_";        \
+  fi;                                           \
   echo %kversion | tr '-' '_')}
 
 # always append the buildid, even when the caller defines %release
@@ -77,24 +77,24 @@
 # response from them
 #%%global _use_internal_dependency_generator 0
 
-%define is_client %(bash -c "\
-  if [[ %{lustre_name} = *-client ]] \
-  then echo -n 1 \
+%define is_client %(bash -c "                   \
+  if [[ %{lustre_name} = *-client ]]            \
+  then echo -n 1                                \
   else echo -n 0; fi")
 # for those uses that don't want the -smp/-bigsmp (or the .arch) on the end
 # of %kversion
-%define krequires %(bash -c "\
-  echo %{kversion} | \
-    sed -e 's/\.x86_64$//' \
-        -e 's/\.i[3456]86$//' \
-        -e 's/-smp$//' \
-        -e 's/-bigsmp$//' \
-        -e 's/-ppc64$//' \
+%define krequires %(bash -c "                   \
+  echo %{kversion} |                            \
+    sed -e 's/\.x86_64$//'                      \
+        -e 's/\.i[3456]86$//'                   \
+        -e 's/-smp$//'                          \
+        -e 's/-bigsmp$//'                       \
+        -e 's/-ppc64$//'                        \
         -e 's/-default$//'")
 
-%define sles10 %(bash -c "\
-  if [ "%sles_version" = "10" ] \
-  then echo -n 1 \
+%define sles10 %(bash -c "                      \
+  if [ "%sles_version" = "10" ]                 \
+  then echo -n 1                                \
   else echo -n 0; fi")
 
 %if %sles10
@@ -181,6 +181,16 @@ Conflicts: %{name}-deps-sles
 This package has RPM dependencies appropriate for RHEL, RHL, and FC
 systems.
 
+%package headers
+Summary: Lustre include headers
+Group: Development/Kernel
+Provides: %{name}-headers = %{version}
+Requires: %{name} = %{version}, %{name}-modules = %{version}
+
+%description headers
+This package contains the headers required to build ancillary
+kernel modules that work closely with the standard lustre modules.
+
 %package tests
 Summary: Lustre testing framework
 Group: Development/Kernel
@@ -203,11 +213,10 @@ ln lnet/ChangeLog ChangeLog-lnet
 %build
 # if RPM_BUILD_NCPUS unset, set it
 if [ -z "$RPM_BUILD_NCPUS" ] ; then
-    RPM_BUILD_NCPUS=$(egrep -c "^cpu[0-9]+" /proc/stat 2>/dev/null || echo 0 :)
+    RPM_BUILD_NCPUS=$(egrep -c "^cpu[0-9]" /proc/stat 2>/dev/null || echo 1)
     if [ $RPM_BUILD_NCPUS -eq 0 ] ; then
         RPM_BUILD_NCPUS=1
-    fi
-    if [ $RPM_BUILD_NCPUS -gt 8 ] ; then
+    elif [ $RPM_BUILD_NCPUS -gt 8 ] ; then
         RPM_BUILD_NCPUS=8
     fi
 fi
@@ -228,16 +237,19 @@ CONFIGURE_ARGS="$CONFIGURE_ARGS --disable-tests --disable-liblustre-tests"
 
 # if %%kdir was given, make sure it's not in the configure arguments
 if [ -n "%kdir" ]; then
-	CONFIGURE_ARGS=$(echo $CONFIGURE_ARGS | sed -e 's/"\?--with-linux=[^ ][^ ]* \?//')
+	CONFIGURE_ARGS=$(echo $CONFIGURE_ARGS | \
+                sed -e 's/"\?--with-linux=[^ ][^ ]* \?//')
 fi
 # ditto for %%kobjdir
 if [ -n "%kobjdir" ]; then
-	CONFIGURE_ARGS=$(echo $CONFIGURE_ARGS | sed -e 's/"\?--with-linux-obj=[^ ][^ ]* \?//')
+	CONFIGURE_ARGS=$(echo $CONFIGURE_ARGS | \
+                sed -e 's/"\?--with-linux-obj=[^ ][^ ]* \?//')
 fi
 
 # we need to eval "configure" because $CONFIGURE_ARGS could have a quoted
 # string in it which we don't want word splitted by the shell
-%define eval_configure %(echo '%configure' | sed -e 's#\./configure#eval ./configure#')
+%define eval_configure %(\
+        echo '%configure' | sed -e 's#\./configure#eval ./configure#')
 
 %eval_configure \
 	%{?kdir: --with-linux=%kdir} %{?kobjdir: --with-linux-obj=%kobjdir} \
@@ -245,6 +257,36 @@ fi
 make -j $RPM_BUILD_NCPUS -s
 
 %install
+add_hdr_file() {
+    declare destfil= destdir= f=
+
+    # change lustre-source/lustre-%v/libcfs/include/libcfs/bitmap.h into
+    # lustre-%v/libcfs/bitmap.h
+    # then install into /usr/include/lustre-%v/libcfs/bitmap.h
+    #
+    while read f
+    do
+        destfil=/usr/include/$(echo $f | \
+            sed 's@/include/@/@
+		s@/\([a-z]*\)/\1/@/\1/@
+		s@^lustre-source/@@')
+        destdir=$RPM_BUILD_ROOT/$(dirname $destfil)
+        test -d ${destdir} || mkdir -p ${destdir}
+        cp $f ${destdir}/.
+        echo "%attr(-, root, root) ${destfil}"
+    done
+
+    f=$RPM_BUILD_DIR/lustre-%{version}/config.h
+    destfil=usr/include/lustre-%{version}/config.h
+    cp $f $RPM_BUILD_ROOT/$destfil
+    echo "%attr(-, root, root) /${destfil}"
+
+    f=$RPM_BUILD_DIR/lustre-%{version}/Module.symvers
+    destfil=usr/include/lustre-%{version}/Module.symvers
+    cp $f $RPM_BUILD_ROOT/${destfil}
+    echo "%attr(-, root, root) /${destfil}"
+}
+
 make install DESTDIR=$RPM_BUILD_ROOT
 # hack to avoid changing the libsysio code for "make install"
 rm -f $RPM_BUILD_ROOT%{_libdir}/libsysio.a
@@ -325,10 +367,15 @@ if [ -d $RPM_BUILD_ROOT%{_libdir}/lustre/liblustre/tests ] ; then
 fi
 %endif
 
-pushd $RPM_BUILD_ROOT >/dev/null
-> $RPM_BUILD_DIR/lustre-%{version}/lustre-modules.files
-find lib/modules/%{kversion}/updates -type f | awk "!/(ZZZZZZZZZZ$modules_excludes)/ {print \"%attr(-, root, root) /\"\$0}" >>$RPM_BUILD_DIR/lustre-%{version}/lustre-modules.files
-popd >/dev/null
+cd $RPM_BUILD_ROOT
+find lib/modules/%{kversion}/updates -type f | \
+    sed 's@^@%attr(-, root, root) /@' \
+    > $RPM_BUILD_DIR/lustre-%{version}/lustre-modules.files
+cd $OLDPWD
+
+find lustre-source/lustre-%{version} -type f -name '*.h' | \
+    fgrep /include/ | \
+    add_hdr_file > lustre-headers.files
 
 %files -f lustre.files
 
@@ -336,6 +383,8 @@ popd >/dev/null
 %attr(-, root, root) %doc COPYING
 %attr(-, root, root) %doc ChangeLog-lustre
 %attr(-, root, root) %doc ChangeLog-lnet
+
+%files headers -f lustre-headers.files
 
 %files source
 %attr(-, root, root) /usr/src/lustre-%{version}
