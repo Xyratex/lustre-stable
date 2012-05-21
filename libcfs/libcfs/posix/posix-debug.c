@@ -44,6 +44,8 @@
 #include <libcfs/libcfs.h>
 
 static char debug_file_name[1024];
+unsigned int libcfs_subsystem_debug = ~0 - (S_LNET | S_LND);
+unsigned int libcfs_debug = 0;
 
 #ifdef HAVE_CATAMOUNT_DATA_H
 #include <catamount/data.h>

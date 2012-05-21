@@ -10,7 +10,8 @@ AM_LDFLAGS := -L$(top_builddir)/lnet/utils
 CONFDIRdir=$(sysconfdir)/lustre
 CONFDIR_DATA =
 
-LIBPTLCTL := $(top_builddir)/lnet/utils/libptlctl.a $(top_builddir)/libcfs/libcfs/libcfsutil.a
+LIBPTLCTL := $(top_builddir)/lnet/utils/libptlctl.a $(top_builddir)/libcfs/libcfs/libcfsutil.a \
+	$(top_builddir)/libcfs/libcfs/libcfs.a
 
 sbin_scripts = lrun
 bin_scripts = llstat llobdstat plot-llstat llbackup
