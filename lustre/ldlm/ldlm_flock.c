@@ -170,6 +170,7 @@ ldlm_flock_deadlock(struct ldlm_lock *req, struct ldlm_lock *bl_lock)
                 if (lock == NULL)
                         break;
 
+                LASSERT(req != lock);
                 flock = &lock->l_policy_data.l_flock;
                 LASSERT(flock->owner == bl_owner);
                 bl_owner = flock->blocking_owner;
@@ -281,14 +282,16 @@ reprocess:
                                 RETURN(LDLM_ITER_STOP);
                         }
 
+                        /* add lock to blocking list before deadlock
+                         * check to prevent race */
+                        ldlm_flock_blocking_link(req, lock);
                         if (ldlm_flock_deadlock(req, lock)) {
+                                ldlm_flock_blocking_unlink(req);
                                 ldlm_flock_destroy(req, mode, *flags);
                                 *err = -EDEADLK;
                                 RETURN(LDLM_ITER_STOP);
                         }
 
-
-                        ldlm_flock_blocking_link(req, lock);
                         ldlm_resource_add_lock(res, &res->lr_waiting, req);
                         *flags |= LDLM_FL_BLOCK_GRANTED;
                         RETURN(LDLM_ITER_STOP);
