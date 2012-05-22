@@ -1480,6 +1480,9 @@ static int osc_lock_fits_into(const struct lu_env *env,
         if (need->cld_enq_flags & CEF_NEVER)
                 return 0;
 
+	if (ols->ols_state >= OLS_CANCELLED)
+		return 0;
+
         if (need->cld_mode == CLM_PHANTOM) {
                 /*
                  * Note: the QUEUED lock can't be matched here, otherwise

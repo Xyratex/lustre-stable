@@ -1568,8 +1568,8 @@ static void server_wait_finished(struct vfsmount *mnt)
 		cfs_restore_sigs(blocked);
 		if (rc < 0) {
 			LCONSOLE_EMERG("Danger: interrupted umount %s with "
-				"%d refs!\n", mnt_get_devname(mnt),
-				mnt_get_count(mnt));
+				       "%d refs!\n", mnt_get_devname(mnt),
+				       mnt_get_count(mnt));
 			break;
 		}
 
