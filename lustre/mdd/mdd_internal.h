@@ -493,6 +493,9 @@ struct llog_changelog_rec;
 int mdd_changelog_llog_write(struct mdd_device         *mdd,
                              struct llog_changelog_rec *rec,
                              struct thandle            *handle);
+int mdd_changelog_ext_llog_write(struct mdd_device *mdd,
+				 struct llog_changelog_ext_rec *rec,
+				 struct thandle *handle);
 int mdd_changelog_llog_cancel(const struct lu_env *env,
 			      struct mdd_device *mdd, long long endrec);
 int mdd_changelog_write_header(const struct lu_env *env,
@@ -517,7 +520,6 @@ static inline struct lu_name *mdd_name(const struct lu_env *env,
         lname->ln_namelen = namelen;
         return lname;
 }
-
 
 /* mdd_permission.c */
 #define mdd_cap_t(x) (x)
