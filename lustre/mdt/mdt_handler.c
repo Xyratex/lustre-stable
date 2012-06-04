@@ -570,15 +570,22 @@ static int mdt_getattr_internal(struct mdt_thread_info *info,
                         CERROR("readlink failed: %d\n", rc);
                         rc = -EFAULT;
                 } else {
+			int print_limit = min_t(int, CFS_PAGE_SIZE - 128, rc);
+
                         if (OBD_FAIL_CHECK(OBD_FAIL_MDS_READLINK_EPROTO))
                                  rc -= 2;
                         repbody->valid |= OBD_MD_LINKNAME;
                         repbody->eadatasize = rc;
                         /* NULL terminate */
                         ((char*)ma->ma_lmm)[rc - 1] = 0;
-                        CDEBUG(D_INODE, "symlink dest %s, len = %d\n",
-                               (char*)ma->ma_lmm, rc);
-                        rc = 0;
+
+			/* If the total CDEBUG() size is larger than a page, it
+			 * will print a warning to the console, avoid this by
+			 * printing just the last part of the symlink. */
+			CDEBUG(D_INODE, "symlink dest %s%.*s, len = %d\n",
+			       print_limit < rc ? "..." : "", print_limit,
+			       (char *)ma->ma_lmm + rc - print_limit, rc);
+			rc = 0;
                 }
         }
 
