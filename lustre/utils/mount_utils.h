@@ -59,5 +59,8 @@ void fatal(void);
 int run_command(char *, int);
 int get_mountdata(char *, struct lustre_disk_data *);
 void register_service_tags(char *, char *, char *);
+int check_mtab_entry(char *spec1, char *spec2, char *mntpt, char *type);
+int update_mtab_entry(char *spec, char *mtpt, char *type, char *opts,
+		      int flags, int freq, int pass);
 
 #endif
