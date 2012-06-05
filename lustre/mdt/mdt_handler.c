@@ -5204,14 +5204,8 @@ static int mdt_init_export(struct obd_export *exp)
         if (rc)
                 GOTO(err_free, rc);
 
-        rc = ldlm_init_flock_export(exp);
-        if (rc)
-                GOTO(err_fini, rc);
-
         RETURN(rc);
 
-err_fini:
-        ldlm_destroy_export(exp);
 err_free:
         lut_client_free(exp);
 err:
@@ -5234,7 +5228,6 @@ static int mdt_destroy_export(struct obd_export *exp)
                                      &exp->exp_client_uuid)))
                 RETURN(0);
 
-        ldlm_destroy_flock_export(exp);
         ldlm_destroy_export(exp);
         lut_client_free(exp);
 

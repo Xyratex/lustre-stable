@@ -87,14 +87,21 @@ ldlm_flocks_overlap(struct ldlm_lock *lock, struct ldlm_lock *new)
                 lock->l_policy_data.l_flock.start));
 }
 
-static inline void ldlm_flock_blocking_link(struct ldlm_lock *req,
-                                            struct ldlm_lock *lock)
+static inline int ldlm_flock_blocking_link(struct ldlm_lock *req,
+                                           struct ldlm_lock *lock)
 {
+        int rc = 0;
+
         /* For server only */
         if (req->l_export == NULL)
-                return;
+                return 0;
 
-        LASSERT(req->l_export->exp_flock_hash != NULL);
+        if (req->l_export->exp_flock_hash == NULL) {
+                rc = ldlm_init_flock_export(req->l_export);
+                if (rc)
+                        goto error;
+        }
+
         LASSERT(cfs_hlist_unhashed(&req->l_exp_flock_hash));
 
         req->l_policy_data.l_flock.blocking_owner =
@@ -106,6 +113,8 @@ static inline void ldlm_flock_blocking_link(struct ldlm_lock *req,
         cfs_hash_add(req->l_export->exp_flock_hash,
                      &req->l_policy_data.l_flock.owner,
                      &req->l_exp_flock_hash);
+error:
+        return rc;
 }
 
 static inline void ldlm_flock_blocking_unlink(struct ldlm_lock *req)
@@ -115,8 +124,8 @@ static inline void ldlm_flock_blocking_unlink(struct ldlm_lock *req)
                 return;
 
         check_res_locked(req->l_resource);
-        LASSERT(req->l_export->exp_flock_hash != NULL);
-        if (!cfs_hlist_unhashed(&req->l_exp_flock_hash))
+        if (req->l_export->exp_flock_hash != NULL &&
+            !cfs_hlist_unhashed(&req->l_exp_flock_hash))
                 cfs_hash_del(req->l_export->exp_flock_hash,
                              &req->l_policy_data.l_flock.owner,
                              &req->l_exp_flock_hash);
@@ -160,9 +169,10 @@ static int ldlm_flock_lookup_cb(cfs_hash_t *hs, cfs_hash_bd_t *bd,
         struct ldlm_flock_lookup_cb_data *cb_data =
                                 (struct ldlm_flock_lookup_cb_data*)data;
         struct obd_export *exp = cfs_hash_object(hs, hnode);
-        struct ldlm_lock *lock;
+        struct ldlm_lock *lock = NULL;
 
-        lock = cfs_hash_lookup(exp->exp_flock_hash, cb_data->bl_owner);
+        if (exp->exp_flock_hash != NULL)
+                lock = cfs_hash_lookup(exp->exp_flock_hash, cb_data->bl_owner);
         if (lock == NULL)
                 return 0;
 
@@ -216,8 +226,8 @@ ldlm_flock_deadlock(struct ldlm_lock *req, struct ldlm_lock *bl_lock)
                 bl_exp = bl_exp_new;
 
                 if (bl_owner == req_owner &&
-                                bl_exp->exp_connection->c_peer.nid ==
-                                req_exp->exp_connection->c_peer.nid) {
+                    bl_exp->exp_connection->c_peer.nid ==
+                    req_exp->exp_connection->c_peer.nid) {
                         class_export_put(bl_exp);
                         return 1;
                 }
@@ -244,6 +254,7 @@ ldlm_process_flock_lock(struct ldlm_lock *req, int *flags, int first_enq,
         int overlaps = 0;
         int splitted = 0;
         const struct ldlm_callback_suite null_cbs = { NULL };
+        int rc;
         ENTRY;
 
         CDEBUG(D_DLMTRACE, "flags %#x owner "LPU64" pid %u mode %u start "LPU64
@@ -321,7 +332,13 @@ reprocess:
 
                         /* add lock to blocking list before deadlock
                          * check to prevent race */
-                        ldlm_flock_blocking_link(req, lock);
+                        rc = ldlm_flock_blocking_link(req, lock);
+                        if (rc) {
+                                ldlm_flock_destroy(req, mode, *flags);
+                                *err = rc;
+                                RETURN(LDLM_ITER_STOP);
+                        }
+
                         if (ldlm_flock_deadlock(req, lock)) {
                                 ldlm_flock_blocking_unlink(req);
                                 ldlm_flock_destroy(req, mode, *flags);
@@ -855,8 +872,10 @@ EXPORT_SYMBOL(ldlm_init_flock_export);
 void ldlm_destroy_flock_export(struct obd_export *exp)
 {
         ENTRY;
-        cfs_hash_putref(exp->exp_flock_hash);
-        exp->exp_flock_hash = NULL;
+        if (exp->exp_flock_hash) {
+                cfs_hash_putref(exp->exp_flock_hash);
+                exp->exp_flock_hash = NULL;
+        }
         EXIT;
 }
 EXPORT_SYMBOL(ldlm_destroy_flock_export);

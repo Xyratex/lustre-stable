@@ -966,8 +966,6 @@ int ldlm_resource_iterate(struct ldlm_namespace *, const struct ldlm_res_id *,
 
 /* ldlm_flock.c */
 int ldlm_flock_completion_ast(struct ldlm_lock *lock, int flags, void *data);
-int ldlm_init_flock_export(struct obd_export *exp);
-void ldlm_destroy_flock_export(struct obd_export *exp);
 
 /* ldlm_extent.c */
 __u64 ldlm_extent_shift_kms(struct ldlm_lock *lock, __u64 old_kms);
