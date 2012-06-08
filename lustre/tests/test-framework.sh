@@ -7753,6 +7753,8 @@ restore_to_default_flavor()
 
 set_flavor_all()
 {
+	#skipping call in CLIENTONLY mode make this mode work.
+	[ $CLIENTONLY ] && return;
 	local flavor=${1:-null}
 
 	echo "setting all flavor to $flavor"
