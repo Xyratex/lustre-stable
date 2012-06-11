@@ -343,14 +343,10 @@ static struct inode *osd_iget(struct osd_thread_info *info,
 {
         struct inode *inode = NULL;
 
-#ifdef HAVE_EXT4_LDISKFS
         inode = ldiskfs_iget(osd_sb(dev), id->oii_ino);
         if (IS_ERR(inode))
         /* Newer kernels return an error instead of a NULL pointer */
                 inode = NULL;
-#else
-        inode = iget(osd_sb(dev), id->oii_ino);
-#endif
         if (inode == NULL) {
                 CERROR("no inode\n");
                 inode = ERR_PTR(-EACCES);

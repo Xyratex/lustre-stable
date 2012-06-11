@@ -55,20 +55,15 @@
 /* struct dirent64 */
 #include <linux/dirent.h>
 
-#ifdef HAVE_EXT4_LDISKFS
 #include <ldiskfs/ldiskfs.h>
 #include <ldiskfs/ldiskfs_jbd2.h>
-# ifdef HAVE_LDISKFS_JOURNAL_CALLBACK_ADD
-#  define journal_callback ldiskfs_journal_cb_entry
-#  define osd_journal_callback_set(handle, func, jcb) ldiskfs_journal_callback_add(handle, func, jcb)
-# else
-#  define osd_journal_callback_set(handle, func, jcb) jbd2_journal_callback_set(handle, func, jcb)
-# endif
+#ifdef HAVE_LDISKFS_JOURNAL_CALLBACK_ADD
+# define journal_callback ldiskfs_journal_cb_entry
+# define osd_journal_callback_set(handle, func, jcb) \
+         ldiskfs_journal_callback_add(handle, func, jcb)
 #else
-#include <linux/jbd.h>
-#include <linux/ldiskfs_fs.h>
-#include <linux/ldiskfs_jbd.h>
-#define osd_journal_callback_set(handle, func, jcb) journal_callback_set(handle, func, jcb)
+# define osd_journal_callback_set(handle, func, jcb) \
+         journal_callback_set(handle, func, jcb)
 #endif
 
 
