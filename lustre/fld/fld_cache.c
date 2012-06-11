@@ -167,7 +167,12 @@ restart_fixup:
                 if (&f_next->fce_list == head)
                         break;
 
-                LASSERT(c_range->lsr_start <= n_range->lsr_start);
+		if (c_range->lsr_flags != n_range->lsr_flags)
+			continue;
+
+                LASSERTF(c_range->lsr_start <= n_range->lsr_start,
+                         "cur lsr_start "DRANGE" next lsr_start "DRANGE"\n",
+                         PRANGE(c_range), PRANGE(n_range));
 
                 /* check merge possibility with next range */
                 if (c_range->lsr_end == n_range->lsr_start) {
@@ -180,12 +185,10 @@ restart_fixup:
 
                 /* check if current range overlaps with next range. */
                 if (n_range->lsr_start < c_range->lsr_end) {
-
                         if (c_range->lsr_index == n_range->lsr_index) {
                                 n_range->lsr_start = c_range->lsr_start;
                                 n_range->lsr_end = max(c_range->lsr_end,
                                                        n_range->lsr_end);
-
                                 fld_cache_entry_delete(cache, f_curr);
                         } else {
                                 if (n_range->lsr_end <= c_range->lsr_end) {
@@ -201,9 +204,9 @@ restart_fixup:
                 }
 
                 /* kill duplicates */
-                if (c_range->lsr_start == n_range->lsr_start &&
-                    c_range->lsr_end == n_range->lsr_end)
-                        fld_cache_entry_delete(cache, f_curr);
+		if (c_range->lsr_start == n_range->lsr_start &&
+		    c_range->lsr_end == n_range->lsr_end)
+			fld_cache_entry_delete(cache, f_curr);
         }
 
         EXIT;
@@ -395,6 +398,7 @@ void fld_cache_insert(struct fld_cache *cache,
         cfs_list_t *prev = NULL;
         const seqno_t new_start  = range->lsr_start;
         const seqno_t new_end  = range->lsr_end;
+        __u32 new_flags  = range->lsr_flags;
         ENTRY;
 
         LASSERT(range_is_sane(range));
@@ -420,12 +424,15 @@ void fld_cache_insert(struct fld_cache *cache,
 
         cfs_list_for_each_entry_safe(f_curr, n, head, fce_list) {
                 /* add list if next is end of list */
-                if (new_end < f_curr->fce_range.lsr_start)
+                if (new_end < f_curr->fce_range.lsr_start ||
+                   (new_end == f_curr->fce_range.lsr_start &&
+                    new_flags != f_curr->fce_range.lsr_flags))
                         break;
 
                 prev = &f_curr->fce_list;
                 /* check if this range is to left of new range. */
-                if (new_start < f_curr->fce_range.lsr_end) {
+                if (new_start < f_curr->fce_range.lsr_end &&
+                    new_flags == f_curr->fce_range.lsr_flags) {
                         fld_cache_overlap_handle(cache, f_curr, f_new);
                         goto out;
                 }
@@ -434,6 +441,7 @@ void fld_cache_insert(struct fld_cache *cache,
         if (prev == NULL)
                 prev = head;
 
+        CDEBUG(D_INFO, "insert range "DRANGE"\n", PRANGE(&f_new->fce_range));
         /* Add new entry to cache and lru list. */
         fld_cache_entry_add(cache, f_new, prev);
 out:
