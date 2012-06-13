@@ -2034,6 +2034,16 @@ do_facet() {
     do_node $HOST "$@"
 }
 
+# Function: do_facet_random_file $FACET $FILE $SIZE
+# Creates FILE with random content on the given FACET of given SIZE
+
+do_facet_random_file() {
+    local FACET=$1
+    local FILE=$2
+    local SIZE=$3
+    do_facet $FACET "dd if=/dev/urandom of=$FILE bs=$SIZE count=1 2>/dev/null"
+}
+
 do_nodesv() {
     do_nodes --verbose "$@"
 }
@@ -3131,6 +3141,14 @@ stop_full_debug_logging() {
     debugrestore
 }
 
+# prints bash call stack
+log_trace_dump() {
+    echo "  Trace dump:"
+    for (( i=1; i < ${#BASH_LINENO[*]} ; i++ )) ; do
+        echo "  = ${BASH_SOURCE[$i]}:${BASH_LINENO[$i-1]}:${FUNCNAME[$i]}"
+    done
+}
+
 ##################################
 # Test interface
 ##################################
@@ -3146,6 +3164,7 @@ error_noexit() {
     fi
 
     log " ${TESTSUITE} ${TESTNAME}: @@@@@@ ${TYPE}: $@ "
+    log_trace_dump
 
     mkdir -p $LOGDIR
     # We need to dump the logs on all nodes
