@@ -3470,7 +3470,7 @@ run_one_logged() {
 
     umask $SAVE_UMASK
 
-    return 0
+    return $RC
 }
 
 #
