@@ -1132,15 +1132,18 @@ out_bulk:
         if (desc)
                 ptlrpc_free_bulk(desc);
 out:
-        if (rc == 0) {
+	if (rc == 0)
                 oti_to_request(oti, req);
-                target_committed_to_req(req);
-                rc = ptlrpc_reply(req);
-        } else if (!no_reply) {
-                /* Only reply if there was no comms problem with bulk */
-                target_committed_to_req(req);
+
+	if (likely(no_reply == 0))
+		no_reply = !target_committed_to_req(req) && oti->oti_wait;
+	CDEBUG(D_INFO, "reply %d - %d \n", no_reply, oti->oti_wait);
+	if (!no_reply) {
                 req->rq_status = rc;
-                ptlrpc_error(req);
+		if (rc == 0) 
+			ptlrpc_reply(req);
+		else
+			ptlrpc_error(req);
         } else {
                 /* reply out callback would free */
                 ptlrpc_req_drop_rs(req);
@@ -2075,7 +2078,7 @@ static int ost_hpreq_handler(struct ptlrpc_request *req)
 /* TODO: handle requests in a similar way as MDT: see mdt_handle_common() */
 int ost_handle(struct ptlrpc_request *req)
 {
-        struct obd_trans_info trans_info = { 0, };
+        struct obd_trans_info trans_info = { 0 };
         struct obd_trans_info *oti = &trans_info;
         int should_process, fail = OBD_FAIL_OST_ALL_REPLY_NET, rc = 0;
         struct obd_device *obd = NULL;

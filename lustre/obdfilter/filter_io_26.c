@@ -769,6 +769,8 @@ retry:
                 fsfilt_check_slow(obd, now, "direct_io");
                 goto retry;
         }
+        CDEBUG(D_INFO, "set wait %d\n", sync_journal_commit);
+        oti->oti_wait = sync_journal_commit;
 
         obdo_from_inode(oa, inode, NULL, rc == 0 ? FILTER_VALID_FLAGS : 0 |
                                                    OBD_MD_FLUID |OBD_MD_FLGID);

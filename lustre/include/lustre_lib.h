@@ -78,7 +78,8 @@ int target_handle_disconnect(struct ptlrpc_request *req);
 void target_destroy_export(struct obd_export *exp);
 int target_pack_pool_reply(struct ptlrpc_request *req);
 int target_handle_ping(struct ptlrpc_request *req);
-void target_committed_to_req(struct ptlrpc_request *req);
+/* return 1 if transo send, 0 otherwise*/
+int target_committed_to_req(struct ptlrpc_request *req);
 int do_set_info_async(struct obd_import *imp,
                       int opcode, int version,
                       obd_count keylen, void *key,
