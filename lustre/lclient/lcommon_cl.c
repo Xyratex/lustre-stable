@@ -977,17 +977,15 @@ void ccc_req_attr_set(const struct lu_env *env,
         struct obdo  *oa;
         obd_flag      valid_flags;
 
-        oa = attr->cra_oa;
-        inode = ccc_object_inode(obj);
-        valid_flags = OBD_MD_FLTYPE|OBD_MD_FLATIME;
+	oa = attr->cra_oa;
+	inode = ccc_object_inode(obj);
+	valid_flags = OBD_MD_FLTYPE;
 
-        if (flags != (obd_valid)~0ULL)
-                valid_flags |= OBD_MD_FLMTIME|OBD_MD_FLCTIME|OBD_MD_FLATIME;
-        else {
-                LASSERT(attr->cra_capa == NULL);
-                attr->cra_capa = cl_capa_lookup(inode,
-                                                slice->crs_req->crq_type);
-        }
+	if ((flags & OBD_MD_FLOSSCAPA) != 0) {
+		LASSERT(attr->cra_capa == NULL);
+		attr->cra_capa = cl_capa_lookup(inode,
+						slice->crs_req->crq_type);
+	}
 
         if (slice->crs_req->crq_type == CRT_WRITE) {
                 if (flags & OBD_MD_FLEPOCH) {
