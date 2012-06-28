@@ -897,6 +897,19 @@ lnet_net2ni_locked (__u32 net)
         return NULL;
 }
 
+lnet_ni_t *
+lnet_net2ni(__u32 net)
+{
+	lnet_ni_t *ni;
+
+	LNET_LOCK();
+	ni = lnet_net2ni_locked(net);
+	LNET_UNLOCK();
+
+	return ni;
+}
+EXPORT_SYMBOL(lnet_net2ni);
+
 int
 lnet_islocalnet (__u32 net)
 {

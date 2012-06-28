@@ -586,17 +586,7 @@ lnet_set_msg_uid(lnet_ni_t *ni, lnet_msg_t *msg, lnet_uid_t uid)
 
 extern lnet_ni_t *lnet_nid2ni_locked (lnet_nid_t nid);
 extern lnet_ni_t *lnet_net2ni_locked (__u32 net);
-static inline lnet_ni_t *
-lnet_net2ni (__u32 net)
-{
-        lnet_ni_t *ni;
-
-        LNET_LOCK();
-        ni = lnet_net2ni_locked(net);
-        LNET_UNLOCK();
-
-        return ni;
-}
+extern lnet_ni_t *lnet_net2ni(__u32 net);
 
 int lnet_notify(lnet_ni_t *ni, lnet_nid_t peer, int alive, cfs_time_t when);
 void lnet_notify_locked(lnet_peer_t *lp, int notifylnd, int alive, cfs_time_t when);
