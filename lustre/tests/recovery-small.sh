@@ -1414,6 +1414,12 @@ test_105()
         local ir_state=$(check_cli_ir_state $rcli)
 	[ $ir_state = DISABLED -o $ir_state = "OFF" ] || error "IR state must be DISABLED at $rcli"
 
+	# Since the client just mounted, its last_rcvd entry is not on disk.
+	# Send an RPC so exp_need_sync forces last_rcvd to commit this export
+	# so the client can reconnect during OST recovery (LU-924, LU-1582)
+	$SETSTRIPE -i 0 $DIR/$tfile
+	dd if=/dev/zero of=$DIR/$tfile bs=1M count=1 conv=sync
+
         # make sure MGS's state is Partial
         [ $(get_ir_status) = "partial" ] || error "MGS IR state must be partial"
 
