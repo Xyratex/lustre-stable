@@ -244,15 +244,7 @@ do {                                                                           \
 # endif /* LIBCFS_DEBUG */
 # define KLASSERT(e) ((void)0)
 # define printk printf
-# ifdef CRAY_XT3                                /* buggy calloc! */
-#  define LIBCFS_ALLOC(ptr, size)               \
-   do {                                         \
-        (ptr) = malloc(size);                   \
-        memset(ptr, 0, size);                   \
-   } while (0)
-# else
-#  define LIBCFS_ALLOC(ptr, size) do { (ptr) = calloc(1,size); } while (0)
-# endif
+# define LIBCFS_ALLOC(ptr, size) do { (ptr) = calloc(1,size); } while (0)
 # define LIBCFS_FREE(ptr, size) do { free(ptr); } while((size) - (size))
 
 void libcfs_debug_dumplog(void);

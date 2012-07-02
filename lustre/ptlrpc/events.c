@@ -285,9 +285,6 @@ void request_in_callback(lnet_event_t *ev)
         req->rq_self = ev->target.nid;
         req->rq_rqbd = rqbd;
         req->rq_phase = RQ_PHASE_NEW;
-#ifdef CRAY_XT3
-        req->rq_uid = ev->uid;
-#endif
         cfs_spin_lock_init(&req->rq_lock);
         CFS_INIT_LIST_HEAD(&req->rq_timed_list);
         CFS_INIT_LIST_HEAD(&req->rq_exp_list);
