@@ -377,6 +377,8 @@ int main(int argc, char **argv)
                                 len -= rc;
                                 if (verbose >= 2)
                                         printf("%.*s\n", rc, buf_align);
+				if (rc == 0)
+					break;
                         }
                         break;
                 case 'R':
