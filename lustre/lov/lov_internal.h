@@ -183,11 +183,6 @@ int lov_prep_create_set(struct obd_export *exp, struct obd_info *oifo,
                         struct lov_request_set **reqset);
 int cb_create_update(void *cookie, int rc);
 int lov_fini_create_set(struct lov_request_set *set, struct lov_stripe_md **ea);
-int lov_prep_brw_set(struct obd_export *exp, struct obd_info *oinfo,
-                     obd_count oa_bufs, struct brw_page *pga,
-                     struct obd_trans_info *oti,
-                     struct lov_request_set **reqset);
-int lov_fini_brw_set(struct lov_request_set *set);
 int lov_prep_getattr_set(struct obd_export *exp, struct obd_info *oinfo,
                          struct lov_request_set **reqset);
 int lov_fini_getattr_set(struct lov_request_set *set);
