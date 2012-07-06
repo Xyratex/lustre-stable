@@ -1635,81 +1635,6 @@ static int lov_sync(struct obd_export *exp, struct obd_info *oinfo,
         RETURN(0);
 }
 
-static int lov_brw_check(struct lov_obd *lov, struct obd_info *lov_oinfo,
-                         obd_count oa_bufs, struct brw_page *pga)
-{
-        struct obd_info oinfo = { { { 0 } } };
-        int i, rc = 0;
-
-        oinfo.oi_oa = lov_oinfo->oi_oa;
-
-        /* The caller just wants to know if there's a chance that this
-         * I/O can succeed */
-        for (i = 0; i < oa_bufs; i++) {
-                int stripe = lov_stripe_number(lov_oinfo->oi_md, pga[i].off);
-                int ost = lov_oinfo->oi_md->lsm_oinfo[stripe]->loi_ost_idx;
-                obd_off start, end;
-
-                if (!lov_stripe_intersects(lov_oinfo->oi_md, i, pga[i].off,
-                                           pga[i].off + pga[i].count - 1,
-                                           &start, &end))
-                        continue;
-
-                if (!lov->lov_tgts[ost] || !lov->lov_tgts[ost]->ltd_active) {
-                        CDEBUG(D_HA, "lov idx %d inactive\n", ost);
-                        return -EIO;
-                }
-
-                rc = obd_brw(OBD_BRW_CHECK, lov->lov_tgts[ost]->ltd_exp, &oinfo,
-                             1, &pga[i], NULL);
-                if (rc)
-                        break;
-        }
-        return rc;
-}
-
-static int lov_brw(int cmd, struct obd_export *exp, struct obd_info *oinfo,
-                   obd_count oa_bufs, struct brw_page *pga,
-                   struct obd_trans_info *oti)
-{
-        struct lov_request_set *set;
-        struct lov_request *req;
-        cfs_list_t *pos;
-        struct lov_obd *lov = &exp->exp_obd->u.lov;
-        int err, rc = 0;
-        ENTRY;
-
-        ASSERT_LSM_MAGIC(oinfo->oi_md);
-
-        if (cmd == OBD_BRW_CHECK) {
-                rc = lov_brw_check(lov, oinfo, oa_bufs, pga);
-                RETURN(rc);
-        }
-
-        rc = lov_prep_brw_set(exp, oinfo, oa_bufs, pga, oti, &set);
-        if (rc)
-                RETURN(rc);
-
-        cfs_list_for_each (pos, &set->set_list) {
-                struct obd_export *sub_exp;
-                struct brw_page *sub_pga;
-                req = cfs_list_entry(pos, struct lov_request, rq_link);
-
-                sub_exp = lov->lov_tgts[req->rq_idx]->ltd_exp;
-                sub_pga = set->set_pga + req->rq_pgaidx;
-                rc = obd_brw(cmd, sub_exp, &req->rq_oi, req->rq_oabufs,
-                             sub_pga, oti);
-                if (rc)
-                        break;
-                lov_update_common_set(set, req, rc);
-        }
-
-        err = lov_fini_brw_set(set);
-        if (!rc)
-                rc = err;
-        RETURN(rc);
-}
-
 static int lov_enqueue_interpret(struct ptlrpc_request_set *rqset,
                                  void *data, int rc)
 {
@@ -3006,7 +2931,6 @@ struct obd_ops lov_obd_ops = {
         .o_getattr_async       = lov_getattr_async,
         .o_setattr             = lov_setattr,
         .o_setattr_async       = lov_setattr_async,
-        .o_brw                 = lov_brw,
         .o_merge_lvb           = lov_merge_lvb,
         .o_adjust_kms          = lov_adjust_kms,
         .o_punch               = lov_punch,
