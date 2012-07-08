@@ -977,6 +977,7 @@ struct lu_context {
          * from enum lu_context_tag.
          */
         __u32                  lc_tags;
+	enum lu_context_state  lc_state;
         /**
          * Pointer to the home service thread. NULL for other execution
          * contexts.
@@ -987,7 +988,6 @@ struct lu_context {
          * detail.
          */
         void                 **lc_value;
-        enum lu_context_state  lc_state;
         /**
          * Linkage into a list of all remembered contexts. Only
          * `non-transient' contexts, i.e., ones created for service threads
