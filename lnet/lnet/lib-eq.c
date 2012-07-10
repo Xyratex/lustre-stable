@@ -121,6 +121,7 @@ LNetEQAlloc(unsigned int count, lnet_eq_handler_t callback,
         lnet_eq2handle(handle, eq);
         return (0);
 }
+EXPORT_SYMBOL(LNetEQAlloc);
 
 /**
  * Release the resources associated with an event queue if it's idle;
@@ -171,6 +172,8 @@ LNetEQFree(lnet_handle_eq_t eqh)
 
         return 0;
 }
+EXPORT_SYMBOL(LNetEQFree);
+
 
 int
 lib_get_event (lnet_eq_t *eq, lnet_event_t *ev)
@@ -229,6 +232,7 @@ LNetEQGet (lnet_handle_eq_t eventq, lnet_event_t *event)
         return LNetEQPoll(&eventq, 1, 0,
                          event, &which);
 }
+EXPORT_SYMBOL(LNetEQGet);
 
 /**
  * Block the calling process until there is an event in the EQ.
@@ -254,6 +258,7 @@ LNetEQWait (lnet_handle_eq_t eventq, lnet_event_t *event)
         return LNetEQPoll(&eventq, 1, LNET_TIME_FOREVER,
                          event, &which);
 }
+EXPORT_SYMBOL(LNetEQWait);
 
 /**
  * Block the calling process until there's an event from a set of EQs or

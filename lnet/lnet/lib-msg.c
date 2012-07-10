@@ -252,3 +252,4 @@ lnet_finalize (lnet_ni_t *ni, lnet_msg_t *msg, int status)
  out:
         LNET_UNLOCK();
 }
+EXPORT_SYMBOL(lnet_finalize);
