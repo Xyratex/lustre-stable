@@ -180,6 +180,7 @@ struct lustre_mount_info *server_get_mount(const char *name)
 
         RETURN(lmi);
 }
+EXPORT_SYMBOL(server_get_mount);
 
 /*
  * Used by mdt to get mount_info from obdname.
@@ -199,6 +200,7 @@ struct lustre_mount_info *server_get_mount_2(const char *name)
 
         RETURN(lmi);
 }
+EXPORT_SYMBOL(server_get_mount_2);
 
 static void unlock_mntput(struct vfsmount *mnt)
 {
@@ -255,6 +257,7 @@ int server_put_mount(const char *name, struct vfsmount *mnt)
 
         RETURN(0);
 }
+EXPORT_SYMBOL(server_put_mount);
 
 /* Corresponding to server_get_mount_2 */
 int server_put_mount_2(const char *name, struct vfsmount *mnt)
@@ -262,6 +265,7 @@ int server_put_mount_2(const char *name, struct vfsmount *mnt)
         ENTRY;
         RETURN(0);
 }
+EXPORT_SYMBOL(server_put_mount_2);
 
 /******* mount helper utilities *********/
 
@@ -446,6 +450,7 @@ int lustre_process_log(struct super_block *sb, char *logname,
         /* class_obd_list(); */
         RETURN(rc);
 }
+EXPORT_SYMBOL(lustre_process_log);
 
 /* Stop watching this config log for updates */
 int lustre_end_log(struct super_block *sb, char *logname,
@@ -471,6 +476,7 @@ int lustre_end_log(struct super_block *sb, char *logname,
         lustre_cfg_free(lcfg);
         RETURN(rc);
 }
+EXPORT_SYMBOL(lustre_end_log);
 
 /**************** obd start *******************/
 
@@ -503,6 +509,7 @@ int do_lcfg(char *cfgname, lnet_nid_t nid, int cmd,
         lustre_cfg_free(lcfg);
         return(rc);
 }
+EXPORT_SYMBOL(do_lcfg);
 
 /** Call class_attach and class_setup.  These methods in turn call
  * obd type-specific methods.
@@ -974,6 +981,7 @@ int server_mti_print(char *title, struct mgs_target_info *mti)
                   mti->mti_config_ver, mti->mti_flags);
         return(0);
 }
+EXPORT_SYMBOL(server_mti_print);
 
 static int server_sb2mti(struct super_block *sb, struct mgs_target_info *mti)
 {
@@ -1101,6 +1109,7 @@ out:
                 OBD_FREE_PTR(mti);
         RETURN(rc);
 }
+EXPORT_SYMBOL(server_register_target);
 
 /** Start server targets: MDTs and OSTs
  */
@@ -1788,6 +1797,7 @@ int server_name2index(char *svname, __u32 *idx, char **endptr)
         *idx = index;
         return rc;
 }
+EXPORT_SYMBOL(server_name2index);
 
 /*************** mount common betweeen server and client ***************/
 
@@ -1815,6 +1825,7 @@ int lustre_common_put_super(struct super_block *sb)
         lu_types_stop();
         RETURN(rc);
 }
+EXPORT_SYMBOL(lustre_common_put_super);
 
 static void lmd_print(struct lustre_mount_data *lmd)
 {
@@ -2190,11 +2201,13 @@ void lustre_register_client_fill_super(int (*cfs)(struct super_block *sb,
 {
         client_fill_super = cfs;
 }
+EXPORT_SYMBOL(lustre_register_client_fill_super);
 
 void lustre_register_kill_super_cb(void (*cfs)(struct super_block *sb))
 {
         kill_super_cb = cfs;
 }
+EXPORT_SYMBOL(lustre_register_kill_super_cb);
 
 /***************** FS registration ******************/
 
@@ -2247,17 +2260,3 @@ int lustre_unregister_fs(void)
 {
         return unregister_filesystem(&lustre_fs_type);
 }
-
-EXPORT_SYMBOL(lustre_register_client_fill_super);
-EXPORT_SYMBOL(lustre_register_kill_super_cb);
-EXPORT_SYMBOL(lustre_common_put_super);
-EXPORT_SYMBOL(lustre_process_log);
-EXPORT_SYMBOL(lustre_end_log);
-EXPORT_SYMBOL(server_get_mount);
-EXPORT_SYMBOL(server_get_mount_2);
-EXPORT_SYMBOL(server_put_mount);
-EXPORT_SYMBOL(server_put_mount_2);
-EXPORT_SYMBOL(server_register_target);
-EXPORT_SYMBOL(server_name2index);
-EXPORT_SYMBOL(server_mti_print);
-EXPORT_SYMBOL(do_lcfg);
