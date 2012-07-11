@@ -41,9 +41,7 @@
 #ifndef EXPORT_SYMTAB
 # define EXPORT_SYMTAB
 #endif
-#ifndef AUTOCONF_INCLUDED
-#include <linux/config.h>
-#endif
+
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>

@@ -42,9 +42,6 @@
 # define EXPORT_SYMTAB
 #endif
 
-#ifndef AUTOCONF_INCLUDED
-#include <linux/config.h>
-#endif
 #include <linux/module.h>
 #include <linux/kmod.h>
 #include <linux/notifier.h>

@@ -46,9 +46,6 @@
 #endif
 
 #ifdef __KERNEL__
-#ifndef AUTOCONF_INCLUDED
-#include <linux/config.h> /* for CONFIG_PROC_FS */
-#endif
 #include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>

@@ -46,9 +46,6 @@
 
 #include <qsnet/kernel.h>
 #undef printf                                   /* nasty QSW #define */
-#ifndef AUTOCONF_INCLUDED
-#include <linux/config.h>
-#endif
 #include <linux/module.h>
 
 #include <elan/epcomms.h>
