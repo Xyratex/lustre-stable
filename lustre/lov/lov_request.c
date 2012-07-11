@@ -129,7 +129,7 @@ int lov_update_common_set(struct lov_request_set *set,
 
         /* grace error on inactive ost */
         if (rc && !(lov->lov_tgts[req->rq_idx] &&
-                    lov->lov_tgts[req->rq_idx]->ltd_active))
+                    lov->lov_tgts[req->rq_idx]->ltd_activate))
                 rc = 0;
 
         /* FIXME in raid1 regime, should return 0 */
@@ -157,7 +157,7 @@ static int lov_update_enqueue_lov(struct obd_export *exp,
         if (rc != ELDLM_OK &&
             !(rc == ELDLM_LOCK_ABORTED && (flags & LDLM_FL_HAS_INTENT))) {
                 memset(lov_lockhp, 0, sizeof(*lov_lockhp));
-                if (lov->lov_tgts[idx] && lov->lov_tgts[idx]->ltd_active) {
+                if (lov->lov_tgts[idx] && lov->lov_tgts[idx]->ltd_activate) {
                         /* -EUSERS used by OST to report file contention */
                         if (rc != -EINTR && rc != -EUSERS)
                                 CERROR("enqueue objid "LPX64" subobj "
@@ -338,7 +338,7 @@ int lov_prep_enqueue_set(struct obd_export *exp, struct obd_info *oinfo,
                         continue;
 
                 if (!lov->lov_tgts[loi->loi_ost_idx] ||
-                    !lov->lov_tgts[loi->loi_ost_idx]->ltd_active) {
+                    !lov->lov_tgts[loi->loi_ost_idx]->ltd_activate) {
                         CDEBUG(D_HA, "lov idx %d inactive\n", loi->loi_ost_idx);
                         continue;
                 }
@@ -461,7 +461,7 @@ int lov_prep_match_set(struct obd_export *exp, struct obd_info *oinfo,
 
                 /* FIXME raid1 should grace this error */
                 if (!lov->lov_tgts[loi->loi_ost_idx] ||
-                    !lov->lov_tgts[loi->loi_ost_idx]->ltd_active) {
+                    !lov->lov_tgts[loi->loi_ost_idx]->ltd_activate) {
                         CDEBUG(D_HA, "lov idx %d inactive\n", loi->loi_ost_idx);
                         GOTO(out_set, rc = -EIO);
                 }
@@ -896,7 +896,7 @@ int lov_prep_getattr_set(struct obd_export *exp, struct obd_info *oinfo,
 
                 loi = oinfo->oi_md->lsm_oinfo[i];
                 if (!lov->lov_tgts[loi->loi_ost_idx] ||
-                    !lov->lov_tgts[loi->loi_ost_idx]->ltd_active) {
+                    !lov->lov_tgts[loi->loi_ost_idx]->ltd_activate) {
                         CDEBUG(D_HA, "lov idx %d inactive\n", loi->loi_ost_idx);
                         if (oinfo->oi_oa->o_valid & OBD_MD_FLEPOCH)
                                 /* SOM requires all the OSTs to be active. */
@@ -979,7 +979,7 @@ int lov_prep_destroy_set(struct obd_export *exp, struct obd_info *oinfo,
 
                 loi = lsm->lsm_oinfo[i];
                 if (!lov->lov_tgts[loi->loi_ost_idx] ||
-                    !lov->lov_tgts[loi->loi_ost_idx]->ltd_active) {
+                    !lov->lov_tgts[loi->loi_ost_idx]->ltd_activate) {
                         CDEBUG(D_HA, "lov idx %d inactive\n", loi->loi_ost_idx);
                         continue;
                 }
@@ -1091,7 +1091,7 @@ int lov_prep_setattr_set(struct obd_export *exp, struct obd_info *oinfo,
                 struct lov_request *req;
 
                 if (!lov->lov_tgts[loi->loi_ost_idx] ||
-                    !lov->lov_tgts[loi->loi_ost_idx]->ltd_active) {
+                    !lov->lov_tgts[loi->loi_ost_idx]->ltd_activate) {
                         CDEBUG(D_HA, "lov idx %d inactive\n", loi->loi_ost_idx);
                         continue;
                 }
@@ -1168,7 +1168,7 @@ int lov_update_punch_set(struct lov_request_set *set,
         lov_update_set(set, req, rc);
 
         /* grace error on inactive ost */
-        if (rc && !lov->lov_tgts[req->rq_idx]->ltd_active)
+        if (rc && !lov->lov_tgts[req->rq_idx]->ltd_activate)
                 rc = 0;
 
         if (rc == 0) {
@@ -1225,7 +1225,7 @@ int lov_prep_punch_set(struct obd_export *exp, struct obd_info *oinfo,
                         continue;
 
                 if (!lov->lov_tgts[loi->loi_ost_idx] ||
-                    !lov->lov_tgts[loi->loi_ost_idx]->ltd_active) {
+                    !lov->lov_tgts[loi->loi_ost_idx]->ltd_activate) {
                         CDEBUG(D_HA, "lov idx %d inactive\n", loi->loi_ost_idx);
                         GOTO(out_set, rc = -EIO);
                 }
@@ -1320,7 +1320,7 @@ int lov_prep_sync_set(struct obd_export *exp, struct obd_info *oinfo,
                 obd_off rs, re;
 
                 if (!lov->lov_tgts[loi->loi_ost_idx] ||
-                    !lov->lov_tgts[loi->loi_ost_idx]->ltd_active) {
+                    !lov->lov_tgts[loi->loi_ost_idx]->ltd_activate) {
                         CDEBUG(D_HA, "lov idx %d inactive\n", loi->loi_ost_idx);
                         continue;
                 }
@@ -1503,7 +1503,7 @@ static int cb_statfs_update(void *cookie, int rc)
 
         obd_getref(lovobd);
         tgt = lov->lov_tgts[lovreq->rq_idx];
-        if (!tgt || !tgt->ltd_active)
+        if (!tgt || !tgt->ltd_activate)
                 GOTO(out_update, rc);
 
         tgtobd = class_exp2obd(tgt->ltd_exp);
@@ -1558,7 +1558,7 @@ int lov_prep_statfs_set(struct obd_device *obd, struct obd_info *oinfo,
 
                 /* skip targets that have been explicitely disabled by the
                  * administrator */
-                if (!lov->lov_tgts[i]->ltd_exp) {
+                if (!lov->lov_tgts[i]->ltd_activate) {
                         CDEBUG(D_HA, "lov idx %d administratively disabled\n", i);
                         continue;
                 }

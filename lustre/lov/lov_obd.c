@@ -509,7 +509,7 @@ static int lov_notify(struct obd_device *obd, struct obd_device *watched,
 
                         /* don't send sync event if target not
                          * connected/activated */
-                        if (is_sync &&  !lov->lov_tgts[i]->ltd_active)
+                        if (is_sync &&  !lov->lov_tgts[i]->ltd_activate)
                                 continue;
 
                         rc = obd_notify_observer(obd, lov->lov_tgts[i]->ltd_obd,
@@ -1971,7 +1971,7 @@ static int lov_iocontrol(unsigned int cmd, struct obd_export *exp, int len,
                 if (!lov->lov_tgts[index])
                         /* Try again with the next index */
                         RETURN(-EAGAIN);
-                if (!lov->lov_tgts[index]->ltd_active)
+                if (!lov->lov_tgts[index]->ltd_activate)
                         RETURN(-ENODATA);
 
                 osc_obd = class_exp2obd(lov->lov_tgts[index]->ltd_exp);
@@ -2395,7 +2395,7 @@ static int lov_fiemap(struct lov_obd *lov, __u32 keylen, void *key,
                                 GOTO(out, rc = -EINVAL);
 
                         /* If OST is inactive, return extent with UNKNOWN flag */
-                        if (!lov->lov_tgts[ost_index]->ltd_active) {
+                        if (!lov->lov_tgts[ost_index]->ltd_activate) {
                                 fm_local->fm_flags |= FIEMAP_EXTENT_LAST;
                                 fm_local->fm_mapped_extents = 1;
 
