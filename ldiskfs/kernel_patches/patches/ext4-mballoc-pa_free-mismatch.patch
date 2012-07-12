@@ -111,18 +111,19 @@ Index: linux-stage/fs/ext4/mballoc.c
  		} else {
  			block = ext4_grp_offs_to_block(sb, &ac->ac_b_ex);
  			ar->len = ac->ac_b_ex.fe_len;
-@@ -5025,6 +5075,15 @@
+@@ -5025,6 +5075,16 @@
  		goto error_return;
  	}
  
-+        if (dev_check_rdonly(sb->s_bdev)) {
-+                struct block_device *bdev = sb->s_bdev;
++	if (dev_check_rdonly(sb->s_bdev) && printk_ratelimit()) {
++		struct block_device *bdev = sb->s_bdev;
 +
-+                printk(KERN_WARNING "Release to readonly device %s (%#x): "
-+                       "[inode %lu] [block %lu] [count %lu] [is_meta %d]\n",
-+                       bdev->bd_disk ? bdev->bd_disk->disk_name : "",
-+                       bdev->bd_dev, inode->i_ino, (unsigned long)block, count, metadata);
-+        }
++		printk(KERN_WARNING "Release to readonly device %s (%#x): "
++			"[inode %lu] [block %lu] [count %lu] [is_meta %d]\n",
++			bdev->bd_disk ? bdev->bd_disk->disk_name : "",
++			bdev->bd_dev, inode->i_ino, (unsigned long)block,
++			count, metadata);
++	}
 +
  	ext4_debug("freeing block %llu\n", block);
  	trace_mark(ext4_free_blocks,
