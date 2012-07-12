@@ -51,6 +51,11 @@
 #include <asm/system.h>
 #include <asm/uaccess.h>
 
+#ifdef HAVE_MIGRATE_H
+#include <linux/migrate.h>
+#elif defined(HAVE_MIGRATE_MODE_H)
+#include <linux/migrate_mode.h>
+#endif
 #include <linux/fs.h>
 #include <linux/buffer_head.h>
 #include <linux/writeback.h>
@@ -556,6 +561,10 @@ static int ll_write_end(struct file *file, struct address_space *mapping,
 #ifdef HAVE_MIGRATEPAGE_3_ARGS
 int ll_migratepage(struct address_space *mapping,
                    struct page *newpage, struct page *page)
+#elif defined(HAVE_MIGRATEPAGE_4ARGS)
+int ll_migratepage(struct address_space *mapping,
+		   struct page *newpage, struct page *page,
+		   enum migrate_mode mode)
 #else
 int ll_migratepage(struct page *newpage, struct page *page)
 #endif
