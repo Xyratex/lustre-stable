@@ -68,7 +68,7 @@ Index: linux-stage/fs/ext4/mballoc.c
  	trace_ext4_request_blocks(ar);
  
 +
-+	if (dev_check_rdonly(sb->s_bdev)) {
++	if (dev_check_rdonly(sb->s_bdev) && printk_ratelimit()) {
 +		struct block_device *bdev = sb->s_bdev;
 +
 +		printk(KERN_WARNING "Alloc from readonly device %s (%#x): "
@@ -118,7 +118,7 @@ Index: linux-stage/fs/ext4/mballoc.c
  		goto error_return;
  	}
  
-+	if (dev_check_rdonly(sb->s_bdev)) {
++	if (dev_check_rdonly(sb->s_bdev) && printk_ratelimit()) {
 +		struct block_device *bdev = sb->s_bdev;
 +
 +		printk(KERN_WARNING "Release to readonly device %s (%#x): "
