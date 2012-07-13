@@ -1091,7 +1091,6 @@ LB_LINUX_TRY_COMPILE([
 ])
 ])
 
-
 #
 # 2.6.27
 #
@@ -1128,6 +1127,27 @@ LB_LINUX_TRY_COMPILE([
                 [kernel vm_operation_struct.page_mkwrite uses struct vm_fault * as second parameter])
 ],[
         AC_MSG_RESULT([no])
+])
+EXTRA_KCFLAGS="$tmp_flags"
+])
+
+AC_DEFUN([LC_PGMKWRITE_COMPACT],
+[AC_MSG_CHECKING([if kernel .page_mkwrite is located in vm_operation_struct._pmkw])
+tmp_flags="$EXTRA_KCFLAGS"
+EXTRA_KCFLAGS="-Werror"
+LB_LINUX_TRY_COMPILE([
+	#include <linux/mm.h>
+],[
+	struct vm_operations_struct *vm_ops;
+
+	vm_ops = NULL;
+	vm_ops->_pmkw.page_mkwrite(NULL, NULL);
+], [
+	AC_MSG_RESULT([yes])
+	AC_DEFINE(HAVE_PGMKWRITE_COMPACT, 1,
+		[kernel .page_mkwrite is located in vm_operation_struct._pmkw])
+],[
+	AC_MSG_RESULT([no])
 ])
 EXTRA_KCFLAGS="$tmp_flags"
 ])
@@ -1402,6 +1422,22 @@ LB_LINUX_TRY_COMPILE([
 ])
 
 # 2.6.32
+
+# 2.6.32 introduced inode_newsize_ok
+AC_DEFUN([LC_VFS_INODE_NEWSIZE_OK],
+[AC_MSG_CHECKING([if inode_newsize_ok is defined])
+LB_LINUX_TRY_COMPILE([
+	#include <linux/fs.h>
+],[
+	return inode_newsize_ok(NULL, 0);
+],[
+	AC_MSG_RESULT(yes)
+	AC_DEFINE(HAVE_VFS_INODE_NEWSIZE_OK, 1,
+		  [inode_newsize_ok is defined])
+],[
+	AC_MSG_RESULT(no)
+])
+])
 
 # 2.6.32 changes cache_detail's member cache_request to cache_upcall
 # in kernel commit bc74b4f5e63a09fb78e245794a0de1e5a2716bbe
@@ -1949,6 +1985,7 @@ AC_DEFUN([LC_PROG_LINUX],
          # 2.6.27
          LC_SECURITY_PLUG  # for SLES10 SP2
          LC_PGMKWRITE_USE_VMFAULT
+	 LC_PGMKWRITE_COMPACT
          LC_INODE_PERMISION_2ARGS
          LC_FILE_REMOVE_SUID
          LC_TRYLOCKPAGE
@@ -1985,6 +2022,7 @@ AC_DEFUN([LC_PROG_LINUX],
          LC_SET_CPUS_ALLOWED
          LC_CACHE_UPCALL
          LC_SELINUX_IS_ENABLED
+	 LC_VFS_INODE_NEWSIZE_OK
 
          # 2.6.35, 3.0.0
          LC_FILE_FSYNC
