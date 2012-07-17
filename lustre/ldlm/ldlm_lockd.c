@@ -2073,7 +2073,8 @@ static int ldlm_cancel_handler(struct ptlrpc_request *req)
         case LDLM_CANCEL:
                 req_capsule_set(&req->rq_pill, &RQF_LDLM_CANCEL);
                 CDEBUG(D_INODE, "cancel\n");
-                if (OBD_FAIL_CHECK(OBD_FAIL_LDLM_CANCEL))
+                if (CFS_FAIL_CHECK(OBD_FAIL_LDLM_CANCEL) ||
+                    CFS_FAIL_CHECK(OBD_FAIL_PTLRPC_CANCEL_RESEND))
                         RETURN(0);
                 rc = ldlm_handle_cancel(req);
                 if (rc)

@@ -1352,10 +1352,18 @@ static int ptlrpc_server_request_add(struct ptlrpc_service *svc,
  */
 static int ptlrpc_server_allow_high(struct ptlrpc_service *svc, int force)
 {
+        int running = svc->srv_threads_running;
+
         if (force)
                 return 1;
 
-        if (svc->srv_n_active_reqs >= svc->srv_threads_running - 1)
+        if (svc->srv_req_portal == MDS_REQUEST_PORTAL &&
+            CFS_FAIL_PRECHECK(OBD_FAIL_PTLRPC_CANCEL_RESEND)) {
+                /* leave just 1 thread for normal RPCs */
+                running = (svc->srv_hpreq_handler != NULL) ? 3 : 2;
+        }
+
+        if (svc->srv_n_active_reqs >= running - 1)
                 return 0;
 
         return cfs_list_empty(&svc->srv_request_queue) ||
@@ -1379,15 +1387,21 @@ static int ptlrpc_server_high_pending(struct ptlrpc_service *svc, int force)
  */
 static int ptlrpc_server_allow_normal(struct ptlrpc_service *svc, int force)
 {
+        int running = svc->srv_threads_running;
 #ifndef __KERNEL__
         if (1) /* always allow to handle normal request for liblustre */
                 return 1;
 #endif
-        if (force ||
-            svc->srv_n_active_reqs < svc->srv_threads_running - 2)
+        if (svc->srv_req_portal == MDS_REQUEST_PORTAL &&
+            CFS_FAIL_PRECHECK(OBD_FAIL_PTLRPC_CANCEL_RESEND)) {
+                /* leave just 1 thread for normal RPCs */
+                running = (svc->srv_hpreq_handler != NULL) ? 3 : 2;
+        }
+
+        if (force || svc->srv_n_active_reqs < running - 2)
                 return 1;
 
-        if (svc->srv_n_active_reqs >= svc->srv_threads_running - 1)
+        if (svc->srv_n_active_reqs >= running - 1)
                 return 0;
 
         return svc->srv_n_active_hpreq > 0 || svc->srv_hpreq_handler == NULL;
