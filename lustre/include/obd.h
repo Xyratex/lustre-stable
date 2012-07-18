@@ -1327,8 +1327,6 @@ struct obd_ops {
          * Object with @fid is getting deleted, we may want to do something
          * about this.
          */
-        int (*o_fid_delete)(struct obd_export *exp, const struct lu_fid *fid);
-
         int (*o_statfs)(struct obd_device *obd, struct obd_statfs *osfs,
                         __u64 max_age, __u32 flags);
         int (*o_statfs_async)(struct obd_device *obd, struct obd_info *oinfo,
