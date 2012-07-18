@@ -174,6 +174,9 @@ static inline void cfs_kunmap(cfs_page_t *page)
     return;
 }
 
+#define cfs_kmap_atomic(p)    cfs_kmap(p)
+#define cfs_kunmap_atomic(p, a) cfs_kunmap(p)
+
 static inline void cfs_get_page(cfs_page_t *page)
 {
     cfs_atomic_inc(&page->count);

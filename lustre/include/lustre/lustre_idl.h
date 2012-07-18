@@ -1115,6 +1115,7 @@ extern void lustre_swab_ptlrpc_body(struct ptlrpc_body *pb);
 #define OBD_CONNECT_64BITHASH    0x4000000000ULL /* client supports 64-bits
                                                   * directory hash */
 #define OBD_CONNECT_MAXBYTES     0x8000000000ULL /* max stripe size */
+#define OBD_CONNECT_SHORTIO	0x10000000000ULL /* short io */
 /* also update obd_connect_names[] for lprocfs_rd_connect_flags()
  * and lustre/utils/wirecheck.c */
 
@@ -1149,7 +1150,7 @@ extern void lustre_swab_ptlrpc_body(struct ptlrpc_body *pb);
                                 OBD_CONNECT_MDS | OBD_CONNECT_SKIP_ORPHAN | \
                                 OBD_CONNECT_GRANT_SHRINK | OBD_CONNECT_FULL20 | \
                                 OBD_CONNECT_64BITHASH | OBD_CONNECT_MAXBYTES | \
-                                OBD_CONNECT_MAX_EASIZE)
+                                OBD_CONNECT_MAX_EASIZE | OBD_CONNECT_SHORTIO)
 #define ECHO_CONNECT_SUPPORTED (0)
 #define MGS_CONNECT_SUPPORTED  (OBD_CONNECT_VERSION | OBD_CONNECT_AT | \
                                 OBD_CONNECT_FULL20)
@@ -1287,7 +1288,7 @@ enum obdo_flags {
         OBD_FL_MMAP         = 0x00040000, /* object is mmapped on the client */
         OBD_FL_RECOV_RESEND = 0x00080000, /* recoverable resent */
         OBD_FL_NOSPC_BLK    = 0x00100000, /* no more block space on OST */
-
+	OBD_FL_SHORT_IO	    = 0x00200000, /* short io request */
         /* Note that while these checksum values are currently separate bits,
          * in 2.x we can actually allow all values from 1-31 if we wanted. */
         OBD_FL_CKSUM_ALL    = OBD_FL_CKSUM_CRC32 | OBD_FL_CKSUM_ADLER |
@@ -1452,6 +1453,8 @@ extern void lustre_swab_obd_statfs (struct obd_statfs *os);
 #define OBD_BRW_MEMALLOC       0x800 /* Client runs in the "kswapd" context */
 
 #define OBD_OBJECT_EOF 0xffffffffffffffffULL
+#define OBD_SHORT_IO_NUM_PAGES	1    /* Number of pages when short io happend,
+				      * should base on OST_MAXREQSIZE */
 
 #define OST_MIN_PRECREATE 32
 #define OST_MAX_PRECREATE 20000

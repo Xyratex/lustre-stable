@@ -86,6 +86,9 @@ static inline void cfs_kunmap(cfs_page_t *page)
         kunmap(page);
 }
 
+#define cfs_kmap_atomic(p)    kmap_atomic(p, KM_USER0)
+#define cfs_kunmap_atomic(p, a)  kunmap_atomic(a, KM_USER0)
+
 static inline void cfs_get_page(cfs_page_t *page)
 {
         get_page(page);

@@ -162,6 +162,9 @@ void *cfs_page_address(cfs_page_t *pg);
 void *cfs_kmap(cfs_page_t *pg);
 void cfs_kunmap(cfs_page_t *pg);
 
+#define cfs_kmap_atomic(p)    cfs_kmap(p)
+#define cfs_kunmap_atomic(p, a) cfs_kunmap(p)
+
 /*
  * Memory allocator
  */

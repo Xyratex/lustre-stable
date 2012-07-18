@@ -516,8 +516,8 @@ static int ost_setattr(struct obd_export *exp, struct ptlrpc_request *req,
         ost_drop_id(exp, &repbody->oa);
         RETURN(0);
 }
-static __u32 ost_checksum_bulk(struct ptlrpc_bulk_desc *desc, int opc,
-                               cksum_type_t cksum_type)
+static __u32 ost_checksum_niobuf(struct niobuf_local *local_nb, int npages,
+			       int opc, cksum_type_t cksum_type)
 {
         struct cfs_crypto_hash_desc     *hdesc;
         unsigned int                    bufsize;
@@ -532,33 +532,33 @@ static __u32 ost_checksum_bulk(struct ptlrpc_bulk_desc *desc, int opc,
                 return PTR_ERR(hdesc);
         }
         CDEBUG(D_INFO, "Checksum for algo %s\n", cfs_crypto_hash_name(cfs_alg));
-        for (i = 0; i < desc->bd_iov_count; i++) {
+        for (i = 0; i < npages; i++) {
 
                 /* corrupt the data before we compute the checksum, to
                  * simulate a client->OST data error */
                 if (i == 0 && opc == OST_WRITE &&
                     OBD_FAIL_CHECK(OBD_FAIL_OST_CHECKSUM_RECEIVE)) {
-                        int off = desc->bd_iov[i].kiov_offset & ~CFS_PAGE_MASK;
-                        int len = desc->bd_iov[i].kiov_len;
-                        char *ptr = kmap(desc->bd_iov[i].kiov_page) + off;
-                        memcpy(ptr, "bad3", min(4, len));
-                        kunmap(desc->bd_iov[i].kiov_page);
+                        int off = local_nb[i].offset & ~CFS_PAGE_MASK;
+                        int len = local_nb[i].len;
+                        char *ptr = kmap_atomic(local_nb[i].page, KM_USER0);
+                        memcpy(ptr + off, "bad3", min(4, len));
+                        kunmap_atomic(ptr, KM_USER0);
                 }
-                cfs_crypto_hash_update_page(hdesc, desc->bd_iov[i].kiov_page,
-                                  desc->bd_iov[i].kiov_offset & ~CFS_PAGE_MASK,
-                                  desc->bd_iov[i].kiov_len);
+		cfs_crypto_hash_update_page(hdesc, local_nb[i].page,
+					    local_nb[i].offset & ~CFS_PAGE_MASK,
+					    local_nb[i].len);
 
                  /* corrupt the data after we compute the checksum, to
                  * simulate an OST->client data error */
                 if (i == 0 && opc == OST_READ &&
                     OBD_FAIL_CHECK(OBD_FAIL_OST_CHECKSUM_SEND)) {
-                        int off = desc->bd_iov[i].kiov_offset & ~CFS_PAGE_MASK;
-                        int len = desc->bd_iov[i].kiov_len;
-                        char *ptr = kmap(desc->bd_iov[i].kiov_page) + off;
-                        memcpy(ptr, "bad4", min(4, len));
-                        kunmap(desc->bd_iov[i].kiov_page);
+                        int off = local_nb[i].offset & ~CFS_PAGE_MASK;
+                        int len = local_nb[i].len;
+                        char *ptr = kmap_atomic(local_nb[i].page, KM_USER0);
+                        memcpy(ptr + off, "bad4", min(4, len));
+                        kunmap_atomic(ptr, KM_USER0);
                         /* nobody should use corrupted page again */
-                        ClearPageUptodate(desc->bd_iov[i].kiov_page);
+                        ClearPageUptodate(local_nb[i].page);
                 }
         }
 
@@ -653,6 +653,31 @@ static void ost_tls_put(struct ptlrpc_request *r)
         }
 }
 
+static int ost_pages2shortio(struct niobuf_local *local, int npages,
+			     unsigned char *buf, int size)
+{
+	int	i, off, len, copied = size;
+	char	*ptr;
+
+	for (i = 0; i < npages; i++) {
+		off = local[i].offset & ~CFS_PAGE_MASK;
+		len = local[i].len;
+
+		CDEBUG(D_PAGE, "index %d offset = %d len = %d left = %d\n",
+		       i, off, len, size);
+		if (len > size)
+			return -EINVAL;
+
+		ptr = kmap_atomic(local[i].page, KM_USER0);
+		memcpy(buf + off, ptr, len);
+		kunmap_atomic(ptr, KM_USER0);
+		buf += len;
+		size -= len;
+	}
+	return copied - size;
+}
+
+
 static int ost_brw_read(struct ptlrpc_request *req, struct obd_trans_info *oti)
 {
         struct ptlrpc_bulk_desc *desc = NULL;
@@ -665,7 +690,7 @@ static int ost_brw_read(struct ptlrpc_request *req, struct obd_trans_info *oti)
         struct l_wait_info lwi;
         struct lustre_handle lockh = { 0 };
         int niocount, npages, nob = 0, rc, i;
-        int no_reply = 0;
+        int no_reply = 0, npages_readed;
         struct ost_thread_local_cache *tls;
         ENTRY;
 
@@ -719,6 +744,10 @@ static int ost_brw_read(struct ptlrpc_request *req, struct obd_trans_info *oti)
                 }
         }
 
+	req_capsule_set_size(&req->rq_pill, &RMF_SHORT_IO, RCL_SERVER,
+			     (body->oa.o_flags & OBD_FL_SHORT_IO) ?
+			     remote_nb[0].len : 0);
+
         rc = req_capsule_server_pack(&req->rq_pill);
         if (rc)
                 GOTO(out, rc);
@@ -756,22 +785,28 @@ static int ost_brw_read(struct ptlrpc_request *req, struct obd_trans_info *oti)
         if (rc != 0)
                 GOTO(out_lock, rc);
 
-        desc = ptlrpc_prep_bulk_exp(req, npages,
-                                     BULK_PUT_SOURCE, OST_BULK_PORTAL);
-        if (desc == NULL)
-                GOTO(out_commitrw, rc = -ENOMEM);
+	if (body->oa.o_flags & OBD_FL_SHORT_IO) {
+		desc = NULL;
+	} else {
+		desc = ptlrpc_prep_bulk_exp(req, npages,
+					    BULK_PUT_SOURCE, OST_BULK_PORTAL);
+		if (desc == NULL)
+			GOTO(out_commitrw, rc = -ENOMEM);
+	}
 
         nob = 0;
+	npages_readed = npages;
         for (i = 0; i < npages; i++) {
                 int page_rc = local_nb[i].rc;
 
                 if (page_rc < 0) {              /* error */
                         rc = page_rc;
+			npages_readed = i;
                         break;
                 }
 
                 nob += page_rc;
-                if (page_rc != 0) {             /* some data! */
+                if (page_rc != 0 && desc != NULL) {       /* some data! */
                         LASSERT (local_nb[i].page != NULL);
                         ptlrpc_prep_bulk_page(desc, local_nb[i].page,
                                               local_nb[i].offset & ~CFS_PAGE_MASK,
@@ -779,6 +814,8 @@ static int ost_brw_read(struct ptlrpc_request *req, struct obd_trans_info *oti)
                 }
 
                 if (page_rc != local_nb[i].len) { /* short read */
+			local_nb[i].len = page_rc;
+			npages_readed = i + (page_rc != 0 ? 1 : 0);
                         /* All subsequent pages should be 0 */
                         while(++i < npages)
                                 LASSERT(local_nb[i].rc == 0);
@@ -792,7 +829,9 @@ static int ost_brw_read(struct ptlrpc_request *req, struct obd_trans_info *oti)
                                           repbody->oa.o_flags : 0);
                 repbody->oa.o_flags = cksum_type_pack(cksum_type);
                 repbody->oa.o_valid = OBD_MD_FLCKSUM | OBD_MD_FLFLAGS;
-                repbody->oa.o_cksum = ost_checksum_bulk(desc, OST_READ,cksum_type);
+                repbody->oa.o_cksum = ost_checksum_niobuf(local_nb,
+							  npages_readed,
+							  OST_READ, cksum_type);
                 CDEBUG(D_PAGE, "checksum at read origin: %x\n",
                        repbody->oa.o_cksum);
         } else {
@@ -803,11 +842,30 @@ static int ost_brw_read(struct ptlrpc_request *req, struct obd_trans_info *oti)
         /* Check if client was evicted while we were doing i/o before touching
            network */
         if (rc == 0) {
-                if (!CFS_FAIL_PRECHECK(OBD_FAIL_PTLRPC_CLIENT_BULK_CB2))
+		if (body->oa.o_flags & OBD_FL_SHORT_IO) {
+			unsigned char *short_io_buf;
+			int short_io_size;
+
+			short_io_buf = req_capsule_server_get(&req->rq_pill,
+							      &RMF_SHORT_IO);
+			short_io_size = req_capsule_get_size(&req->rq_pill,
+							     &RMF_SHORT_IO,
+							     RCL_SERVER);
+			rc = ost_pages2shortio(local_nb, npages_readed,
+					       short_io_buf, short_io_size);
+			if (rc >= 0)
+				req_capsule_shrink(&req->rq_pill,
+						   &RMF_SHORT_IO, rc,
+						   RCL_SERVER);
+			rc = rc > 0 ? 0 : rc;
+		} else if (!CFS_FAIL_PRECHECK(OBD_FAIL_PTLRPC_CLIENT_BULK_CB2))
                         rc = target_bulk_io(exp, desc, &lwi);
                 no_reply = rc != 0;
-        }
-
+        } else {
+		if (body->oa.o_flags & OBD_FL_SHORT_IO)
+			req_capsule_shrink(&req->rq_pill, &RMF_SHORT_IO, 0,
+					   RCL_SERVER);
+	}
 out_commitrw:
         /* Must commit after prep above in all cases */
         rc = obd_commitrw(OBD_BRW_READ, exp, &repbody->oa, 1, ioo,
@@ -847,7 +905,8 @@ out:
         }
         /* send a bulk after reply to simulate a network delay or reordering
          * after router */
-        if (CFS_FAIL_PRECHECK(OBD_FAIL_PTLRPC_CLIENT_BULK_CB2)) {
+        if (desc != NULL &&
+	    CFS_FAIL_PRECHECK(OBD_FAIL_PTLRPC_CLIENT_BULK_CB2)) {
                 cfs_waitq_t              waitq;
                 struct l_wait_info       lwi1;
 
@@ -861,6 +920,32 @@ out:
         }
 
         RETURN(rc);
+}
+
+static int ost_shortio2pages(struct niobuf_local *local, int npages,
+			     unsigned char *buf, int size)
+{
+	int	i, off, len;
+	char	*ptr;
+
+	for (i = 0; i < npages; i++) {
+		off = local[i].offset & ~CFS_PAGE_MASK;
+		len = local[i].len;
+
+		if (len == 0)
+			continue;
+
+		CDEBUG(D_PAGE, "index %d offset = %d len = %d left = %d\n",
+		       i, off, len, size);
+		ptr = kmap_atomic(local[i].page, KM_USER0);
+		if (ptr == NULL)
+			return -EINVAL;
+		memcpy(ptr + off, buf, len < size ? len : size);
+		kunmap_atomic(ptr, KM_USER0);
+		buf += len;
+		size -= len;
+	}
+	return 0;
 }
 
 static int ost_brw_write(struct ptlrpc_request *req, struct obd_trans_info *oti)
@@ -998,23 +1083,40 @@ static int ost_brw_write(struct ptlrpc_request *req, struct obd_trans_info *oti)
         if (rc != 0)
                 GOTO(out_lock, rc);
 
-        desc = ptlrpc_prep_bulk_exp(req, npages,
+	if (body->oa.o_flags & OBD_FL_SHORT_IO) {
+		int short_io_size;
+		unsigned char *short_io_buf;
+
+		short_io_size = req_capsule_get_size(&req->rq_pill,
+						     &RMF_SHORT_IO,
+						     RCL_CLIENT);
+		short_io_buf = req_capsule_client_get(&req->rq_pill,
+						      &RMF_SHORT_IO);
+		CDEBUG(D_INFO, "Client use short io for data transfer,"
+			       " size = %d\n", short_io_size);
+
+		/* Copy short io buf to pages */
+		rc = ost_shortio2pages(local_nb, npages, short_io_buf, short_io_size);
+		desc = NULL;
+	} else {
+		desc = ptlrpc_prep_bulk_exp(req, npages,
                                      BULK_GET_SINK, OST_BULK_PORTAL);
-        if (desc == NULL)
-                GOTO(skip_transfer, rc = -ENOMEM);
+		if (desc == NULL)
+			GOTO(skip_transfer, rc = -ENOMEM);
 
-        /* NB Having prepped, we must commit... */
+		/* NB Having prepped, we must commit... */
 
-        for (i = 0; i < npages; i++)
-                ptlrpc_prep_bulk_page(desc, local_nb[i].page,
-                                      local_nb[i].offset & ~CFS_PAGE_MASK,
-                                      local_nb[i].len);
+		for (i = 0; i < npages; i++)
+			ptlrpc_prep_bulk_page(desc, local_nb[i].page,
+					local_nb[i].offset & ~CFS_PAGE_MASK,
+					local_nb[i].len);
 
-        rc = sptlrpc_svc_prep_bulk(req, desc);
-        if (rc != 0)
-                GOTO(out_lock, rc);
+		rc = sptlrpc_svc_prep_bulk(req, desc);
+		if (rc != 0)
+			GOTO(out_lock, rc);
 
-        rc = target_bulk_io(exp, desc, &lwi);
+		rc = target_bulk_io(exp, desc, &lwi);
+	}
         no_reply = rc != 0;
 
 skip_transfer:
@@ -1023,7 +1125,8 @@ skip_transfer:
                 repbody->oa.o_valid |= OBD_MD_FLCKSUM | OBD_MD_FLFLAGS;
                 repbody->oa.o_flags &= ~OBD_FL_CKSUM_ALL;
                 repbody->oa.o_flags |= cksum_type_pack(cksum_type);
-                server_cksum = ost_checksum_bulk(desc, OST_WRITE, cksum_type);
+                server_cksum = ost_checksum_niobuf(local_nb, npages,
+						   OST_WRITE, cksum_type);
                 repbody->oa.o_cksum = server_cksum;
                 cksum_counter++;
                 if (unlikely(client_cksum != server_cksum)) {
@@ -1060,19 +1163,13 @@ skip_transfer:
         repbody->oa.o_valid &= ~(OBD_MD_FLMTIME | OBD_MD_FLATIME);
 
         if (unlikely(client_cksum != server_cksum && rc == 0 && !mmap)) {
-                int  new_cksum = ost_checksum_bulk(desc, OST_WRITE, cksum_type);
                 char *msg;
                 char *via;
                 char *router;
 
-                if (new_cksum == server_cksum)
-                        msg = "changed in transit before arrival at OST";
-                else if (new_cksum == client_cksum)
-                        msg = "initial checksum before message complete";
-                else
-                        msg = "changed in transit AND after initial checksum";
+                msg = "changed in transit before arrival at OST";
 
-                if (req->rq_peer.nid == desc->bd_sender) {
+                if (desc == NULL || req->rq_peer.nid == desc->bd_sender) {
                         via = router = "";
                 } else {
                         via = " via ";
@@ -1097,9 +1194,8 @@ skip_transfer:
                                    local_nb[0].offset,
                                    local_nb[npages-1].offset +
                                    local_nb[npages-1].len - 1 );
-                CERROR("client csum %x, original server csum %x, "
-                       "server csum now %x\n",
-                       client_cksum, server_cksum, new_cksum);
+                CERROR("client csum %x, original server csum %x\n",
+                       client_cksum, server_cksum);
         }
 
         if (rc == 0) {

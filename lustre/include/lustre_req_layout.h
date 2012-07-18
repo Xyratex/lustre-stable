@@ -282,6 +282,7 @@ extern struct req_msg_field RMF_NIOBUF_REMOTE;
 extern struct req_msg_field RMF_RCS;
 extern struct req_msg_field RMF_FIEMAP_KEY;
 extern struct req_msg_field RMF_FIEMAP_VAL;
+extern struct req_msg_field RMF_SHORT_IO;
 
 /** @} req_layout */
 

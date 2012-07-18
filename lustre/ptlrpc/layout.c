@@ -509,12 +509,14 @@ static const struct req_msg_field *ost_brw_client[] = {
         &RMF_OST_BODY,
         &RMF_OBD_IOOBJ,
         &RMF_NIOBUF_REMOTE,
-        &RMF_CAPA1
+        &RMF_CAPA1,
+        &RMF_SHORT_IO
 };
 
 static const struct req_msg_field *ost_brw_read_server[] = {
         &RMF_PTLRPC_BODY,
-        &RMF_OST_BODY
+        &RMF_OST_BODY,
+        &RMF_SHORT_IO
 };
 
 static const struct req_msg_field *ost_brw_write_server[] = {
@@ -929,6 +931,10 @@ EXPORT_SYMBOL(RMF_FIEMAP_KEY);
 struct req_msg_field RMF_FIEMAP_VAL =
         DEFINE_MSGF("fiemap", 0, -1, lustre_swab_fiemap, NULL);
 EXPORT_SYMBOL(RMF_FIEMAP_VAL);
+
+struct req_msg_field RMF_SHORT_IO =
+        DEFINE_MSGF("short_io", 0, -1, NULL, NULL);
+EXPORT_SYMBOL(RMF_SHORT_IO);
 
 /*
  * Request formats.
