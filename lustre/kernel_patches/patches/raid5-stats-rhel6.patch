@@ -40,8 +40,8 @@ Index: linux-2.6.32-131.4.1.el6/drivers/md/raid5.c
  		bi = &sh->dev[i].req;
  
  		bi->bi_rw = rw;
--		if (rw == WRITE)
-+		if (rw == WRITE) {
+-		if (rw & WRITE)
++		if (rw & WRITE) {
 +			atomic_inc(&conf->writes_out);
  			bi->bi_end_io = raid5_end_write_request;
 -		else

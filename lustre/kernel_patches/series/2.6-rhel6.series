@@ -6,11 +6,9 @@ blkdev_tunables-2.6-rhel6.patch
 export-2.6.32-vanilla.patch
 jbd2-jcberr-2.6-rhel6.patch
 bh_lru_size_config.patch
-titan_sas_table_to_table.patch
 raid5-mmp-unplug-dev-rhel6.patch 
 raid5-zerocopy-rhel6.patch 
 raid5-stats-rhel6.patch 
 raid5-configurable-cachesize-rhel6.patch 
 raid5-large-io-rhel6.patch 
-raid5-fix-callback.patch
 raid5-fix-bug-on-race.patch
