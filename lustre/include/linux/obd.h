@@ -50,6 +50,11 @@
 # include <linux/lustre_intent.h>
 #endif
 
+struct ll_iattr {
+	struct iattr	iattr;
+	unsigned int	ia_attr_flags;
+};
+
 typedef struct {
         cfs_spinlock_t          lock;
 
