@@ -176,6 +176,10 @@ kiblnd_post_rx (kib_rx_t *rx, int credit)
 
         rx->rx_nob = -1;                        /* flag posted */
 
+	/* Transfer ownership from CPU to device just before the call
+	 * to post the message to device to receive data. */
+	kiblnd_dma_sync_single_for_device(conn->ibc_hdev->ibh_ibdev,
+		rx->rx_msgaddr, IBLND_MSG_SIZE, DMA_FROM_DEVICE);
         rc = ib_post_recv(conn->ibc_cmid->qp, &rx->rx_wrq, &bad_wrq);
         if (rc != 0) {
                 CERROR("Can't post rx for %s: %d, bad_wrq: %p\n",
@@ -476,6 +480,9 @@ kiblnd_rx_complete (kib_rx_t *rx, int status, int nob)
         LASSERT (nob >= 0);
         rx->rx_nob = nob;
 
+	kiblnd_dma_sync_single_for_cpu(conn->ibc_hdev->ibh_ibdev,
+		rx->rx_msgaddr, IBLND_MSG_SIZE, DMA_FROM_DEVICE);
+
         rc = kiblnd_unpack_msg(msg, rx->rx_nob);
         if (rc != 0) {
                 CERROR ("Error %d unpacking rx from %s\n",
@@ -620,6 +627,9 @@ kiblnd_unmap_tx(lnet_ni_t *ni, kib_tx_t *tx)
                 kiblnd_pmr_pool_unmap(tx->tx_u.pmr);
                 tx->tx_u.pmr = NULL;
         }
+
+	kiblnd_dma_sync_single_for_cpu(tx->tx_pool->tpo_hdev->ibh_ibdev,
+		tx->tx_msgaddr, tx->tx_msg->ibm_nob, DMA_TO_DEVICE);
 
         if (tx->tx_nfrags != 0) {
                 kiblnd_dma_unmap_sg(tx->tx_pool->tpo_hdev->ibh_ibdev,
@@ -854,6 +864,11 @@ kiblnd_post_tx_locked (kib_conn_t *conn, kib_tx_t *tx, int credit)
                 /* close_conn will launch failover */
                 rc = -ENETDOWN;
         } else {
+		/* Transfer ownership from CPU to device just before the call
+		* to post the message to device to send data. */
+		kiblnd_dma_sync_single_for_device(
+			tx->tx_pool->tpo_hdev->ibh_ibdev,
+			tx->tx_msgaddr, tx->tx_msg->ibm_nob, DMA_TO_DEVICE);
                 rc = ib_post_send(conn->ibc_cmid->qp,
                                   tx->tx_wrq, &bad_wrq);
         }
