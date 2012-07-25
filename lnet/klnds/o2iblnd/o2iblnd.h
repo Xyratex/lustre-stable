@@ -1137,6 +1137,20 @@ static inline unsigned int kiblnd_sg_dma_len(struct ib_device *dev,
         return ib_sg_dma_len(dev, sg);
 }
 
+static inline void kiblnd_dma_sync_single_for_cpu(struct ib_device *dev,
+					__u64 addr, size_t size,
+					enum dma_data_direction direction)
+{
+	ib_dma_sync_single_for_cpu(dev, addr, size, direction);
+}
+
+static inline void kiblnd_dma_sync_single_for_device(struct ib_device *dev,
+					__u64 addr, size_t size,
+					enum dma_data_direction direction)
+{
+	ib_dma_sync_single_for_device(dev, addr, size, direction);
+}
+
 /* XXX We use KIBLND_CONN_PARAM(e) as writable buffer, it's not strictly
  * right because OFED1.2 defines it as const, to use it we have to add
  * (void *) cast to overcome "const" */
