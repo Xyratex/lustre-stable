@@ -556,6 +556,7 @@ check_mds_body(void)
         CHECK_CDEFINE(MDS_OPEN_JOIN_FILE);
         CHECK_CDEFINE(MDS_OPEN_HAS_EA);
         CHECK_CDEFINE(MDS_OPEN_HAS_OBJS);
+        CHECK_CDEFINE(MDS_OPEN_BY_FID);
 
         /* these should be identical to their EXT3_*_FL counterparts, and
          * are redefined only to avoid dragging in ext3_fs.h */

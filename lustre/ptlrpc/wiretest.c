@@ -1217,6 +1217,8 @@ void lustre_assert_wire_constants(void)
         CLASSERT(MDS_INODELOCK_LOOKUP == 0x000001);
         CLASSERT(MDS_INODELOCK_UPDATE == 0x000002);
         CLASSERT(MDS_INODELOCK_OPEN == 0x000004);
+	LASSERTF(MDS_OPEN_BY_FID == 000040000000UL, "found 0%.11oUL\n",
+		 MDS_OPEN_BY_FID);
 
         /* Checks for struct mdt_rec_setattr */
         LASSERTF((int)sizeof(struct mdt_rec_setattr) == 136, " found %lld\n",
