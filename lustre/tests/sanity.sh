@@ -5222,12 +5222,14 @@ setup_test102() {
 	done
 
 	cd $DIR
-	$1 $TAR cf $TMP/f102.tar $tdir --xattrs
+	mkdir -m 777 $TMP/d102
+	$1 $TAR cf $TMP/d102/f102.tar $tdir --xattrs ||
+		{ error_noexit "Can't create archive $TMP/d102/f102.tar"; }
 }
 
 cleanup_test102() {
 	trap 0
-	rm -f $TMP/f102.tar
+	rm -rf $TMP/d102
 	rm -rf $DIR/d0.sanity/d102
 }
 
@@ -5382,9 +5384,10 @@ test_102d() {
 	[ "$OSTCOUNT" -lt "2" ] && skip_env "skipping N-stripe test" && return
 	setup_test102
 	mkdir -p $DIR/d102d
-	$TAR xf $TMP/f102.tar -C $DIR/d102d --xattrs
+	$TAR xf $TMP/d102/f102.tar -C $DIR/d102d --xattrs
 	cd $DIR/d102d/$tdir
 	compare_stripe_info1
+	cleanup_test102
 }
 run_test 102d "tar restore stripe info from tarfile,not keep osts ==========="
 
@@ -5399,6 +5402,7 @@ test_102f() {
 	$TAR cf - --xattrs $tdir | $TAR xf - --xattrs -C $DIR/d102f
 	cd $DIR/d102f/$tdir
 	compare_stripe_info1
+	cleanup_test102
 }
 run_test 102f "tar copy files, not keep osts ==========="
 
@@ -5470,9 +5474,10 @@ test_102j() {
 	setup_test102 "$RUNAS"
 	mkdir -p $DIR/d102j
 	chown $RUNAS_ID $DIR/d102j
-	$RUNAS $TAR xf $TMP/f102.tar -C $DIR/d102j --xattrs
+	$RUNAS $TAR xf $TMP/d102/f102.tar -C $DIR/d102j --xattrs
 	cd $DIR/d102j/$tdir
 	compare_stripe_info1 "$RUNAS"
+	cleanup_test102
 }
 run_test 102j "non-root tar restore stripe info from tarfile, not keep osts ==="
 
