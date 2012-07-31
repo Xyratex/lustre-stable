@@ -1160,8 +1160,8 @@ check_cli_ir_state()
         local st
         st=$(do_node $NODE "lctl get_param mgc.*.ir_state |
                             awk '/imperative_recovery:/ { print \\\$2}'")
-        [ $st != ON -o $st != OFF ] ||
-                error "Error state $st, must be ON or OFF"
+	[ $st != ON -o $st != OFF -o $st != ENABLED -o $st != DISABLED ] ||
+		error "Error state $st, must be ENABLED or DISABLED"
         echo -n $st
 }
 
@@ -1391,7 +1391,8 @@ test_104()
         clients_up
 
         local ir_state=$(check_target_ir_state ost1)
-        [ $ir_state = "OFF" ] || error "ir status on ost1 should be OFF"
+	[ $ir_state = "DISABLED" -o $ir_state = "OFF" ] ||
+		error "ir status on ost1 should be DISABLED"
 }
 run_test 104 "IR: ost can disable IR voluntarily"
 
@@ -1411,15 +1412,16 @@ test_105()
 
         # make sure lustre mount at $rcli disabling IR
         local ir_state=$(check_cli_ir_state $rcli)
-        [ $ir_state = OFF ] || error "IR state must be OFF at $rcli"
+	[ $ir_state = DISABLED -o $ir_state = "OFF" ] || error "IR state must be DISABLED at $rcli"
 
         # make sure MGS's state is Partial
         [ $(get_ir_status) = "partial" ] || error "MGS IR state must be partial"
 
         fail ost1
-        # make sure IR on ost1 is OFF
+	# make sure IR on ost1 is DISABLED
         local ir_state=$(check_target_ir_state ost1)
-        [ $ir_state = "OFF" ] || error "IR status on ost1 should be OFF"
+	[ $ir_state = "DISABLED" -o $ir_state = "OFF" ] ||
+		error "IR status on ost1 should be DISABLED"
 
         # restore it
         MOUNTOPT=$old_MOUNTOPT
@@ -1430,9 +1432,10 @@ test_105()
         [ $(get_ir_status) = "full" ] || error "MGS IR status must be full"
 
         fail ost1
-        # make sure IR on ost1 is ON
+	# make sure IR on ost1 is ENABLED
         local ir_state=$(check_target_ir_state ost1)
-        [ $ir_state = "ON" ] || error "IR status on ost1 should be OFF"
+	[ $ir_state = "ENABLED" -o $ir_state = "ON" ] ||
+		error "IR status on ost1 should be ENABLED"
 
         return 0
 }
