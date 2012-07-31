@@ -172,7 +172,7 @@ int cfs_crypto_hash_digest(unsigned char alg_id,
                            unsigned char *key, unsigned int key_len,
                            unsigned char *hash, unsigned int *hash_len)
 {
-        struct scatterlist      sl = {0};
+        struct scatterlist      sl;
         struct hash_desc        hdesc;
         int                     err;
         const struct cfs_crypto_hash_type    *type;
@@ -189,7 +189,7 @@ int cfs_crypto_hash_digest(unsigned char alg_id,
                 crypto_free_hash(hdesc.tfm);
                 return -ENOSPC;
         }
-        sg_set_buf(&sl, (void *)buf, buf_len);
+        sg_init_one(&sl, (void *)buf, buf_len);
 
         hdesc.flags = 0;
         err = crypto_hash_digest(&hdesc, &sl, sl.length, hash);
@@ -226,9 +226,18 @@ int cfs_crypto_hash_update_page(struct cfs_crypto_hash_desc *hdesc,
                                 cfs_page_t *page, unsigned int offset,
                                 unsigned int len)
 {
-        struct scatterlist      sl = {0};
+        struct scatterlist      sl;
 
-        sg_set_page(&sl, page, len, offset & ~CFS_PAGE_MASK);
+#ifdef HAVE_SCATTERLIST_SETPAGE
+#ifdef HAVE_SCATTERLIST_INITTABLE
+	sg_init_table(&sl, 1);
+#else
+	memset(&sl, 0, sizeof(sl));
+#endif
+	sg_set_page(&sl, page, len, offset & ~CFS_PAGE_MASK);
+#else
+	sg_init_one(&sl, page_address(page) + (offset & ~CFS_PAGE_MASK), len);
+#endif
 
         return crypto_hash_update((struct hash_desc *)hdesc, &sl, sl.length);
 }
@@ -237,9 +246,9 @@ EXPORT_SYMBOL(cfs_crypto_hash_update_page);
 int cfs_crypto_hash_update(struct cfs_crypto_hash_desc *hdesc,
                            const void *buf, unsigned int buf_len)
 {
-        struct scatterlist      sl = {0};
+        struct scatterlist      sl;
 
-        sg_set_buf(&sl, (void *)buf, buf_len);
+        sg_init_one(&sl, (void *)buf, buf_len);
 
         return crypto_hash_update((struct hash_desc *)hdesc, &sl, sl.length);
 }
