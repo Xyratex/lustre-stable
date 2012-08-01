@@ -1261,16 +1261,30 @@ target_instance_match()
 
 test_100()
 {
-        # disable IR
-        set_ir_status disabled
+	do_facet mgs $LCTL list_param mgs.*.ir_timeout ||
+		{ skip "MGS without IR support"; return 0; }
+
+	# MDT was just restarted in the previous test, make sure everything
+	# is all set.
+	local cnt=30
+	while [ $cnt -gt 0 ]; do
+		nidtbl_versions_match && break
+		sleep 1
+		cnt=$((cnt - 1))
+	done
+
+	# disable IR
+	set_ir_status disabled
+
+	local prev_ver=$(nidtbl_version_client client)
 
         local saved_FAILURE_MODE=$FAILURE_MODE
         [ $(facet_host mgs) = $(facet_host ost1) ] && FAILURE_MODE="SOFT"
         fail ost1
 
         # valid check
-        nidtbl_versions_match &&
-                error "version must differ due to IR disabled"
+	[ $(nidtbl_version_client client) -eq $prev_ver ] ||
+		error "version must not change due to IR disabled"
         target_instance_match ost1 || error "instance mismatch"
 
         # restore env
@@ -1281,6 +1295,9 @@ run_test 100 "IR: Make sure normal recovery still works w/o IR"
 
 test_101()
 {
+        do_facet mgs $LCTL list_param mgs.*.ir_timeout ||
+                { skip "MGS without IR support"; return 0; }
+
         set_ir_status full
 
         local OST1_IMP=$(get_osc_import_name client ost1)
@@ -1299,6 +1316,9 @@ run_test 101 "IR: Make sure IR works w/o normal recovery"
 
 test_102()
 {
+        do_facet mgs $LCTL list_param mgs.*.ir_timeout ||
+                { skip "MGS without IR support"; return 0; }
+
         local clients=${CLIENTS:-$HOSTNAME}
         local old_version
         local new_version
@@ -1345,6 +1365,9 @@ run_test 102 "IR: New client gets updated nidtbl after MGS restart"
 
 test_103()
 {
+        do_facet mgs $LCTL list_param mgs.*.ir_timeout ||
+                { skip "MGS without IR support"; return 0; }
+
         combined_mgs_mds && skip "mgs and mds on the same target" && return 0
 
         # workaround solution to generate config log on the mds
@@ -1383,6 +1406,9 @@ run_test 103 "IR: MDS can start w/o MGS and get updated nidtbl later"
 
 test_104()
 {
+        do_facet mgs $LCTL list_param mgs.*.ir_timeout ||
+                { skip "MGS without IR support"; return 0; }
+
         set_ir_status full
 
         stop ost1
@@ -1398,6 +1424,9 @@ run_test 104 "IR: ost can disable IR voluntarily"
 
 test_105()
 {
+        do_facet mgs $LCTL list_param mgs.*.ir_timeout ||
+                { skip "MGS without IR support"; return 0; }
+
         [ -z "$RCLIENTS" ] && skip "Needs multiple clients" && return 0
 
         set_ir_status full
