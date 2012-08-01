@@ -1810,7 +1810,7 @@ static int mdd_create(const struct lu_env *env,
                 struct md_ucred  *uc = md_ucred(env);
                 struct dt_object *dt = mdd_object_child(son);
                 const char *target_name = spec->u.sp_symname;
-                int sym_len = strlen(target_name);
+		int sym_len = strlen(target_name) + 1;
                 const struct lu_buf *buf;
                 loff_t pos = 0;
 
