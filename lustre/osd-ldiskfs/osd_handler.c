@@ -2620,6 +2620,8 @@ static int osd_ldiskfs_writelink(struct inode *inode, char *buffer, int buflen)
 
         memcpy((char*)&LDISKFS_I(inode)->i_data, (char *)buffer,
                buflen);
+	/* link's buffer contains '\0' to make fsck happy (LU-1540) */
+	buflen--;
         LDISKFS_I(inode)->i_disksize = buflen;
         i_size_write(inode, buflen);
         inode->i_sb->s_op->dirty_inode(inode);
@@ -2676,6 +2678,10 @@ static int osd_ldiskfs_write_record(struct inode *inode, void *buf, int bufsize,
         if (bh)
                 brelse(bh);
 
+	/* link's buffer contains '\0' (LU-1540) to make fsck happy */
+	if (S_ISLNK(inode->i_mode))
+		--new_size;
+
         /* correct in-core and on-disk sizes */
         if (new_size > i_size_read(inode)) {
                 spin_lock(&inode->i_lock);
@@ -2724,8 +2730,8 @@ static ssize_t osd_write(const struct lu_env *env, struct dt_object *dt,
         /* Write small symlink to inode body as we need to maintain correct
          * on-disk symlinks for ldiskfs.
          */
-        if(S_ISLNK(obj->oo_dt.do_lu.lo_header->loh_attr) &&
-           (buf->lb_len < sizeof (LDISKFS_I(inode)->i_data)))
+	if (S_ISLNK(obj->oo_dt.do_lu.lo_header->loh_attr) &&
+           (buf->lb_len <= sizeof (LDISKFS_I(inode)->i_data)))
                 result = osd_ldiskfs_writelink(inode, buf->lb_buf, buf->lb_len);
         else
                 result = osd_ldiskfs_write_record(inode, buf->lb_buf,
