@@ -172,8 +172,7 @@ struct llog_process_cat_args {
 int llog_cat_put(struct llog_handle *cathandle);
 int llog_cat_add_rec(struct llog_handle *cathandle, struct llog_rec_hdr *rec,
                      struct llog_cookie *reccookie, void *buf);
-int llog_cat_cancel_records(struct llog_handle *cathandle, int count,
-                            struct llog_cookie *cookies);
+int llog_cat_cancel_record(struct llog_handle *cathandle, struct llog_cookie *cookie);
 int llog_cat_process(struct llog_handle *cat_llh, llog_cb_t cb, void *data,
                      int startcat, int startidx);
 int llog_cat_process_flags(struct llog_handle *cat_llh, llog_cb_t cb, void *data,

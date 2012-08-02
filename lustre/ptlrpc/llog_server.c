@@ -421,7 +421,7 @@ int llog_origin_handle_cancel(struct ptlrpc_request *req)
                         GOTO(pop_ctxt, rc = PTR_ERR(handle));
                 }
 
-                rc = llog_cat_cancel_records(cathandle, 1, logcookies);
+                rc = llog_cat_cancel_record(cathandle, logcookies);
 
                 /*
                  * Do not raise -ENOENT errors for resent rpcs. This rec already

@@ -153,7 +153,7 @@ static int llog_changelog_cancel_cb(struct llog_handle *llh,
         /* cancel them one at a time.  I suppose we could store up the cookies
            and cancel them all at once; probably more efficient, but this is
            done as a user call, so who cares... */
-        rc = llog_cat_cancel_records(llh->u.phd.phd_cat_handle, 1, &cookie);
+        rc = llog_cat_cancel_record(llh->u.phd.phd_cat_handle, &cookie);
 
         err = fsfilt_commit(obd, inode, trans_h, 0);
         if (err) {

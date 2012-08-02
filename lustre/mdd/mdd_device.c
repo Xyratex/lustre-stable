@@ -1447,8 +1447,8 @@ static int mdd_changelog_user_purge_cb(struct llog_handle *llh,
                         RETURN(PTR_ERR(trans_h));
                 }
 
-                rc = llog_cat_cancel_records(llh->u.phd.phd_cat_handle,
-                                             1, &cookie);
+                rc = llog_cat_cancel_record(llh->u.phd.phd_cat_handle,
+                                            &cookie);
                 if (rc == 0)
                         mcud->mcud_usercount--;
 

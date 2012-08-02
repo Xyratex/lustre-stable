@@ -310,62 +310,57 @@ int llog_cat_add_rec(struct llog_handle *cathandle, struct llog_rec_hdr *rec,
 }
 EXPORT_SYMBOL(llog_cat_add_rec);
 
-/* For each cookie in the cookie array, we clear the log in-use bit and either:
+/* For given cookie, we clear the log in-use bit and either:
  * - the log is empty, so mark it free in the catalog header and delete it
  * - the log is not empty, just write out the log header
  *
- * The cookies may be in different log files, so we need to get new logs
- * each time.
- *
  * Assumes caller has already pushed us into the kernel context.
  */
-int llog_cat_cancel_records(struct llog_handle *cathandle, int count,
-                            struct llog_cookie *cookies)
+int llog_cat_cancel_record(struct llog_handle *cathandle,
+                           struct llog_cookie *cookie)
 {
-        int i, index, rc = 0;
+        int index, rc = 0;
+        struct llog_handle *loghandle;
+        struct llog_logid *lgl = &cookie->lgc_lgl;
+
         ENTRY;
 
         cfs_down_write_nested(&cathandle->lgh_lock, LLOGH_CAT);
-        for (i = 0; i < count; i++, cookies++) {
-                struct llog_handle *loghandle;
-                struct llog_logid *lgl = &cookies->lgc_lgl;
-
-                rc = llog_cat_id2handle(cathandle, &loghandle, lgl);
-                if (rc) {
-                        if (rc == -ENOENT) {
-                                CERROR("Ignoring missing llog file "LPX64"\n",
-                                        lgl->lgl_oid);
-                                rc = 0;
-                                continue;
-                        }
-                        CERROR("Cannot open log "LPX64"\n", lgl->lgl_oid);
-                        break;
+        rc = llog_cat_id2handle(cathandle, &loghandle, lgl);
+        if (rc) {
+                if (rc == -ENOENT) {
+                        CERROR("Ignoring missing llog file "LPX64"\n",
+                               lgl->lgl_oid);
+                        rc = 0;
+                } else {
+                        CERROR("Cannot find log "LPX64"\n", lgl->lgl_oid);
                 }
-
-                cfs_down_write_nested(&loghandle->lgh_lock, LLOGH_LOG);
-                rc = llog_cancel_rec(loghandle, cookies->lgc_index);
-                cfs_up_write(&loghandle->lgh_lock);
-
-                if (rc == 1) {          /* log has been destroyed */
-                        index = loghandle->u.phd.phd_cookie.lgc_index;
-                        if (cathandle->u.chd.chd_current_log == loghandle)
-                                cathandle->u.chd.chd_current_log = NULL;
-                        llog_free_handle(loghandle);
-
-                        LASSERT(index);
-                        llog_cat_set_first_idx(cathandle, index);
-                        rc = llog_cancel_rec(cathandle, index);
-                        if (rc == 0)
-                                CDEBUG(D_RPCTRACE,"cancel plain log at index %u"
-                                       " of catalog "LPX64"\n",
-                                       index, cathandle->lgh_id.lgl_oid);
-                }
+                goto out;
         }
-        cfs_up_write(&cathandle->lgh_lock);
 
+        cfs_down_write_nested(&loghandle->lgh_lock, LLOGH_LOG);
+        rc = llog_cancel_rec(loghandle, cookie->lgc_index);
+        cfs_up_write(&loghandle->lgh_lock);
+
+        if (rc == 1) {          /* log has been destroyed */
+                index = loghandle->u.phd.phd_cookie.lgc_index;
+                if (cathandle->u.chd.chd_current_log == loghandle)
+                        cathandle->u.chd.chd_current_log = NULL;
+                llog_free_handle(loghandle);
+
+                LASSERT(index);
+                llog_cat_set_first_idx(cathandle, index);
+                rc = llog_cancel_rec(cathandle, index);
+                if (rc == 0)
+                        CDEBUG(D_RPCTRACE,"cancel plain log at index %u"
+                               " of catalog "LPX64"\n",
+                               index, cathandle->lgh_id.lgl_oid);
+        }
+out:
+        cfs_up_write(&cathandle->lgh_lock);
         RETURN(rc);
 }
-EXPORT_SYMBOL(llog_cat_cancel_records);
+EXPORT_SYMBOL(llog_cat_cancel_record);
 
 int llog_cat_process_cb(struct llog_handle *cat_llh, struct llog_rec_hdr *rec,
                         void *data)
