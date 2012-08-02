@@ -914,9 +914,8 @@ void ll_lli_init(struct ll_inode_info *lli)
                 lli->lli_symlink_name = NULL;
                 cfs_init_rwsem(&lli->lli_trunc_sem);
                 cfs_mutex_init(&lli->lli_write_mutex);
-                lli->lli_async_rc = 0;
-                lli->lli_write_rc = 0;
-        }
+		lli->lli_async_rc = 0;
+	}
 }
 
 static inline int ll_bdi_register(struct backing_dev_info *bdi)

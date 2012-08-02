@@ -1130,25 +1130,26 @@ out_unlock:
 
 int ll_writepage(struct page *vmpage, struct writeback_control *unused)
 {
-        struct inode           *inode = vmpage->mapping->host;
+	struct inode	       *inode = vmpage->mapping->host;
+	struct ll_inode_info   *lli   = ll_i2info(inode);
         struct lu_env          *env;
         struct cl_io           *io;
         struct cl_page         *page;
         struct cl_object       *clob;
         struct cl_2queue       *queue;
         struct cl_env_nest      nest;
+	bool unlocked = false;
         int result;
         ENTRY;
 
         LASSERT(PageLocked(vmpage));
         LASSERT(!PageWriteback(vmpage));
 
-        if (ll_i2dtexp(inode) == NULL)
-                RETURN(-EINVAL);
+	LASSERT(ll_i2dtexp(inode) != NULL);
 
-        env = cl_env_nested_get(&nest);
-        if (IS_ERR(env))
-                RETURN(PTR_ERR(env));
+	env = cl_env_nested_get(&nest);
+	if (IS_ERR(env))
+		GOTO(out, result = PTR_ERR(env));
 
         queue = &vvp_env_info(env)->vti_queue;
         clob  = ll_i2info(inode)->lli_clob;
@@ -1176,6 +1177,7 @@ int ll_writepage(struct page *vmpage, struct writeback_control *unused)
                         result = cl_io_submit_rw(env, io, CRT_WRITE,
                                                  queue, CRP_NORMAL);
                         cl_page_list_disown(env, io, &queue->c2_qin);
+			unlocked = true;
                         if (result != 0) {
                                 /*
                                  * There is no need to clear PG_writeback, as
@@ -1195,11 +1197,23 @@ int ll_writepage(struct page *vmpage, struct writeback_control *unused)
                                    "writepage", cfs_current());
                         cl_page_put(env, page);
                         cl_2queue_fini(env, queue);
-                }
+                } else {
+			result = PTR_ERR(page);
+		}
         }
         cl_io_fini(env, io);
         cl_env_nested_put(&nest, env);
-        RETURN(result);
+	GOTO(out, result);
+
+out:
+	if (result < 0) {
+		if (!lli->lli_async_rc)
+			lli->lli_async_rc = result;
+		SetPageError(vmpage);
+		if (!unlocked)
+			unlock_page(vmpage);
+	}
+	return result;
 }
 
 int ll_readpage(struct file *file, struct page *vmpage)
