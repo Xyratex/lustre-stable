@@ -1124,6 +1124,7 @@ extern void lustre_swab_ptlrpc_body(struct ptlrpc_body *pb);
 #define OBD_CONNECT_NANOSECOND_TIMES 0x200000000000ULL /* nanosec resolution
 							* timestamps supported
 							*/
+#define OBD_CONNECT_LVB_TYPE	0x400000000000ULL /* variable type of LVB */
 #define OBD_CONNECT_SHORTIO   0x2000000000000ULL /* short io */
 /* also update obd_connect_names[] for lprocfs_rd_connect_flags()
  * and lustre/utils/wirecheck.c */
