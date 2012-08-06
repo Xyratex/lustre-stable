@@ -260,7 +260,7 @@ static int llog_remove_log(struct llog_handle *cat, struct llog_logid *logid)
                 GOTO(out, rc);
         }
         llog_cat_set_first_idx(cat, index);
-        rc = llog_cancel_rec(cat, index);
+        rc = llog_cancel_rec(cat, index, 1);
 out:
         llog_free_handle(log);
         cfs_up_write(&cat->lgh_lock);
@@ -365,7 +365,7 @@ int llog_ioctl(struct llog_ctxt *ctxt, int cmd, struct obd_ioctl_data *data)
 
                 if (handle->lgh_hdr->llh_flags & LLOG_F_IS_CAT) {
                         cfs_down_write(&handle->lgh_lock);
-                        err = llog_cancel_rec(handle, cookie.lgc_index);
+                        err = llog_cancel_rec(handle, cookie.lgc_index, 1);
                         cfs_up_write(&handle->lgh_lock);
                         GOTO(out_close, err);
                 }

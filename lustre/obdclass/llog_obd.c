@@ -336,7 +336,7 @@ static int cat_cancel_cb(struct llog_handle *cathandle,
 cat_cleanup:
                 LASSERT(index);
                 llog_cat_set_first_idx(cathandle, index);
-                rc = llog_cancel_rec(cathandle, index);
+                rc = llog_cancel_rec(cathandle, index, 1);
                 if (rc == 0)
                         CDEBUG(D_HA, "cancel log "LPX64":%x at index %u of catalog "
                               LPX64"\n", lir->lid_id.lgl_oid,
@@ -425,7 +425,7 @@ int llog_obd_origin_cleanup(struct llog_ctxt *ctxt)
 
                                 LASSERT(index);
                                 llog_cat_set_first_idx(cathandle, index);
-                                rc = llog_cancel_rec(cathandle, index);
+                                rc = llog_cancel_rec(cathandle, index, 1);
                                 if (rc == 0)
                                         CDEBUG(D_RPCTRACE, "cancel plain log at"
                                                "index %u of catalog "LPX64"\n",

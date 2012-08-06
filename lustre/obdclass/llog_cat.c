@@ -339,22 +339,35 @@ int llog_cat_cancel_record(struct llog_handle *cathandle,
         }
 
         cfs_down_write_nested(&loghandle->lgh_lock, LLOGH_LOG);
-        rc = llog_cancel_rec(loghandle, cookie->lgc_index);
+        rc = llog_cancel_rec(loghandle, cookie->lgc_index, 0);
         cfs_up_write(&loghandle->lgh_lock);
 
         if (rc == 1) {          /* log has been destroyed */
+                int err;
+
                 index = loghandle->u.phd.phd_cookie.lgc_index;
                 if (cathandle->u.chd.chd_current_log == loghandle)
                         cathandle->u.chd.chd_current_log = NULL;
-                llog_free_handle(loghandle);
-
                 LASSERT(index);
                 llog_cat_set_first_idx(cathandle, index);
-                rc = llog_cancel_rec(cathandle, index);
-                if (rc == 0)
-                        CDEBUG(D_RPCTRACE,"cancel plain log at index %u"
-                               " of catalog "LPX64"\n",
-                               index, cathandle->lgh_id.lgl_oid);
+                rc = llog_cancel_rec(cathandle, index, 1);
+                cfs_up_write(&cathandle->lgh_lock);
+                /* Log catalog cannot be removed when the last
+                 * llog record from the last plain llog file is cancelled.
+                 * It is ensured by not setting LLOG_F_ZAP_WHEN_EMPTY
+                 * flag for catalogs. It is impossible to have rc == 1 here. */
+                LASSERT(rc <= 0);
+                CDEBUG(D_RPCTRACE,"cancel plain log at index %u"
+                                " of catalog "LPX64"\n",
+                                index, cathandle->lgh_id.lgl_oid);
+                err = llog_destroy(loghandle);
+                if (err != 0)
+                        CERROR("cannot remove plain log "LPX64" at index %u"
+                                        " of catalog "LPX64" err %d\n",
+                                       loghandle->lgh_id.lgl_oid, index,
+                                       cathandle->lgh_id.lgl_oid, err);
+                llog_free_handle(loghandle);
+                RETURN(err != 0 ? err : rc);
         }
 out:
         cfs_up_write(&cathandle->lgh_lock);

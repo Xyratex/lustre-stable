@@ -93,8 +93,9 @@ void llog_free_handle(struct llog_handle *loghandle)
 }
 EXPORT_SYMBOL(llog_free_handle);
 
-/* returns negative on error; 0 if success; 1 if success & log destroyed */
-int llog_cancel_rec(struct llog_handle *loghandle, int index)
+/* returns negative on error; 0 if success; 1 if success & log has been (or
+ * should be) destroyed */
+int llog_cancel_rec(struct llog_handle *loghandle, int index, int can_destroy)
 {
         struct llog_log_hdr *llh = loghandle->lgh_hdr;
         int rc = 0;
@@ -118,6 +119,8 @@ int llog_cancel_rec(struct llog_handle *loghandle, int index)
         if ((llh->llh_flags & LLOG_F_ZAP_WHEN_EMPTY) &&
             (llh->llh_count == 1) &&
             (loghandle->lgh_last_idx == (LLOG_BITMAP_BYTES * 8) - 1)) {
+                if (!can_destroy)
+                        RETURN(1);
                 rc = llog_destroy(loghandle);
                 if (rc) {
                         CERROR("Failure destroying log after last cancel: %d\n",
@@ -333,7 +336,7 @@ static int llog_process_thread(void *arg)
                                         GOTO(out, rc);
                                 } else if (rc == LLOG_DEL_RECORD) {
                                         llog_cancel_rec(loghandle,
-                                                        rec->lrh_index);
+                                                        rec->lrh_index, 1);
                                         rc = 0;
                                 }
                                 if (rc)
