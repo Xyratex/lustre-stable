@@ -42,7 +42,7 @@ struct osc_quota_info {
         short              oqi_type; /* quota type */
 };
 
-cfs_spinlock_t qinfo_list_lock = CFS_SPIN_LOCK_UNLOCKED;
+DEFINE_SPINLOCK(qinfo_list_lock);
 
 static cfs_list_t qinfo_hash[NR_DQHASH];
 /* SLAB cache for client quota context */

@@ -65,7 +65,7 @@ enum {
 };
 
 static unsigned int sai_generation = 0;
-static cfs_spinlock_t sai_generation_lock = CFS_SPIN_LOCK_UNLOCKED;
+static DEFINE_SPINLOCK(sai_generation_lock);
 
 /**
  * Check whether first entry was stated already or not.

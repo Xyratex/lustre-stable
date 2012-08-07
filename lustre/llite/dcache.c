@@ -52,7 +52,7 @@
 
 #include "llite_internal.h"
 
-cfs_spinlock_t ll_lookup_lock = CFS_SPIN_LOCK_UNLOCKED;
+DEFINE_SPINLOCK(ll_lookup_lock);
 
 /* should NOT be called with the dcache lock, see fs/dcache.c */
 static void ll_release(struct dentry *de)
