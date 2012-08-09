@@ -617,6 +617,32 @@ static int ptlrpc_lprocfs_wr_hp_ratio(struct file *file, const char *buffer,
         return count;
 }
 
+static int ptlrpc_lprocfs_rd_in_limit(char *page, char **start, off_t off,
+                                      int count, int *eof, void *data)
+{
+        struct ptlrpc_service *svc = data;
+        int rc = snprintf(page, count, "%d", svc->srv_reqs_in_limit);
+        return rc;
+}
+
+static int ptlrpc_lprocfs_wr_in_limit(struct file *file, const char *buffer,
+                                      unsigned long count, void *data)
+{
+        struct ptlrpc_service *svc = data;
+        int rc, val;
+
+        rc = lprocfs_write_helper(buffer, count, &val);
+        if (rc < 0)
+                return rc;
+        if (val < 0)
+                return -ERANGE;
+
+        cfs_spin_lock(&svc->srv_lock);
+        svc->srv_reqs_in_limit = val;
+        cfs_spin_unlock(&svc->srv_lock);
+        return count;
+}
+
 void ptlrpc_lprocfs_register_service(struct proc_dir_entry *entry,
                                      struct ptlrpc_service *svc)
 {
@@ -645,6 +671,10 @@ void ptlrpc_lprocfs_register_service(struct proc_dir_entry *entry,
                  .data       = svc},
                 {.name       = "timeouts",
                  .read_fptr  = ptlrpc_lprocfs_rd_timeouts,
+                 .data       = svc},
+                {.name       = "reqs_in_limit",
+                 .write_fptr = ptlrpc_lprocfs_wr_in_limit,
+                 .read_fptr  = ptlrpc_lprocfs_rd_in_limit,
                  .data       = svc},
                 {NULL}
         };
