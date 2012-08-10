@@ -391,6 +391,7 @@ static int ldlm_srv_pool_recalc(struct ldlm_pool *pl)
 static int ldlm_srv_pool_shrink(struct ldlm_pool *pl,
                                 int nr, unsigned int gfp_mask)
 {
+        struct obd_device *obd = ldlm_pl2ns(pl)->ns_obd;
         __u32 limit;
 
         /*
@@ -405,6 +406,8 @@ static int ldlm_srv_pool_shrink(struct ldlm_pool *pl,
          */
         if (cfs_atomic_read(&pl->pl_granted) == 0)
                 RETURN(0);
+
+        ldlm_cancel_stale_locks(obd, nr);
 
         cfs_spin_lock(&pl->pl_lock);
 
@@ -1170,6 +1173,8 @@ static int ldlm_pools_cli_shrink(SHRINKER_ARGS(sc, nr_to_scan, gfp_mask))
                                  shrink_param(sc, gfp_mask));
 }
 
+#define LDLM_UNUSED_SHRINK_BATCH 100
+
 void ldlm_pools_recalc(ldlm_side_t client)
 {
         __u32 nr_l = 0, nr_p = 0, l;
@@ -1288,6 +1293,8 @@ void ldlm_pools_recalc(ldlm_side_t client)
                  * After setup is done - recalc the pool.
                  */
                 if (!skip) {
+                        ldlm_cancel_stale_locks(ns->ns_obd,
+                                                LDLM_UNUSED_SHRINK_BATCH);
                         ldlm_pool_recalc(&ns->ns_pool);
                         ldlm_namespace_put(ns);
                 }
