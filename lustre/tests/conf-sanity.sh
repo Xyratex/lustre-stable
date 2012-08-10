@@ -2844,7 +2844,27 @@ test_62() {
 }
 run_test 62 "start with disabled journal"
 
-test_63() { # MRP-153
+test_63() {
+	if [ $(facet_fstype $SINGLEMDS) != ldiskfs ]; then
+		skip "Only applicable to ldiskfs-based MDTs"
+		return
+	fi
+
+	local inode_slab=$(do_facet $SINGLEMDS \
+		"awk '/ldiskfs_inode_cache/ { print \\\$5 }' /proc/slabinfo")
+	if [ -z "$inode_slab" ]; then
+		skip "ldiskfs module has not been loaded"
+		return
+	fi
+
+	echo "$inode_slab ldisk inodes per page"
+	[ "$inode_slab" -ge "3" ] ||
+		error "ldisk inode size is too big, $inode_slab objs per page"
+	return
+}
+run_test 63 "Verify each page can at least hold 3 ldisk inodes"
+
+test_70() { # MRP-153
 	local paramkey="mgsnode"
 	local paramval1="192.0.2.254@tcp" # Reserved IPs, see RFC 5735
 	local paramval2="192.0.2.255@tcp"
@@ -2883,9 +2903,9 @@ test_63() { # MRP-153
 
 	reformat
 }
-run_test 63 "check tunefs correctly handles parameter addition and removal"
+run_test 70 "check tunefs correctly handles parameter addition and removal"
 
-test_64() {
+test_71() {
     setup
     local OST_NID=$($LCTL list_nids | head -1)
     local MDS_NID=$($LCTL list_nids | head -1)
@@ -2925,7 +2945,7 @@ test_64() {
     cleanup
     reformat
 }
-run_test 63 "replace nids"
+run_test 71 "replace nids"
 
 if ! combined_mgs_mds ; then
 	stop mgs
