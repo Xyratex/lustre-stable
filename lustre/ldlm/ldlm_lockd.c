@@ -2878,6 +2878,8 @@ EXPORT_SYMBOL(ldlm_revoke_export_locks);
 /* ldlm_resource.c */
 EXPORT_SYMBOL(ldlm_namespace_new);
 EXPORT_SYMBOL(ldlm_namespace_cleanup);
+EXPORT_SYMBOL(ldlm_namespace_free_prior);
+EXPORT_SYMBOL(ldlm_namespace_free_post);
 EXPORT_SYMBOL(ldlm_namespace_free);
 EXPORT_SYMBOL(ldlm_namespace_dump);
 EXPORT_SYMBOL(ldlm_dump_all_namespaces);

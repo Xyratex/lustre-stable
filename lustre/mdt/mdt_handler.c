@@ -4355,6 +4355,11 @@ static void mdt_fini(const struct lu_env *env, struct mdt_device *m)
         mdt_stop_ptlrpc_service(m);
         mdt_llog_ctxt_unclone(env, m, LLOG_CHANGELOG_ORIG_CTXT);
         mdt_obd_llog_cleanup(obd);
+
+        if (m->mdt_namespace != NULL)
+                ldlm_namespace_free_prior(m->mdt_namespace, NULL,
+                                          d->ld_obd->obd_force);
+
         obd_exports_barrier(obd);
         obd_zombie_barrier();
 
@@ -4369,8 +4374,7 @@ static void mdt_fini(const struct lu_env *env, struct mdt_device *m)
         m->mdt_identity_cache = NULL;
 
         if (m->mdt_namespace != NULL) {
-                ldlm_namespace_free(m->mdt_namespace, NULL,
-                                    d->ld_obd->obd_force);
+                ldlm_namespace_free_post(m->mdt_namespace);
                 d->ld_obd->obd_namespace = m->mdt_namespace = NULL;
         }
 

@@ -310,6 +310,10 @@ static int mgs_precleanup(struct obd_device *obd, enum obd_cleanup_stage stage)
                 break;
         case OBD_CLEANUP_EXPORTS:
                 ping_evictor_stop();
+                ldlm_namespace_free_prior(obd->obd_namespace, NULL, 1);
+                obd_exports_barrier(obd);
+                obd_zombie_barrier();
+
                 ptlrpc_unregister_service(mgs->mgs_service);
                 mgs_cleanup_fsdb_list(obd);
                 rc = obd_llog_finish(obd, 0);
@@ -335,7 +339,7 @@ static int mgs_cleanup(struct obd_device *obd)
         server_put_mount(obd->obd_name, mgs->mgs_vfsmnt);
         mgs->mgs_sb = NULL;
 
-        ldlm_namespace_free(obd->obd_namespace, NULL, 1);
+        ldlm_namespace_free_post(obd->obd_namespace);
         obd->obd_namespace = NULL;
 
         fsfilt_put_ops(obd->obd_fsops);

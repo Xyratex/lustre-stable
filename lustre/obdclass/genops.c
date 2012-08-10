@@ -940,6 +940,7 @@ void class_unlink_export(struct obd_export *exp)
         cfs_list_move(&exp->exp_obd_chain, &exp->exp_obd->obd_unlinked_exports);
         cfs_list_del_init(&exp->exp_obd_chain_timed);
         exp->exp_obd->obd_num_exports--;
+        exp->exp_obd->obd_num_unlinked++;
         cfs_spin_unlock(&exp->exp_obd->obd_dev_lock);
         class_export_put(exp);
 }
@@ -1597,6 +1598,7 @@ static void obd_zombie_export_add(struct obd_export *exp) {
         cfs_spin_lock(&exp->exp_obd->obd_dev_lock);
         LASSERT(!cfs_list_empty(&exp->exp_obd_chain));
         cfs_list_del_init(&exp->exp_obd_chain);
+        exp->exp_obd->obd_num_unlinked--;
         cfs_spin_unlock(&exp->exp_obd->obd_dev_lock);
         cfs_spin_lock(&obd_zombie_impexp_lock);
         zombies_count++;

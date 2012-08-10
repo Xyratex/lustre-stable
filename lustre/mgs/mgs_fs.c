@@ -196,8 +196,6 @@ int mgs_fs_cleanup(struct obd_device *obd)
         struct lvfs_run_ctxt saved;
         int rc = 0;
 
-        class_disconnect_exports(obd); /* cleans up client info too */
-
         push_ctxt(&saved, &obd->obd_lvfs_ctxt, NULL);
 
         if (mgs->mgs_configs_dir) {

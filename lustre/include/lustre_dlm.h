@@ -1107,6 +1107,7 @@ void ldlm_reprocess_all_ns(struct ldlm_namespace *ns);
 void ldlm_lock_dump(int level, struct ldlm_lock *lock, int pos);
 void ldlm_lock_dump_handle(int level, struct lustre_handle *);
 void ldlm_unlink_lock_skiplist(struct ldlm_lock *req);
+int ldlm_cancel_stale_locks(struct obd_device *obd, int count);
 
 /* resource.c */
 struct ldlm_namespace *
@@ -1114,6 +1115,10 @@ ldlm_namespace_new(struct obd_device *obd, char *name,
                    ldlm_side_t client, ldlm_appetite_t apt,
                    ldlm_ns_type_t ns_type);
 int ldlm_namespace_cleanup(struct ldlm_namespace *ns, int flags);
+void ldlm_namespace_free_prior(struct ldlm_namespace *ns,
+                               struct obd_import *imp,
+                               int force);
+void ldlm_namespace_free_post(struct ldlm_namespace *ns);
 void ldlm_namespace_free(struct ldlm_namespace *ns,
                          struct obd_import *imp, int force);
 void ldlm_namespace_register(struct ldlm_namespace *ns, ldlm_side_t client);
