@@ -256,7 +256,7 @@ struct obd_export {
         /** blocking dlm lock list, protected by exp_bl_list_lock */
         cfs_list_t                exp_bl_list;
         cfs_spinlock_t            exp_bl_list_lock;
-
+	cfs_rw_semaphore_t        exp_mutex;
         /** Target specific data */
         union {
                 struct tg_export_data     eu_target_data;
