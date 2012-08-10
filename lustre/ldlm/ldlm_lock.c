@@ -1721,11 +1721,17 @@ int ldlm_lock_set_data(struct lustre_handle *lockh, void *data)
 }
 EXPORT_SYMBOL(ldlm_lock_set_data);
 
-int ldlm_cancel_locks_for_export_cb(cfs_hash_t *hs, cfs_hash_bd_t *bd,
-                                    cfs_hlist_node_t *hnode, void *data)
+struct export_cl_data {
+	struct obd_export	*ecl_exp;
+	int			ecl_loop;
+	int                     ecl_count;
+};
 
+static int ldlm_cancel_locks_for_export_cb(cfs_hash_t *hs, cfs_hash_bd_t *bd,
+                                           cfs_hlist_node_t *hnode, void *data)
 {
-        struct obd_export    *exp  = data;
+        struct export_cl_data *ecl = data;
+        struct obd_export     *exp  = ecl->ecl_exp;
         struct ldlm_lock     *lock = cfs_hash_object(hs, hnode);
         struct ldlm_resource *res;
 
@@ -1738,14 +1744,82 @@ int ldlm_cancel_locks_for_export_cb(cfs_hash_t *hs, cfs_hash_bd_t *bd,
         ldlm_reprocess_all(res);
         ldlm_resource_putref(res);
         LDLM_LOCK_RELEASE(lock);
-        return 0;
+
+	ecl->ecl_loop++;
+	if ((ecl->ecl_loop & -ecl->ecl_loop) == ecl->ecl_loop) {
+		CDEBUG(D_INFO,
+		       "Cancel lock %p for export %p (loop %d), still have "
+		       "%d locks left on hash table.\n",
+		       lock, exp, ecl->ecl_loop,
+		       cfs_atomic_read(&hs->hs_count));
+	}
+
+        /* break */
+        if (ecl->ecl_loop == ecl->ecl_count)
+                return 1;
+
+	return 0;
 }
 
-void ldlm_cancel_locks_for_export(struct obd_export *exp)
+static int ldlm_cancel_locks_for_export(struct obd_export *exp, int count)
 {
-        cfs_hash_for_each_empty(exp->exp_lock_hash,
-                                ldlm_cancel_locks_for_export_cb, exp);
+	struct export_cl_data	ecl = {
+		.ecl_exp	= exp,
+		.ecl_count      = count,
+		.ecl_loop	= 0,
+	};
+
+	cfs_hash_for_each_empty(exp->exp_lock_hash,
+				ldlm_cancel_locks_for_export_cb, &ecl);
+
+        return ecl.ecl_loop;
 }
+
+/**
+ * \param obd : take list of exports from obd_unlinked_exports on this obd
+ * \param count : count of locks to cancel; 0 means ALL
+ *
+ * returns amount of locks canceled.
+ **/
+int ldlm_cancel_stale_locks(struct obd_device *obd, int count)
+{
+        struct obd_export *exp;
+        int cancel = count;
+        int total = 0;
+        int handled = 0;
+        int exp_tot;
+
+        LASSERT(count > 0);
+
+        cfs_spin_lock(&obd->obd_dev_lock);
+        exp_tot = obd->obd_num_unlinked;
+
+        while (cancel > 0 && exp_tot > handled) {
+                cfs_list_for_each_entry(exp, &obd->obd_unlinked_exports,
+                                        exp_obd_chain) {
+                        if (cfs_atomic_read(&exp->exp_locks_count))
+                                break;
+                }
+                /* all exports have no locks. */
+                if (&exp->exp_obd_chain == &obd->obd_unlinked_exports)
+                        break;
+
+                handled++;
+                cfs_list_move_tail(&exp->exp_obd_chain,
+                                   &obd->obd_unlinked_exports);
+                class_export_get(exp);
+                cfs_spin_unlock(&obd->obd_dev_lock);
+
+                total += ldlm_cancel_locks_for_export(exp, cancel);
+
+                class_export_put(exp);
+                cfs_spin_lock(&obd->obd_dev_lock);
+                cancel = count - total;
+        }
+        cfs_spin_unlock(&obd->obd_dev_lock);
+        return total;
+}
+EXPORT_SYMBOL(ldlm_cancel_stale_locks);
 
 /**
  * Downgrade an exclusive lock.
