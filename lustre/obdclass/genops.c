@@ -848,6 +848,7 @@ struct obd_export *class_new_export(struct obd_device *obd,
         CFS_INIT_HLIST_NODE(&export->exp_nid_hash);
         cfs_spin_lock_init(&export->exp_bl_list_lock);
         CFS_INIT_LIST_HEAD(&export->exp_bl_list);
+	cfs_init_rwsem(&export->exp_mutex);
 
         export->exp_sp_peer = LUSTRE_SP_ANY;
         export->exp_flvr.sf_rpc = SPTLRPC_FLVR_INVALID;
@@ -1133,6 +1134,7 @@ int class_disconnect(struct obd_export *export)
                 RETURN(-EINVAL);
         }
 
+	cfs_down_write(&export->exp_mutex);
         cfs_spin_lock(&export->exp_lock);
         already_disconnected = export->exp_disconnected;
         export->exp_disconnected = 1;
@@ -1156,6 +1158,7 @@ int class_disconnect(struct obd_export *export)
 
         class_unlink_export(export);
 no_disconn:
+	cfs_up_write(&export->exp_mutex);
         class_export_put(export);
         RETURN(0);
 }
