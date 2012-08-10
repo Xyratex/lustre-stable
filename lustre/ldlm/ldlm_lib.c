@@ -819,18 +819,33 @@ int target_handle_connect(struct ptlrpc_request *req)
         if (obd_uuid_equals(&cluuid, &target->obd_uuid))
                 goto dont_check_exports;
 
-        export = cfs_hash_lookup(target->obd_uuid_hash, &cluuid);
-        if (!export)
-                goto no_export;
+	export = cfs_hash_lookup(target->obd_uuid_hash, &cluuid);
+
+	if (!export)
+		goto no_export;
+
+	cfs_down_read(&export->exp_mutex);
+
+	if (export->exp_disconnected) {
+		cfs_up_read(&export->exp_mutex);
+		CWARN("%s: exp %p already disconnecting\n",
+		export->exp_obd->obd_name, export);
+		class_export_put(export);
+		export = NULL;
+		rc = -EAGAIN;
+		GOTO(out, rc);
+	}
 
         /* we've found an export in the hash */
         if (export->exp_connecting) { /* bug 9635, et. al. */
+		cfs_up_read(&export->exp_mutex);
                 CWARN("%s: exp %p already connecting\n",
                       export->exp_obd->obd_name, export);
                 class_export_put(export);
                 export = NULL;
                 rc = -EALREADY;
         } else if (mds_conn && export->exp_connection) {
+		cfs_up_read(&export->exp_mutex);
                 if (req->rq_peer.nid != export->exp_connection->c_peer.nid)
                         /* mds reconnected after failover */
                         CWARN("%s: received MDS connection from NID %s,"
@@ -850,6 +865,7 @@ int target_handle_connect(struct ptlrpc_request *req)
                    req->rq_peer.nid != export->exp_connection->c_peer.nid &&
                    (lustre_msg_get_op_flags(req->rq_reqmsg) &
                     MSG_CONNECT_INITIAL)) {
+		cfs_up_read(&export->exp_mutex);
                 /* in mds failover we have static uuid but nid can be
                  * changed*/
                 CWARN("%s: cookie %s seen on new NID %s when "
@@ -951,8 +967,13 @@ dont_check_exports:
                         rc = obd_connect(req->rq_svc_thread->t_env,
                                          &export, target, &cluuid, data,
                                          client_nid);
-                        if (rc == 0)
-                                conn.cookie = export->exp_handle.h_cookie;
+			if (rc == 0) {
+				cfs_down_read(&export->exp_mutex);
+				if (export->exp_disconnected)
+					rc = -EAGAIN;
+				else
+					conn.cookie = export->exp_handle.h_cookie;
+			}
                 }
         } else {
                 rc = obd_reconnect(req->rq_svc_thread->t_env,
@@ -1124,7 +1145,7 @@ out:
                 cfs_spin_lock(&export->exp_lock);
                 export->exp_connecting = 0;
                 cfs_spin_unlock(&export->exp_lock);
-
+		cfs_up_read(&export->exp_mutex);
                 class_export_put(export);
         }
         if (targref) {
