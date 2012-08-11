@@ -2534,6 +2534,7 @@ EXPORT_SYMBOL(ldlm_destroy_export);
 
 static int ldlm_setup(void)
 {
+	static struct ptlrpc_service_conf conf;
         struct ldlm_bl_pool *blp;
         int rc = 0;
         int ldlm_min_threads = LDLM_THREADS_AUTO_MIN;
@@ -2567,32 +2568,48 @@ static int ldlm_setup(void)
         }
 #endif
 
+	conf = (typeof(conf)) {
+		.psc_nbufs           = LDLM_NBUFS,
+		.psc_bufsize         = LDLM_BUFSIZE,
+		.psc_nbufs_mem_max   = PTLRPC_NBUFS_MEM_MAX_DEFAULT,
+		.psc_max_req_size    = LDLM_MAXREQSIZE,
+		.psc_max_reply_size  = LDLM_MAXREPSIZE,
+		.psc_req_portal      = LDLM_CB_REQUEST_PORTAL,
+		.psc_rep_portal      = LDLM_CB_REPLY_PORTAL,
+		.psc_watchdog_factor = 2,
+		.psc_min_threads     = ldlm_min_threads,
+		.psc_max_threads     = ldlm_max_threads,
+		.psc_ctx_tags        = LCT_MD_THREAD | LCT_DT_THREAD,
+		.psc_hpreq_handler   = NULL,
+	};
         ldlm_state->ldlm_cb_service =
-                ptlrpc_init_svc(LDLM_NBUFS, LDLM_BUFSIZE, LDLM_MAXREQSIZE,
-                                LDLM_MAXREPSIZE, LDLM_CB_REQUEST_PORTAL,
-                                LDLM_CB_REPLY_PORTAL, 2,
-                                ldlm_callback_handler, "ldlm_cbd",
-                                ldlm_svc_proc_dir, NULL,
-                                ldlm_min_threads, ldlm_max_threads,
-                                "ldlm_cb",
-                                LCT_MD_THREAD|LCT_DT_THREAD, NULL);
-
+		ptlrpc_init_svc_conf(&conf, ldlm_callback_handler,
+					"ldlm_cbd",
+					ldlm_svc_proc_dir, NULL, "ldlm_cb");
         if (!ldlm_state->ldlm_cb_service) {
                 CERROR("failed to start service\n");
                 GOTO(out_proc, rc = -ENOMEM);
         }
 
-        ldlm_state->ldlm_cancel_service =
-                ptlrpc_init_svc(LDLM_NBUFS, LDLM_BUFSIZE, LDLM_MAXREQSIZE,
-                                LDLM_MAXREPSIZE, LDLM_CANCEL_REQUEST_PORTAL,
-                                LDLM_CANCEL_REPLY_PORTAL, 6,
-                                ldlm_cancel_handler, "ldlm_canceld",
-                                ldlm_svc_proc_dir, NULL,
-                                ldlm_min_threads, ldlm_max_threads,
-                                "ldlm_cn",
-                                LCT_MD_THREAD|LCT_DT_THREAD|LCT_CL_THREAD,
-                                ldlm_hpreq_handler);
 
+	conf = (typeof(conf)) {
+		.psc_nbufs           = LDLM_NBUFS,
+		.psc_bufsize         = LDLM_BUFSIZE,
+		.psc_nbufs_mem_max   = PTLRPC_NBUFS_MEM_MAX_DEFAULT,
+		.psc_max_req_size    = LDLM_MAXREQSIZE,
+		.psc_max_reply_size  = LDLM_MAXREPSIZE,
+		.psc_req_portal      = LDLM_CANCEL_REQUEST_PORTAL,
+		.psc_rep_portal      = LDLM_CANCEL_REPLY_PORTAL,
+		.psc_watchdog_factor = 6,
+		.psc_min_threads     = ldlm_min_threads,
+		.psc_max_threads     = ldlm_max_threads,
+		.psc_ctx_tags        = LCT_MD_THREAD|LCT_DT_THREAD|LCT_CL_THREAD,
+		.psc_hpreq_handler   = ldlm_hpreq_handler,
+	};
+	ldlm_state->ldlm_cancel_service =
+		ptlrpc_init_svc_conf(&conf, ldlm_cancel_handler,
+					"ldlm_canceld",
+					ldlm_svc_proc_dir, NULL, "ldlm_cn");
         if (!ldlm_state->ldlm_cancel_service) {
                 CERROR("failed to start service\n");
                 GOTO(out_proc, rc = -ENOMEM);
