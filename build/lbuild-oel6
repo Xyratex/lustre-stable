@@ -1,0 +1,9 @@
+# vim:expandtab:shiftwidth=4:softtabstop=4:tabstop=4:
+
+source ${0%/*}/lbuild-rhel6
+
+# increment this if you have made a change that should force a new kernel
+# to build built for this distribution (only -- if you want to force a kernel
+# build on all distributions, update the BUILD_GEN variable in build/lbuild)
+BUILD_GEN+=".0"
+

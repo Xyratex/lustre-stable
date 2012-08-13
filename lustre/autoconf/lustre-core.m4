@@ -2491,6 +2491,7 @@ lustre/kernel_patches/targets/rhel-2.4.target
 lustre/kernel_patches/targets/suse-2.4.21-2.target
 lustre/kernel_patches/targets/sles-2.4.target
 lustre/kernel_patches/targets/2.6-oel5.target
+lustre/kernel_patches/targets/2.6-oel6.target
 lustre/ldlm/Makefile
 lustre/liblustre/Makefile
 lustre/liblustre/tests/Makefile
