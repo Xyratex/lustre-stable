@@ -408,6 +408,14 @@ static int ll_write_end(struct file *file, struct address_space *mapping,
 }
 #endif
 
+#ifdef HAVE_LINUX_COMPACTION_H
+static int ll_migratepage(struct address_space *mapping,
+                          struct page *new_page, struct page *page)
+{
+        return -ENOTSUPP;
+}
+#endif
+
 struct address_space_operations ll_aops = {
         .readpage       = ll_readpage,
 //        .readpages      = ll_readpages,
@@ -425,5 +433,8 @@ struct address_space_operations ll_aops = {
 #endif
         .invalidatepage = ll_invalidatepage,
         .releasepage    = ll_releasepage,
-        .bmap           = NULL
+        .bmap           = NULL,
+#ifdef HAVE_LINUX_COMPACTION_H
+        .migratepage    = ll_migratepage
+#endif
 };

@@ -1863,6 +1863,20 @@ LB_LINUX_TRY_COMPILE([
 ])
 ])
 
+# rhel6 kernel has added "memory compaction" feature
+# which seems to be slighlty inaccurate:
+# it misses setting page->private to 0 for pages allocated for migration
+# detect kernel with that feature in order to workaround that
+# 
+AC_DEFUN([LC_HAVE_COMPACTION_H],
+[LB_CHECK_FILE([$LINUX/include/linux/compaction.h], [
+        AC_DEFINE(HAVE_LINUX_COMPACTION_H, 1,
+                [kernel has include/linux/compaction.h])
+],[
+        AC_MSG_RESULT([no])
+])
+])
+
 #
 # LC_PROG_LINUX
 #
@@ -2027,6 +2041,7 @@ AC_DEFUN([LC_PROG_LINUX],
           fi
           LC_DQUOT_INIT
           LC_REQUEST_QUEUE_LIMITS
+          LC_HAVE_COMPACTION_H
 
           #
           if test x$enable_server = xyes ; then
