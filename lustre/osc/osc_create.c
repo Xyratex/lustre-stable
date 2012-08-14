@@ -396,9 +396,6 @@ static int handle_async_create(struct ptlrpc_request *req, int rc)
         if (oscc->oscc_flags & OSCC_FLAG_EXITING)
                 GOTO(out_wake, rc = -EIO);
 
-        if (oscc->oscc_flags & OSCC_FLAG_NOSPC)
-                GOTO(out_wake, rc = -ENOSPC);
-
         if (oscc->oscc_flags & OSCC_FLAG_RDONLY)
                 GOTO(out_wake, rc = -EROFS);
 
@@ -417,6 +414,9 @@ static int handle_async_create(struct ptlrpc_request *req, int rc)
                        oscc->oscc_next_id);
                 GOTO(out_wake, rc = 0);
         }
+
+        if (oscc->oscc_flags & OSCC_FLAG_NOSPC)
+                GOTO(out_wake, rc = -ENOSPC);
 
         /* we don't have objects now - continue wait */
         RETURN(-EAGAIN);
