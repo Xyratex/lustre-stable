@@ -1029,11 +1029,6 @@ typedef void (*svc_req_printfn_t)(void *, struct ptlrpc_request *);
 #define PTLRPC_SVC_HP_RATIO 10
 
 /**
- * How many incoming requests to be processed before handling any
- */
-#define PTLRPC_REQS_IN_LIMIT 10000
-
-/**
  * Definition of PortalRPC service.
  * The service is listening on a particular portal (like tcp port)
  * and perform actions for a specific server like IO service for OST
@@ -1099,8 +1094,6 @@ struct ptlrpc_service {
         struct lprocfs_stats           *srv_stats;
         /** # hp per lp reqs to handle */
         int                             srv_hpreq_ratio;
-        /** # of incoming reqs to be processed before handling any */
-        int                             srv_reqs_in_limit;
         /** biggest request to receive */
         int                             srv_max_req_size;
         /** biggest reply to send */

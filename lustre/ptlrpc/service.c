@@ -562,7 +562,6 @@ ptlrpc_init_svc(int nbufs, int bufsize, int max_req_size, int max_reply_size,
         service->srv_ctx_tags = ctx_tags;
         service->srv_hpreq_handler = hp_handler;
         service->srv_hpreq_ratio = PTLRPC_SVC_HP_RATIO;
-        service->srv_reqs_in_limit = PTLRPC_REQS_IN_LIMIT;
         service->srv_hpreq_count = 0;
         service->srv_n_active_hpreq = 0;
 
@@ -2246,7 +2245,7 @@ static int ptlrpc_main(void *arg)
                 if (ptlrpc_server_request_waiting(svc)) {
                         ptlrpc_server_handle_req_in(svc);
                         /* but limit ourselves in case of flood */
-                        if (counter++ < svc->srv_reqs_in_limit)
+                        if (counter++ < 100)
                                 continue;
                         counter = 0;
                 }
