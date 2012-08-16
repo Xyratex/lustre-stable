@@ -159,8 +159,8 @@ static int filter_quota_enforce(struct obd_device *obd, unsigned int ignore)
 {
         ENTRY;
 
-        if (!ll_sb_any_quota_active(obd->u.obt.obt_sb))
-                RETURN(0);
+	if (!sb_any_quota_loaded(obd->u.obt.obt_sb))
+		RETURN(0);
 
         if (ignore) {
                 CDEBUG(D_QUOTA, "blocks will be written with ignoring quota.\n");
@@ -181,8 +181,8 @@ static int filter_quota_getflag(struct obd_device *obd, struct obdo *oa)
         struct obd_quotactl *oqctl;
         ENTRY;
 
-        if (!ll_sb_any_quota_active(obt->obt_sb))
-                RETURN(0);
+	if (!sb_any_quota_loaded(obt->obt_sb))
+		RETURN(0);
 
         OBD_ALLOC_PTR(oqctl);
         if (!oqctl)
@@ -196,7 +196,7 @@ static int filter_quota_getflag(struct obd_device *obd, struct obdo *oa)
                 struct lustre_qunit_size *lqs = NULL;
 
                 /* check if quota is enabled */
-                if (!ll_sb_has_quota_active(obt->obt_sb, cnt))
+                if (!sb_has_quota_active(obt->obt_sb, cnt))
                         continue;
 
                 lqs = quota_search_lqs(LQS_KEY(cnt, GET_OA_ID(cnt, oa)),
@@ -294,7 +294,7 @@ static int quota_check_common(struct obd_device *obd, const unsigned int id[],
                 qdata[i].qd_count = 0;
 
                 /* check if quota is enabled */
-                if (!ll_sb_has_quota_active(qctxt->lqc_sb, i))
+                if (!sb_has_quota_active(qctxt->lqc_sb, i))
                         continue;
 
                 /* ignore root user */
@@ -400,12 +400,12 @@ int quota_is_set(struct obd_device *obd, const unsigned int id[], int flag)
         struct lustre_qunit_size *lqs;
         int i, q_set = 0;
 
-        if (!ll_sb_any_quota_active(obd->u.obt.obt_qctxt.lqc_sb))
-                RETURN(0);
+	if (!sb_any_quota_loaded(obd->u.obt.obt_qctxt.lqc_sb))
+		RETURN(0);
 
         for (i = 0; i < MAXQUOTAS; i++) {
                 /* check if quota is enabled */
-                if (!ll_sb_has_quota_active(obd->u.obt.obt_qctxt.lqc_sb, i))
+                if (!sb_has_quota_active(obd->u.obt.obt_qctxt.lqc_sb, i))
                         continue;
                 lqs = quota_search_lqs(LQS_KEY(i, id[i]),
                                        &obd->u.obt.obt_qctxt, 0);
@@ -568,10 +568,10 @@ static int quota_pending_commit(struct obd_device *obd, const unsigned int id[],
         struct qunit_data qdata[MAXQUOTAS];
         ENTRY;
 
-        CDEBUG(D_QUOTA, "commit pending quota for  %s\n", obd->obd_name);
-        CLASSERT(MAXQUOTAS < 4);
-        if (!ll_sb_any_quota_active(qctxt->lqc_sb))
-                RETURN(0);
+	CDEBUG(D_QUOTA, "commit pending quota for  %s\n", obd->obd_name);
+	CLASSERT(MAXQUOTAS < 4);
+	if (!sb_any_quota_loaded(qctxt->lqc_sb))
+		RETURN(0);
 
         cfs_gettimeofday(&work_start);
         for (i = 0; i < MAXQUOTAS; i++) {
