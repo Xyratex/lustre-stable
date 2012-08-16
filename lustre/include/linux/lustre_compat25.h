@@ -157,12 +157,6 @@ static inline void ll_set_fs_pwd(struct fs_struct *fs, struct vfsmount *mnt,
 extern void __d_rehash(struct dentry *dentry, int lock);
 #endif
 
-#ifdef HAVE_KIOBUF_KIO_BLOCKS
-#define KIOBUF_GET_BLOCKS(k) ((k)->kio_blocks)
-#else
-#define KIOBUF_GET_BLOCKS(k) ((k)->blocks)
-#endif
-
 #ifdef HAVE_SECURITY_PLUG
 #define ll_vfs_symlink(dir, dentry, mnt, path, mode) \
                 vfs_symlink(dir, dentry, mnt, path, mode)
@@ -182,12 +176,6 @@ extern void __d_rehash(struct dentry *dentry, int lock);
         } while(0)
 #endif
 
-#ifndef container_of
-#define container_of(ptr, type, member) ({                      \
-                const typeof( ((type *)0)->member ) *__mptr = (ptr); \
-                (type *)( (char *)__mptr - offsetof(type,member) );})
-#endif
-
 #define UP_WRITE_I_ALLOC_SEM(i)   up_write(&(i)->i_alloc_sem)
 #define DOWN_WRITE_I_ALLOC_SEM(i) down_write(&(i)->i_alloc_sem)
 #define LASSERT_I_ALLOC_SEM_WRITE_LOCKED(i) LASSERT(down_read_trylock(&(i)->i_alloc_sem) == 0)
@@ -195,8 +183,6 @@ extern void __d_rehash(struct dentry *dentry, int lock);
 #define UP_READ_I_ALLOC_SEM(i)    up_read(&(i)->i_alloc_sem)
 #define DOWN_READ_I_ALLOC_SEM(i)  down_read(&(i)->i_alloc_sem)
 #define LASSERT_I_ALLOC_SEM_READ_LOCKED(i) LASSERT(down_write_trylock(&(i)->i_alloc_sem) == 0)
-
-#include <linux/mpage.h>        /* for generic_writepages */
 
 #ifdef HAVE_HIDE_VFSMOUNT_GUTS
 # include <../fs/mount.h>
