@@ -588,7 +588,7 @@ int ldlm_cli_enqueue_fini(struct obd_export *exp, struct ptlrpc_request *req,
                         LDLM_DEBUG(lock, "client-side enqueue, new resource");
                 }
                 if (with_policy)
-                        if (!(type == LDLM_IBITS && !(exp->exp_connect_flags &
+                        if (!(type == LDLM_IBITS && !(exp->exp_connect_data.ocd_connect_flags &
                                                     OBD_CONNECT_IBITS)))
                                 /* We assume lock type cannot change on server*/
                                 ldlm_convert_policy_to_local(exp,
@@ -820,7 +820,7 @@ int ldlm_cli_enqueue(struct obd_export *exp, struct ptlrpc_request **reqp,
                          * inodebits lock internally with both bits set.
                          */
                         if (einfo->ei_type == LDLM_IBITS &&
-                            !(exp->exp_connect_flags & OBD_CONNECT_IBITS))
+                            !(exp->exp_connect_data.ocd_connect_flags & OBD_CONNECT_IBITS))
                                 lock->l_policy_data.l_inodebits.bits =
                                         MDS_INODELOCK_LOOKUP |
                                         MDS_INODELOCK_UPDATE;

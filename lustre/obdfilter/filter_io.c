@@ -90,8 +90,8 @@ void filter_grant_incoming(struct obd_export *exp, struct obdo *oa)
          * on fed_dirty however, but we must check sanity to not assert. */
         if ((long long)oa->o_dirty < 0)
                 oa->o_dirty = 0;
-        else if (oa->o_dirty > fed->fed_grant + 4 * FILTER_GRANT_CHUNK)
-                oa->o_dirty = fed->fed_grant + 4 * FILTER_GRANT_CHUNK;
+        else if (oa->o_dirty > fed->fed_grant + 4 * FILTER_GRANT_CHUNK(exp))
+                oa->o_dirty = fed->fed_grant + 4 * FILTER_GRANT_CHUNK(exp);
         obd->u.filter.fo_tot_dirty += oa->o_dirty - fed->fed_dirty;
         if (fed->fed_grant < oa->o_dropped) {
                 CDEBUG(D_CACHE,"%s: cli %s/%p reports %u dropped > grant %lu\n",
@@ -116,7 +116,7 @@ void filter_grant_incoming(struct obd_export *exp, struct obdo *oa)
                 /*Only if left_space < fo_tot_clients * 32M,
                  *then the grant space could be shrinked */
                 if (left_space < filter->fo_tot_granted_clients *
-                                 FILTER_GRANT_SHRINK_LIMIT) {
+                                 FILTER_GRANT_SHRINK_LIMIT(exp)) {
                         fed->fed_grant -= oa->o_grant;
                         filter->fo_tot_granted -= oa->o_grant;
                         CDEBUG(D_CACHE, "%s: cli %s/%p shrink "LPU64
@@ -170,7 +170,7 @@ restat:
                 left = 0 /* << blockbits */;
         }
 
-        if (!statfs_done && left < 32 * FILTER_GRANT_CHUNK + tot_granted) {
+        if (!statfs_done && left < 32 * FILTER_GRANT_CHUNK(exp) + tot_granted) {
                 CDEBUG(D_CACHE, "fs has no space left and statfs too old\n");
                 goto restat;
         }
@@ -227,13 +227,13 @@ long filter_grant(struct obd_export *exp, obd_size current_grant,
                 CERROR("%s: client %s/%p requesting > 2GB grant "LPU64"\n",
                        obd->obd_name, exp->exp_client_uuid.uuid, exp, want);
         } else if (current_grant < want &&
-                   current_grant < fed->fed_grant + FILTER_GRANT_CHUNK) {
+                   current_grant < fed->fed_grant + FILTER_GRANT_CHUNK(exp)) {
                 grant = min(want + (1 << blockbits) - 1, fs_space_left / 8);
                 grant &= ~((1ULL << blockbits) - 1);
 
                 if (grant) {
-                        if (grant > FILTER_GRANT_CHUNK && conservative)
-                                grant = FILTER_GRANT_CHUNK;
+                        if (grant > FILTER_GRANT_CHUNK(exp) && conservative)
+                                grant = FILTER_GRANT_CHUNK(exp);
 
                         obd->u.filter.fo_tot_granted += grant;
                         fed->fed_grant += grant;

@@ -2227,6 +2227,7 @@ enum seq_op {
 #define LOV_MIN_STRIPE_BITS 16   /* maximum PAGE_SIZE (ia64), power of 2 */
 #define LOV_MIN_STRIPE_SIZE (1<<LOV_MIN_STRIPE_BITS)
 #define LOV_MAX_STRIPE_COUNT_OLD 160
+#define LOV_DEFAULT_STRIPE_SIZE (1<<LNET_MTU_BITS)
 /* This calculation is crafted so that input of 4096 will result in 160
  * which in turn is equal to old maximal stripe count.
  * XXX: In fact this is too simpified for now, what it also need is to get

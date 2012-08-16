@@ -809,7 +809,7 @@ int mdt_finish_open(struct mdt_thread_info *info,
                 }
         }
 #ifdef CONFIG_FS_POSIX_ACL
-        else if (exp->exp_connect_flags & OBD_CONNECT_ACL) {
+        else if (exp->exp_connect_data.ocd_connect_flags & OBD_CONNECT_ACL) {
                 const struct lu_env *env = info->mti_env;
                 struct md_object *next = mdt_object_child(o);
                 struct lu_buf *buf = &info->mti_buf;
@@ -840,7 +840,7 @@ int mdt_finish_open(struct mdt_thread_info *info,
 #endif
 
         if (info->mti_mdt->mdt_opts.mo_mds_capa &&
-            exp->exp_connect_flags & OBD_CONNECT_MDS_CAPA) {
+            exp->exp_connect_data.ocd_connect_flags & OBD_CONNECT_MDS_CAPA) {
                 struct lustre_capa *capa;
 
                 capa = req_capsule_server_get(info->mti_pill, &RMF_CAPA1);
@@ -852,7 +852,7 @@ int mdt_finish_open(struct mdt_thread_info *info,
                 repbody->valid |= OBD_MD_FLMDSCAPA;
         }
         if (info->mti_mdt->mdt_opts.mo_oss_capa &&
-            exp->exp_connect_flags & OBD_CONNECT_OSS_CAPA &&
+            exp->exp_connect_data.ocd_connect_flags & OBD_CONNECT_OSS_CAPA &&
             S_ISREG(lu_object_attr(&o->mot_obj.mo_lu))) {
                 struct lustre_capa *capa;
 
@@ -870,7 +870,7 @@ int mdt_finish_open(struct mdt_thread_info *info,
          * handle for special nodes as client required.
          */
         if (islnk || (!isreg && !isdir &&
-            (req->rq_export->exp_connect_flags & OBD_CONNECT_NODEVOH))) {
+            (req->rq_export->exp_connect_data.ocd_connect_flags & OBD_CONNECT_NODEVOH))) {
                 lustre_msg_set_transno(req->rq_repmsg, 0);
                 RETURN(0);
         }

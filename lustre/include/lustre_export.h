@@ -223,8 +223,9 @@ struct obd_export {
         cfs_list_t                exp_req_replay_queue;
         /** protects exp_flags and exp_outstanding_replies */
         cfs_spinlock_t            exp_lock;
-        /** Compatibility flags for this export */
-        __u64                     exp_connect_flags;
+        /** Compatibility flags for this export are embedded into
+         *  exp_connect_data */
+        struct obd_connect_data   exp_connect_data;
         enum obd_option           exp_flags;
         unsigned long             exp_failed:1,
                                   exp_in_recovery:1,
@@ -271,6 +272,15 @@ struct obd_export {
 #define exp_filter_data u.eu_filter_data
 #define exp_ec_data     u.eu_ec_data
 
+static inline int exp_max_brw_size(struct obd_export *exp)
+{
+        LASSERT(exp != NULL);
+        if (exp->exp_connect_data.ocd_connect_flags & OBD_CONNECT_BRW_SIZE)
+                return exp->exp_connect_data.ocd_brw_size;
+        else
+                return ONE_MB_BRW_SIZE;
+}
+
 static inline int exp_expired(struct obd_export *exp, cfs_duration_t age)
 {
         LASSERT(exp->exp_delayed);
@@ -281,19 +291,19 @@ static inline int exp_expired(struct obd_export *exp, cfs_duration_t age)
 static inline int exp_connect_cancelset(struct obd_export *exp)
 {
         LASSERT(exp != NULL);
-        return !!(exp->exp_connect_flags & OBD_CONNECT_CANCELSET);
+        return !!(exp->exp_connect_data.ocd_connect_flags & OBD_CONNECT_CANCELSET);
 }
 
 static inline int exp_connect_lru_resize(struct obd_export *exp)
 {
         LASSERT(exp != NULL);
-        return !!(exp->exp_connect_flags & OBD_CONNECT_LRU_RESIZE);
+        return !!(exp->exp_connect_data.ocd_connect_flags & OBD_CONNECT_LRU_RESIZE);
 }
 
 static inline int exp_connect_rmtclient(struct obd_export *exp)
 {
         LASSERT(exp != NULL);
-        return !!(exp->exp_connect_flags & OBD_CONNECT_RMT_CLIENT);
+        return !!(exp->exp_connect_data.ocd_connect_flags & OBD_CONNECT_RMT_CLIENT);
 }
 
 static inline int client_is_remote(struct obd_export *exp)
@@ -308,13 +318,13 @@ static inline int exp_connect_vbr(struct obd_export *exp)
 {
         LASSERT(exp != NULL);
         LASSERT(exp->exp_connection);
-        return !!(exp->exp_connect_flags & OBD_CONNECT_VBR);
+        return !!(exp->exp_connect_data.ocd_connect_flags & OBD_CONNECT_VBR);
 }
 
 static inline int exp_connect_som(struct obd_export *exp)
 {
         LASSERT(exp != NULL);
-        return !!(exp->exp_connect_flags & OBD_CONNECT_SOM);
+        return !!(exp->exp_connect_data.ocd_connect_flags & OBD_CONNECT_SOM);
 }
 
 static inline int imp_connect_lru_resize(struct obd_import *imp)

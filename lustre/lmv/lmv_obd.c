@@ -202,7 +202,7 @@ static int lmv_notify(struct obd_device *obd, struct obd_device *watched,
                 conn_data = &watched->u.cli.cl_import->imp_connect_data;
 
                 /*
-                 * Set connect data to desired target, update exp_connect_flags.
+                 * Set connect data to desired target, update exp_connect_data.ocd_connect_flags.
                  */
                 rc = lmv_set_mdc_data(lmv, uuid, conn_data);
                 if (rc) {
@@ -216,7 +216,7 @@ static int lmv_notify(struct obd_device *obd, struct obd_device *watched,
                  * the same. Otherwise one of MDTs runs wrong version or
                  * something like this.  --umka
                  */
-                obd->obd_self_export->exp_connect_flags =
+                obd->obd_self_export->exp_connect_data.ocd_connect_flags =
                         conn_data->ocd_connect_flags;
         }
 #if 0
@@ -2707,7 +2707,7 @@ static int lmv_get_info(struct obd_export *exp, __u32 keylen,
                 rc = obd_get_info(lmv->tgts[0].ltd_exp, keylen, key,
                                   vallen, val, NULL);
                 if (!rc && KEY_IS(KEY_CONN_DATA)) {
-                        exp->exp_connect_flags =
+                        exp->exp_connect_data.ocd_connect_flags =
                         ((struct obd_connect_data *)val)->ocd_connect_flags;
                 }
                 RETURN(rc);

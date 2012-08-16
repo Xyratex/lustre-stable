@@ -119,7 +119,7 @@ static int filter_quota_setinfo(struct obd_device *obd, void *data)
                 /* make imp's connect flags equal relative exp's connect flags
                  * adding it to avoid the scan export list */
                 imp->imp_connect_data.ocd_connect_flags |=
-                                (exp->exp_connect_flags &
+                                (exp->exp_connect_data.ocd_connect_flags &
                                  (OBD_CONNECT_QUOTA64 | OBD_CONNECT_CHANGE_QS));
                 cfs_spin_unlock(&qctxt->lqc_lock);
                 CDEBUG(D_QUOTA, "%s: lqc_import(%p) of obd(%p) is reactivated "

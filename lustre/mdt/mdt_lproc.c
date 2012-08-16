@@ -761,7 +761,7 @@ static int lprocfs_wr_mdt_som(struct file *file, const char *buffer,
         cfs_list_for_each_entry(exp, &obd->obd_exports, exp_obd_chain) {
                 if (exp == obd->obd_self_export)
                         continue;
-                if (exp->exp_connect_flags & OBD_CONNECT_MDS_MDS)
+                if (exp->exp_connect_data.ocd_connect_flags & OBD_CONNECT_MDS_MDS)
                         continue;
                 /* Some clients are already connected, skip the change */
                 LCONSOLE_INFO("%s is already connected, SOM will be %s on "

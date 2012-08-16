@@ -1557,7 +1557,7 @@ static int mdc_iocontrol(unsigned int cmd, struct obd_export *exp, int len,
                 break;
         }
         case LL_IOC_GET_CONNECT_FLAGS: {
-                if (cfs_copy_to_user(uarg, &exp->exp_connect_flags,
+                if (cfs_copy_to_user(uarg, &exp->exp_connect_data.ocd_connect_flags,
                                      sizeof(__u64)))
                         GOTO(out, rc = -EFAULT);
                 else

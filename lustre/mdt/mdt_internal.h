@@ -465,7 +465,7 @@ static inline int req_is_replay(struct ptlrpc_request *req)
 static inline __u64 mdt_conn_flags(struct mdt_thread_info *info)
 {
         LASSERT(info->mti_exp);
-        return info->mti_exp->exp_connect_flags;
+        return info->mti_exp->exp_connect_data.ocd_connect_flags;
 }
 
 static inline void mdt_object_get(const struct lu_env *env,
@@ -858,7 +858,7 @@ static inline void mdt_set_capainfo(struct mdt_thread_info *info, int offset,
 
         LASSERT(offset >= 0 && offset <= MD_CAPAINFO_MAX);
         if (!info->mti_mdt->mdt_opts.mo_mds_capa ||
-            !(info->mti_exp->exp_connect_flags & OBD_CONNECT_MDS_CAPA))
+            !(info->mti_exp->exp_connect_data.ocd_connect_flags & OBD_CONNECT_MDS_CAPA))
                 return;
 
         ci = md_capainfo(info->mti_env);

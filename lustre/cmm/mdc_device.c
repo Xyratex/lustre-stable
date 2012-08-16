@@ -88,9 +88,9 @@ static int mdc_obd_update(struct obd_device *host,
                 struct obd_connect_data *conn_data =
                                   &watched->u.cli.cl_import->imp_connect_data;
                 /*
-                 * Update exp_connect_flags.
+                 * Update exp_connect_data.ocd_connect_flags.
                  */
-                mc->mc_desc.cl_exp->exp_connect_flags =
+                mc->mc_desc.cl_exp->exp_connect_data.ocd_connect_flags =
                                                 conn_data->ocd_connect_flags;
                 CDEBUG(D_INFO, "Update connect_flags: "LPX64"\n",
                        conn_data->ocd_connect_flags);
@@ -165,7 +165,7 @@ static int mdc_obd_add(const struct lu_env *env,
                                          OBD_CONNECT_AT |
                                          OBD_CONNECT_FULL20 |
                                          OBD_CONNECT_64BITHASH;
-                ocd->ocd_brw_size = PTLRPC_MAX_BRW_SIZE;
+                ocd->ocd_brw_size = MD_MAX_BRW_SIZE;
                 rc = obd_connect(env, &desc->cl_exp, mdc, &mdc->obd_uuid, ocd, NULL);
                 OBD_FREE_PTR(ocd);
                 if (rc) {

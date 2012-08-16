@@ -351,7 +351,7 @@ int osc_quota_adjust_qunit(struct obd_export *exp,
         ENTRY;
 
         /* client don't support this kind of operation, abort it */
-        if (!(exp->exp_connect_flags & OBD_CONNECT_CHANGE_QS)) {
+        if (!(exp->exp_connect_data.ocd_connect_flags & OBD_CONNECT_CHANGE_QS)) {
                 CDEBUG(D_QUOTA, "osc: %s don't support change qunit size\n",
                        exp->exp_obd->obd_name);
                 RETURN(rc);

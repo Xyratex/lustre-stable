@@ -58,8 +58,8 @@
 #define FILTER_INCOMPAT_SUPP (OBD_INCOMPAT_GROUPS | OBD_INCOMPAT_OST | \
                               OBD_INCOMPAT_COMMON_LR)
 
-#define FILTER_GRANT_CHUNK (2ULL * PTLRPC_MAX_BRW_SIZE)
-#define FILTER_GRANT_SHRINK_LIMIT (16ULL * FILTER_GRANT_CHUNK)
+#define FILTER_GRANT_CHUNK(rexp) (2ULL * exp_max_brw_size((rexp)))
+#define FILTER_GRANT_SHRINK_LIMIT(rexp) (16ULL * FILTER_GRANT_CHUNK((rexp)))
 #define GRANT_FOR_LLOG(obd) 16
 
 extern struct file_operations filter_per_export_stats_fops;

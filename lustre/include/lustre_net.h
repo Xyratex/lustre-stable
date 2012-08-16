@@ -90,6 +90,12 @@
 #define PTLRPC_MAX_BRW_SIZE     (1<<LNET_MTU_BITS)
 #define PTLRPC_MAX_BRW_PAGES    (PTLRPC_MAX_BRW_SIZE >> CFS_PAGE_SHIFT)
 
+#define ONE_MB_BRW_SIZE         (1<<LNET_MTU_BITS)
+#define MD_MAX_BRW_SIZE         (1<<LNET_MTU_BITS)
+#define MD_MAX_BRW_PAGES        (MD_MAX_BRW_SIZE >> CFS_PAGE_SHIFT)
+#define OSC_MAX_BRW_SIZE        (1<<LNET_MTU_BITS)
+#define FILTER_MAX_BRW_SIZE     (1<<LNET_MTU_BITS)
+
 /* When PAGE_SIZE is a constant, we can check our arithmetic here with cpp! */
 #ifdef __KERNEL__
 # if ((PTLRPC_MAX_BRW_PAGES & (PTLRPC_MAX_BRW_PAGES - 1)) != 0)

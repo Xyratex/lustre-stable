@@ -2197,7 +2197,7 @@ struct qunit_data *quota_get_qdata(void *r, int is_req, int is_exp)
 {
         struct ptlrpc_request *req = (struct ptlrpc_request *)r;
         struct qunit_data *qdata;
-        __u64  flags = is_exp ? req->rq_export->exp_connect_flags :
+        __u64  flags = is_exp ? req->rq_export->exp_connect_data.ocd_connect_flags :
                        req->rq_import->imp_connect_data.ocd_connect_flags;
 
         LASSERT(req);
@@ -2226,7 +2226,7 @@ int quota_copy_qdata(void *r, struct qunit_data *qdata, int is_req,
 {
         struct ptlrpc_request *req = (struct ptlrpc_request *)r;
         void *target;
-        __u64  flags = is_exp ? req->rq_export->exp_connect_flags :
+        __u64  flags = is_exp ? req->rq_export->exp_connect_data.ocd_connect_flags :
                 req->rq_import->imp_connect_data.ocd_connect_flags;
 
         LASSERT(req);

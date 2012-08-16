@@ -661,7 +661,7 @@ int mdt_handle_last_unlink(struct mdt_thread_info *info, struct mdt_object *mo,
         }
 
         if (info->mti_mdt->mdt_opts.mo_oss_capa &&
-            info->mti_exp->exp_connect_flags & OBD_CONNECT_OSS_CAPA &&
+            info->mti_exp->exp_connect_data.ocd_connect_flags & OBD_CONNECT_OSS_CAPA &&
             repbody->valid & OBD_MD_FLEASIZE) {
                 struct lustre_capa *capa;
 

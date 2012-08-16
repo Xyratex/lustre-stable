@@ -221,7 +221,7 @@ static int osc_getattr_interpret(const struct lu_env *env,
                 lustre_get_wire_obdo(aa->aa_oi->oi_oa, &body->oa);
 
                 /* This should really be sent by the OST */
-                aa->aa_oi->oi_oa->o_blksize = PTLRPC_MAX_BRW_SIZE;
+                aa->aa_oi->oi_oa->o_blksize = OSC_MAX_BRW_SIZE;
                 aa->aa_oi->oi_oa->o_valid |= OBD_MD_FLBLKSZ;
         } else {
                 CDEBUG(D_INFO, "can't unpack ost_body\n");
@@ -299,7 +299,7 @@ static int osc_getattr(struct obd_export *exp, struct obd_info *oinfo)
         lustre_get_wire_obdo(oinfo->oi_oa, &body->oa);
 
         /* This should really be sent by the OST */
-        oinfo->oi_oa->o_blksize = PTLRPC_MAX_BRW_SIZE;
+        oinfo->oi_oa->o_blksize = OSC_MAX_BRW_SIZE;
         oinfo->oi_oa->o_valid |= OBD_MD_FLBLKSZ;
 
         EXIT;
@@ -482,7 +482,7 @@ int osc_real_create(struct obd_export *exp, struct obdo *oa,
         lustre_get_wire_obdo(oa, &body->oa);
 
         /* This should really be sent by the OST */
-        oa->o_blksize = PTLRPC_MAX_BRW_SIZE;
+        oa->o_blksize = OSC_MAX_BRW_SIZE;
         oa->o_valid |= OBD_MD_FLBLKSZ;
 
         /* XXX LOV STACKING: the lsm that is passed to us from LOV does not
@@ -874,7 +874,8 @@ static void osc_release_write_grant(struct client_obd *cli,
                  * write, however, this is not an option for page_mkwrite()
                  * because grant has to be allocated before a page becomes
                  * dirty. */
-                if (cli->cl_avail_grant < PTLRPC_MAX_BRW_SIZE)
+                if (cli->cl_avail_grant < min_t(int, OSC_MAX_BRW_SIZE,
+                                                exp_max_brw_size(cli->cl_import->imp_obd->obd_self_export)))
                         cli->cl_avail_grant += CFS_PAGE_SIZE;
                 else
                         cli->cl_lost_grant += CFS_PAGE_SIZE;
@@ -1066,7 +1067,6 @@ int osc_shrink_grant_to_target(struct client_obd *cli, long target)
         RETURN(rc);
 }
 
-#define GRANT_SHRINK_LIMIT PTLRPC_MAX_BRW_SIZE
 static int osc_should_shrink_grant(struct client_obd *client)
 {
         cfs_time_t time = cfs_time_current();
@@ -1078,7 +1078,8 @@ static int osc_should_shrink_grant(struct client_obd *client)
 
         if (cfs_time_aftereq(time, next_shrink - 5 * CFS_TICK)) {
                 if (client->cl_import->imp_state == LUSTRE_IMP_FULL &&
-                    client->cl_avail_grant > GRANT_SHRINK_LIMIT)
+                    client->cl_avail_grant > min_t(int, OSC_MAX_BRW_SIZE,
+                                                exp_max_brw_size(client->cl_import->imp_obd->obd_self_export)))
                         return 1;
                 else
                         osc_update_next_shrink(client);
@@ -2714,13 +2715,13 @@ osc_send_oap_rpc(const struct lu_env *env, struct client_obd *cli,
                 if (oap->oap_brw_flags & OBD_BRW_MEMALLOC)
                         mem_tight = 1;
 
-                /* End on a PTLRPC_MAX_BRW_SIZE boundary.  We want full-sized
-                 * RPCs aligned on PTLRPC_MAX_BRW_SIZE boundaries to help reads
+                /* End on a server-defined MAX_BRW_SIZE boundary. We want full-sized
+                 * RPCs aligned on MAX_BRW_SIZE boundaries to help reads
                  * have the same alignment as the initial writes that allocated
                  * extents on the server. */
                 ending_offset = oap->oap_obj_off + oap->oap_page_off +
                                 oap->oap_count;
-                if (!(ending_offset & (PTLRPC_MAX_BRW_SIZE - 1)))
+                if (!(ending_offset & (exp_max_brw_size(cli->cl_import->imp_obd->obd_self_export) - 1)))
                         break;
 
                 if (page_count >= cli->cl_max_pages_per_rpc)
@@ -2755,7 +2756,7 @@ osc_send_oap_rpc(const struct lu_env *env, struct client_obd *cli,
 
         aa = ptlrpc_req_async_args(req);
 
-        starting_offset &= PTLRPC_MAX_BRW_SIZE - 1;
+        starting_offset &= exp_max_brw_size(cli->cl_import->imp_obd->obd_self_export) - 1;
         if (cmd == OBD_BRW_READ) {
                 lprocfs_oh_tally_log2(&cli->cl_read_page_hist, page_count);
                 lprocfs_oh_tally(&cli->cl_read_rpc_hist, cli->cl_r_in_flight);

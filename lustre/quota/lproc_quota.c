@@ -482,7 +482,7 @@ int lprocfs_quota_wr_least_bunit(struct file *file, const char *buffer,
         if (rc)
                 return rc;
 
-        if (val < PTLRPC_MAX_BRW_SIZE ||
+        if (val < FILTER_MAX_BRW_SIZE ||
             val >= obd->u.obt.obt_qctxt.lqc_bunit_sz)
                 return -EINVAL;
 

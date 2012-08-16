@@ -254,7 +254,7 @@ static int client_common_fill_super(struct super_block *sb, char *md, char *dt,
         if (sbi->ll_flags & LL_SBI_RMT_CLIENT)
                 data->ocd_connect_flags |= OBD_CONNECT_RMT_CLIENT_FORCE;
 
-        data->ocd_brw_size = PTLRPC_MAX_BRW_SIZE;
+        data->ocd_brw_size = MD_MAX_BRW_SIZE;
 
         err = obd_connect(NULL, &sbi->ll_md_exp, obd, &sbi->ll_sb_uuid, data, NULL);
         if (err == -EBUSY) {
@@ -283,12 +283,12 @@ static int client_common_fill_super(struct super_block *sb, char *md, char *dt,
         /* This needs to be after statfs to ensure connect has finished.
          * Note that "data" does NOT contain the valid connect reply.
          * If connecting to a 1.8 server there will be no LMV device, so
-         * we can access the MDC export directly and exp_connect_flags will
+         * we can access the MDC export directly and exp_connect_data.ocd_connect_flags will
          * be non-zero, but if accessing an upgraded 2.1 server it will
          * have the correct flags filled in.
-         * XXX: fill in the LMV exp_connect_flags from MDC(s). */
-        valid = sbi->ll_md_exp->exp_connect_flags & CLIENT_CONNECT_MDT_REQD;
-        if (sbi->ll_md_exp->exp_connect_flags != 0 &&
+         * XXX: fill in the LMV exp_connect_data.ocd_connect_flags from MDC(s). */
+        valid = sbi->ll_md_exp->exp_connect_data.ocd_connect_flags & CLIENT_CONNECT_MDT_REQD;
+        if (sbi->ll_md_exp->exp_connect_data.ocd_connect_flags != 0 &&
             valid != CLIENT_CONNECT_MDT_REQD) {
                 char *buf;
 
@@ -367,7 +367,7 @@ static int client_common_fill_super(struct super_block *sb, char *md, char *dt,
                 sbi->ll_flags |= LL_SBI_64BIT_HASH;
 
         if (data->ocd_connect_flags & OBD_CONNECT_BRW_SIZE)
-                sbi->ll_md_brw_size = data->ocd_brw_size;
+                sbi->ll_md_brw_size = min_t(int, data->ocd_brw_size, MD_MAX_BRW_SIZE);
         else
                 sbi->ll_md_brw_size = CFS_PAGE_SIZE;
 
@@ -415,7 +415,7 @@ static int client_common_fill_super(struct super_block *sb, char *md, char *dt,
         obd->obd_upcall.onu_owner = &sbi->ll_lco;
         obd->obd_upcall.onu_upcall = cl_ocd_update;
 
-        data->ocd_brw_size = PTLRPC_MAX_BRW_SIZE;
+        data->ocd_brw_size = OSC_MAX_BRW_SIZE;
 
         err = obd_connect(NULL, &sbi->ll_dt_exp, obd, &sbi->ll_sb_uuid, data, NULL);
         if (err == -EBUSY) {

@@ -1361,7 +1361,7 @@ qctxt_init(struct obd_device *obd, dqacq_handler_t handler)
         qctxt->lqc_switch_qs = 1; /* Change qunit size in default setting */
         qctxt->lqc_valid = 1;
         qctxt->lqc_cqs_boundary_factor = 4;
-        qctxt->lqc_cqs_least_bunit = PTLRPC_MAX_BRW_SIZE;
+        qctxt->lqc_cqs_least_bunit = FILTER_MAX_BRW_SIZE;
         qctxt->lqc_cqs_least_iunit = 2;
         qctxt->lqc_cqs_qs_factor = 2;
         qctxt->lqc_flags = 0;
