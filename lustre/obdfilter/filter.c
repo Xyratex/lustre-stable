@@ -3969,8 +3969,8 @@ static int filter_precreate(struct obd_device *obd, struct obdo *oa,
                 /* We mark object SUID+SGID to flag it for accepting UID+GID
                  * from client on first write.  Currently the permission bits
                  * on the OST are never used, so this is OK. */
-                rc = ll_vfs_create(dparent->d_inode, dchild,
-                                   S_IFREG |  S_ISUID | S_ISGID | 0666, NULL);
+                rc = vfs_create(dparent->d_inode, dchild,
+				S_IFREG |  S_ISUID | S_ISGID | 0666, NULL);
                 if (rc) {
                         CWARN("%s: create failed: rc = %d\n", obd->obd_name,rc);
                         if (rc == -ENOSPC) {

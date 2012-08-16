@@ -114,6 +114,10 @@ static inline void d_rehash_cond(struct dentry * entry, int lock)
 		spin_lock(&dcache_lock);
 }
 
+#define CheckWriteback(page, cmd) \
+        ((!PageWriteback(page) && (cmd & OBD_BRW_READ)) || \
+         (PageWriteback(page) && (cmd & OBD_BRW_WRITE)))
+
 #define __d_rehash(dentry, lock) d_rehash_cond(dentry, lock)
 #endif /* !HAVE_D_REHASH_COND && !HAVE___D_REHASH*/
 

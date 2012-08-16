@@ -45,7 +45,6 @@
 #include <linux/stat.h>
 #include <linux/errno.h>
 #include <linux/unistd.h>
-#include <linux/version.h>
 #include <asm/system.h>
 #include <asm/uaccess.h>
 

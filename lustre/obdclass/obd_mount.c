@@ -2386,11 +2386,8 @@ struct file_system_type lustre_fs_type = {
         .name         = "lustre",
         .get_sb       = lustre_get_sb,
         .kill_sb      = lustre_kill_super,
-        .fs_flags     = FS_BINARY_MOUNTDATA | FS_REQUIRES_DEV |
-#ifdef FS_HAS_FIEMAP
-                        FS_HAS_FIEMAP |
-#endif
-                        LL_RENAME_DOES_D_MOVE,
+	.fs_flags     = FS_BINARY_MOUNTDATA | FS_REQUIRES_DEV |
+			FS_HAS_FIEMAP | FS_RENAME_DOES_D_MOVE,
 };
 
 int lustre_register_fs(void)
