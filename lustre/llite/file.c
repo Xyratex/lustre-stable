@@ -1518,16 +1518,20 @@ repeat:
                 nrsegs_copy = nr_segs;
         }
 
-        down_read(&lli->lli_truncate_rwsem); /* Bug 18233 */
+        if (file->f_flags & O_DIRECT) {
+                ltd.lock_style = LL_LOCK_STYLE_NOLOCK;
+        } else {
+                down_read(&lli->lli_truncate_rwsem); /* Bug 18233 */
 
-        ltd.lock_style = ll_file_get_lock(file, (obd_off)(*ppos), end,
-                                          iov_copy, nrsegs_copy,
-                                          &ltd.u.lockh, &ltd.u.tree,
-                                          OBD_BRW_READ);
-        if (ltd.lock_style < 0 || ltd.lock_style == LL_LOCK_STYLE_NOLOCK)
-                up_read(&lli->lli_truncate_rwsem);
-        if (ltd.lock_style < 0)
-                GOTO(out, retval = ltd.lock_style);
+                ltd.lock_style = ll_file_get_lock(file, (obd_off)(*ppos), end,
+                                                  iov_copy, nrsegs_copy,
+                                                  &ltd.u.lockh, &ltd.u.tree,
+                                                  OBD_BRW_READ);
+                if (ltd.lock_style < 0 || ltd.lock_style == LL_LOCK_STYLE_NOLOCK)
+                        up_read(&lli->lli_truncate_rwsem);
+                if (ltd.lock_style < 0)
+                        GOTO(out, retval = ltd.lock_style);
+        }
 
         ll_inode_size_lock(inode, 1);
         /*
@@ -1801,7 +1805,7 @@ static ssize_t ll_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
         /* signal(7) specifies that write(2) and writev(2) should be restarted */
         if (!(fd->fd_flags & LL_FILE_IGNORE_LOCK)) {
                 got_write_sem = 1;
-                if (down_interruptible(&ll_i2info(inode)->lli_write_sem))
+                if (LOCK_INODE_MUTEX_INTERRUPTIBLE(inode))
                         RETURN(-ERESTARTSYS);
         }
 
@@ -1913,10 +1917,18 @@ repeat:
                 ltd.lock_style = LL_LOCK_STYLE_TREELOCK;
 
 #ifdef HAVE_FILE_WRITEV
-                retval = generic_file_writev(file, iov_copy, nrsegs_copy, ppos);
+                retval = generic_file_write_nolock(file, iov_copy, nrsegs_copy,
+                                                   ppos);
 #else
-                retval = generic_file_aio_write(iocb, iov_copy, nrsegs_copy,
-                                                *ppos);
+                retval = __generic_file_aio_write(iocb, iov_copy, nrsegs_copy,
+                                                  &iocb->ki_pos);
+                if (retval > 0 || retval == -EIOCBQUEUED) {
+                        ssize_t err;
+
+                        err = generic_write_sync(file, *ppos, retval);
+                        if (err < 0 && retval > 0)
+                                retval = err;
+                }
 #endif
         } else {
                 size_t ocount, ncount;
@@ -1967,7 +1979,7 @@ out:
         }
 
         if (got_write_sem)
-                up(&ll_i2info(inode)->lli_write_sem);
+                UNLOCK_INODE_MUTEX(inode);
 
         ll_td_set(NULL);
         if (iov_copy && iov_copy != iov)

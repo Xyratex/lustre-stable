@@ -806,7 +806,6 @@ void ll_lli_init(struct ll_inode_info *lli)
 {
         lli->lli_inode_magic = LLI_INODE_MAGIC;
         sema_init(&lli->lli_size_sem, 1);
-        sema_init(&lli->lli_write_sem, 1);
         lli->lli_flags = 0;
         lli->lli_maxbytes = PAGE_CACHE_MAXBYTES;
         spin_lock_init(&lli->lli_lock);
@@ -1385,9 +1384,6 @@ static int ll_setattr_do_truncate(struct inode *inode, loff_t new_size)
         int ast_flags;
         ENTRY;
 
-        UNLOCK_INODE_MUTEX(inode);
-        UP_WRITE_I_ALLOC_SEM(inode);
-
         down_write(&lli->lli_truncate_rwsem);
         if (sbi->ll_lockless_truncate_enable &&
             (sbi->ll_lco.lco_flags & OBD_CONNECT_TRUNCLOCK)) {
@@ -1421,8 +1417,6 @@ static int ll_setattr_do_truncate(struct inode *inode, loff_t new_size)
                         local_lock = 0;
         }
 
-        LOCK_INODE_MUTEX(inode);
-        DOWN_WRITE_I_ALLOC_SEM(inode);
         if (likely(rc == 0)) {
                 /* Only ll_inode_size_lock is taken at this level.
                  * lov_stripe_lock() is grabbed by ll_truncate() only over
@@ -1603,7 +1597,6 @@ int ll_setattr_raw(struct inode *inode, struct iattr *attr)
                         if (LTIME_S(attr->ia_mtime) < LTIME_S(attr->ia_ctime)){
                                 struct ost_lvb xtimes;
 
-                                UNLOCK_INODE_MUTEX(inode);
                                 /* setting mtime to past is performed under PW
                                  * EOF extent lock */
                                 oinfo->oi_policy.l_extent.start = 0;
@@ -1611,7 +1604,6 @@ int ll_setattr_raw(struct inode *inode, struct iattr *attr)
                                 rc = ll_extent_lock(NULL, inode, lsm, LCK_PW,
                                                     &oinfo->oi_policy,
                                                     &lockh, 0);
-                                LOCK_INODE_MUTEX(inode);
                                 if (rc) {
                                         OBDO_FREE(oa);
                                         OBD_FREE_PTR(oinfo);

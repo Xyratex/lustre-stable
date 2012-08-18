@@ -130,7 +130,6 @@ struct ll_inode_info {
         int                     lli_inode_magic;
         struct semaphore        lli_size_sem;           /* protect open and change size */
         void                   *lli_size_sem_owner;
-        struct semaphore        lli_write_sem;
         struct lov_stripe_md   *lli_smd;
         char                   *lli_symlink_name;
         __u64                   lli_maxbytes;
