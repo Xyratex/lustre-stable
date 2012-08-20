@@ -3855,7 +3855,6 @@ static int mdt_start_ptlrpc_service(struct mdt_device *m)
         conf = (typeof(conf)) {
                 .psc_nbufs           = MDS_NBUFS,
                 .psc_bufsize         = MDS_BUFSIZE,
-		.psc_nbufs_mem_max   = PTLRPC_NBUFS_MEM_MAX_DEFAULT,
                 .psc_max_req_size    = MDS_MAXREQSIZE,
                 .psc_max_reply_size  = MDS_MAXREPSIZE,
                 .psc_req_portal      = MDS_REQUEST_PORTAL,
@@ -3893,7 +3892,6 @@ static int mdt_start_ptlrpc_service(struct mdt_device *m)
         conf = (typeof(conf)) {
                 .psc_nbufs           = MDS_NBUFS,
                 .psc_bufsize         = MDS_BUFSIZE,
-		.psc_nbufs_mem_max   = PTLRPC_NBUFS_MEM_MAX_DEFAULT,
                 .psc_max_req_size    = MDS_MAXREQSIZE,
                 .psc_max_reply_size  = MDS_MAXREPSIZE,
                 .psc_req_portal      = MDS_READPAGE_PORTAL,
@@ -3926,7 +3924,6 @@ static int mdt_start_ptlrpc_service(struct mdt_device *m)
         conf = (typeof(conf)) {
                 .psc_nbufs           = MDS_NBUFS,
                 .psc_bufsize         = MDS_BUFSIZE,
-		.psc_nbufs_mem_max   = PTLRPC_NBUFS_MEM_MAX_DEFAULT,
                 .psc_max_req_size    = MDS_MAXREQSIZE,
                 .psc_max_reply_size  = MDS_MAXREPSIZE,
                 .psc_req_portal      = MDS_SETATTR_PORTAL,
@@ -3958,7 +3955,6 @@ static int mdt_start_ptlrpc_service(struct mdt_device *m)
         conf = (typeof(conf)) {
                 .psc_nbufs           = MDS_NBUFS,
                 .psc_bufsize         = MDS_BUFSIZE,
-		.psc_nbufs_mem_max   = PTLRPC_NBUFS_MEM_MAX_DEFAULT,
                 .psc_max_req_size    = SEQ_MAXREQSIZE,
                 .psc_max_reply_size  = SEQ_MAXREPSIZE,
                 .psc_req_portal      = SEQ_CONTROLLER_PORTAL,
@@ -3989,7 +3985,6 @@ static int mdt_start_ptlrpc_service(struct mdt_device *m)
         conf = (typeof(conf)) {
                 .psc_nbufs           = MDS_NBUFS,
                 .psc_bufsize         = MDS_BUFSIZE,
-		.psc_nbufs_mem_max   = PTLRPC_NBUFS_MEM_MAX_DEFAULT,
                 .psc_max_req_size    = SEQ_MAXREQSIZE,
                 .psc_max_reply_size  = SEQ_MAXREPSIZE,
                 .psc_req_portal      = SEQ_METADATA_PORTAL,
@@ -4023,7 +4018,6 @@ static int mdt_start_ptlrpc_service(struct mdt_device *m)
         conf = (typeof(conf)) {
                 .psc_nbufs           = MDS_NBUFS,
                 .psc_bufsize         = MDS_BUFSIZE,
-		.psc_nbufs_mem_max   = PTLRPC_NBUFS_MEM_MAX_DEFAULT,
                 .psc_max_req_size    = SEQ_MAXREQSIZE,
                 .psc_max_reply_size  = SEQ_MAXREPSIZE,
                 .psc_req_portal      = SEQ_DATA_PORTAL,
@@ -4052,7 +4046,6 @@ static int mdt_start_ptlrpc_service(struct mdt_device *m)
         conf = (typeof(conf)) {
                 .psc_nbufs           = MDS_NBUFS,
                 .psc_bufsize         = MDS_BUFSIZE,
-		.psc_nbufs_mem_max   = PTLRPC_NBUFS_MEM_MAX_DEFAULT,
                 .psc_max_req_size    = FLD_MAXREQSIZE,
                 .psc_max_reply_size  = FLD_MAXREPSIZE,
                 .psc_req_portal      = FLD_REQUEST_PORTAL,
@@ -4084,7 +4077,6 @@ static int mdt_start_ptlrpc_service(struct mdt_device *m)
         conf = (typeof(conf)) {
                 .psc_nbufs           = MDS_NBUFS,
                 .psc_bufsize         = MDS_BUFSIZE,
-		.psc_nbufs_mem_max   = PTLRPC_NBUFS_MEM_MAX_DEFAULT,
                 .psc_max_req_size    = MDS_MAXREQSIZE,
                 .psc_max_reply_size  = MDS_MAXREPSIZE,
                 .psc_req_portal      = MDS_MDS_PORTAL,
@@ -6057,10 +6049,6 @@ MODULE_DESCRIPTION("Lustre Meta-data Target ("LUSTRE_MDT_NAME")");
 MODULE_LICENSE("GPL");
 
 CFS_MODULE_PARM(mdt_num_threads, "ul", ulong, 0444,
-                "number of mdt service threads to start, disabling dynamic allocation");
-CFS_MODULE_PARM(mdt_min_threads, "ul", ulong, 0444,
-		"number of mdt service threads to start on boot");
-CFS_MODULE_PARM(mdt_max_threads, "ul", ulong, 0444,
-		"maximum number of mdt service threads to start");
+                "number of mdt service threads to start");
 
 cfs_module(mdt, "0.2.0", mdt_mod_init, mdt_mod_exit);

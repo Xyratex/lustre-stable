@@ -1028,15 +1028,6 @@ typedef void (*svc_req_printfn_t)(void *, struct ptlrpc_request *);
  */
 #define PTLRPC_SVC_HP_RATIO 10
 
-enum {
-
-/**
- * How many seconds to wait before creating a new thread, to see the
- * results of the previous thread creation.
- */
-	PTLRPC_SVC_THREAD_TIME	= 1,
-};
-
 /**
  * Definition of PortalRPC service.
  * The service is listening on a particular portal (like tcp port)
@@ -1074,8 +1065,6 @@ struct ptlrpc_service {
         unsigned                        srv_threads_next_id;
         /** # of starting threads */
         int                             srv_threads_starting;
-	/** last thread creation time - to rate limiting */
-	cfs_time_t			srv_next_start;
         /** # running threads */
         int                             srv_threads_running;
 
@@ -1113,8 +1102,6 @@ struct ptlrpc_service {
         int                             srv_buf_size;
         /** # buffers to allocate in 1 group */
         int                             srv_nbuf_per_group;
-	/** maximum # buffers allowed to be created */
-	int				srv_nbuf_max;
         /** Local portal on which to receive requests */
         __u32                           srv_req_portal;
         /** Portal on the client to send replies to */
@@ -1127,13 +1114,9 @@ struct ptlrpc_service {
         /** soft watchdog timeout multiplier */
         int                             srv_watchdog_factor;
         /** bind threads to CPUs */
-	unsigned long			srv_cpu_affinity:1,
-	/** under unregister_service */
-					srv_is_stopping:1,
-	/** new allocation thread started - protected srv_lock */
-					srv_thr_start:1,
-	/** grow bufferes started - protected srv_lock */
-					srv_grow_rqbd:1;
+        unsigned                        srv_cpu_affinity:1;
+        /** under unregister_service */
+        unsigned                        srv_is_stopping:1;
 
         /**
          * serialize the following fields, used for protecting
@@ -1469,16 +1452,9 @@ __u64 ptlrpc_req_xid(struct ptlrpc_request *request);
 
 /** @} */
 
-enum {
-	/** default # of buffers in rqbd queue */
-	PTLRPC_NBUFS_MEM_MAX_DEFAULT = 1*1024*1024*1024  /* 1GB */
-};
-
 struct ptlrpc_service_conf {
         int psc_nbufs;
         int psc_bufsize;
-/** < maximum memory size mapped for incomming request for a service */
-	int psc_nbufs_mem_max; 
         int psc_max_req_size;
         int psc_max_reply_size;
         int psc_req_portal;
@@ -1509,6 +1485,16 @@ struct ptlrpc_service *ptlrpc_init_svc_conf(struct ptlrpc_service_conf *c,
                                             svc_req_printfn_t prntfn,
                                             char *threadname);
 
+struct ptlrpc_service *ptlrpc_init_svc(int nbufs, int bufsize, int max_req_size,
+                                       int max_reply_size,
+                                       int req_portal, int rep_portal,
+                                       int watchdog_factor,
+                                       svc_handler_t, char *name,
+                                       cfs_proc_dir_entry_t *proc_entry,
+                                       svc_req_printfn_t,
+                                       int min_threads, int max_threads,
+                                       char *threadname, __u32 ctx_tags,
+                                       svc_hpreq_handler_t);
 void ptlrpc_stop_all_threads(struct ptlrpc_service *svc);
 
 int ptlrpc_start_threads(struct ptlrpc_service *svc);
