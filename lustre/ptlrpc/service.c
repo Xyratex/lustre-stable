@@ -1579,6 +1579,7 @@ ptlrpc_server_handle_req_in(struct ptlrpc_service *svc)
         req->rq_export = class_conn2export(
                 lustre_msg_get_handle(req->rq_reqmsg));
         if (req->rq_export) {
+		class_export_rpc_get(req->rq_export);
                 rc = ptlrpc_check_req(req);
                 if (rc == 0) {
                         rc = sptlrpc_target_export_check(req->rq_export, req);
@@ -1621,6 +1622,8 @@ ptlrpc_server_handle_req_in(struct ptlrpc_service *svc)
         RETURN(1);
 
 err_req:
+	if (req->rq_export)
+		class_export_rpc_put(req->rq_export);
         cfs_spin_lock(&svc->srv_rq_lock);
         svc->srv_n_active_reqs++;
         cfs_spin_unlock(&svc->srv_rq_lock);
@@ -1710,6 +1713,8 @@ ptlrpc_server_handle_request(struct ptlrpc_service *svc,
                              LCT_SESSION|LCT_REMEMBER|LCT_NOREF);
         if (rc) {
                 CERROR("Failure to initialize session: %d\n", rc);
+		if (request->rq_export != NULL)
+			class_export_rpc_put(request->rq_export);
                 goto out_req;
         }
         request->rq_session.lc_thread = thread;
@@ -1723,10 +1728,12 @@ ptlrpc_server_handle_request(struct ptlrpc_service *svc,
                 request->rq_svc_thread->t_env->le_ses = &request->rq_session;
 
         if (likely(request->rq_export)) {
-                if (unlikely(ptlrpc_check_req(request)))
-                        goto put_conn;
+		if (unlikely(ptlrpc_check_req(request))) {
+			class_export_rpc_put(request->rq_export);
+			goto put_conn;
+		}
                 ptlrpc_update_export_timer(request->rq_export, timediff >> 19);
-                export = class_export_rpc_get(request->rq_export);
+		export = request->rq_export;
         }
 
         /* Discard requests queued for longer than the deadline.
@@ -2751,6 +2758,10 @@ int ptlrpc_unregister_service(struct ptlrpc_service *service)
                 struct ptlrpc_request *req;
 
                 req = ptlrpc_server_request_get(service, 1);
+
+		if (req->rq_export != NULL)
+			class_export_rpc_put(req->rq_export);
+
                 cfs_list_del(&req->rq_list);
                 service->srv_n_active_reqs++;
                 ptlrpc_server_finish_request(service, req);
