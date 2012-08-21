@@ -61,6 +61,15 @@
 #include "mgs_internal.h"
 #include <lustre_param.h>
 
+static unsigned long mgs_mem = 0;
+
+#ifdef _KERNEL_
+CFS_MODULE_PARM(mgs_mem, "ul", ulong, 0444,
+		"maximum memory size for incomming requests of mgs "
+		"service");
+#endif
+
+
 /* Establish a connection to the MGS.*/
 static int mgs_connect(const struct lu_env *env,
                        struct obd_export **exp, struct obd_device *obd,
@@ -169,6 +178,7 @@ static int mgs_llog_finish(struct obd_device *obd, int count)
 /* Start the MGS obd */
 static int mgs_setup(struct obd_device *obd, struct lustre_cfg *lcfg)
 {
+	static struct ptlrpc_service_conf conf;
         struct lprocfs_static_vars lvars;
         struct mgs_obd *mgs = &obd->u.mgs;
         struct lustre_mount_info *lmi;
@@ -235,16 +245,27 @@ static int mgs_setup(struct obd_device *obd, struct lustre_cfg *lcfg)
                         GOTO(err_llog, rc);
         }
 
-        /* Start the service threads */
+	conf = (typeof(conf)) {
+		.psc_nbufs           = MGS_NBUFS,
+		.psc_bufsize         = MGS_BUFSIZE,
+		.psc_nbufs_mem_max   = mgs_mem ?
+				       mgs_mem :
+				       PTLRPC_NBUFS_MEM_MAX_DEFAULT,
+		.psc_max_req_size    = MGS_MAXREQSIZE,
+		.psc_max_reply_size  = MGS_MAXREPSIZE,
+		.psc_req_portal      = MGS_REQUEST_PORTAL,
+		.psc_rep_portal      = MGC_REPLY_PORTAL,
+		.psc_watchdog_factor = 2,
+		.psc_min_threads     = MGS_THREADS_AUTO_MIN,
+		.psc_max_threads     = MGS_THREADS_AUTO_MAX,
+		.psc_ctx_tags        = LCT_MD_THREAD,
+		.psc_hpreq_handler   = NULL,
+	};
         mgs->mgs_service =
-                ptlrpc_init_svc(MGS_NBUFS, MGS_BUFSIZE, MGS_MAXREQSIZE,
-                                MGS_MAXREPSIZE, MGS_REQUEST_PORTAL,
-                                MGC_REPLY_PORTAL, 2,
-                                mgs_handle, LUSTRE_MGS_NAME,
-                                obd->obd_proc_entry, target_print_req,
-                                MGS_THREADS_AUTO_MIN, MGS_THREADS_AUTO_MAX,
-                                "ll_mgs", LCT_MD_THREAD, NULL);
-
+		ptlrpc_init_svc_conf(&conf, mgs_handle,
+				     LUSTRE_MGS_NAME,
+				     obd->obd_proc_entry, target_print_req,
+				     "ll_mgs");
         if (!mgs->mgs_service) {
                 CERROR("failed to start service\n");
                 GOTO(err_llog, rc = -ENOMEM);
