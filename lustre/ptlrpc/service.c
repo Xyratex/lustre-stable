@@ -96,12 +96,14 @@ ptlrpc_alloc_rqbd (struct ptlrpc_service *svc)
         cfs_spin_lock(&svc->srv_lock);
         cfs_list_add(&rqbd->rqbd_list, &svc->srv_idle_rqbds);
         svc->srv_nbufs++;
-        cfs_spin_unlock(&svc->srv_lock);
+	svc->srv_nrqbd_idle++;
+	cfs_spin_unlock(&svc->srv_lock);
 
         return (rqbd);
 }
 
-void
+/* must be called with srv_lock */
+static void
 ptlrpc_free_rqbd (struct ptlrpc_request_buffer_desc *rqbd)
 {
         struct ptlrpc_service *svc = rqbd->rqbd_service;
@@ -109,10 +111,8 @@ ptlrpc_free_rqbd (struct ptlrpc_request_buffer_desc *rqbd)
         LASSERT (rqbd->rqbd_refcount == 0);
         LASSERT (cfs_list_empty(&rqbd->rqbd_reqs));
 
-        cfs_spin_lock(&svc->srv_lock);
         cfs_list_del(&rqbd->rqbd_list);
         svc->srv_nbufs--;
-        cfs_spin_unlock(&svc->srv_lock);
 
         OBD_FREE_LARGE(rqbd->rqbd_buffer, svc->srv_buf_size);
         OBD_FREE_PTR(rqbd);
@@ -121,37 +121,63 @@ ptlrpc_free_rqbd (struct ptlrpc_request_buffer_desc *rqbd)
 int
 ptlrpc_grow_req_bufs(struct ptlrpc_service *svc)
 {
-        struct ptlrpc_request_buffer_desc *rqbd;
-        int                                rc = 0;
-        int                                i;
+	struct ptlrpc_request_buffer_desc *rqbd;
+	int rc = 0;
+	int i;
+	int avail     = svc->srv_nrqbd_receiving;
+	__u32 low_water = test_req_buffer_pressure ? 0 :
+		svc->srv_nbuf_per_group / 2;
 
-        for (i = 0; i < svc->srv_nbuf_per_group; i++) {
-                /* NB: another thread might be doing this as well, we need to
-                 * make sure that it wouldn't over-allocate, see LU-1212. */
-                if (svc->srv_nrqbd_receiving >= svc->srv_nbuf_per_group)
-                        break;
+	/* NB I'm not locking; just looking. */
 
-                rqbd = ptlrpc_alloc_rqbd(svc);
+	/* CAVEAT EMPTOR: We might be allocating buffers here because we've
+	 * allowed the request history to grow out of control.  We could put a
+	 * sanity check on that here and cull some history if we need the
+	 * space. */
 
-                if (rqbd == NULL) {
-                        CERROR("%s: Can't allocate request buffer\n",
-                               svc->srv_name);
-                        rc = -ENOMEM;
-                        break;
-                }
+	if (avail > low_water || svc->srv_nbufs > svc->srv_nbuf_max ||
+	    svc->srv_grow_rqbd)
+		return 0;
 
-                if (ptlrpc_server_post_idle_rqbds(svc) < 0) {
-                        rc = -EAGAIN;
-                        break;
-                }
-        }
+	/* forbid parallel allocations due to high contention in vmalloc code
+	*/
+	cfs_spin_lock(&svc->srv_lock);
+	rc = svc->srv_grow_rqbd != 0;
+	svc->srv_grow_rqbd = 1;
+	cfs_spin_unlock(&svc->srv_lock);
+	if (rc)
+		return 0;
 
-        CDEBUG(D_RPCTRACE,
-               "%s: allocate %d new %d-byte reqbufs (%d/%d left), rc = %d\n",
-               svc->srv_name, i, svc->srv_buf_size,
-               svc->srv_nrqbd_receiving, svc->srv_nbufs, rc);
+	for (i = 0; i < svc->srv_nbuf_per_group; i++) {
+		if (svc->srv_nbufs > svc->srv_nbuf_max)
+			break;
 
-        return rc;
+		rqbd = ptlrpc_alloc_rqbd(svc);
+		if (rqbd == NULL) {
+			CERROR("%s: Can't allocate request buffer\n",
+			       svc->srv_name);
+			rc = -ENOMEM;
+			break;
+		}
+
+		if (ptlrpc_server_post_idle_rqbds(svc) < 0) {
+			rc = -EAGAIN;
+			break;
+		}
+
+	}
+
+	if (i > 0)
+		CDEBUG(D_RPCTRACE,
+		       "%s: allocate %d new %d-byte reqbufs (%d/%d left), rc = %d\n",
+		       svc->srv_name, i, svc->srv_buf_size,
+		       svc->srv_nrqbd_receiving, svc->srv_nbufs, rc);
+
+	cfs_spin_lock(&svc->srv_lock);
+	svc->srv_grow_rqbd = 0;
+	cfs_spin_unlock(&svc->srv_lock);
+
+	return rc;
 }
 
 /**
@@ -412,6 +438,7 @@ ptlrpc_server_post_idle_rqbds (struct ptlrpc_service *svc)
                                       struct ptlrpc_request_buffer_desc,
                                       rqbd_list);
                 cfs_list_del (&rqbd->rqbd_list);
+		svc->srv_nrqbd_idle--;
 
                 /* assume we will post successfully */
                 svc->srv_nrqbd_receiving++;
@@ -431,6 +458,7 @@ ptlrpc_server_post_idle_rqbds (struct ptlrpc_service *svc)
         svc->srv_nrqbd_receiving--;
         cfs_list_del(&rqbd->rqbd_list);
         cfs_list_add_tail(&rqbd->rqbd_list, &svc->srv_idle_rqbds);
+	svc->srv_nrqbd_idle++;
 
         /* Don't complain if no request buffers are posted right now; LNET
          * won't drop requests because we set the portal lazy! */
@@ -439,26 +467,6 @@ ptlrpc_server_post_idle_rqbds (struct ptlrpc_service *svc)
 
         return (-1);
 }
-
-/**
- * Start a service with parameters from struct ptlrpc_service_conf \a c
- * as opposed to directly calling ptlrpc_init_svc with tons of arguments.
- */
-struct ptlrpc_service *ptlrpc_init_svc_conf(struct ptlrpc_service_conf *c,
-                                            svc_handler_t h, char *name,
-                                            struct proc_dir_entry *proc_entry,
-                                            svc_req_printfn_t prntfn,
-                                            char *threadname)
-{
-        return ptlrpc_init_svc(c->psc_nbufs, c->psc_bufsize,
-                               c->psc_max_req_size, c->psc_max_reply_size,
-                               c->psc_req_portal, c->psc_rep_portal,
-                               c->psc_watchdog_factor, h, name, proc_entry,
-                               prntfn, c->psc_min_threads, c->psc_max_threads,
-                               threadname, c->psc_ctx_tags,
-                               c->psc_hpreq_handler);
-}
-EXPORT_SYMBOL(ptlrpc_init_svc_conf);
 
 static void ptlrpc_at_timer(unsigned long castmeharder)
 {
@@ -498,145 +506,139 @@ EXPORT_SYMBOL(ptlrpc_hpreq_handler);
  * Initialize service on a given portal.
  * This includes starting serving threads , allocating and posting rqbds and
  * so on.
- * \a nbufs is how many buffers to post
- * \a bufsize is buffer size to post
- * \a max_req_size - maximum request size to be accepted for this service
- * \a max_reply_size maximum reply size this service can ever send
- * \a req_portal - portal to listed for requests on
- * \a rep_portal - portal of where to send replies to
- * \a watchdog_factor soft watchdog timeout multiplifier to print stuck service traces.
- * \a handler - function to process every new request
+ * \a svc_handler - function to process every new request
  * \a name - service name
  * \a proc_entry - entry in the /proc tree for sttistics reporting
- * \a min_threads \a max_threads - min/max number of service threads to start.
  * \a threadname should be 11 characters or less - 3 will be added on
- * \a hp_handler - function to determine priority of the request, also called
- *                 on every new request.
  */
-struct ptlrpc_service *
-ptlrpc_init_svc(int nbufs, int bufsize, int max_req_size, int max_reply_size,
-                int req_portal, int rep_portal, int watchdog_factor,
-                svc_handler_t handler, char *name,
-                cfs_proc_dir_entry_t *proc_entry,
-                svc_req_printfn_t svcreq_printfn,
-                int min_threads, int max_threads,
-                char *threadname, __u32 ctx_tags,
-                svc_hpreq_handler_t hp_handler)
+struct ptlrpc_service *ptlrpc_init_svc_conf(struct ptlrpc_service_conf *conf,
+					    svc_handler_t svc_handler,
+					    char *name,
+					    struct proc_dir_entry *proc_entry,
+					    svc_req_printfn_t prntfn,
+					    char *threadname)
 {
-        int                     rc;
-        struct ptlrpc_at_array *array;
-        struct ptlrpc_service  *service;
-        unsigned int            size, index;
-        ENTRY;
+	int                     rc;
+	struct ptlrpc_at_array *array;
+	struct ptlrpc_service  *service;
+	unsigned int            size, index;
+	__u64			nbufs_mem_max;
+	ENTRY;
 
-        LASSERT (nbufs > 0);
-        LASSERT (bufsize >= max_req_size + SPTLRPC_MAX_PAYLOAD);
-        LASSERT (ctx_tags != 0);
+	LASSERT (conf->psc_nbufs > 0);
+	LASSERT (conf->psc_bufsize >=
+		 conf->psc_max_req_size + SPTLRPC_MAX_PAYLOAD);
+	LASSERT (conf->psc_ctx_tags != 0);
 
-        OBD_ALLOC_PTR(service);
-        if (service == NULL)
-                RETURN(NULL);
+	OBD_ALLOC_PTR(service);
+	if (service == NULL)
+		RETURN(NULL);
 
-        /* First initialise enough for early teardown */
+	/* First initialise enough for early teardown */
 
-        service->srv_name = name;
-        cfs_spin_lock_init(&service->srv_lock);
-        cfs_spin_lock_init(&service->srv_rq_lock);
-        cfs_spin_lock_init(&service->srv_rs_lock);
-        CFS_INIT_LIST_HEAD(&service->srv_threads);
-        cfs_waitq_init(&service->srv_waitq);
+	service->srv_name = name;
+	cfs_spin_lock_init(&service->srv_lock);
+	cfs_spin_lock_init(&service->srv_rq_lock);
+	cfs_spin_lock_init(&service->srv_rs_lock);
+	CFS_INIT_LIST_HEAD(&service->srv_threads);
+	cfs_waitq_init(&service->srv_waitq);
 
-        service->srv_nbuf_per_group = test_req_buffer_pressure ? 1 : nbufs;
-        service->srv_max_req_size = max_req_size + SPTLRPC_MAX_PAYLOAD;
-        service->srv_buf_size = bufsize;
-        service->srv_rep_portal = rep_portal;
-        service->srv_req_portal = req_portal;
-        service->srv_watchdog_factor = watchdog_factor;
-        service->srv_handler = handler;
-        service->srv_req_printfn = svcreq_printfn;
-        service->srv_request_seq = 1;           /* valid seq #s start at 1 */
-        service->srv_request_max_cull_seq = 0;
-        service->srv_threads_min = min_threads;
-        service->srv_threads_max = max_threads;
-        service->srv_thread_name = threadname;
-        service->srv_ctx_tags = ctx_tags;
-        service->srv_hpreq_handler = hp_handler;
-        service->srv_hpreq_ratio = PTLRPC_SVC_HP_RATIO;
-        service->srv_hpreq_count = 0;
-        service->srv_n_active_hpreq = 0;
+	service->srv_nbuf_per_group = test_req_buffer_pressure ? 1 :
+								 conf->psc_nbufs;
+        nbufs_mem_max = conf->psc_nbufs_mem_max ? conf->psc_nbufs_mem_max :
+			PTLRPC_NBUFS_MEM_MAX_DEFAULT;
+	service->srv_nbuf_max = nbufs_mem_max / conf->psc_bufsize;
+	service->srv_max_req_size = conf->psc_max_req_size + SPTLRPC_MAX_PAYLOAD;
+	service->srv_buf_size = conf->psc_bufsize;
+	service->srv_rep_portal = conf->psc_rep_portal;
+	service->srv_req_portal = conf->psc_req_portal;
+	service->srv_watchdog_factor = conf->psc_watchdog_factor;
+	service->srv_handler = svc_handler;
+	service->srv_req_printfn = prntfn;
+	service->srv_request_seq = 1;           /* valid seq #s start at 1 */
+	service->srv_request_max_cull_seq = 0;
+	service->srv_threads_min = conf->psc_min_threads;
+	service->srv_threads_max = conf->psc_max_threads;
+	service->srv_thread_name = threadname;
+	service->srv_ctx_tags = conf->psc_ctx_tags;
+	service->srv_hpreq_handler = conf->psc_hpreq_handler;
+	service->srv_hpreq_ratio = PTLRPC_SVC_HP_RATIO;
+	service->srv_hpreq_count = 0;
+	service->srv_n_active_hpreq = 0;
 
-        rc = LNetSetLazyPortal(service->srv_req_portal);
-        LASSERT (rc == 0);
+	rc = LNetSetLazyPortal(service->srv_req_portal);
+	LASSERT (rc == 0);
 
-        CFS_INIT_LIST_HEAD(&service->srv_request_queue);
-        CFS_INIT_LIST_HEAD(&service->srv_request_hpq);
-        CFS_INIT_LIST_HEAD(&service->srv_idle_rqbds);
-        CFS_INIT_LIST_HEAD(&service->srv_active_rqbds);
-        CFS_INIT_LIST_HEAD(&service->srv_history_rqbds);
-        CFS_INIT_LIST_HEAD(&service->srv_request_history);
-        CFS_INIT_LIST_HEAD(&service->srv_active_replies);
+	CFS_INIT_LIST_HEAD(&service->srv_request_queue);
+	CFS_INIT_LIST_HEAD(&service->srv_request_hpq);
+	CFS_INIT_LIST_HEAD(&service->srv_idle_rqbds);
+	CFS_INIT_LIST_HEAD(&service->srv_active_rqbds);
+	CFS_INIT_LIST_HEAD(&service->srv_history_rqbds);
+	CFS_INIT_LIST_HEAD(&service->srv_request_history);
+	CFS_INIT_LIST_HEAD(&service->srv_active_replies);
 #ifndef __KERNEL__
-        CFS_INIT_LIST_HEAD(&service->srv_reply_queue);
+	CFS_INIT_LIST_HEAD(&service->srv_reply_queue);
 #endif
-        CFS_INIT_LIST_HEAD(&service->srv_free_rs_list);
-        cfs_waitq_init(&service->srv_free_rs_waitq);
-        cfs_atomic_set(&service->srv_n_difficult_replies, 0);
+	CFS_INIT_LIST_HEAD(&service->srv_free_rs_list);
+	cfs_waitq_init(&service->srv_free_rs_waitq);
+	cfs_atomic_set(&service->srv_n_difficult_replies, 0);
 
-        cfs_spin_lock_init(&service->srv_at_lock);
-        CFS_INIT_LIST_HEAD(&service->srv_req_in_queue);
+	cfs_spin_lock_init(&service->srv_at_lock);
+	CFS_INIT_LIST_HEAD(&service->srv_req_in_queue);
 
-        array = &service->srv_at_array;
-        size = at_est2timeout(at_max);
-        array->paa_size = size;
-        array->paa_count = 0;
-        array->paa_deadline = -1;
+	array = &service->srv_at_array;
+	size = at_est2timeout(at_max);
+	array->paa_size = size;
+	array->paa_count = 0;
+	array->paa_deadline = -1;
 
-        /* allocate memory for srv_at_array (ptlrpc_at_array) */
-        OBD_ALLOC(array->paa_reqs_array, sizeof(cfs_list_t) * size);
-        if (array->paa_reqs_array == NULL)
-                GOTO(failed, NULL);
+	/* allocate memory for srv_at_array (ptlrpc_at_array) */
+	OBD_ALLOC(array->paa_reqs_array, sizeof(cfs_list_t) * size);
+	if (array->paa_reqs_array == NULL)
+		GOTO(failed, NULL);
 
-        for (index = 0; index < size; index++)
-                CFS_INIT_LIST_HEAD(&array->paa_reqs_array[index]);
+	for (index = 0; index < size; index++)
+		CFS_INIT_LIST_HEAD(&array->paa_reqs_array[index]);
 
-        OBD_ALLOC(array->paa_reqs_count, sizeof(__u32) * size);
-        if (array->paa_reqs_count == NULL)
-                GOTO(failed, NULL);
+	OBD_ALLOC(array->paa_reqs_count, sizeof(__u32) * size);
+	if (array->paa_reqs_count == NULL)
+		GOTO(failed, NULL);
 
-        cfs_timer_init(&service->srv_at_timer, ptlrpc_at_timer, service);
-        /* At SOW, service time should be quick; 10s seems generous. If client
-           timeout is less than this, we'll be sending an early reply. */
-        at_init(&service->srv_at_estimate, 10, 0);
+	cfs_timer_init(&service->srv_at_timer, ptlrpc_at_timer, service);
+	/* At SOW, service time should be quick; 10s seems generous. If client
+	   timeout is less than this, we'll be sending an early reply. */
+	at_init(&service->srv_at_estimate, 10, 0);
 
-        cfs_spin_lock (&ptlrpc_all_services_lock);
-        cfs_list_add (&service->srv_list, &ptlrpc_all_services);
-        cfs_spin_unlock (&ptlrpc_all_services_lock);
+	cfs_spin_lock (&ptlrpc_all_services_lock);
+	cfs_list_add (&service->srv_list, &ptlrpc_all_services);
+	cfs_spin_unlock (&ptlrpc_all_services_lock);
 
-        /* Now allocate the request buffers */
-        rc = ptlrpc_grow_req_bufs(service);
-        /* We shouldn't be under memory pressure at startup, so
-         * fail if we can't post all our buffers at this time. */
-        if (rc != 0)
-                GOTO(failed, NULL);
+	/* Now allocate the request buffers */
+	rc = ptlrpc_grow_req_bufs(service);
+	/* We shouldn't be under memory pressure at startup, so
+	 * fail if we can't post all our buffers at this time. */
+	if (rc != 0)
+		GOTO(failed, NULL);
 
-        /* Now allocate pool of reply buffers */
-        /* Increase max reply size to next power of two */
-        service->srv_max_reply_size = 1;
-        while (service->srv_max_reply_size <
-               max_reply_size + SPTLRPC_MAX_PAYLOAD)
-                service->srv_max_reply_size <<= 1;
+	/* Now allocate pool of reply buffers */
+	/* Increase max reply size to next power of two */
+	service->srv_max_reply_size = 1;
+	while (service->srv_max_reply_size <
+	       conf->psc_max_reply_size + SPTLRPC_MAX_PAYLOAD)
+		service->srv_max_reply_size <<= 1;
 
-        if (proc_entry != NULL)
-                ptlrpc_lprocfs_register_service(proc_entry, service);
+	if (proc_entry != NULL)
+		ptlrpc_lprocfs_register_service(proc_entry, service);
 
-        CDEBUG(D_NET, "%s: Started, listening on portal %d\n",
-               service->srv_name, service->srv_req_portal);
+	CDEBUG(D_NET, "%s: Started, listening on portal %d\n",
+			service->srv_name, service->srv_req_portal);
 
-        RETURN(service);
+	RETURN(service);
 failed:
-        ptlrpc_unregister_service(service);
-        return NULL;
+	ptlrpc_unregister_service(service);
+	return NULL;
 }
+EXPORT_SYMBOL(ptlrpc_init_svc_conf);
 
 /**
  * to actually free the request, must be called without holding svc_lock.
@@ -657,7 +659,7 @@ static void ptlrpc_server_free_request(struct ptlrpc_request *req)
                 /* NB request buffers use an embedded
                  * req if the incoming req unlinked the
                  * MD; this isn't one of them! */
-                OBD_FREE(req, sizeof(*req));
+		ptlrpc_request_free_cache(req);
         }
 }
 
@@ -716,7 +718,7 @@ void ptlrpc_server_drop_request(struct ptlrpc_request *req)
                                               struct ptlrpc_request_buffer_desc,
                                               rqbd_list);
 
-                        cfs_list_del(&rqbd->rqbd_list);
+			cfs_list_del_init(&rqbd->rqbd_list);
                         svc->srv_n_history_rqbds--;
 
                         /* remove rqbd's reqs from svc's req history while
@@ -749,8 +751,15 @@ void ptlrpc_server_drop_request(struct ptlrpc_request *req)
                          */
                         LASSERT(cfs_atomic_read(&rqbd->rqbd_req.rq_refcount) ==
                                 0);
-                        cfs_list_add_tail(&rqbd->rqbd_list,
-                                          &svc->srv_idle_rqbds);
+			/* if we're over max (somebody changed it), free
+			   the rqbd instead of posting to idle */
+			if (svc->srv_nrqbd_receiving >= svc->srv_nbuf_max)
+		                ptlrpc_free_rqbd(rqbd);
+			else {
+				cfs_list_add_tail(&rqbd->rqbd_list,
+						  &svc->srv_idle_rqbds);
+				svc->srv_nrqbd_idle++;
+			}
                 }
 
                 cfs_spin_unlock(&svc->srv_lock);
@@ -1064,12 +1073,12 @@ static int ptlrpc_at_send_early_reply(struct ptlrpc_request *req)
         }
         newdl = cfs_time_current_sec() + at_get(&svc->srv_at_estimate);
 
-        OBD_ALLOC(reqcopy, sizeof *reqcopy);
+	reqcopy = ptlrpc_request_alloc_cache(CFS_ALLOC_IO);
         if (reqcopy == NULL)
                 RETURN(-ENOMEM);
         OBD_ALLOC_LARGE(reqmsg, req->rq_reqlen);
         if (!reqmsg) {
-                OBD_FREE(reqcopy, sizeof *reqcopy);
+		ptlrpc_request_free_cache(reqcopy);
                 RETURN(-ENOMEM);
         }
 
@@ -1128,7 +1137,7 @@ out_put:
 out:
         sptlrpc_svc_ctx_decref(reqcopy);
         OBD_FREE_LARGE(reqmsg, req->rq_reqlen);
-        OBD_FREE(reqcopy, sizeof *reqcopy);
+	ptlrpc_request_free_cache(reqcopy);
         RETURN(rc);
 }
 
@@ -2012,23 +2021,11 @@ liblustre_check_services (void *arg)
 static void
 ptlrpc_check_rqbd_pool(struct ptlrpc_service *svc)
 {
-        int avail = svc->srv_nrqbd_receiving;
-        int low_water = test_req_buffer_pressure ? 0 :
-                        svc->srv_nbuf_per_group / 2;
-
-        /* NB I'm not locking; just looking. */
-
-        /* CAVEAT EMPTOR: We might be allocating buffers here because we've
-         * allowed the request history to grow out of control.  We could put a
-         * sanity check on that here and cull some history if we need the
-         * space. */
-
-        if (avail <= low_water)
-                ptlrpc_grow_req_bufs(svc);
+        ptlrpc_grow_req_bufs(svc);
 
         if (svc->srv_stats)
                 lprocfs_counter_add(svc->srv_stats, PTLRPC_REQBUF_AVAIL_CNTR,
-                                    avail);
+                                    svc->srv_nrqbd_receiving);
 }
 
 static int
@@ -2771,8 +2768,9 @@ int ptlrpc_unregister_service(struct ptlrpc_service *service)
         LASSERT(service->srv_n_history_rqbds == 0);
         LASSERT(cfs_list_empty(&service->srv_active_rqbds));
 
-        /* Now free all the request buffers since nothing references them
-         * any more... */
+	 /* Now free all the request buffers since nothing references them
+	 * any more...
+	 * Don't bother holding srv_lock; nobody else can be messing with this now */
         while (!cfs_list_empty(&service->srv_idle_rqbds)) {
                 struct ptlrpc_request_buffer_desc *rqbd =
                         cfs_list_entry(service->srv_idle_rqbds.next,
@@ -2780,6 +2778,7 @@ int ptlrpc_unregister_service(struct ptlrpc_service *service)
                                        rqbd_list);
 
                 ptlrpc_free_rqbd(rqbd);
+		service->srv_nrqbd_idle--;
         }
 
         ptlrpc_wait_replies(service);
