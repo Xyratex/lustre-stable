@@ -42,6 +42,9 @@ extern struct semaphore ldlm_srv_namespace_lock;
 extern struct list_head ldlm_srv_namespace_list;
 extern struct semaphore ldlm_cli_namespace_lock;
 extern struct list_head ldlm_cli_namespace_list;
+extern atomic_t ldlm_cli_all_ns_unused;
+extern atomic_t ldlm_srv_all_pl_granted;
+#define LDLM_POOL_SHRINK_BATCH_SIZE 64
 
 static inline atomic_t *ldlm_namespace_nr(ldlm_side_t client)
 {
@@ -59,6 +62,19 @@ static inline struct semaphore *ldlm_namespace_lock(ldlm_side_t client)
 {
         return client == LDLM_NAMESPACE_SERVER ?
                 &ldlm_srv_namespace_lock : &ldlm_cli_namespace_lock;
+}
+static inline int ldlm_namespace_shrinkable(ldlm_side_t client)
+{
+        int total;
+        if (client == LDLM_NAMESPACE_CLIENT) {
+                total = atomic_read(&ldlm_cli_all_ns_unused);
+#ifdef __KERNEL__
+                total = total / 100 * sysctl_vfs_cache_pressure;;
+#endif
+        } else {
+                total = atomic_read(&ldlm_srv_all_pl_granted);
+        }
+        return total;
 }
 
 /* ldlm_request.c */

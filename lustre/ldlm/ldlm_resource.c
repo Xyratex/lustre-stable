@@ -61,6 +61,8 @@ struct list_head ldlm_srv_namespace_list =
 struct semaphore ldlm_cli_namespace_lock;
 struct list_head ldlm_cli_namespace_list =
         CFS_LIST_HEAD_INIT(ldlm_cli_namespace_list);
+atomic_t ldlm_cli_all_ns_unused = ATOMIC_INIT(0);
+atomic_t ldlm_srv_all_pl_granted = ATOMIC_INIT(0);
 
 cfs_proc_dir_entry_t *ldlm_type_proc_dir = NULL;
 cfs_proc_dir_entry_t *ldlm_ns_proc_dir = NULL;
@@ -352,6 +354,7 @@ ldlm_namespace_new(struct obd_device *obd, char *name,
 
         CFS_INIT_LIST_HEAD(&ns->ns_root_list);
         CFS_INIT_LIST_HEAD(&ns->ns_list_chain);
+        CFS_INIT_LIST_HEAD(&ns->ns_shrink_chain);
         ns->ns_refcount = 0;
         ns->ns_client = client;
         spin_lock_init(&ns->ns_hash_lock);
@@ -375,6 +378,7 @@ ldlm_namespace_new(struct obd_device *obd, char *name,
         spin_lock_init(&ns->ns_unused_lock);
         ns->ns_orig_connect_flags = 0;
         ns->ns_connect_flags = 0;
+        ns->ns_stopping           = 0;
 
         ldlm_proc_namespace(ns);
 
@@ -584,6 +588,9 @@ void ldlm_namespace_free_prior(struct ldlm_namespace *ns,
                 return;
         }
 
+        spin_lock(&ns->ns_hash_lock);
+        ns->ns_stopping = 1;
+        spin_unlock(&ns->ns_hash_lock);
 
         /* Can fail with -EINTR when force == 0 in which case try harder */
         rc = __ldlm_namespace_free(ns, force);
