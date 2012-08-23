@@ -48,10 +48,6 @@ struct ptlrpc_request_set;
 extern int test_req_buffer_pressure;
 
 /* client.c */
-int ptlrpc_request_cache_init(void);
-int ptlrpc_request_cache_fini(void);
-struct ptlrpc_request *ptlrpc_request_alloc_cache(int flags);
-void ptlrpc_request_free_cache(struct ptlrpc_request *req);
 void ptlrpc_init_xid(void);
 
 /* events.c */

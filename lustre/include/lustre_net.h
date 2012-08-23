@@ -1102,8 +1102,6 @@ struct ptlrpc_service {
         int                             srv_buf_size;
         /** # buffers to allocate in 1 group */
         int                             srv_nbuf_per_group;
-	/** maximum # buffers allowed to be created */
-	int				srv_nbuf_max;
         /** Local portal on which to receive requests */
         __u32                           srv_req_portal;
         /** Portal on the client to send replies to */
@@ -1116,11 +1114,9 @@ struct ptlrpc_service {
         /** soft watchdog timeout multiplier */
         int                             srv_watchdog_factor;
         /** bind threads to CPUs */
-	unsigned long			srv_cpu_affinity:1,
-	/** under unregister_service */
-					srv_is_stopping:1,
-	/** grow bufferes started - protected srv_lock */
-					srv_grow_rqbd:1;
+        unsigned                        srv_cpu_affinity:1;
+        /** under unregister_service */
+        unsigned                        srv_is_stopping:1;
 
         /**
          * serialize the following fields, used for protecting
@@ -1456,11 +1452,19 @@ __u64 ptlrpc_req_xid(struct ptlrpc_request *request);
 
 /** @} */
 
-/** Default # of buffers in rqbd queue.
-    Hopefully we won't use this much memory, but we must accept all waiting
-    reqs, in case some of them are e.g. lock cancels.   On the other hand,
-    we don't want to OOM.  */
-#define PTLRPC_NBUFS_MEM_MAX_DEFAULT ((cfs_num_physpages / 2) << CFS_PAGE_SHIFT)
+struct ptlrpc_service_conf {
+        int psc_nbufs;
+        int psc_bufsize;
+        int psc_max_req_size;
+        int psc_max_reply_size;
+        int psc_req_portal;
+        int psc_rep_portal;
+        int psc_watchdog_factor;
+        int psc_min_threads;
+        int psc_max_threads;
+        __u32 psc_ctx_tags;
+        int (*psc_hpreq_handler)(struct ptlrpc_request *);
+};
 
 /* ptlrpc/service.c */
 /**
@@ -1469,35 +1473,6 @@ __u64 ptlrpc_req_xid(struct ptlrpc_request *request);
  *
  * @{
  */
-
-struct ptlrpc_service_conf {
-	/** how many buffers to post in single allocation round */
-	int psc_nbufs;
-	/** buffer size to post */
-	int psc_bufsize;
-	/** maximum memory size mapped for incomming request for a service */
-	int psc_nbufs_mem_max;
-	/** maximum request size to be accepted for this service */
-	int psc_max_req_size;
-	/** maximum reply size this service can ever send */
-	int psc_max_reply_size;
-	/** portal to listen for requests on */
-	int psc_req_portal;
-	/** portal to send replies to */
-	int psc_rep_portal;
-	/** soft watchdog timeout multiplifier to print stuck service traces.*/
-	int psc_watchdog_factor;
-	/** min number of service threads to start. */
-	int psc_min_threads;
-	/** max number of service threads to start. */
-	int psc_max_threads;
-	/** lu_context flags a service enviroment used for handler */
-	__u32 psc_ctx_tags;
-	/** function to determine priority of the request, also called
-	 * on every new request.*/
-	int (*psc_hpreq_handler)(struct ptlrpc_request *);
-};
-
 void ptlrpc_save_lock (struct ptlrpc_request *req,
                        struct lustre_handle *lock, int mode, int no_ack);
 void ptlrpc_commit_replies(struct obd_export *exp);
@@ -1510,6 +1485,16 @@ struct ptlrpc_service *ptlrpc_init_svc_conf(struct ptlrpc_service_conf *c,
                                             svc_req_printfn_t prntfn,
                                             char *threadname);
 
+struct ptlrpc_service *ptlrpc_init_svc(int nbufs, int bufsize, int max_req_size,
+                                       int max_reply_size,
+                                       int req_portal, int rep_portal,
+                                       int watchdog_factor,
+                                       svc_handler_t, char *name,
+                                       cfs_proc_dir_entry_t *proc_entry,
+                                       svc_req_printfn_t,
+                                       int min_threads, int max_threads,
+                                       char *threadname, __u32 ctx_tags,
+                                       svc_hpreq_handler_t);
 void ptlrpc_stop_all_threads(struct ptlrpc_service *svc);
 
 int ptlrpc_start_threads(struct ptlrpc_service *svc);

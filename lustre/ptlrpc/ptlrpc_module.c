@@ -72,76 +72,68 @@ __init int ptlrpc_init(void)
         cfs_mutex_init(&ptlrpcd_mutex);
         ptlrpc_init_xid();
 
-	rc = req_layout_init();
-	if (rc)
-		RETURN(rc);
+        rc = req_layout_init();
+        if (rc)
+                RETURN(rc);
 
-	rc = ptlrpc_hr_init();
-	if (rc)
-		RETURN(rc);
+        rc = ptlrpc_hr_init();
+        if (rc)
+                RETURN(rc);
 
-	cleanup_phase = 1;
-	rc = ptlrpc_request_cache_init();
-	if (rc)
-		GOTO(cleanup, rc);
+        cleanup_phase = 1;
 
-	cleanup_phase = 2;
-	rc = ptlrpc_init_portals();
-	if (rc)
-		GOTO(cleanup, rc);
+        rc = ptlrpc_init_portals();
+        if (rc)
+                GOTO(cleanup, rc);
+        cleanup_phase = 2;
 
-	cleanup_phase = 3;
+        rc = ptlrpc_connection_init();
+        if (rc)
+                GOTO(cleanup, rc);
+        cleanup_phase = 3;
 
-	rc = ptlrpc_connection_init();
-	if (rc)
-		GOTO(cleanup, rc);
+        ptlrpc_put_connection_superhack = ptlrpc_connection_put;
 
-	cleanup_phase = 4;
-	ptlrpc_put_connection_superhack = ptlrpc_connection_put;
+        rc = ptlrpc_start_pinger();
+        if (rc)
+                GOTO(cleanup, rc);
+        cleanup_phase = 4;
 
-	rc = ptlrpc_start_pinger();
-	if (rc)
-		GOTO(cleanup, rc);
+        rc = ldlm_init();
+        if (rc)
+                GOTO(cleanup, rc);
+        cleanup_phase = 5;
 
-	cleanup_phase = 5;
-	rc = ldlm_init();
-	if (rc)
-		GOTO(cleanup, rc);
+        rc = sptlrpc_init();
+        if (rc)
+                GOTO(cleanup, rc);
 
-	cleanup_phase = 6;
-	rc = sptlrpc_init();
-	if (rc)
-		GOTO(cleanup, rc);
+        cleanup_phase = 6;
+        rc = llog_recov_init();
+        if (rc)
+                GOTO(cleanup, rc);
 
-	cleanup_phase = 7;
-	rc = llog_recov_init();
-	if (rc)
-		GOTO(cleanup, rc);
-
-	RETURN(0);
+        RETURN(0);
 
 cleanup:
-	CDEBUG(D_NET, "ptlrpc_init failed, phase %d\n", cleanup_phase);
-	switch(cleanup_phase) {
-	case 7:
-		sptlrpc_fini();
-	case 6:
-		ldlm_exit();
-	case 5:
-		ptlrpc_stop_pinger();
-	case 4:
-		ptlrpc_connection_fini();
-	case 3:
-		ptlrpc_exit_portals();
-	case 2:
-		ptlrpc_request_cache_fini();
-	case 1:
-		ptlrpc_hr_fini();
-		req_layout_fini();
-	default: ;
-	}
+        switch(cleanup_phase) {
+        case 6:
+                sptlrpc_fini();
+        case 5:
+                ldlm_exit();
+        case 4:
+                ptlrpc_stop_pinger();
+        case 3:
+                ptlrpc_connection_fini();
+        case 2:
+                ptlrpc_exit_portals();
+        case 1:
+                ptlrpc_hr_fini();
+                req_layout_fini();
+        default: ;
+        }
 
-	return rc;
+        return rc;
 }
 
 #ifdef __KERNEL__
@@ -152,7 +144,6 @@ static void __exit ptlrpc_exit(void)
         ldlm_exit();
         ptlrpc_stop_pinger();
         ptlrpc_exit_portals();
-	ptlrpc_request_cache_fini();
         ptlrpc_hr_fini();
         ptlrpc_connection_fini();
 }
@@ -227,6 +218,7 @@ EXPORT_SYMBOL(ptlrpc_mark_interrupted);
 EXPORT_SYMBOL(ptlrpc_save_lock);
 EXPORT_SYMBOL(ptlrpc_schedule_difficult_reply);
 EXPORT_SYMBOL(ptlrpc_commit_replies);
+EXPORT_SYMBOL(ptlrpc_init_svc);
 EXPORT_SYMBOL(ptlrpc_stop_all_threads);
 EXPORT_SYMBOL(ptlrpc_start_threads);
 EXPORT_SYMBOL(ptlrpc_start_thread);

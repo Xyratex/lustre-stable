@@ -294,45 +294,6 @@ ptlrpc_lprocfs_write_req_history_max(struct file *file, const char *buffer,
         return count;
 }
 
-/* max memory usable, in bytes */
-static int
-ptlrpc_lprocfs_read_req_buffer_max(char *page, char **start, off_t off,
-				   int count, int *eof, void *data)
-{
-	struct ptlrpc_service *svc = data;
-
-	*eof = 1;
-	return snprintf(page, count, LPU64"\n",
-			(__u64)svc->srv_nbuf_max * svc->srv_buf_size);
-}
-
-/* max memory usable, in bytes */
-static int
-ptlrpc_lprocfs_write_req_buffer_max(struct file *file, const char *buffer,
-				    unsigned long count, void *data)
-{
-	__u64 val;
-	struct ptlrpc_service *svc = data;
-	int rc = lprocfs_write_u64_helper(buffer, count, &val);
-
-	if (rc < 0)
-		return rc;
-
-	if (val < 0)
-		return -ERANGE;
-
-	/* This sanity check is more of an insanity check; we can still
-	 * hose a kernel by creating too many buffers.  Limit to 1/2 of
-	 * memory. */
-	if ((int)(val >> CFS_PAGE_SHIFT) > cfs_num_physpages / 2)
-		return -ERANGE;
-	cfs_spin_lock(&svc->srv_lock);
-	svc->srv_nbuf_max = (int)(val / svc->srv_buf_size);
-	cfs_spin_unlock(&svc->srv_lock);
-
-	return count;
-}
-
 static int
 ptlrpc_lprocfs_rd_threads_min(char *page, char **start, off_t off,
                               int count, int *eof, void *data)
@@ -656,22 +617,6 @@ static int ptlrpc_lprocfs_wr_hp_ratio(struct file *file, const char *buffer,
         return count;
 }
 
-static int ptlrpc_lprocfs_rd_rqbd_buffers(char *page, char **start, off_t off, int count,
-					  int *eof, void *data)
-{
-	struct ptlrpc_service *svc = data;
-	*eof = 1;
-	return snprintf(page, count, "network buffers:\n\tcreated: %d\n"
-			"\tavailable: %d\n\tactive: %d\n\tqueued: %d\n"
-			"\thistory: %d\n\tmax allowed: %d\n\tsize: %d\n"
-			"\ttotal memory used: %d MB\n",
-			svc->srv_nbufs, svc->srv_nrqbd_receiving,
-			svc->srv_n_active_reqs, svc->srv_n_queued_reqs,
-			svc->srv_n_history_rqbds, svc->srv_nbuf_max,
-			svc->srv_buf_size,
-			svc->srv_nbufs * svc->srv_buf_size / 1024 / 1024);
-}
-
 void ptlrpc_lprocfs_register_service(struct proc_dir_entry *entry,
                                      struct ptlrpc_service *svc)
 {
@@ -687,13 +632,6 @@ void ptlrpc_lprocfs_register_service(struct proc_dir_entry *entry,
                  .write_fptr = ptlrpc_lprocfs_write_req_history_max,
                  .read_fptr  = ptlrpc_lprocfs_read_req_history_max,
                  .data       = svc},
-		{.name       = "req_buffer_max",
-		 .write_fptr = ptlrpc_lprocfs_write_req_buffer_max,
-		 .read_fptr  = ptlrpc_lprocfs_read_req_buffer_max,
-		 .data       = svc},
-		{.name       = "req_buffer_stats",
-		 .read_fptr  = ptlrpc_lprocfs_rd_rqbd_buffers,
-		 .data       = svc},
                 {.name       = "threads_min",
                  .read_fptr  = ptlrpc_lprocfs_rd_threads_min,
                  .write_fptr = ptlrpc_lprocfs_wr_threads_min,
