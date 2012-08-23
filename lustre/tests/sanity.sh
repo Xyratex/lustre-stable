@@ -9208,6 +9208,46 @@ test_226() {
 }
 run_test 226 "xattr cache should not crash on ENOMEM"
 
+# LU-1512 try to reuse idle OI blocks
+test_228() {
+	[ "$FSTYPE" != "ldiskfs" ] && skip "non-ldiskfs backend" && return
+
+	local MDT_DEV=$(mdsdevname ${SINGLEMDS//mds/})
+	local myDIR=$DIR/$tdir
+
+	mkdir -p $myDIR
+	#define OBD_FAIL_SEQ_EXHAUST             0x1002
+	$LCTL set_param fail_loc=0x80001002
+	createmany -o $myDIR/t- 10000
+	$LCTL set_param fail_loc=0
+	# The guard is current the largest FID holder
+	touch $myDIR/guard
+	local SEQ=$($LFS path2fid $myDIR/guard | awk -F ':' '{print $1}' |
+		    tr -d '[')
+	local IDX=$(($SEQ % 64))
+
+	do_facet $SINGLEMDS sync
+	# Make sure journal flushed.
+	sleep 6
+	local blk1=$(do_facet $SINGLEMDS \
+		     "$DEBUGFS -c -R \\\"stat oi.16.${IDX}\\\" $MDT_DEV" |
+		     grep Blockcount | awk '{print $4}')
+
+	# Remove old files, some OI blocks will become idle.
+	unlinkmany $myDIR/t- 10000
+	# Create new files, idle OI blocks should be reused.
+	createmany -o $myDIR/t- 2000
+	do_facet $SINGLEMDS sync
+	# Make sure journal flushed.
+	sleep 6
+	local blk2=$(do_facet $SINGLEMDS \
+		     "$DEBUGFS -c -R \\\"stat oi.16.${IDX}\\\" $MDT_DEV" |
+		     grep Blockcount | awk '{print $4}')
+
+	[ $blk1 == $blk2 ] || error "old blk1=$blk1, new blk2=$blk2, unmatched!"
+}
+run_test 228 "try to reuse idle OI blocks"
+
 test_231a()
 {
 	# For simplicity this test assumes that max_pages_per_rpc
