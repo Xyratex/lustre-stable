@@ -1761,6 +1761,29 @@ static ssize_t ll_file_writev(struct file *file, const struct iovec *iov,
                               unsigned long nr_segs, loff_t *ppos)
 {
 #else /* AIO stuff */
+/*
+ * Perform syncing after a write if file / inode is sync.
+ *
+ * Based on generic_write_sync(). It is supposed to be called with i_mutex
+ * taken.
+ */
+static int ll_write_sync(struct file *file, loff_t pos, loff_t count)
+{
+        ssize_t ret, err;
+
+        if (!(file->f_flags & O_SYNC) && !IS_SYNC(file->f_mapping->host))
+                return 0;
+
+        ret = filemap_write_and_wait_range(file->f_mapping, pos, pos + count - 1);
+        err = ll_fsync(file, file->f_dentry, 1);
+        if (!ret)
+                ret = err;
+        return ret;
+}
+
+/*
+ * Write to a file (through the page cache).
+ */
 static ssize_t ll_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
                                  unsigned long nr_segs, loff_t pos)
 {
@@ -1925,7 +1948,7 @@ repeat:
                 if (retval > 0 || retval == -EIOCBQUEUED) {
                         ssize_t err;
 
-                        err = generic_write_sync(file, *ppos, retval);
+                        err = ll_write_sync(file, pos, retval);
                         if (err < 0 && retval > 0)
                                 retval = err;
                 }
