@@ -619,7 +619,9 @@ static inline int llap_shrink_cache_internal(struct ll_sb_info *sbi,
                                          (__u64)page->index << CFS_PAGE_SHIFT,
                                          ((__u64)page->index << CFS_PAGE_SHIFT)|
                                           ~CFS_PAGE_MASK);
-                        if (!PageDirty(page) && !page_mapped(page)) {
+                        if (!PageDirty(page) && !page_mapped(page) &&
+                            page_count(page) == 3) { /* pagecache + private +
+                                                      * caller's ref */
                                 ll_ra_accounting(llap, page->mapping);
                                 ll_truncate_complete_page(page);
                                 ++count;
