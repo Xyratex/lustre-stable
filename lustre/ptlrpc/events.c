@@ -325,7 +325,7 @@ void request_in_callback(lnet_event_t *ev)
         }
 
         cfs_list_add_tail(&req->rq_list, &service->srv_req_in_queue);
-        service->srv_n_queued_reqs++;
+	service->srv_n_incoming_reqs++;
 
         /* NB everything can disappear under us once the request
          * has been queued and we unlock, so do the wake now... */

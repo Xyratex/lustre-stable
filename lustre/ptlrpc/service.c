@@ -1229,10 +1229,11 @@ static int ptlrpc_at_check_timed(struct ptlrpc_service *svc)
                    chance to send early replies */
                 LCONSOLE_WARN("%s: This server is not able to keep up with "
                               "request traffic (cpu-bound).\n", svc->srv_name);
-                CWARN("earlyQ=%d reqQ=%d recA=%d, svcEst=%d, "
+		CWARN("earlyQ=%d reqI=%d reqQ=%d recA=%d, svcEst=%d, "
                       "delay="CFS_DURATION_T"(jiff)\n",
-                      counter, svc->srv_n_queued_reqs, svc->srv_n_active_reqs,
-                      at_get(&svc->srv_at_estimate), delay);
+		      counter, svc->srv_n_incoming_reqs, svc->srv_n_queued_reqs,
+		      svc->srv_n_active_reqs, at_get(&svc->srv_at_estimate),
+		      delay);
         }
 
         /* we took additional refcount so entries can't be deleted from list, no
@@ -1374,7 +1375,8 @@ static int ptlrpc_server_request_add(struct ptlrpc_service *svc,
         else
                 cfs_list_add_tail(&req->rq_list,
                                   &svc->srv_request_queue);
-
+	/* on either hpq or normal request */
+	svc->srv_n_queued_reqs++;
         cfs_spin_unlock(&svc->srv_rq_lock);
 
         RETURN(0);
@@ -1519,9 +1521,7 @@ ptlrpc_server_handle_req_in(struct ptlrpc_service *svc)
         req = cfs_list_entry(svc->srv_req_in_queue.next,
                              struct ptlrpc_request, rq_list);
         cfs_list_del_init (&req->rq_list);
-        svc->srv_n_queued_reqs--;
-        /* Consider this still a "queued" request as far as stats are
-           concerned */
+	svc->srv_n_incoming_reqs--;
         cfs_spin_unlock(&svc->srv_lock);
 
         /* go through security check/transform */
@@ -1697,6 +1697,7 @@ ptlrpc_server_handle_request(struct ptlrpc_service *svc,
         }
 
         cfs_list_del_init(&request->rq_list);
+	svc->srv_n_queued_reqs--;
         svc->srv_n_active_reqs++;
         if (request->rq_hp)
                 svc->srv_n_active_hpreq++;
@@ -2750,7 +2751,7 @@ int ptlrpc_unregister_service(struct ptlrpc_service *service)
                                        rq_list);
 
                 cfs_list_del(&req->rq_list);
-                service->srv_n_queued_reqs--;
+		service->srv_n_incoming_reqs--;
                 service->srv_n_active_reqs++;
                 ptlrpc_server_finish_request(service, req);
         }
@@ -2763,9 +2764,11 @@ int ptlrpc_unregister_service(struct ptlrpc_service *service)
 			class_export_rpc_put(req->rq_export);
 
                 cfs_list_del(&req->rq_list);
+		service->srv_n_queued_reqs--;
                 service->srv_n_active_reqs++;
                 ptlrpc_server_finish_request(service, req);
         }
+	LASSERT(service->srv_n_incoming_reqs == 0);
         LASSERT(service->srv_n_queued_reqs == 0);
         LASSERT(service->srv_n_active_reqs == 0);
         LASSERT(service->srv_n_history_rqbds == 0);

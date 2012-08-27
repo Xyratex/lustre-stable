@@ -656,8 +656,8 @@ static int ptlrpc_lprocfs_wr_hp_ratio(struct file *file, const char *buffer,
         return count;
 }
 
-static int ptlrpc_lprocfs_rd_rqbd_buffers(char *page, char **start, off_t off, int count,
-					  int *eof, void *data)
+static int ptlrpc_lprocfs_rd_rqbd_buffers(char *page, char **start, off_t off,
+					  int count, int *eof, void *data)
 {
 	struct ptlrpc_service *svc = data;
 	*eof = 1;
@@ -666,13 +666,13 @@ static int ptlrpc_lprocfs_rd_rqbd_buffers(char *page, char **start, off_t off, i
 			"\thistory: %d\n\tmax allowed: %d\n\tsize: %d\n"
 			"\ttotal memory used: "LPU64" MB\n"
 			"requests:\n\tactive: %d\n\thp active: %d\n"
-			"\tqueued %d\n",
+			"\tincoming: %d\n\tqueued: %d\n",
 			svc->srv_nbufs, svc->srv_nrqbd_receiving,
 			svc->srv_nrqbd_idle, svc->srv_n_history_rqbds,
 			svc->srv_nbuf_max, svc->srv_buf_size,
-			(__u64)svc->srv_nbufs * svc->srv_buf_size/1024/1024,
+			(__u64)svc->srv_nbufs * svc->srv_buf_size / 1024 / 1024,
 			svc->srv_n_active_reqs, svc->srv_n_active_hpreq,
-			svc->srv_n_queued_reqs);
+			svc->srv_n_incoming_reqs, svc->srv_n_queued_reqs);
 }
 
 void ptlrpc_lprocfs_register_service(struct proc_dir_entry *entry,
