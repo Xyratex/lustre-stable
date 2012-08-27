@@ -5420,3 +5420,11 @@ generate_string() {
 
     echo "$(head -c $size < /dev/zero | tr '\0' y)"
 }
+
+# generate maloo upload-able log file name
+# \param logname specify unique part of file name
+generate_logname() {
+	local logname=${1:-"default_logname"}
+
+	echo "$TESTLOG_PREFIX.$TESTNAME.$logname.$(hostname -s).log"
+}
