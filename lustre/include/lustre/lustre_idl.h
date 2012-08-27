@@ -1123,6 +1123,7 @@ extern void lustre_swab_ptlrpc_body(struct ptlrpc_body *pb);
 							* timestamps supported
 							*/
 #define OBD_CONNECT_LVB_TYPE	0x400000000000ULL /* variable type of LVB */
+#define OBD_CONNECT_LIGHTWEIGHT 0x1000000000000ULL/* lightweight connection */
 #define OBD_CONNECT_SHORTIO   0x2000000000000ULL /* short io */
 
 /* XXX README XXX:
