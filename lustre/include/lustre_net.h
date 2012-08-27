@@ -1169,8 +1169,10 @@ struct ptlrpc_service {
         cfs_list_t                      srv_request_queue;
         /** high priority queue */
         cfs_list_t                      srv_request_hpq;
-        /** # incoming reqs */
-        int                             srv_n_queued_reqs;
+	/** # reqs waiting for req_in (srv_lock) */
+	int				srv_n_incoming_reqs;
+	/** # reqs waiting for handle_req (srv_rq_lock) */
+	int				srv_n_queued_reqs;
         /** # reqs being served */
         int                             srv_n_active_reqs;
         /** # HPreqs being served */
