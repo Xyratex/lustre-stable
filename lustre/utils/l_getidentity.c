@@ -104,10 +104,10 @@ static void errlog(const char *fmt, ...)
 int get_groups_local(struct identity_downcall_data *data,
                      unsigned int maxgroups)
 {
-        gid_t *groups;
+        gid_t *groups, *groups_tmp = NULL;
         unsigned int ngroups = 0;
+        int ngroups_tmp;
         struct passwd *pw;
-        struct group *gr;
         char *pw_name;
         int namelen;
         int i;
@@ -135,24 +135,33 @@ int get_groups_local(struct identity_downcall_data *data,
         strncpy(pw_name, pw->pw_name, namelen - 1);
         groups = data->idd_groups;
 
-        while ((gr = getgrent()) && ngroups < maxgroups) {
-                if (gr->gr_gid == groups[0])
-                        continue;
-                if (!gr->gr_mem)
-                        continue;
-                for (i = 0; gr->gr_mem[i]; i++) {
-                        if (!strcmp(gr->gr_mem[i], pw_name)) {
-                                groups[ngroups++] = gr->gr_gid;
-                                break;
-                        }
-                }
+        /* Allocate array of size maxgroups instead of handling two 
+           consecutive and potentially racy getgrouplist() calls. */
+        groups_tmp = (gid_t *)malloc(maxgroups * sizeof(gid_t));
+        if (groups_tmp == NULL) {
+                errlog("malloc error\n");
+                return -1;
         }
-        endgrent();
+
+        ngroups_tmp = maxgroups;
+        if (getgrouplist(pw->pw_name, pw->pw_gid, groups_tmp, &ngroups_tmp) < 0) {
+                free(pw_name);
+                free(groups_tmp);
+                errlog("getgrouplist() error\n");
+                return -1;
+        }
+
+        /* Do not place user's group ID in to the resulting groups list */
+        for (i = 0; i < ngroups_tmp; i++)
+                if (pw->pw_gid != groups_tmp[i])
+                        groups[ngroups++] = groups_tmp[i];
+ 
         if (ngroups > 0)
                 qsort(groups, ngroups, sizeof(*groups), compare_u32);
         data->idd_ngroups = ngroups;
 
         free(pw_name);
+        free(groups_tmp);
         return 0;
 }
 
