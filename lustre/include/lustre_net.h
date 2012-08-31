@@ -157,7 +157,7 @@
 #define MDS_MAXREQSIZE  MDS_MAXREPSIZE
 
 /** MDS_BUFSIZE = max_reqsize + max sptlrpc payload size */
-#define MDS_BUFSIZE     (MDS_MAXREQSIZE + 1024)
+#define MDS_BUFSIZE     2*(MDS_MAXREQSIZE + 1024)
 
 /** FLD_MAXREQSIZE == lustre_msg + __u32 padding + ptlrpc_body + opc + md_fld */
 #define FLD_MAXREQSIZE  (160)
