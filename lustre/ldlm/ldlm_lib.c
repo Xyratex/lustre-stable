@@ -878,11 +878,22 @@ int target_handle_connect(struct ptlrpc_request *req)
                 export = NULL;
         } else {
                 cfs_spin_lock(&export->exp_lock);
-                export->exp_connecting = 1;
-                cfs_spin_unlock(&export->exp_lock);
-                LASSERT(export->exp_obd == target);
+		if (export->exp_connecting) { /* ORI-710 */
+			cfs_spin_unlock(&export->exp_lock);
+			cfs_up_read(&export->exp_mutex);
+			LCONSOLE_WARN("%s: Export %p already connecting from %s\n",
+				      export->exp_obd->obd_name, export,
+				      libcfs_nid2str(req->rq_peer.nid));
+			class_export_put(export);
+			export = NULL;
+			rc = -EALREADY;
+		} else {
+			export->exp_connecting = 1;
+			cfs_spin_unlock(&export->exp_lock);
+			LASSERT(export->exp_obd == target);
 
-                rc = target_handle_reconnect(&conn, export, &cluuid);
+			rc = target_handle_reconnect(&conn, export, &cluuid);
+		}
         }
 
         /* If we found an export, we already unlocked. */
@@ -969,10 +980,12 @@ dont_check_exports:
                                          client_nid);
 			if (rc == 0) {
 				cfs_down_read(&export->exp_mutex);
-				if (export->exp_disconnected)
+				if (export->exp_disconnected) {
 					rc = -EAGAIN;
-				else
+				} else {
 					conn.cookie = export->exp_handle.h_cookie;
+					export->exp_connecting = 1;
+				}
 			}
                 }
         } else {
