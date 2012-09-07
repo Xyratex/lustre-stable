@@ -289,7 +289,7 @@ static int lov_verify_lmm(void *lmm, int lmm_bytes, int *stripe_count)
 
                         for (i = 0; i < lmm_bytes; i++)
                                 sprintf(buffer+2*i, "%.2X", ((char *)lmm)[i]);
-                        buffer[sz] = '\0';
+			buffer[sz - 1] = '\0';
                         CERROR("%s\n", buffer);
                         OBD_FREE_LARGE(buffer, sz);
                 }
