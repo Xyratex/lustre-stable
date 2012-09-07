@@ -261,6 +261,20 @@ gid_t cfs_curproc_fsgid(void)
         return getgid();
 }
 
+#ifndef HAVE_STRLCAT /* not in glibc for RHEL 5.x, remove when obsolete */
+size_t strlcat(char *tgt, const char *src, size_t size)
+{
+	size_t tgt_len = strlen(tgt);
+
+	if (size > tgt_len) {
+		strncat(tgt, src, size - tgt_len - 1);
+		tgt[size - 1] = '\0';
+	}
+
+	return tgt_len + strlen(src);
+}
+#endif
+
 void cfs_enter_debugger(void)
 {
         /*
