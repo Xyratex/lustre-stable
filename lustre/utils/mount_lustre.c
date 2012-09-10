@@ -623,8 +623,6 @@ static int parse_opts(int argc, char *const argv[], struct mount_opts *mop)
 	 * symbolic link for instance
 	 */
 	if (realpath(mop->mo_usource, real_path) != NULL) {
-		mop->mo_usource = strdup(real_path);
-
 		ptr = strrchr(real_path, '/');
 		if (ptr && strncmp(ptr, "/dm-", 4) == 0 && isdigit(*(ptr + 4))) {
 			snprintf(path, sizeof(path), "/sys/block/%s/dm/name", ptr+1);
@@ -637,6 +635,7 @@ static int parse_opts(int argc, char *const argv[], struct mount_opts *mop)
 				fclose(f);
 			}
 		}
+		mop->mo_usource = strdup(real_path);
 	}
 
 	mop->mo_source = convert_hostnames(mop->mo_usource);
