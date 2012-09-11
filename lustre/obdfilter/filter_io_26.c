@@ -633,7 +633,7 @@ int filter_commitrw_write(struct obd_export *exp, struct obdo *oa,
 		int nogrant = !(flags & OBD_BRW_GRANTED) && lnb->rc == -ENOSPC;
 
 		if (nogrant || need_quotas) {
-			if (filter_range_is_mapped(inode, lnb->offset,
+			if (filter_range_is_mapped(inode, lnb->lnb_file_offset,
 						   lnb->len)) {
 				/* If overwriting an existing block,
 				 * we don't need a grant */
@@ -665,7 +665,7 @@ int filter_commitrw_write(struct obd_export *exp, struct obdo *oa,
 
                 /* we expect these pages to be in offset order, but we'll
                  * be forgiving */
-                this_size = lnb->offset + lnb->len;
+		this_size = lnb->lnb_file_offset + lnb->len;
                 if (this_size > iattr.ia_size)
                         iattr.ia_size = this_size;
 
