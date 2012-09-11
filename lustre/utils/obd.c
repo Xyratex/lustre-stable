@@ -3053,9 +3053,11 @@ void obd_finalize(int argc, char **argv)
 {
         struct sigaction sigact;
 
+	/* sigact initialization */
         sigact.sa_handler = signal_server;
         sigfillset(&sigact.sa_mask);
         sigact.sa_flags = SA_RESTART;
+	/* coverity[uninit_use_in_call] */
         sigaction(SIGINT, &sigact, NULL);
 
         shmem_cleanup();
