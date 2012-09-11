@@ -528,6 +528,7 @@ static int dir_write(char *chunk_buf, size_t chunksize,
 	struct timeval start_time;
 	unsigned long long total_bytes;
 	unsigned long long curr_bytes = 0;
+	int rc = 0;
 
 #ifdef HAVE_EXT2FS_EXT2FS_H
 	if (!full && fsetflags(testdir, EXT2_TOPDIR_FL))
@@ -546,7 +547,8 @@ static int dir_write(char *chunk_buf, size_t chunksize,
 	    fflush(countfile) != 0) {
 		fprintf(stderr, "\n%s: writing %s failed :%s\n",
 			progname, filecount, strerror(errno));
-		return 6;
+		rc = 6;
+		goto out;
 	}
 
 	/* calculate total bytes that need to be written */
@@ -554,7 +556,8 @@ static int dir_write(char *chunk_buf, size_t chunksize,
 	if (total_bytes <= 0) {
 		fprintf(stderr, "\n%s: unable to calculate total bytes\n",
 			progname);
-		return 7;
+		rc = 7;
+		goto out;
 	}
 
 	if (!full && (dir_num != 0))
@@ -576,7 +579,8 @@ static int dir_write(char *chunk_buf, size_t chunksize,
 					fprintf(stderr, "\n%s: mkdir %s : %s\n",
 						progname, tempdir,
 						strerror(errno));
-					return 1;
+					rc = 1;
+					goto out;
 				}
 			}
 			dir_num++;
@@ -601,8 +605,10 @@ static int dir_write(char *chunk_buf, size_t chunksize,
 				   time_st, inode_st, tempfile);
 		close(fd);
 		if (ret < 0) {
-			if (ret != -ENOSPC)
-				return 1;
+			if (ret != -ENOSPC) {
+				rc = 1;
+				goto out;
+			}
 			curr_bytes = total_bytes;
 			break;
 		}
@@ -619,7 +625,6 @@ static int dir_write(char *chunk_buf, size_t chunksize,
 				progname, filecount, strerror(errno));
 		}
 	}
-	fclose(countfile);
 
 	if (verbose) {
 		verbose++;
@@ -629,7 +634,10 @@ static int dir_write(char *chunk_buf, size_t chunksize,
 		verbose--;
 	}
 
-	return 0;
+out:
+	fclose(countfile);
+
+	return rc;
 }
 
 /*
