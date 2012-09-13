@@ -126,8 +126,7 @@ static int server_register_mount(const char *name, struct super_block *sb,
 
         cfs_mutex_unlock(&lustre_mount_info_lock);
 
-        CDEBUG(D_MOUNT, "reg_mnt %p from %s, vfscount=%d\n",
-               lmi->lmi_mnt, name, mnt_get_count(lmi->lmi_mnt));
+	CDEBUG(D_MOUNT, "reg_mnt %p from %s\n", lmi->lmi_mnt, name);
 
         RETURN(0);
 }
@@ -146,8 +145,7 @@ static int server_deregister_mount(const char *name)
                 RETURN(-ENOENT);
         }
 
-        CDEBUG(D_MOUNT, "dereg_mnt %p from %s, vfscount=%d\n",
-               lmi->lmi_mnt, name, mnt_get_count(lmi->lmi_mnt));
+	CDEBUG(D_MOUNT, "dereg_mnt %p from %s\n", lmi->lmi_mnt, name);
 
         OBD_FREE(lmi->lmi_name, strlen(lmi->lmi_name) + 1);
         cfs_list_del(&lmi->lmi_list_chain);
@@ -177,9 +175,8 @@ struct lustre_mount_info *server_get_mount(const char *name)
         mntget(lmi->lmi_mnt);
         cfs_atomic_inc(&lsi->lsi_mounts);
 
-        CDEBUG(D_MOUNT, "get_mnt %p from %s, refs=%d, vfscount=%d\n",
-               lmi->lmi_mnt, name, cfs_atomic_read(&lsi->lsi_mounts),
-               mnt_get_count(lmi->lmi_mnt));
+	CDEBUG(D_MOUNT, "get_mnt %p from %s, refs=%d\n", lmi->lmi_mnt,
+	       name, cfs_atomic_read(&lsi->lsi_mounts));
 
         RETURN(lmi);
 }
@@ -228,7 +225,6 @@ int server_put_mount(const char *name, struct vfsmount *mnt)
 {
         struct lustre_mount_info *lmi;
         struct lustre_sb_info *lsi;
-        int count = mnt_get_count(mnt) - 1;
         ENTRY;
 
         /* This might be the last one, can't deref after this */
@@ -244,16 +240,12 @@ int server_put_mount(const char *name, struct vfsmount *mnt)
         lsi = s2lsi(lmi->lmi_sb);
         LASSERT(lmi->lmi_mnt == mnt);
 
-        CDEBUG(D_MOUNT, "put_mnt %p from %s, refs=%d, vfscount=%d\n",
-               lmi->lmi_mnt, name, cfs_atomic_read(&lsi->lsi_mounts), count);
+	CDEBUG(D_MOUNT, "put_mnt %p from %s, refs=%d\n",
+	       lmi->lmi_mnt, name, cfs_atomic_read(&lsi->lsi_mounts));
 
-        if (lustre_put_lsi(lmi->lmi_sb)) {
-                CDEBUG(D_MOUNT, "Last put of mnt %p from %s, vfscount=%d\n",
-                       lmi->lmi_mnt, name, count);
-                /* last mount is the One True Mount */
-                if (count > 1)
-                        CERROR("%s: mount busy, vfscount=%d!\n", name, count);
-        }
+	if (lustre_put_lsi(lmi->lmi_sb))
+		CDEBUG(D_MOUNT, "Last put of mnt %p from %s\n",
+		       lmi->lmi_mnt, name);
 
         /* this obd should never need the mount again */
         server_deregister_mount(name);
