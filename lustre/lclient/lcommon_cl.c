@@ -677,12 +677,11 @@ void ccc_lock_state(const struct lu_env *env,
                 inode = ccc_object_inode(obj);
                 attr  = ccc_env_thread_attr(env);
 
-                /* vmtruncate()->ll_truncate() first sets the i_size and then
-                 * the kms under both a DLM lock and the
+                /* vmtruncate() sets the i_size
+                 * under both a DLM lock and the
                  * ll_inode_size_lock().  If we don't get the
                  * ll_inode_size_lock() here we can match the DLM lock and
-                 * reset i_size from the kms before the truncating path has
-                 * updated the kms.  generic_file_write can then trust the
+                 * reset i_size.  generic_file_write can then trust the
                  * stale i_size when doing appending writes and effectively
                  * cancel the result of the truncate.  Getting the
                  * ll_inode_size_lock() after the enqueue maintains the DLM

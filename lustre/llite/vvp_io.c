@@ -336,8 +336,7 @@ static int vvp_do_vmtruncate(struct inode *inode, size_t size)
 {
         int     result;
         /*
-         * Only ll_inode_size_lock is taken at this level. lov_stripe_lock()
-         * is grabbed by ll_truncate() only over call to obd_adjust_kms().
+         * Only ll_inode_size_lock is taken at this level.
          */
         ll_inode_size_lock(inode, 0);
         result = vmtruncate(inode, size);
