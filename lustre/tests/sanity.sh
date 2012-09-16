@@ -3018,18 +3018,28 @@ run_test 51a "special situations: split htree with empty entry =="
 # large number may give panic(). debugging on this is going on.
 export NUMTEST=70
 test_51b() {
-	NUMFREE=`df -i -P $DIR | tail -n 1 | awk '{ print $4 }'`
-	[ $NUMFREE -lt 21000 ] && \
-		skip "not enough free inodes ($NUMFREE)" && \
+	local BASE=$DIR/$tdir
+	mkdir -p $BASE
+
+	local mdtidx=$(printf "%04x" $($LFS getstripe -M $BASE))
+	local numfree=$(lctl get_param -n mdc.$FSNAME-MDT$mdtidx*.filesfree)
+	[ $numfree -lt 21000 ] && skip "not enough free inodes ($numfree)" &&
 		return
 
 	check_kernel_version 40 || NUMTEST=31000
-	[ $NUMFREE -lt $NUMTEST ] && NUMTEST=$(($NUMFREE - 50))
+	[ $numfree -lt $NUMTEST ] && NUMTEST=$(($numfree - 50)) &&
+		echo "reduced count to $NUMTEST due to inodes"
 
-	mkdir -p $DIR/d51b
-	createmany -d $DIR/d51b/t- $NUMTEST
+	# need to check free space for the directories as well
+	local blkfree=$(lctl get_param -n mdc.$FSNAME-MDT$mdtidx*.kbytesavail)
+	numfree=$((blkfree / 4))
+	[ $numfree -lt $NUMTEST ] && NUMTEST=$(($numfree - 50)) &&
+		echo "reduced count to $NUMTEST due to blocks"
+
+	createmany -d $BASE/d $NUMTEST && echo $NUMTEST > $BASE/fnum ||
+		echo "failed" > $BASE/fnum
 }
-run_test 51b "mkdir .../t-0 --- .../t-$NUMTEST ===================="
+run_test 51b "exceed 64k subdirectory nlink limit"
 
 test_51bb() {
 	[ $MDSCOUNT -lt 2 ] && skip "needs >= 2 MDTs" && return
