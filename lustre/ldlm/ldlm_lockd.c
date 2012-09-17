@@ -1975,7 +1975,7 @@ static int ldlm_callback_handler(struct ptlrpc_request *req)
          * which the server has already started a blocking callback on. */
         if (OBD_FAIL_CHECK(OBD_FAIL_LDLM_CANCEL_BL_CB_RACE) &&
             lustre_msg_get_opc(req->rq_reqmsg) == LDLM_BL_CALLBACK) {
-                rc = ldlm_cli_cancel(&dlm_req->lock_handle[0]);
+                rc = ldlm_cli_cancel(&dlm_req->lock_handle[0], 0);
                 if (rc < 0)
                         CERROR("ldlm_cli_cancel: %d\n", rc);
         }

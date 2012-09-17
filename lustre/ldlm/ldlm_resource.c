@@ -745,7 +745,7 @@ static void cleanup_resource(struct ldlm_resource *res, cfs_list_t *q,
 
                         unlock_res(res);
                         ldlm_lock2handle(lock, &lockh);
-                        rc = ldlm_cli_cancel(&lockh);
+                        rc = ldlm_cli_cancel(&lockh, 0);
                         if (rc)
                                 CERROR("ldlm_cli_cancel: %d\n", rc);
                 } else {

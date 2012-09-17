@@ -829,7 +829,7 @@ static int grouplock_blocking_ast(struct ldlm_lock *lock,
                         CDEBUG(D_DLMTRACE, "Lock %p is canceled\n", lock);
 
                         ldlm_lock2handle(lock, &lockh);
-                        rc = ldlm_cli_cancel(&lockh);
+                        rc = ldlm_cli_cancel(&lockh, LCF_ASYNC);
 
                         break;
                 case LDLM_CB_CANCELING :

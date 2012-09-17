@@ -304,7 +304,7 @@ int ldlm_blocking_ast_nocheck(struct ldlm_lock *lock)
 
                 LDLM_DEBUG(lock, "already unused, calling ldlm_cli_cancel");
                 ldlm_lock2handle(lock, &lockh);
-                rc = ldlm_cli_cancel(&lockh);
+                rc = ldlm_cli_cancel(&lockh, LCF_ASYNC);
                 if (rc < 0)
                         CERROR("ldlm_cli_cancel: %d\n", rc);
         } else {
@@ -1241,7 +1241,8 @@ int ldlm_cli_update_pool(struct ptlrpc_request *req)
 }
 EXPORT_SYMBOL(ldlm_cli_update_pool);
 
-int ldlm_cli_cancel(struct lustre_handle *lockh)
+int ldlm_cli_cancel(struct lustre_handle *lockh,
+                    ldlm_cancel_flags_t cancel_flags)
 {
         struct obd_export *exp;
         int avail, flags, count = 1, rc = 0;
@@ -1281,7 +1282,7 @@ int ldlm_cli_cancel(struct lustre_handle *lockh)
                 count += ldlm_cancel_lru_local(ns, &cancels, 0, avail - 1,
                                                LCF_BL_AST, flags);
         }
-        ldlm_cli_cancel_list(&cancels, count, NULL, 0);
+        ldlm_cli_cancel_list(&cancels, count, NULL, cancel_flags);
         RETURN(0);
 }
 
