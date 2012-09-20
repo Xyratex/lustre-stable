@@ -1736,6 +1736,10 @@ got:
 		brelse(bh);
 		bh = NULL;
 		ldiskfs_std_error(inode->i_sb, *e);
+	} else {
+		/* Clear the reused node as new node does. */
+		memset(bh->b_data, 0, inode->i_sb->s_blocksize);
+		set_buffer_uptodate(bh);
 	}
 	return bh;
 
@@ -2067,7 +2071,7 @@ int split_index_node(handle_t *handle, struct iam_path *path,
                         ++ frame;
                         assert_inv(dx_node_check(path, frame));
                         bh_new[0] = NULL; /* buffer head is "consumed" */
-                        err = ldiskfs_journal_get_write_access(handle, bh2);
+                        err = ldiskfs_journal_dirty_metadata(handle, bh2);
                         if (err)
                                 goto journal_error;
                         do_corr(schedule());
@@ -2259,6 +2263,7 @@ static iam_ptr_t iam_index_shrink(handle_t *h, struct iam_path *p,
 	struct inode *inode = c->ic_object;
 	struct iam_frame *frame = p->ip_frame;
 	struct iam_entry *entries;
+	struct iam_entry *pos;
 	struct dynlock_handle *lh;
 	int count;
 	int rc;
@@ -2279,15 +2284,6 @@ static iam_ptr_t iam_index_shrink(handle_t *h, struct iam_path *p,
 		return 0;
 	}
 
-	entries = frame->entries;
-	count = dx_get_count(entries);
-	/* NOT shrink the last entry in the index node, which can be reused
-	 * directly by next new node. */
-	if (count == 2) {
-		iam_unlock_htree(c, lh);
-		return 0;
-	}
-
 	rc = iam_txn_add(h, p, frame->bh);
 	if (rc != 0) {
 		iam_unlock_htree(c, lh);
@@ -2295,6 +2291,29 @@ static iam_ptr_t iam_index_shrink(handle_t *h, struct iam_path *p,
 	}
 
 	iam_lock_bh(frame->bh);
+	entries = frame->entries;
+	count = dx_get_count(entries);
+	/* NOT shrink the last entry in the index node, which can be reused
+	 * directly by next new node. */
+	if (count == 2) {
+		iam_unlock_bh(frame->bh);
+		iam_unlock_htree(c, lh);
+		return 0;
+	}
+
+	pos = iam_find_position(p, frame);
+	/* There may be some new leaf nodes have been added or empty leaf nodes
+	 * have been shrinked during my delete operation.
+	 *
+	 * If the empty leaf is not under current index node because the index
+	 * node has been split, then just skip the empty leaf, which is rare. */
+	if (unlikely(frame->leaf != dx_get_block(p, pos))) {
+		iam_unlock_bh(frame->bh);
+		iam_unlock_htree(c, lh);
+		return 0;
+	}
+
+	frame->at = pos;
 	if (frame->at < iam_entry_shift(p, entries, count - 1)) {
 		struct iam_entry *n = iam_entry_shift(p, frame->at, 1);
 
@@ -2323,14 +2342,11 @@ iam_install_idle_blocks(handle_t *h, struct iam_path *p, struct buffer_head *bh,
 	struct iam_idle_head *head;
 	int rc;
 
-	rc = iam_txn_add(h, p, bh);
-	if (rc != 0)
-		return rc;
-
 	head = (struct iam_idle_head *)(bh->b_data);
 	head->iih_magic = cpu_to_le16(IAM_IDLE_HEADER_MAGIC);
 	head->iih_count = 0;
 	head->iih_next = *idle_blocks;
+	/* The bh already get_write_accessed. */
 	rc = iam_txn_dirty(h, p, bh);
 	if (rc != 0)
 		return rc;
