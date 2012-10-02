@@ -307,10 +307,18 @@ static char *absolute_path(char *devname)
                 if (getcwd(buf, sizeof(buf) - 1) == NULL)
                         return NULL;
                 strcat(buf, "/");
-                strcat(buf, devname);
-        } else {
-                strcpy(buf, devname);
-        }
+		if (strlen(devname) > sizeof(buf)-strlen(buf)-1) {
+			free(path);
+			return NULL;
+		}
+		strncat(buf, devname, sizeof(buf)-strlen(buf)-1);
+	} else {
+		if (strlen(devname) > sizeof(buf)-1) {
+			free(path);
+			return NULL;
+		}
+		strncpy(buf, devname, sizeof(buf));
+	}
         /* truncate filename before calling realpath */
         ptr = strrchr(buf, '/');
         if (ptr == NULL) {

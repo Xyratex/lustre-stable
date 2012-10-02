@@ -780,20 +780,24 @@ static int lfs_find(int argc, char **argv)
                                 param.obduuid = tmp;
                         }
                         for (token = buf; token && *token; token = next) {
-                                char *uuid;
-                                if (c == 'm')
-                                        uuid =
-                                          param.mdtuuid[param.num_mdts++].uuid;
-                                else
-                                        uuid =
-                                          param.obduuid[param.num_obds++].uuid;
+				struct obd_uuid *puuid;
+				if (c == 'm') {
+					puuid =
+					  &param.mdtuuid[param.num_mdts++];
+				} else {
+					puuid =
+					  &param.obduuid[param.num_obds++];
+				}
                                 p = strchr(token, ',');
                                 next = 0;
                                 if (p) {
                                         *p = 0;
                                         next = p+1;
                                 }
-                                strcpy((char *)uuid, token);
+				if (strlen(token) > sizeof(puuid->uuid)-1)
+					GOTO(err_free, ret = -E2BIG);
+				strncpy(puuid->uuid, token,
+					sizeof(puuid->uuid));
                         }
 err_free:
                         if (buf)
