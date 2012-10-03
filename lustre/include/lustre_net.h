@@ -1497,7 +1497,8 @@ struct ptlrpc_service_conf {
 	/** lu_context flags a service enviroment used for handler */
 	__u32 psc_ctx_tags;
 	/** function to determine priority of the request, also called
-	 * on every new request.*/
+	 *  on every new request.
+	 */
 	int (*psc_hpreq_handler)(struct ptlrpc_request *);
 };
 

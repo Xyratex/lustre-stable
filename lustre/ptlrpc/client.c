@@ -408,8 +408,8 @@ cfs_mem_cache_t *request_cache;
 int ptlrpc_request_cache_init()
 {
 	request_cache = cfs_mem_cache_create("rpc_cache",
-						sizeof(struct ptlrpc_request),
-						0, CFS_SLAB_HWCACHE_ALIGN);
+					     sizeof(struct ptlrpc_request),
+					     0, CFS_SLAB_HWCACHE_ALIGN);
 	return request_cache == NULL ? -ENOMEM : 0;
 }
 

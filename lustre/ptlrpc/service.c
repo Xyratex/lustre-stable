@@ -546,8 +546,8 @@ struct ptlrpc_service *ptlrpc_init_svc_conf(struct ptlrpc_service_conf *conf,
 
 	service->srv_nbuf_per_group = test_req_buffer_pressure ? 1 :
 								 conf->psc_nbufs;
-        nbufs_mem_max = conf->psc_nbufs_mem_max ? conf->psc_nbufs_mem_max :
-			PTLRPC_NBUFS_MEM_MAX_DEFAULT;
+        nbufs_mem_max = conf->psc_nbufs_mem_max ? :
+                                                PTLRPC_NBUFS_MEM_MAX_DEFAULT;
 	service->srv_nbuf_max = nbufs_mem_max / conf->psc_bufsize;
 	service->srv_max_req_size = conf->psc_max_req_size + SPTLRPC_MAX_PAYLOAD;
 	service->srv_buf_size = conf->psc_bufsize;

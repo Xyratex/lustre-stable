@@ -322,7 +322,7 @@ ptlrpc_lprocfs_write_req_buffer_max(struct file *file, const char *buffer,
 	/* This sanity check is more of an insanity check; we can still
 	 * hose a kernel by creating too many buffers.  Limit to 1/2 of
 	 * memory. */
-	if ((int)(val >> CFS_PAGE_SHIFT) > cfs_num_physpages / 2)
+	if (val > PTLRPC_NBUFS_MEM_MAX_DEFAULT)
 		return -ERANGE;
 	cfs_spin_lock(&svc->srv_lock);
 	svc->srv_nbuf_max = (__u32)(val / svc->srv_buf_size);
