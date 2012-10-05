@@ -1,9 +1,7 @@
-diff --git a/drivers/md/raid5.c b/drivers/md/raid5.c
-index 9cd137e..6d1a32d 100644
-Index: linux-2.6.32-131.12.1.el6.x86_64/drivers/md/raid5.c
+Index: linux-2.6.32-220.7.1.el6.x86_64/drivers/md/raid5.c
 ===================================================================
---- linux-2.6.32-131.12.1.el6.x86_64.orig/drivers/md/raid5.c	2011-09-23 14:49:20.000000000 +0300
-+++ linux-2.6.32-131.12.1.el6.x86_64/drivers/md/raid5.c	2011-09-23 14:49:54.000000000 +0300
+--- linux-2.6.32-220.7.1.el6.x86_64.orig/drivers/md/raid5.c
++++ linux-2.6.32-220.7.1.el6.x86_64/drivers/md/raid5.c
 @@ -193,6 +193,25 @@ static int stripe_operations_active(stru
  	       test_bit(STRIPE_COMPUTE_RUN, &sh->state);
  }
@@ -115,7 +113,7 @@ Index: linux-2.6.32-131.12.1.el6.x86_64/drivers/md/raid5.c
 +
  			while (wbi && wbi->bi_sector <
  				dev->sector + STRIPE_SECTORS) {
- 				if (wbi->bi_rw & REQ_FUA)
+ 				if (wbi->bi_rw & BIO_FUA)
 @@ -1065,7 +1142,8 @@ static void ops_complete_reconstruct(voi
  		struct r5dev *dev = &sh->dev[i];
  
@@ -126,7 +124,7 @@ Index: linux-2.6.32-131.12.1.el6.x86_64/drivers/md/raid5.c
  			if (fua)
  				set_bit(R5_WantFUA, &dev->flags);
  		}
-@@ -1644,6 +1722,7 @@ static void raid5_end_read_request(struc
+@@ -1642,6 +1720,7 @@ static void raid5_end_read_request(struc
  		}
  	}
  	rdev_dec_pending(conf->disks[i].rdev, conf->mddev);
@@ -134,7 +132,7 @@ Index: linux-2.6.32-131.12.1.el6.x86_64/drivers/md/raid5.c
  	clear_bit(R5_LOCKED, &sh->dev[i].flags);
  	set_bit(STRIPE_HANDLE, &sh->state);
  	release_stripe(sh);
-@@ -1673,6 +1752,8 @@ static void raid5_end_write_request(stru
+@@ -1671,6 +1750,8 @@ static void raid5_end_write_request(stru
  
  	rdev_dec_pending(conf->disks[i].rdev, conf->mddev);
  	
@@ -143,7 +141,7 @@ Index: linux-2.6.32-131.12.1.el6.x86_64/drivers/md/raid5.c
  	clear_bit(R5_LOCKED, &sh->dev[i].flags);
  	set_bit(STRIPE_HANDLE, &sh->state);
  	release_stripe(sh);
-@@ -2515,7 +2596,8 @@ static void handle_stripe_clean_event(ra
+@@ -2511,7 +2592,8 @@ static void handle_stripe_clean_event(ra
  		if (sh->dev[i].written) {
  			dev = &sh->dev[i];
  			if (!test_bit(R5_LOCKED, &dev->flags) &&
@@ -153,7 +151,7 @@ Index: linux-2.6.32-131.12.1.el6.x86_64/drivers/md/raid5.c
  				/* We can return any write requests */
  				struct bio *wbi, *wbi2;
  				int bitmap_end = 0;
-@@ -2523,6 +2605,7 @@ static void handle_stripe_clean_event(ra
+@@ -2519,6 +2601,7 @@ static void handle_stripe_clean_event(ra
  				spin_lock_irq(&conf->device_lock);
  				wbi = dev->written;
  				dev->written = NULL;
@@ -161,7 +159,7 @@ Index: linux-2.6.32-131.12.1.el6.x86_64/drivers/md/raid5.c
  				while (wbi && wbi->bi_sector <
  					dev->sector + STRIPE_SECTORS) {
  					wbi2 = r5_next_bio(wbi, dev->sector);
-@@ -3476,7 +3559,8 @@ static void handle_stripe6(struct stripe
+@@ -3472,7 +3555,8 @@ static void handle_stripe6(struct stripe
  			    (i == sh->pd_idx || i == qd_idx ||
  			     dev->written)) {
  				pr_debug("Writing block %d\n", i);
@@ -171,7 +169,7 @@ Index: linux-2.6.32-131.12.1.el6.x86_64/drivers/md/raid5.c
  				set_bit(R5_Wantwrite, &dev->flags);
  				if (!test_bit(R5_Insync, &dev->flags) ||
  				    ((i == sh->pd_idx || i == qd_idx) &&
-@@ -5210,6 +5294,7 @@ static int run(mddev_t *mddev)
+@@ -5206,6 +5290,7 @@ static int run(mddev_t *mddev)
  
  		mddev->queue->backing_dev_info.congested_data = mddev;
  		mddev->queue->backing_dev_info.congested_fn = raid5_congested;
@@ -179,10 +177,10 @@ Index: linux-2.6.32-131.12.1.el6.x86_64/drivers/md/raid5.c
  		mddev->queue->unplug_fn = raid5_unplug_queue;
  
  		chunk_size = mddev->chunk_sectors << 9;
-Index: linux-2.6.32-131.12.1.el6.x86_64/drivers/md/raid5.h
+Index: linux-2.6.32-220.7.1.el6.x86_64/drivers/md/raid5.h
 ===================================================================
---- linux-2.6.32-131.12.1.el6.x86_64.orig/drivers/md/raid5.h	2011-07-31 23:05:58.000000000 +0300
-+++ linux-2.6.32-131.12.1.el6.x86_64/drivers/md/raid5.h	2011-09-23 14:49:20.000000000 +0300
+--- linux-2.6.32-220.7.1.el6.x86_64.orig/drivers/md/raid5.h
++++ linux-2.6.32-220.7.1.el6.x86_64/drivers/md/raid5.h
 @@ -232,7 +232,7 @@ struct stripe_head {
  	struct r5dev {
  		struct bio	req;
@@ -202,10 +200,10 @@ Index: linux-2.6.32-131.12.1.el6.x86_64/drivers/md/raid5.h
  /*
   * Write method
   */
-Index: linux-2.6.32-131.12.1.el6.x86_64/include/linux/backing-dev.h
+Index: linux-2.6.32-220.7.1.el6.x86_64/include/linux/backing-dev.h
 ===================================================================
---- linux-2.6.32-131.12.1.el6.x86_64.orig/include/linux/backing-dev.h	2011-07-31 23:06:03.000000000 +0300
-+++ linux-2.6.32-131.12.1.el6.x86_64/include/linux/backing-dev.h	2011-09-23 14:49:20.000000000 +0300
+--- linux-2.6.32-220.7.1.el6.x86_64.orig/include/linux/backing-dev.h
++++ linux-2.6.32-220.7.1.el6.x86_64/include/linux/backing-dev.h
 @@ -230,6 +230,7 @@ int bdi_set_max_ratio(struct backing_dev
  #define BDI_CAP_EXEC_MAP	0x00000040
  #define BDI_CAP_NO_ACCT_WB	0x00000080
@@ -237,23 +235,46 @@ Index: linux-2.6.32-131.12.1.el6.x86_64/include/linux/backing-dev.h
  static inline int bdi_sched_wait(void *word)
  {
  	schedule();
-Index: linux-2.6.32-131.12.1.el6.x86_64/include/linux/page-flags.h
+Index: linux-2.6.32-220.7.1.el6.x86_64/include/linux/page-flags.h
 ===================================================================
---- linux-2.6.32-131.12.1.el6.x86_64.orig/include/linux/page-flags.h	2011-07-31 23:04:50.000000000 +0300
-+++ linux-2.6.32-131.12.1.el6.x86_64/include/linux/page-flags.h	2011-09-23 14:49:20.000000000 +0300
-@@ -111,6 +111,7 @@ enum pageflags {
+--- linux-2.6.32-220.7.1.el6.x86_64.orig/include/linux/page-flags.h
++++ linux-2.6.32-220.7.1.el6.x86_64/include/linux/page-flags.h
+@@ -111,6 +111,9 @@ enum pageflags {
  #ifdef CONFIG_TRANSPARENT_HUGEPAGE
  	PG_compound_lock,
  #endif
++#ifdef CONFIG_SUPPORT_PG_CONSTANT_FLAG
 +	PG_constant,
++#endif
  	__NR_PAGEFLAGS,
  
  	/* Filesystems */
-@@ -214,6 +215,7 @@ PAGEFLAG(Pinned, pinned) TESTSCFLAG(Pinn
- PAGEFLAG(SavePinned, savepinned);			/* Xen */
- PAGEFLAG(Reserved, reserved) __CLEARPAGEFLAG(Reserved, reserved)
- PAGEFLAG(SwapBacked, swapbacked) __CLEARPAGEFLAG(SwapBacked, swapbacked)
-+PAGEFLAG(Constant, constant)
+@@ -285,6 +288,12 @@ PAGEFLAG_FALSE(HWPoison)
+ #define __PG_HWPOISON 0
+ #endif
  
- __PAGEFLAG(SlobFree, slob_free)
++#ifdef CONFIG_SUPPORT_PG_CONSTANT_FLAG
++PAGEFLAG(Constant,constant)
++#else
++PAGEFLAG_FALSE(Constant)
++#endif
++
+ u64 stable_page_flags(struct page *page);
  
+ static inline int PageUptodate(struct page *page)
+Index: linux-2.6.32-220.7.1.el6.x86_64/drivers/md/Kconfig
+===================================================================
+--- linux-2.6.32-220.7.1.el6.x86_64.orig/drivers/md/Kconfig
++++ linux-2.6.32-220.7.1.el6.x86_64/drivers/md/Kconfig
+@@ -352,4 +352,11 @@ config DM_FLAKEY
+        ---help---
+          A target that intermittently fails I/O for debugging purposes.
+ 
++config SUPPORT_PG_CONSTANT_FLAG
++       bool "Enable page flag for RAID5 zero copy support (EXPERIMENTAL)"
++       default n
++       ---help---
++        Enable support for page flag to support 
++        Raid 5 Zero copy on the Lustre File system.
++
+ endif # MD

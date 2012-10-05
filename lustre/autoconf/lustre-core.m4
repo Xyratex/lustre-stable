@@ -638,15 +638,16 @@ AC_DEFUN([LC_CANCEL_DIRTY_PAGE],
 AC_DEFUN([LC_PAGE_CONSTANT],
 [AC_MSG_CHECKING([if kernel have PageConstant defined])
 LB_LINUX_TRY_COMPILE([
-        #include <linux/mm.h>
-        #include <linux/page-flags.h>
+	#include <linux/autoconf.h>
+	#include <linux/mm.h>
+	#include <linux/page-flags.h>
 ],[
-        unsigned bit = PG_constant;
+	unsigned bit = PG_constant;
 ],[
-        AC_MSG_RESULT(yes)
-        AC_DEFINE(HAVE_PAGE_CONSTANT, 1, [kernel have PageConstant supported])
+	AC_MSG_RESULT(yes)
+	AC_DEFINE(HAVE_PAGE_CONSTANT, 1, [kernel have PageConstant supported])
 ],[
-        AC_MSG_RESULT(no);
+	AC_MSG_RESULT(no);
 ])
 ])
 

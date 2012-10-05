@@ -8,7 +8,8 @@
 #BUILD_GEN+=".0"
 #BUILD_GEN+=".1"		# added --with firmware to rpmbuild for rhel6
 #BUILD_GEN+=".0"	# TT-107: don't cache the BUILD dir (reset major to 5)
-BUILD_GEN+=".1"	# LU-1361: enable kernel ABI
+#BUILD_GEN+=".1"	# LU-1361: enable kernel ABI
+BUILD_GEN+=".2"		# LU-535: softraid improvements for RHEL6 U1
 
 source ${0%/*}/lbuild-rhel
 
@@ -21,6 +22,12 @@ patch_spec() {
 
     # edit the SPEC with our changes
     patch_spec_common "$buildid"
+    cfgdir=%{_topdir}/lustre/lustre/kernel_patches/kernel_configs
+    cfgfil=${cfgdir}/kernel-%{version}-2.6-rhel6-%{_target_cpu}.config
+    gen_kern_txt="\\
+    { echo CONFIG_BH_LRU_SIZE=16 \\
+      sed -n /CONFIG_SUPPORT_PG_CONSTANT_FLAG/p ${cfgfil} \\
+    } >> config-generic"
     sed -i -e '/^# empty final patch file to facilitate testing of kernel patches/i\
 # adds Lustre patches\
 Patch99995: linux-%{version}-lustre.patch' \
@@ -35,7 +42,7 @@ ApplyOptionalPatch linux-%{version}-lustre.patch\
     echo "# $Arch" > configs/kernel-%{version}-%{_target_cpu}.config\
     cat %{_topdir}/lustre/lustre/kernel_patches/kernel_configs/kernel-%{version}-2.6-rhel6-%{_target_cpu}.config >> configs/kernel-%{version}-%{_target_cpu}.config\
   fi'\
-           -e '/^# Dynamically generate kernel/a echo "CONFIG_BH_LRU_SIZE=16" >> config-generic'\
+           -e "/^# Dynamically generate kernel/a ${gen_kern_txt}"\
           SPECS/$SPEC_NAME 2>&1 || \
         fatal 1 "Error while editing SPECS/$SPEC_NAME"
 
