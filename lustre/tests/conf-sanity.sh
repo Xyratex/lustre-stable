@@ -3009,5 +3009,5 @@ for facet in MGS MDS OST; do
     fi
 done
 
-complete $(basename $0) $SECONDS
+complete $SECONDS
 exit_status

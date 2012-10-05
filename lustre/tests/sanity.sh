@@ -9437,7 +9437,7 @@ test_900() {
 }
 run_test 900 "umount should not race with any mgc requeue thread"
 
-complete $(basename $0) $SECONDS
+complete $SECONDS
 check_and_cleanup_lustre
 if [ "$I_MOUNTED" != "yes" ]; then
 	lctl set_param debug="$OLDDEBUG" 2> /dev/null || true

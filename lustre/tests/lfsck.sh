@@ -34,7 +34,7 @@ check_and_setup_lustre
 
 assert_DIR
 
-SAMPLE_FILE=$TMP/$(basename $0 .sh).junk
+SAMPLE_FILE=$TMP/$TESTSUITE.junk
 dd if=/dev/urandom of=$SAMPLE_FILE bs=1M count=1
 
 # Create some dirs and files on the filesystem.
@@ -281,6 +281,6 @@ else
     fi
 fi
 
-complete $(basename $0) $SECONDS
+complete $SECONDS
 check_and_cleanup_lustre
 exit_status

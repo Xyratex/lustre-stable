@@ -247,6 +247,6 @@ test_7() {
 }
 run_test 7 "Fail OST before obd_destroy"
 
-complete $(basename $0) $SECONDS
+complete $SECONDS
 check_and_cleanup_lustre
 exit_status

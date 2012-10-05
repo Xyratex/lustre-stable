@@ -1503,6 +1503,6 @@ test_106()
 }
 run_test 106 "drop reply from getxattr in cached mode"
 
-complete $(basename $0) $SECONDS
+complete $SECONDS
 check_and_cleanup_lustre
 exit_status
