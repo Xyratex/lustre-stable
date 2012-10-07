@@ -64,6 +64,7 @@ char *ldlm_lockname[] = {
         [LCK_GROUP] "GROUP",
         [LCK_COS] "COS"
 };
+EXPORT_SYMBOL(ldlm_lockname);
 
 char *ldlm_typename[] = {
         [LDLM_PLAIN] "PLN",
@@ -71,6 +72,7 @@ char *ldlm_typename[] = {
         [LDLM_FLOCK] "FLK",
         [LDLM_IBITS] "IBT",
 };
+EXPORT_SYMBOL(ldlm_typename);
 
 static ldlm_policy_wire_to_local_t ldlm_policy_wire18_to_local[] = {
         [LDLM_PLAIN - LDLM_MIN_TYPE] ldlm_plain_policy_wire_to_local,
@@ -151,6 +153,7 @@ char *ldlm_it2str(int it)
                 return "UNKNOWN";
         }
 }
+EXPORT_SYMBOL(ldlm_it2str);
 
 extern cfs_mem_cache_t *ldlm_lock_slab;
 
@@ -167,11 +170,13 @@ ldlm_processing_policy ldlm_get_processing_policy(struct ldlm_resource *res)
 {
         return ldlm_processing_policy_table[res->lr_type];
 }
+EXPORT_SYMBOL(ldlm_get_processing_policy);
 
 void ldlm_register_intent(struct ldlm_namespace *ns, ldlm_res_policy arg)
 {
         ns->ns_policy = arg;
 }
+EXPORT_SYMBOL(ldlm_register_intent);
 
 /*
  * REFCOUNTED LOCK OBJECTS
@@ -189,6 +194,7 @@ struct ldlm_lock *ldlm_lock_get(struct ldlm_lock *lock)
         cfs_atomic_inc(&lock->l_refc);
         return lock;
 }
+EXPORT_SYMBOL(ldlm_lock_get);
 
 void ldlm_lock_put(struct ldlm_lock *lock)
 {
@@ -227,6 +233,7 @@ void ldlm_lock_put(struct ldlm_lock *lock)
 
         EXIT;
 }
+EXPORT_SYMBOL(ldlm_lock_put);
 
 int ldlm_lock_remove_from_lru_nolock(struct ldlm_lock *lock)
 {
@@ -516,6 +523,7 @@ int ldlm_lock_change_resource(struct ldlm_namespace *ns, struct ldlm_lock *lock,
 
         RETURN(0);
 }
+EXPORT_SYMBOL(ldlm_lock_change_resource);
 
 /*
  *  HANDLES
@@ -525,6 +533,7 @@ void ldlm_lock2handle(const struct ldlm_lock *lock, struct lustre_handle *lockh)
 {
         lockh->cookie = lock->l_handle.h_cookie;
 }
+EXPORT_SYMBOL(ldlm_lock2handle);
 
 /* if flags: atomically get the lock and set the flags.
  *           Return NULL if flag already set
@@ -573,6 +582,7 @@ struct ldlm_lock *__ldlm_handle2lock(const struct lustre_handle *handle,
         unlock_res_and_lock(lock);
         RETURN(lock);
 }
+EXPORT_SYMBOL(__ldlm_handle2lock);
 
 void ldlm_lock2desc(struct ldlm_lock *lock, struct ldlm_lock_desc *desc)
 {
@@ -621,6 +631,7 @@ void ldlm_lock2desc(struct ldlm_lock *lock, struct ldlm_lock_desc *desc)
                                             &desc->l_policy_data);
         }
 }
+EXPORT_SYMBOL(ldlm_lock2desc);
 
 void ldlm_add_bl_work_item(struct ldlm_lock *lock, struct ldlm_lock *new,
                            cfs_list_t *work_list)
@@ -673,6 +684,7 @@ void ldlm_lock_addref(struct lustre_handle *lockh, __u32 mode)
         ldlm_lock_addref_internal(lock, mode);
         LDLM_LOCK_PUT(lock);
 }
+EXPORT_SYMBOL(ldlm_lock_addref);
 
 void ldlm_lock_addref_internal_nolock(struct ldlm_lock *lock, __u32 mode)
 {
@@ -717,6 +729,7 @@ int ldlm_lock_addref_try(struct lustre_handle *lockh, __u32 mode)
         }
         return result;
 }
+EXPORT_SYMBOL(ldlm_lock_addref_try);
 
 /* only called for local locks */
 void ldlm_lock_addref_internal(struct ldlm_lock *lock, __u32 mode)
@@ -818,6 +831,7 @@ void ldlm_lock_decref(struct lustre_handle *lockh, __u32 mode)
         ldlm_lock_decref_internal(lock, mode);
         LDLM_LOCK_PUT(lock);
 }
+EXPORT_SYMBOL(ldlm_lock_decref);
 
 /* This will drop a lock reference and mark it for destruction, but will not
  * necessarily cancel the lock before returning. */
@@ -835,6 +849,7 @@ void ldlm_lock_decref_and_cancel(struct lustre_handle *lockh, __u32 mode)
         ldlm_lock_decref_internal(lock, mode);
         LDLM_LOCK_PUT(lock);
 }
+EXPORT_SYMBOL(ldlm_lock_decref_and_cancel);
 
 struct sl_insert_point {
         cfs_list_t *res_link;
@@ -1090,6 +1105,7 @@ void ldlm_lock_allow_match_locked(struct ldlm_lock *lock)
         lock->l_flags |= LDLM_FL_LVB_READY;
         cfs_waitq_signal(&lock->l_waitq);
 }
+EXPORT_SYMBOL(ldlm_lock_allow_match_locked);
 
 void ldlm_lock_allow_match(struct ldlm_lock *lock)
 {
@@ -1097,6 +1113,7 @@ void ldlm_lock_allow_match(struct ldlm_lock *lock)
         ldlm_lock_allow_match_locked(lock);
         unlock_res_and_lock(lock);
 }
+EXPORT_SYMBOL(ldlm_lock_allow_match);
 
 /* Can be called in two ways:
  *
@@ -1234,6 +1251,7 @@ ldlm_mode_t ldlm_lock_match(struct ldlm_namespace *ns, int flags,
 
         return rc ? mode : 0;
 }
+EXPORT_SYMBOL(ldlm_lock_match);
 
 /* Returns a referenced lock */
 struct ldlm_lock *ldlm_lock_create(struct ldlm_namespace *ns,
@@ -1611,6 +1629,7 @@ void ldlm_reprocess_all_ns(struct ldlm_namespace *ns)
         }
         EXIT;
 }
+EXPORT_SYMBOL(ldlm_reprocess_all_ns);
 
 void ldlm_reprocess_all(struct ldlm_resource *res)
 {
@@ -1707,6 +1726,7 @@ void ldlm_lock_cancel(struct ldlm_lock *lock)
 
         EXIT;
 }
+EXPORT_SYMBOL(ldlm_lock_cancel);
 
 int ldlm_lock_set_data(struct lustre_handle *lockh, void *data)
 {
@@ -1857,6 +1877,7 @@ void ldlm_lock_downgrade(struct ldlm_lock *lock, int new_mode)
 
         EXIT;
 }
+EXPORT_SYMBOL(ldlm_lock_downgrade);
 
 struct ldlm_resource *ldlm_lock_convert(struct ldlm_lock *lock, int new_mode,
                                         __u32 *flags)
@@ -1961,6 +1982,7 @@ struct ldlm_resource *ldlm_lock_convert(struct ldlm_lock *lock, int new_mode,
                 OBD_SLAB_FREE(node, ldlm_interval_slab, sizeof(*node));
         RETURN(res);
 }
+EXPORT_SYMBOL(ldlm_lock_convert);
 
 void ldlm_lock_dump(int level, struct ldlm_lock *lock, int pos)
 {
@@ -2032,6 +2054,7 @@ void ldlm_lock_dump_handle(int level, struct lustre_handle *lockh)
 
         LDLM_LOCK_PUT(lock);
 }
+EXPORT_SYMBOL(ldlm_lock_dump_handle);
 
 void _ldlm_lock_debug(struct ldlm_lock *lock,
                       struct libcfs_debug_msg_data *msgdata,

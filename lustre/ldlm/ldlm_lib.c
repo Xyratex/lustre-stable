@@ -132,6 +132,7 @@ int client_import_add_conn(struct obd_import *imp, struct obd_uuid *uuid,
 {
         return import_set_conn(imp, uuid, priority, 1);
 }
+EXPORT_SYMBOL(client_import_add_conn);
 
 int client_import_del_conn(struct obd_import *imp, struct obd_uuid *uuid)
 {
@@ -187,6 +188,7 @@ out:
                 CERROR("connection %s not found\n", uuid->uuid);
         RETURN(rc);
 }
+EXPORT_SYMBOL(client_import_del_conn);
 
 /**
  * Find conn uuid by peer nid. @peer is a server nid. This function is used
@@ -442,6 +444,7 @@ err:
         RETURN(rc);
 
 }
+EXPORT_SYMBOL(client_obd_setup);
 
 int client_obd_cleanup(struct obd_device *obddev)
 {
@@ -455,6 +458,7 @@ int client_obd_cleanup(struct obd_device *obddev)
         ldlm_put_ref();
         RETURN(0);
 }
+EXPORT_SYMBOL(client_obd_cleanup);
 
 /* ->o_connect() method for client side (OSC and MDC and MGC) */
 int client_connect_import(const struct lu_env *env,
@@ -523,6 +527,7 @@ out_sem:
 
         return rc;
 }
+EXPORT_SYMBOL(client_connect_import);
 
 int client_disconnect_export(struct obd_export *exp)
 {
@@ -597,6 +602,7 @@ int client_disconnect_export(struct obd_export *exp)
 
         RETURN(rc);
 }
+EXPORT_SYMBOL(client_disconnect_export);
 
 int server_disconnect_export(struct obd_export *exp)
 {
@@ -629,6 +635,7 @@ int server_disconnect_export(struct obd_export *exp)
 
         RETURN(rc);
 }
+EXPORT_SYMBOL(server_disconnect_export);
 
 /* --------------------------------------------------------------------------
  * from old lib/target.c
@@ -1232,6 +1239,7 @@ out:
                 req->rq_status = rc;
         RETURN(rc);
 }
+EXPORT_SYMBOL(target_handle_connect);
 
 int target_handle_disconnect(struct ptlrpc_request *req)
 {
@@ -1247,6 +1255,7 @@ int target_handle_disconnect(struct ptlrpc_request *req)
 
         RETURN(0);
 }
+EXPORT_SYMBOL(target_handle_disconnect);
 
 void target_destroy_export(struct obd_export *exp)
 {
@@ -1260,6 +1269,7 @@ void target_destroy_export(struct obd_export *exp)
         LASSERT_ATOMIC_ZERO(&exp->exp_cb_count);
         LASSERT_ATOMIC_ZERO(&exp->exp_replay_count);
 }
+EXPORT_SYMBOL(target_destroy_export);
 
 /*
  * Recovery functions
@@ -1465,6 +1475,7 @@ void target_cleanup_recovery(struct obd_device *obd)
 
         EXIT;
 }
+EXPORT_SYMBOL(target_cleanup_recovery);
 
 /* obd_recovery_task_lock should be held */
 void target_cancel_recovery_timer(struct obd_device *obd)
@@ -1472,6 +1483,7 @@ void target_cancel_recovery_timer(struct obd_device *obd)
         CDEBUG(D_HA, "%s: cancel recovery timer\n", obd->obd_name);
         cfs_timer_disarm(&obd->obd_recovery_timer);
 }
+EXPORT_SYMBOL(target_cancel_recovery_timer);
 
 /* extend = 1 means require at least "duration" seconds left in the timer,
    extend = 0 means set the total duration (start_recovery_timer) */
@@ -2035,6 +2047,7 @@ void target_stop_recovery_thread(struct obd_device *obd)
                 cfs_wait_for_completion(&trd->trd_finishing);
         }
 }
+EXPORT_SYMBOL(target_stop_recovery_thread);
 
 void target_recovery_fini(struct obd_device *obd)
 {
@@ -2253,6 +2266,7 @@ int target_queue_recovery_request(struct ptlrpc_request *req,
         cfs_waitq_signal(&obd->obd_next_transno_waitq);
         RETURN(0);
 }
+EXPORT_SYMBOL(target_queue_recovery_request);
 
 /**
  * Packs current SLV and Limit into \a req.
@@ -2285,6 +2299,7 @@ int target_pack_pool_reply(struct ptlrpc_request *req)
 
         RETURN(0);
 }
+EXPORT_SYMBOL(target_pack_pool_reply);
 
 int target_send_reply_msg(struct ptlrpc_request *req, int rc, int fail_id)
 {
@@ -2403,6 +2418,7 @@ int target_handle_ping(struct ptlrpc_request *req)
         obd_ping(req->rq_export);
         return req_capsule_server_pack(&req->rq_pill);
 }
+EXPORT_SYMBOL(target_handle_ping);
 
 int target_committed_to_req(struct ptlrpc_request *req)
 {
@@ -2440,6 +2456,7 @@ int target_handle_qc_callback(struct ptlrpc_request *req)
 
         return 0;
 }
+EXPORT_SYMBOL(target_send_reply);
 
 #ifdef HAVE_QUOTA_SUPPORT
 int target_handle_dqacq_callback(struct ptlrpc_request *req)
