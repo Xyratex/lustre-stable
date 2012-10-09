@@ -4791,7 +4791,7 @@ test_81a() { # LU-456
         remote_ost_nodsh && skip "remote OST with nodsh" && return
         # define OBD_FAIL_OST_MAPBLK_ENOSPC    0x228
         # MUST OR with the OBD_FAIL_ONCE (0x80000000)
-        do_facet ost0 lctl set_param fail_loc=0x80000228
+        do_facet ost1 lctl set_param fail_loc=0x80000228
 
         # write should trigger a retry and success
         $SETSTRIPE -i 0 -c 1 $DIR/$tfile
@@ -4807,7 +4807,7 @@ test_81b() { # LU-456
         remote_ost_nodsh && skip "remote OST with nodsh" && return
         # define OBD_FAIL_OST_MAPBLK_ENOSPC    0x228
         # Don't OR with the OBD_FAIL_ONCE (0x80000000)
-        do_facet ost0 lctl set_param fail_loc=0x228
+        do_facet ost1 lctl set_param fail_loc=0x228
 
         # write should retry several times and return -ENOSPC finally
         $SETSTRIPE -i 0 -c 1 $DIR/$tfile
