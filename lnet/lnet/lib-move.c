@@ -973,6 +973,10 @@ lnet_peer_alive_locked (lnet_peer_t *lp)
 {
         cfs_time_t now = cfs_time_current();
 
+        /* LU-630: only router checks peer health. */
+        if (the_lnet.ln_routing == 0)
+                return 1;
+
         if (!lnet_peer_aliveness_enabled(lp))
                 return -ENODEV;
 
