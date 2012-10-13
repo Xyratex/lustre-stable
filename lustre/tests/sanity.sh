@@ -5061,11 +5061,13 @@ test_101d() {
     local ra_MB=${READAHEAD_MB:-40}
 
     local space=$(df -P $DIR | tail -n 1 | awk '{ print $4 }')
-    [ $space -gt $((size / 1024)) ] ||
+    # 1-stripe file on 2 osts
+    space=$(( space / 2 )) 
+    [ $space -gt $((size * 1024)) ] ||
         { skip "Need free space ${size}M, have $space" && return; }
 
-    echo Creating ${size}M test file $file
-    dd if=/dev/zero of=$file bs=1M count=$size
+    echo Creating ${size}M test file $file space $space
+    dd if=/dev/zero of=$file bs=1M count=$size || error "dd failed"
     echo Cancel LRU locks on lustre client to flush the client cache
     cancel_lru_locks osc
 

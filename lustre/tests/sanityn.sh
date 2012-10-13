@@ -931,7 +931,8 @@ test_36() { #bug 16417
     while [ $i -le 10 ]; do
         lctl mark "start test"
         local before=$($LFS df | awk '{if ($1 ~/^filesystem/) {print $5; exit} }')
-        dd if=/dev/zero of=$DIR1/$tdir/file000 bs=1M count=$SIZE
+        dd if=/dev/zero of=$DIR1/$tdir/file000 bs=1M count=$SIZE ||
+		error "dd $DIR1/$tdir/$tfile ${SIZE}MB failed"
         sync
         sleep 1
         local after_dd=$($LFS df | awk '{if ($1 ~/^filesystem/) {print $5; exit} }')
