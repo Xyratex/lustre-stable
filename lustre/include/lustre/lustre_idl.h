@@ -1115,7 +1115,7 @@ extern void lustre_swab_ptlrpc_body(struct ptlrpc_body *pb);
 #define OBD_CONNECT_64BITHASH    0x4000000000ULL /* client supports 64-bits
                                                   * directory hash */
 #define OBD_CONNECT_MAXBYTES     0x8000000000ULL /* max stripe size */
-#define OBD_CONNECT_SHORTIO	0x10000000000ULL /* short io */
+#define OBD_CONNECT_SHORTIO   0x2000000000000ULL /* short io */
 /* also update obd_connect_names[] for lprocfs_rd_connect_flags()
  * and lustre/utils/wirecheck.c */
 

@@ -818,6 +818,16 @@ static const char *obd_connect_names[] = {
         "layout_lock",
         "64bithash",
         "object_max_bytes",
+	"unknown",
+	"unknown",
+	"unknown",
+	"unknown",
+	"unknown",
+	"unknown",
+	"unknown",
+	"unknown",
+	"unknown",
+	"short_io",
         NULL
 };
 
