@@ -137,6 +137,7 @@ int get_groups_local(struct identity_downcall_data *data,
            consecutive and potentially racy getgrouplist() calls. */
         groups_tmp = (gid_t *)malloc(maxgroups * sizeof(gid_t));
         if (groups_tmp == NULL) {
+                free(pw_name);
                 errlog("malloc error\n");
                 return -1;
         }
