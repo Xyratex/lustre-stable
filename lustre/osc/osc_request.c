@@ -3301,7 +3301,7 @@ static int osc_find_cbdata(struct obd_export *exp, struct lov_stripe_md *lsm,
 
 static int osc_enqueue_fini(struct ptlrpc_request *req, struct ost_lvb *lvb,
                             obd_enqueue_update_f upcall, void *cookie,
-                            int *flags, int rc)
+                            __u64 *flags, int rc)
 {
         int intent = *flags & LDLM_FL_HAS_INTENT;
         ENTRY;
@@ -3428,7 +3428,7 @@ struct ptlrpc_request_set *PTLRPCD_SET = (void *)1;
  * is excluded from the cluster -- such scenarious make the life difficult, so
  * release locks just after they are obtained. */
 int osc_enqueue_base(struct obd_export *exp, struct ldlm_res_id *res_id,
-                     int *flags, ldlm_policy_data_t *policy,
+		     __u64 *flags, ldlm_policy_data_t *policy,
                      struct ost_lvb *lvb, int kms_valid,
                      obd_enqueue_update_f upcall, void *cookie,
                      struct ldlm_enqueue_info *einfo,

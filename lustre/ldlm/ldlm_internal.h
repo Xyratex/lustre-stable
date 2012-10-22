@@ -126,7 +126,7 @@ ldlm_lock_create(struct ldlm_namespace *ns, const struct ldlm_res_id *,
                  const struct ldlm_callback_suite *cbs,
                  void *data, __u32 lvb_len);
 ldlm_error_t ldlm_lock_enqueue(struct ldlm_namespace *, struct ldlm_lock **,
-                               void *cookie, int *flags);
+			       void *cookie, __u64 *flags);
 void ldlm_lock_addref_internal(struct ldlm_lock *, __u32 mode);
 void ldlm_lock_addref_internal_nolock(struct ldlm_lock *, __u32 mode);
 void ldlm_lock_decref_internal(struct ldlm_lock *, __u32 mode);
@@ -154,23 +154,26 @@ void ldlm_handle_bl_callback(struct ldlm_namespace *ns,
                              struct ldlm_lock_desc *ld, struct ldlm_lock *lock);
 
 /* ldlm_plain.c */
-int ldlm_process_plain_lock(struct ldlm_lock *lock, int *flags, int first_enq,
-                            ldlm_error_t *err, cfs_list_t *work_list);
+int ldlm_process_plain_lock(struct ldlm_lock *lock, __u64 *flags,
+			    int first_enq, ldlm_error_t *err,
+			    cfs_list_t *work_list);
 
 /* ldlm_extent.c */
-int ldlm_process_extent_lock(struct ldlm_lock *lock, int *flags, int first_enq,
-                             ldlm_error_t *err, cfs_list_t *work_list);
+int ldlm_process_extent_lock(struct ldlm_lock *lock, __u64 *flags,
+			     int first_enq, ldlm_error_t *err,
+			     cfs_list_t *work_list);
 void ldlm_extent_add_lock(struct ldlm_resource *res, struct ldlm_lock *lock);
 void ldlm_extent_unlink_lock(struct ldlm_lock *lock);
 
 /* ldlm_flock.c */
-int ldlm_process_flock_lock(struct ldlm_lock *req, int *flags, int first_enq,
-                            ldlm_error_t *err, cfs_list_t *work_list);
+int ldlm_process_flock_lock(struct ldlm_lock *req, __u64 *flags,
+			    int first_enq, ldlm_error_t *err,
+			    cfs_list_t *work_list);
 int ldlm_init_flock_export(struct obd_export *exp);
 void ldlm_destroy_flock_export(struct obd_export *exp);
 
 /* ldlm_inodebits.c */
-int ldlm_process_inodebits_lock(struct ldlm_lock *lock, int *flags,
+int ldlm_process_inodebits_lock(struct ldlm_lock *lock, __u64 *flags,
                                 int first_enq, ldlm_error_t *err,
                                 cfs_list_t *work_list);
 

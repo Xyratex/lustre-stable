@@ -812,7 +812,7 @@ int ldlm_server_blocking_ast(struct ldlm_lock *lock,
         body = req_capsule_client_get(&req->rq_pill, &RMF_DLM_REQ);
         body->lock_handle[0] = lock->l_remote_handle;
         body->lock_desc = *desc;
-        body->lock_flags |= (lock->l_flags & LDLM_AST_FLAGS);
+	body->lock_flags |= ldlm_flags_to_wire(lock->l_flags & LDLM_AST_FLAGS);
 
         LDLM_DEBUG(lock, "server preparing blocking AST");
 
@@ -842,7 +842,7 @@ int ldlm_server_blocking_ast(struct ldlm_lock *lock,
 }
 EXPORT_SYMBOL(ldlm_server_blocking_ast);
 
-int ldlm_server_completion_ast(struct ldlm_lock *lock, int flags, void *data)
+int ldlm_server_completion_ast(struct ldlm_lock *lock, __u64 flags, void *data)
 {
         struct ldlm_cb_set_arg *arg = data;
         struct ldlm_request    *body;
@@ -886,7 +886,7 @@ int ldlm_server_completion_ast(struct ldlm_lock *lock, int flags, void *data)
         body = req_capsule_client_get(&req->rq_pill, &RMF_DLM_REQ);
 
         body->lock_handle[0] = lock->l_remote_handle;
-        body->lock_flags = flags;
+	body->lock_flags = ldlm_flags_to_wire(flags);
         ldlm_lock2desc(lock, &body->lock_desc);
         if (lock->l_resource->lr_lvb_len) {
                 void *lvb = req_capsule_client_get(&req->rq_pill, &RMF_DLM_LVB);
@@ -925,9 +925,10 @@ int ldlm_server_completion_ast(struct ldlm_lock *lock, int flags, void *data)
         /* We only send real blocking ASTs after the lock is granted */
         lock_res_and_lock(lock);
         if (lock->l_flags & LDLM_FL_AST_SENT) {
-                body->lock_flags |= LDLM_FL_AST_SENT;
+		body->lock_flags |= ldlm_flags_to_wire(LDLM_FL_AST_SENT);
                 /* copy ast flags like LDLM_FL_DISCARD_DATA */
-                body->lock_flags |= (lock->l_flags & LDLM_AST_FLAGS);
+		body->lock_flags |= ldlm_flags_to_wire(lock->l_flags &
+						       LDLM_AST_FLAGS);
 
                 /* We might get here prior to ldlm_handle_enqueue setting
                  * LDLM_FL_CANCEL_ON_BLOCK flag. Then we will put this lock
@@ -1070,7 +1071,7 @@ int ldlm_handle_enqueue0(struct ldlm_namespace *ns,
                          const struct ldlm_callback_suite *cbs)
 {
         struct ldlm_reply *dlm_rep;
-        __u32 flags;
+	__u64 flags;
         ldlm_error_t err = ELDLM_OK;
         struct ldlm_lock *lock = NULL;
         void *cookie = NULL;
@@ -1080,7 +1081,7 @@ int ldlm_handle_enqueue0(struct ldlm_namespace *ns,
         LDLM_DEBUG_NOLOCK("server-side enqueue handler START");
 
         ldlm_request_cancel(req, dlm_req, LDLM_ENQUEUE_CANCEL_OFF);
-        flags = dlm_req->lock_flags;
+	flags = ldlm_flags_from_wire(dlm_req->lock_flags);
 
         LASSERT(req->rq_export);
 
@@ -1212,12 +1213,12 @@ existing_lock:
         if (dlm_req->lock_desc.l_resource.lr_type == LDLM_EXTENT)
                 lock->l_req_extent = lock->l_policy_data.l_extent;
 
-        err = ldlm_lock_enqueue(ns, &lock, cookie, (int *)&flags);
+	err = ldlm_lock_enqueue(ns, &lock, cookie, &flags);
         if (err)
                 GOTO(out, err);
 
         dlm_rep = req_capsule_server_get(&req->rq_pill, &RMF_DLM_REP);
-        dlm_rep->lock_flags = flags;
+	dlm_rep->lock_flags = ldlm_flags_to_wire(flags);
 
         ldlm_lock2desc(lock, &dlm_rep->lock_desc);
         ldlm_lock2handle(lock, &dlm_rep->lock_handle);
@@ -1229,7 +1230,8 @@ existing_lock:
         /* Now take into account flags to be inherited from original lock
            request both in reply to client and in our own lock flags. */
         dlm_rep->lock_flags |= dlm_req->lock_flags & LDLM_INHERIT_FLAGS;
-        lock->l_flags |= dlm_req->lock_flags & LDLM_INHERIT_FLAGS;
+	lock->l_flags |= ldlm_flags_from_wire(dlm_req->lock_flags &
+					      LDLM_INHERIT_FLAGS);
 
         /* Don't move a pending lock onto the export if it has already been
          * disconnected due to eviction (bug 5683) or server umount (bug 24324).
@@ -1239,7 +1241,7 @@ existing_lock:
                 LDLM_ERROR(lock, "lock on destroyed export %p", req->rq_export);
                 rc = -ENOTCONN;
         } else if (lock->l_flags & LDLM_FL_AST_SENT) {
-                dlm_rep->lock_flags |= LDLM_FL_AST_SENT;
+		dlm_rep->lock_flags |= ldlm_flags_to_wire(LDLM_FL_AST_SENT);
                 if (lock->l_granted_mode == lock->l_req_mode) {
                         /*
                          * Only cancel lock if it was granted, because it would
@@ -2002,7 +2004,8 @@ static int ldlm_callback_handler(struct ptlrpc_request *req)
 
         /* Copy hints/flags (e.g. LDLM_FL_DISCARD_DATA) from AST. */
         lock_res_and_lock(lock);
-        lock->l_flags |= (dlm_req->lock_flags & LDLM_AST_FLAGS);
+	lock->l_flags |= ldlm_flags_from_wire(dlm_req->lock_flags &
+					      LDLM_AST_FLAGS);
         if (lustre_msg_get_opc(req->rq_reqmsg) == LDLM_BL_CALLBACK) {
                 /* If somebody cancels lock and cache is already dropped,
                  * or lock is failed before cp_ast received on client,

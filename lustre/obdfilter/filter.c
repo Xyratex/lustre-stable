@@ -1531,7 +1531,8 @@ struct dentry *filter_fid2dentry(struct obd_device *obd,
 static int filter_prepare_destroy(struct obd_device *obd, obd_id objid,
                                   obd_id group, struct lustre_handle *lockh)
 {
-        int flags = LDLM_AST_DISCARD_DATA, rc;
+        __u64 flags = LDLM_AST_DISCARD_DATA;
+	int rc;
         struct ldlm_res_id res_id;
         ldlm_policy_data_t policy = { .l_extent = { 0, OBD_OBJECT_EOF } };
         ENTRY;
@@ -1683,7 +1684,7 @@ static enum interval_iter filter_intent_cb(struct interval_node *n,
 
 static int filter_intent_policy(struct ldlm_namespace *ns,
                                 struct ldlm_lock **lockp, void *req_cookie,
-                                ldlm_mode_t mode, int flags, void *data)
+                                ldlm_mode_t mode, __u64 flags, void *data)
 {
         CFS_LIST_HEAD(rpc_list);
         struct ptlrpc_request *req = req_cookie;
@@ -1693,7 +1694,8 @@ static int filter_intent_policy(struct ldlm_namespace *ns,
         struct ost_lvb *res_lvb, *reply_lvb;
         struct ldlm_reply *rep;
         ldlm_error_t err;
-        int idx, rc, tmpflags = 0, only_liblustre = 1;
+        int idx, rc, only_liblustre = 1;
+        __u64 tmpflags = 0;
         struct ldlm_interval_tree *tree;
         struct filter_intent_args arg;
         __u32 repsize[3] = { [MSG_PTLRPC_BODY_OFF] = sizeof(struct ptlrpc_body),

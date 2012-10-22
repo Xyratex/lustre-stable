@@ -811,9 +811,9 @@ static int mgc_set_mgs_param(struct obd_export *exp,
 /* Take a config lock so we can get cancel notifications */
 static int mgc_enqueue(struct obd_export *exp, struct lov_stripe_md *lsm,
                        __u32 type, ldlm_policy_data_t *policy, __u32 mode,
-                       int *flags, void *bl_cb, void *cp_cb, void *gl_cb,
-                       void *data, __u32 lvb_len, void *lvb_swabber,
-                       struct lustre_handle *lockh)
+		       __u64 *flags, void *bl_cb, void *cp_cb, void *gl_cb,
+		       void *data, __u32 lvb_len, void *lvb_swabber,
+		       struct lustre_handle *lockh)
 {
         struct config_llog_data *cld = (struct config_llog_data *)data;
         struct ldlm_enqueue_info einfo = { type, mode, mgc_blocking_ast,
@@ -1346,7 +1346,8 @@ out_pop:
 int mgc_process_log(struct obd_device *mgc, struct config_llog_data *cld)
 {
         struct lustre_handle lockh = { 0 };
-        int rc = 0, rcl, flags = 0;
+	__u64 flags = 0;
+        int rc = 0, rcl;
         ENTRY;
 
         LASSERT(cld);

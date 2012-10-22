@@ -60,7 +60,7 @@ int lmv_intent_remote(struct obd_export *exp, void *lmm,
                       int lmmsize, struct lookup_intent *it,
                       int flags, struct ptlrpc_request **reqp,
                       ldlm_blocking_callback cb_blocking,
-                      int extra_lock_flags)
+		      __u64 extra_lock_flags)
 {
         struct obd_device      *obd = exp->exp_obd;
         struct lmv_obd         *lmv = &obd->u.lmv;
@@ -156,7 +156,7 @@ int lmv_intent_open(struct obd_export *exp, struct md_op_data *op_data,
                     void *lmm, int lmmsize, struct lookup_intent *it,
                     int flags, struct ptlrpc_request **reqp,
                     ldlm_blocking_callback cb_blocking,
-                    int extra_lock_flags)
+		    __u64 extra_lock_flags)
 {
         struct obd_device     *obd = exp->exp_obd;
         struct lu_fid          rpid = op_data->op_fid1;
@@ -341,7 +341,7 @@ int lmv_intent_lookup(struct obd_export *exp, struct md_op_data *op_data,
                       void *lmm, int lmmsize, struct lookup_intent *it,
                       int flags, struct ptlrpc_request **reqp,
                       ldlm_blocking_callback cb_blocking,
-                      int extra_lock_flags)
+		      __u64 extra_lock_flags)
 {
         struct obd_device      *obd = exp->exp_obd;
         struct lu_fid           rpid = op_data->op_fid1;
@@ -505,7 +505,7 @@ int lmv_intent_lock(struct obd_export *exp, struct md_op_data *op_data,
                     void *lmm, int lmmsize, struct lookup_intent *it,
                     int flags, struct ptlrpc_request **reqp,
                     ldlm_blocking_callback cb_blocking,
-                    int extra_lock_flags)
+		    __u64 extra_lock_flags)
 {
         struct obd_device *obd = exp->exp_obd;
         int                rc;
@@ -538,7 +538,7 @@ int lmv_intent_lock(struct obd_export *exp, struct md_op_data *op_data,
 int lmv_revalidate_slaves(struct obd_export *exp, struct ptlrpc_request **reqp,
                           const struct lu_fid *mid, struct lookup_intent *oit,
                           int master_valid, ldlm_blocking_callback cb_blocking,
-                          int extra_lock_flags)
+			  __u64 extra_lock_flags)
 {
         struct obd_device      *obd = exp->exp_obd;
         struct lmv_obd         *lmv = &obd->u.lmv;

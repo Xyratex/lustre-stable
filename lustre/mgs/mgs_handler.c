@@ -348,7 +348,8 @@ static int mgs_get_cfg_lock(struct obd_device *obd, char *fsname,
                             struct lustre_handle *lockh)
 {
         struct ldlm_res_id res_id;
-        int rc, flags = 0;
+        __u64 flags = 0;
+        int rc;
         ENTRY;
 
         rc = mgc_fsname2resid(fsname, &res_id, CONFIG_T_CONFIG);

@@ -92,6 +92,9 @@ typedef enum {
         LDLM_NAMESPACE_CLIENT = 1 << 1
 } ldlm_side_t;
 
+/**
+ * Declaration of flags sent through the wire.
+ **/
 #define LDLM_FL_LOCK_CHANGED   0x000001 /* extent, mode, or resource changed */
 
 /* If the server returns one of these flags, then the lock was put on that list.
@@ -101,26 +104,28 @@ typedef enum {
 #define LDLM_FL_BLOCK_CONV     0x000004
 #define LDLM_FL_BLOCK_WAIT     0x000008
 
-#define LDLM_FL_CBPENDING      0x000010 /* this lock is being destroyed */
+/* Used to be LDLM_FL_CBPENDING 0x000010 moved to non-wire flags */
+
 #define LDLM_FL_AST_SENT       0x000020 /* blocking or cancel packet was
                                          * queued for sending. */
-#define LDLM_FL_WAIT_NOREPROC  0x000040 /* not a real flag, not saved in lock */
-#define LDLM_FL_CANCEL         0x000080 /* cancellation callback already run */
+/* Used to be LDLM_FL_WAIT_NOREPROC 0x000040   moved to non-wire flags */
+/* Used to be LDLM_FL_CANCEL        0x000080   moved to non-wire flags */
 
 /* Lock is being replayed.  This could probably be implied by the fact that one
  * of BLOCK_{GRANTED,CONV,WAIT} is set, but that is pretty dangerous. */
 #define LDLM_FL_REPLAY         0x000100
 
 #define LDLM_FL_INTENT_ONLY    0x000200 /* don't grant lock, just do intent */
-#define LDLM_FL_LOCAL_ONLY     0x000400
 
-/* don't run the cancel callback under ldlm_cli_cancel_unused */
-#define LDLM_FL_FAILED         0x000800
+/* Used to be LDLM_FL_LOCAL_ONLY 0x000400  moved to non-wire flags */
+/* Used to be LDLM_FL_FAILED     0x000800  moved to non-wire flags */
 
 #define LDLM_FL_HAS_INTENT     0x001000 /* lock request has intent */
-#define LDLM_FL_CANCELING      0x002000 /* lock cancel has already been sent */
-#define LDLM_FL_LOCAL          0x004000 /* local lock (ie, no srv/cli split) */
+
+/* Used to be LDLM_FL_CANCELING  0x002000  moved to non-wire flags */
+/* Used to be LDLM_FL_LOCAL      0x004000  moved to non-wire flags */
 /* was LDLM_FL_WARN  until 2.0.0  0x008000 */
+
 #define LDLM_FL_DISCARD_DATA   0x010000 /* discard (no writeback) on cancel */
 
 #define LDLM_FL_NO_TIMEOUT     0x020000 /* Blocked by group lock - wait
@@ -130,26 +135,9 @@ typedef enum {
 #define LDLM_FL_BLOCK_NOWAIT   0x040000 // server told not to wait if blocked
 #define LDLM_FL_TEST_LOCK      0x080000 // return blocking lock
 
-/* XXX FIXME: This is being added to b_size as a low-risk fix to the fact that
- * the LVB filling happens _after_ the lock has been granted, so another thread
- * can match`t before the LVB has been updated.  As a dirty hack, we set
- * LDLM_FL_LVB_READY only after we've done the LVB poop.
- * this is only needed on lov/osc now, where lvb is actually used and callers
- * must set it in input flags.
- *
- * The proper fix is to do the granting inside of the completion AST, which can
- * be replaced with a LVB-aware wrapping function for OSC locks.  That change is
- * pretty high-risk, though, and would need a lot more testing. */
-
-#define LDLM_FL_LVB_READY      0x100000
-
-/* A lock contributes to the kms calculation until it has finished the part
- * of it's cancelation that performs write back on its dirty pages.  It
- * can remain on the granted list during this whole time.  Threads racing
- * to update the kms after performing their writeback need to know to
- * exclude each others locks from the calculation as they walk the granted
- * list. */
-#define LDLM_FL_KMS_IGNORE     0x200000
+/* Used to be LDLM_FL_LVB_READY  0x100000 moved to non-wire flags */
+/* Used to be LDLM_FL_KMS_IGNORE 0x200000 moved to non-wire flags */
+/* Used to be LDLM_FL_NO_LRU     0x400000 moved to non-wire flags */
 
 /* Immediatelly cancel such locks when they block some other locks. Send
  * cancel notification to original lock holder, but expect no reply. This is
@@ -160,30 +148,12 @@ typedef enum {
 /* Flags flags inherited from parent lock when doing intents. */
 #define LDLM_INHERIT_FLAGS     (LDLM_FL_CANCEL_ON_BLOCK)
 
-/* completion ast to be executed */
-#define LDLM_FL_CP_REQD        0x1000000
-
-/* cleanup_resource has already handled the lock */
-#define LDLM_FL_CLEANED        0x2000000
-
-/* optimization hint: LDLM can run blocking callback from current context
- * w/o involving separate thread. in order to decrease cs rate */
-#define LDLM_FL_ATOMIC_CB      0x4000000
-
+/* Used to be LDLM_FL_CP_REQD        0x1000000 moved to non-wire flags */
+/* Used to be LDLM_FL_CLEANED        0x2000000 moved to non-wire flags */
+/* Used to be LDLM_FL_ATOMIC_CB      0x4000000 moved to non-wire flags */
 /* was LDLM_FL_ASYNC until 2.0.0 0x8000000 */
-
-/* It may happen that a client initiate 2 operations, e.g. unlink and mkdir,
- * such that server send blocking ast for conflict locks to this client for
- * the 1st operation, whereas the 2nd operation has canceled this lock and
- * is waiting for rpc_lock which is taken by the 1st operation.
- * LDLM_FL_BL_AST is to be set by ldlm_callback_handler() to the lock not allow
- * ELC code to cancel it.
- * LDLM_FL_BL_DONE is to be set by ldlm_cancel_callback() when lock cache is
- * droped to let ldlm_callback_handler() return EINVAL to the server. It is
- * used when ELC rpc is already prepared and is waiting for rpc_lock, too late
- * to send a separate CANCEL rpc. */
-#define LDLM_FL_BL_AST          0x10000000
-#define LDLM_FL_BL_DONE         0x20000000
+/* Used to be LDLM_FL_BL_AST         0x10000000 moved to non-wire flags */
+/* Used to be LDLM_FL_BL_DONE        0x20000000 moved to non-wire flags */
 
 /* measure lock contention and return -EUSERS if locking contention is high */
 #define LDLM_FL_DENY_ON_CONTENTION 0x40000000
@@ -194,20 +164,76 @@ typedef enum {
 /* Flags sent in AST lock_flags to be mapped into the receiving lock. */
 #define LDLM_AST_FLAGS         (LDLM_FL_DISCARD_DATA)
 
-/* 
+/*
  * --------------------------------------------------------------------------
  * NOTE! Starting from this point, that is, LDLM_FL_* flags with values above
  * 0x80000000 will not be sent over the wire.
  * --------------------------------------------------------------------------
  */
 
+/**
+ * Declaration of flags not sent through the wire.
+ **/
 /* Used for marking lock as an target for -EINTR while cp_ast sleep
  * emulation + race with upcoming bl_ast.  */
 #define LDLM_FL_FAIL_LOC       0x100000000ULL
-
 /* Used while processing the unused list to know that we have already
  * handled this lock and decided to skip it */
 #define LDLM_FL_SKIPPED        0x200000000ULL
+/* this lock is being destroyed */
+#define LDLM_FL_CBPENDING      0x400000000ULL
+/* not a real flag, not saved in lock */
+#define LDLM_FL_WAIT_NOREPROC  0x800000000ULL
+/* cancellation callback already run */
+#define LDLM_FL_CANCEL         0x1000000000ULL
+#define LDLM_FL_LOCAL_ONLY     0x2000000000ULL
+/* don't run the cancel callback under ldlm_cli_cancel_unused */
+#define LDLM_FL_FAILED         0x4000000000ULL
+/* lock cancel has already been sent */
+#define LDLM_FL_CANCELING      0x8000000000ULL
+/* local lock (ie, no srv/cli split) */
+#define LDLM_FL_LOCAL          0x10000000000ULL
+/* XXX FIXME: This is being added to b_size as a low-risk fix to the fact that
+ * the LVB filling happens _after_ the lock has been granted, so another thread
+ * can match`t before the LVB has been updated.  As a dirty hack, we set
+ * LDLM_FL_LVB_READY only after we've done the LVB poop.
+ * this is only needed on lov/osc now, where lvb is actually used and callers
+ * must set it in input flags.
+ *
+ * The proper fix is to do the granting inside of the completion AST, which can
+ * be replaced with a LVB-aware wrapping function for OSC locks.  That change is
+ * pretty high-risk, though, and would need a lot more testing. */
+#define LDLM_FL_LVB_READY      0x20000000000ULL
+/* A lock contributes to the kms calculation until it has finished the part
+ * of it's cancelation that performs write back on its dirty pages.  It
+ * can remain on the granted list during this whole time.  Threads racing
+ * to update the kms after performing their writeback need to know to
+ * exclude each others locks from the calculation as they walk the granted
+ * list. */
+#define LDLM_FL_KMS_IGNORE     0x40000000000ULL
+/* completion ast to be executed */
+#define LDLM_FL_CP_REQD        0x80000000000ULL
+/* cleanup_resource has already handled the lock */
+#define LDLM_FL_CLEANED        0x100000000000ULL
+/* optimization hint: LDLM can run blocking callback from current context
+ * w/o involving separate thread. in order to decrease cs rate */
+#define LDLM_FL_ATOMIC_CB      0x200000000000ULL
+/* It may happen that a client initiate 2 operations, e.g. unlink and mkdir,
+ * such that server send blocking ast for conflict locks to this client for
+ * the 1st operation, whereas the 2nd operation has canceled this lock and
+ * is waiting for rpc_lock which is taken by the 1st operation.
+ * LDLM_FL_BL_AST is to be set by ldlm_callback_handler() to the lock not allow
+ * ELC code to cancel it.
+ * LDLM_FL_BL_DONE is to be set by ldlm_cancel_callback() when lock cache is
+ * droped to let ldlm_callback_handler() return EINVAL to the server. It is
+ * used when ELC rpc is already prepared and is waiting for rpc_lock, too late
+ * to send a separate CANCEL rpc. */
+#define LDLM_FL_BL_AST          0x400000000000ULL
+#define LDLM_FL_BL_DONE         0x800000000000ULL
+/* Don't put lock into the LRU list, so that it is not canceled due to aging.
+ * Used by MGC locks, they are cancelled only at unmount or by callback. */
+#define LDLM_FL_NO_LRU		0x1000000000000ULL
+
 
 /* The blocking callback is overloaded to perform two functions.  These flags
  * indicate which operation should be performed. */
@@ -367,8 +393,8 @@ struct ldlm_pool {
 };
 
 typedef int (*ldlm_res_policy)(struct ldlm_namespace *, struct ldlm_lock **,
-                               void *req_cookie, ldlm_mode_t mode, int flags,
-                               void *data);
+			       void *req_cookie, ldlm_mode_t mode, __u64 flags,
+			       void *data);
 
 typedef int (*ldlm_cancel_for_recovery)(struct ldlm_lock *lock);
 
@@ -565,8 +591,8 @@ struct ldlm_lock;
 typedef int (*ldlm_blocking_callback)(struct ldlm_lock *lock,
                                       struct ldlm_lock_desc *new, void *data,
                                       int flag);
-typedef int (*ldlm_completion_callback)(struct ldlm_lock *lock, int flags,
-                                        void *data);
+typedef int (*ldlm_completion_callback)(struct ldlm_lock *lock, __u64 flags,
+					void *data);
 typedef int (*ldlm_glimpse_callback)(struct ldlm_lock *lock, void *data);
 typedef unsigned long (*ldlm_weigh_callback)(struct ldlm_lock *lock);
 
@@ -938,7 +964,7 @@ void _ldlm_lock_debug(struct ldlm_lock *lock,
 #define LDLM_DEBUG_NOLOCK(format, a...)                 \
         CDEBUG(D_DLMTRACE, "### " format "\n" , ##a)
 
-typedef int (*ldlm_processing_policy)(struct ldlm_lock *lock, int *flags,
+typedef int (*ldlm_processing_policy)(struct ldlm_lock *lock, __u64 *flags,
                                       int first_enq, ldlm_error_t *err,
                                       cfs_list_t *work_list);
 
@@ -962,7 +988,7 @@ int ldlm_resource_iterate(struct ldlm_namespace *, const struct ldlm_res_id *,
                            ldlm_iterator_t iter, void *data);
 
 /* ldlm_flock.c */
-int ldlm_flock_completion_ast(struct ldlm_lock *lock, int flags, void *data);
+int ldlm_flock_completion_ast(struct ldlm_lock *lock, __u64 flags, void *data);
 
 /* ldlm_extent.c */
 __u64 ldlm_extent_shift_kms(struct ldlm_lock *lock, __u64 old_kms);
@@ -971,7 +997,7 @@ __u64 ldlm_extent_shift_kms(struct ldlm_lock *lock, __u64 old_kms);
 /* ldlm_lockd.c */
 int ldlm_server_blocking_ast(struct ldlm_lock *, struct ldlm_lock_desc *,
                              void *data, int flag);
-int ldlm_server_completion_ast(struct ldlm_lock *lock, int flags, void *data);
+int ldlm_server_completion_ast(struct ldlm_lock *lock, __u64 flags, void *data);
 int ldlm_server_glimpse_ast(struct ldlm_lock *lock, void *data);
 int ldlm_handle_enqueue(struct ptlrpc_request *req, ldlm_completion_callback,
                         ldlm_blocking_callback, ldlm_glimpse_callback);
@@ -992,7 +1018,7 @@ ldlm_processing_policy ldlm_get_processing_policy(struct ldlm_resource *res);
 void ldlm_register_intent(struct ldlm_namespace *ns, ldlm_res_policy arg);
 void ldlm_lock2handle(const struct ldlm_lock *lock,
                       struct lustre_handle *lockh);
-struct ldlm_lock *__ldlm_handle2lock(const struct lustre_handle *, int flags);
+struct ldlm_lock *__ldlm_handle2lock(const struct lustre_handle *, __u64 flags);
 void ldlm_cancel_callback(struct ldlm_lock *);
 int ldlm_lock_remove_from_lru(struct ldlm_lock *);
 int ldlm_lock_set_data(struct lustre_handle *, void *);
@@ -1006,7 +1032,7 @@ static inline struct ldlm_lock *ldlm_handle2lock(const struct lustre_handle *h)
         lu_ref_del(&lock->l_reference, "handle", cfs_current())
 
 static inline struct ldlm_lock *
-ldlm_handle2lock_long(const struct lustre_handle *h, int flags)
+ldlm_handle2lock_long(const struct lustre_handle *h, __u64 flags)
 {
         struct ldlm_lock *lock;
 
@@ -1085,7 +1111,7 @@ void ldlm_lock_decref(struct lustre_handle *lockh, __u32 mode);
 void ldlm_lock_decref_and_cancel(struct lustre_handle *lockh, __u32 mode);
 void ldlm_lock_allow_match(struct ldlm_lock *lock);
 void ldlm_lock_allow_match_locked(struct ldlm_lock *lock);
-ldlm_mode_t ldlm_lock_match(struct ldlm_namespace *ns, int flags,
+ldlm_mode_t ldlm_lock_match(struct ldlm_namespace *ns, __u64 flags,
                             const struct ldlm_res_id *, ldlm_type_t type,
                             ldlm_policy_data_t *, ldlm_mode_t mode,
                             struct lustre_handle *, int unref);
@@ -1105,7 +1131,7 @@ struct ldlm_namespace *
 ldlm_namespace_new(struct obd_device *obd, char *name,
                    ldlm_side_t client, ldlm_appetite_t apt,
                    ldlm_ns_type_t ns_type);
-int ldlm_namespace_cleanup(struct ldlm_namespace *ns, int flags);
+int ldlm_namespace_cleanup(struct ldlm_namespace *ns, __u64 flags);
 void ldlm_namespace_free_prior(struct ldlm_namespace *ns,
                                struct obd_import *imp,
                                int force);
@@ -1164,12 +1190,12 @@ int ldlm_blocking_ast_nocheck(struct ldlm_lock *lock);
 int ldlm_blocking_ast(struct ldlm_lock *lock, struct ldlm_lock_desc *desc,
                       void *data, int flag);
 int ldlm_glimpse_ast(struct ldlm_lock *lock, void *reqp);
-int ldlm_completion_ast_async(struct ldlm_lock *lock, int flags, void *data);
-int ldlm_completion_ast(struct ldlm_lock *lock, int flags, void *data);
+int ldlm_completion_ast_async(struct ldlm_lock *lock, __u64 flags, void *data);
+int ldlm_completion_ast(struct ldlm_lock *lock, __u64 flags, void *data);
 int ldlm_cli_enqueue(struct obd_export *exp, struct ptlrpc_request **reqp,
                      struct ldlm_enqueue_info *einfo,
                      const struct ldlm_res_id *res_id,
-                     ldlm_policy_data_t const *policy, int *flags,
+		     ldlm_policy_data_t const *policy, __u64 *flags,
                      void *lvb, __u32 lvb_len, struct lustre_handle *lockh,
                      int async);
 int ldlm_prep_enqueue_req(struct obd_export *exp,
@@ -1185,12 +1211,12 @@ int ldlm_handle_enqueue0(struct ldlm_namespace *ns, struct ptlrpc_request *req,
                          const struct ldlm_callback_suite *cbs);
 int ldlm_cli_enqueue_fini(struct obd_export *exp, struct ptlrpc_request *req,
                           ldlm_type_t type, __u8 with_policy, ldlm_mode_t mode,
-                          int *flags, void *lvb, __u32 lvb_len,
+			  __u64 *flags, void *lvb, __u32 lvb_len,
                           struct lustre_handle *lockh, int rc);
 int ldlm_cli_enqueue_local(struct ldlm_namespace *ns,
                            const struct ldlm_res_id *res_id,
                            ldlm_type_t type, ldlm_policy_data_t *policy,
-                           ldlm_mode_t mode, int *flags,
+			   ldlm_mode_t mode, __u64 *flags,
                            ldlm_blocking_callback blocking,
                            ldlm_completion_callback completion,
                            ldlm_glimpse_callback glimpse,
