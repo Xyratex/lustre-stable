@@ -78,7 +78,7 @@ static struct lu_kmem_descr cl_page_caches[] = {
         ((void)sizeof(env), (void)sizeof(page), (void)sizeof !!(exp))
 #endif /* !LIBCFS_DEBUG */
 
-#ifdef INVARIANT_CHECK
+#ifdef CONFIG_LUSTRE_DEBUG_EXPENSIVE_CHECK
 # define PINVRNT(env, page, expr)                                       \
   do {                                                                    \
           if (unlikely(!(expr))) {                                      \
@@ -86,10 +86,10 @@ static struct lu_kmem_descr cl_page_caches[] = {
                   LINVRNT(0);                                           \
           }                                                             \
   } while (0)
-#else /* !INVARIANT_CHECK */
+#else /* !CONFIG_LUSTRE_DEBUG_EXPENSIVE_CHECK */
 # define PINVRNT(env, page, exp) \
-        ((void)sizeof(env), (void)sizeof(page), (void)sizeof !!(exp))
-#endif /* !INVARIANT_CHECK */
+	 ((void)sizeof(env), (void)sizeof(page), (void)sizeof !!(exp))
+#endif /* !CONFIG_LUSTRE_DEBUG_EXPENSIVE_CHECK */
 
 /* Disable page statistic by default due to huge performance penalty. */
 #ifdef CONFIG_DEBUG_PAGESTATE_TRACKING

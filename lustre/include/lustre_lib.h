@@ -93,6 +93,7 @@ int target_handle_dqacq_callback(struct ptlrpc_request *req);
 #endif
 
 #define OBD_RECOVERY_MAX_TIME (obd_timeout * 18) /* b13079 */
+#define OBD_MAX_IOCTL_BUFFER CONFIG_LUSTRE_OBD_MAX_IOCTL_BUFFER
 
 struct l_wait_info;
 
