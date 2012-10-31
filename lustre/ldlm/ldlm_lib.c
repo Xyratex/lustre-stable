@@ -254,6 +254,15 @@ static int osc_on_mdt(char *obdname)
 	return 0;
 }
 
+typedef enum {
+	CFS_LOCK_CLASS_OSC = 0,
+	CFS_LOCK_CLASS_MDC,
+	CFS_LOCK_CLASS_MGC,
+	CFS_LOCK_CLASS_MAX
+} cfs_lock_class_type_t;
+
+static struct lock_class_key client_key[CFS_LOCK_CLASS_MAX];
+
 /* Configure an RPC client OBD device.
  *
  * lcfg parameters:
@@ -272,6 +281,27 @@ int client_obd_setup(struct obd_device *obddev, struct lustre_cfg *lcfg)
         int rc;
         ENTRY;
 
+	if (LUSTRE_CFG_BUFLEN(lcfg, 1) < 1) {
+		CERROR("requires a TARGET UUID\n");
+		RETURN(-EINVAL);
+	}
+
+	if (LUSTRE_CFG_BUFLEN(lcfg, 1) > 37) {
+		CERROR("client UUID must be less than 38 characters\n");
+		RETURN(-EINVAL);
+	}
+
+	if (LUSTRE_CFG_BUFLEN(lcfg, 2) < 1) {
+		CERROR("setup requires a SERVER UUID\n");
+		RETURN(-EINVAL);
+	}
+
+	if (LUSTRE_CFG_BUFLEN(lcfg, 2) > 37) {
+		CERROR("target UUID must be less than 38 characters\n");
+		RETURN(-EINVAL);
+	}
+
+	init_rwsem(&cli->cl_sem);
         /* In a more perfect world, we would hang a ptlrpc_client off of
          * obd_type and just use the values from there. */
 	if (!strcmp(name, LUSTRE_OSC_NAME)) {
@@ -281,6 +311,7 @@ int client_obd_setup(struct obd_device *obddev, struct lustre_cfg *lcfg)
 		cli->cl_sp_me = LUSTRE_SP_CLI;
 		cli->cl_sp_to = LUSTRE_SP_OST;
 		ns_type = LDLM_NS_TYPE_OSC;
+		lockdep_set_class(&cli->cl_sem,&client_key[CFS_LOCK_CLASS_OSC]);
 	} else if (!strcmp(name, LUSTRE_MDC_NAME) ||
 		   !strcmp(name, LUSTRE_LWP_NAME)) {
 		rq_portal = MDS_REQUEST_PORTAL;
@@ -289,6 +320,7 @@ int client_obd_setup(struct obd_device *obddev, struct lustre_cfg *lcfg)
 		cli->cl_sp_me = LUSTRE_SP_CLI;
 		cli->cl_sp_to = LUSTRE_SP_MDT;
 		ns_type = LDLM_NS_TYPE_MDC;
+		lockdep_set_class(&cli->cl_sem,&client_key[CFS_LOCK_CLASS_MDC]);
 	} else if (!strcmp(name, LUSTRE_OSP_NAME)) {
 		if (strstr(lustre_cfg_buf(lcfg, 1), "OST") == NULL) {
 			/* OSP_on_MDT for other MDTs */
@@ -296,12 +328,16 @@ int client_obd_setup(struct obd_device *obddev, struct lustre_cfg *lcfg)
 			cli->cl_sp_to = LUSTRE_SP_MDT;
 			ns_type = LDLM_NS_TYPE_MDC;
 			rq_portal = OUT_PORTAL;
+			lockdep_set_class(&cli->cl_sem,
+					  &client_key[CFS_LOCK_CLASS_MDC]);
 		} else {
 			/* OSP on MDT for OST */
 			connect_op = OST_CONNECT;
 			cli->cl_sp_to = LUSTRE_SP_OST;
 			ns_type = LDLM_NS_TYPE_OSC;
 			rq_portal = OST_REQUEST_PORTAL;
+			lockdep_set_class(&cli->cl_sem,
+					  &client_key[CFS_LOCK_CLASS_OSC]);
 		}
 		rp_portal = OSC_REPLY_PORTAL;
 		cli->cl_sp_me = LUSTRE_SP_CLI;
@@ -313,33 +349,14 @@ int client_obd_setup(struct obd_device *obddev, struct lustre_cfg *lcfg)
                 cli->cl_sp_to = LUSTRE_SP_MGS;
                 cli->cl_flvr_mgc.sf_rpc = SPTLRPC_FLVR_INVALID;
                 ns_type = LDLM_NS_TYPE_MGC;
+		lockdep_set_class(&cli->cl_sem, &client_key[CFS_LOCK_CLASS_MGC]);
 	} else {
+		fini_rwsem(&cli->cl_sem);
                 CERROR("unknown client OBD type \"%s\", can't setup\n",
                        name);
                 RETURN(-EINVAL);
         }
 
-        if (LUSTRE_CFG_BUFLEN(lcfg, 1) < 1) {
-                CERROR("requires a TARGET UUID\n");
-                RETURN(-EINVAL);
-        }
-
-        if (LUSTRE_CFG_BUFLEN(lcfg, 1) > 37) {
-                CERROR("client UUID must be less than 38 characters\n");
-                RETURN(-EINVAL);
-        }
-
-        if (LUSTRE_CFG_BUFLEN(lcfg, 2) < 1) {
-                CERROR("setup requires a SERVER UUID\n");
-                RETURN(-EINVAL);
-        }
-
-        if (LUSTRE_CFG_BUFLEN(lcfg, 2) > 37) {
-                CERROR("target UUID must be less than 38 characters\n");
-                RETURN(-EINVAL);
-        }
-
-	init_rwsem(&cli->cl_sem);
 	sema_init(&cli->cl_mgc_sem, 1);
         cli->cl_conn_count = 0;
         memcpy(server_uuid.uuid, lustre_cfg_buf(lcfg, 2),

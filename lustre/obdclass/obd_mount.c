@@ -1261,12 +1261,6 @@ int lustre_fill_super(struct super_block *sb, void *data, int silent)
                 RETURN(-ENOMEM);
         lmd = lsi->lsi_lmd;
 
-	/*
-	 * Disable lockdep during mount, because mount locking patterns are
-	 * `special'.
-	 */
-	lockdep_off();
-
         /*
          * LU-639: the obd cleanup of last mount may not finish yet, wait here.
          */
@@ -1323,7 +1317,6 @@ out:
                 CDEBUG(D_SUPER, "Mount %s complete\n",
                        lmd->lmd_dev);
         }
-	lockdep_on();
 	return rc;
 }
 
