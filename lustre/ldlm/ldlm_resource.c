@@ -1008,7 +1008,7 @@ struct ldlm_namespace *ldlm_namespace_first_locked(ldlm_side_t client)
                 struct ldlm_namespace, ns_list_chain);
 }
 
-static struct ldlm_resource *ldlm_resource_new(void)
+static struct ldlm_resource *ldlm_resource_new(int lock_lvb)
 {
         struct ldlm_resource *res;
         int idx;
@@ -1034,8 +1034,10 @@ static struct ldlm_resource *ldlm_resource_new(void)
 
         /* one who creates the resource must unlock
          * the mutex after lvb initialization */
-        cfs_mutex_init(&res->lr_lvb_mutex);
-        cfs_mutex_lock(&res->lr_lvb_mutex);
+	if (lock_lvb) {
+		cfs_mutex_init(&res->lr_lvb_mutex);
+		cfs_mutex_lock(&res->lr_lvb_mutex);
+	}
 
         return res;
 }
@@ -1078,7 +1080,7 @@ ldlm_resource_get(struct ldlm_namespace *ns, struct ldlm_resource *parent,
 
         LASSERTF(type >= LDLM_MIN_TYPE && type < LDLM_MAX_TYPE,
                  "type: %d\n", type);
-        res = ldlm_resource_new();
+	res = ldlm_resource_new(ns->ns_lvbo && ns->ns_lvbo->lvbo_init);
         if (!res)
                 return NULL;
 

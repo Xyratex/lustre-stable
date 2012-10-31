@@ -1366,7 +1366,6 @@ static struct vfsmount *server_kernel_mount(struct super_block *sb)
          * to mount successfuly the underlying filesystem */
         if (lmd->lmd_opts && (*(lmd->lmd_opts) != 0))
                 strncat(options, lmd->lmd_opts, CFS_PAGE_SIZE - 1);
-
         /* Pre-mount ldiskfs to read the MOUNT_DATA_FILE */
         CDEBUG(D_MOUNT, "Pre-mount ldiskfs %s\n", lmd->lmd_dev);
         type = get_fs_type("ldiskfs");
@@ -1383,7 +1382,6 @@ static struct vfsmount *server_kernel_mount(struct super_block *sb)
                         lmd->lmd_dev, s_flags, rc );
                 GOTO(out_free, rc);
         }
-
         OBD_SET_CTXT_MAGIC(&mount_ctxt);
         mount_ctxt.pwdmnt = mnt;
         mount_ctxt.pwd = mnt->mnt_root;
@@ -2145,12 +2143,6 @@ int lustre_fill_super(struct super_block *sb, void *data, int silent)
         lmd = lsi->lsi_lmd;
 
         /*
-         * Disable lockdep during mount, because mount locking patterns are
-         * `special'.
-         */
-        cfs_lockdep_off();
-
-        /*
          * LU-639: the obd cleanup of last mount may not finish yet, wait here.
          */
         obd_zombie_barrier();
@@ -2201,7 +2193,6 @@ out:
                 CDEBUG(D_SUPER, "Mount %s complete\n",
                        lmd->lmd_dev);
         }
-        cfs_lockdep_on();
         return rc;
 }
 

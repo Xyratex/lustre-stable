@@ -149,7 +149,7 @@ int seq_server_alloc_super(struct lu_server_seq *seq,
         int rc;
         ENTRY;
 
-        cfs_mutex_lock(&seq->lss_mutex);
+	cfs_mutex_lock_nested(&seq->lss_mutex, SEQ_ALLOC_SUPER);
         rc = __seq_server_alloc_super(seq, out, env);
         cfs_mutex_unlock(&seq->lss_mutex);
 
@@ -287,7 +287,7 @@ int seq_server_alloc_meta(struct lu_server_seq *seq,
         int rc;
         ENTRY;
 
-        cfs_mutex_lock(&seq->lss_mutex);
+	cfs_mutex_lock_nested(&seq->lss_mutex, SEQ_ALLOC_META);
         rc = __seq_server_alloc_meta(seq, out, env);
         cfs_mutex_unlock(&seq->lss_mutex);
 

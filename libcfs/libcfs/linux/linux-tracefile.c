@@ -47,6 +47,8 @@ static unsigned int pages_factor[CFS_TCD_TYPE_MAX] = {
 
 char *cfs_trace_console_buffers[NR_CPUS][CFS_TCD_TYPE_MAX];
 
+static cfs_lock_class_key_t cfs_tcd_lock_key[CFS_TCD_TYPE_MAX];
+
 cfs_rw_semaphore_t cfs_tracefile_sem;
 
 int cfs_tracefile_init_arch()
@@ -71,6 +73,7 @@ int cfs_tracefile_init_arch()
 	/* arch related info initialized */
 	cfs_tcd_for_each(tcd, i, j) {
 		cfs_spin_lock_init(&tcd->tcd_lock);
+		cfs_lockdep_set_class(&tcd->tcd_lock, &cfs_tcd_lock_key[i]);
 		tcd->tcd_pages_factor = pages_factor[i];
 		tcd->tcd_type = i;
 		tcd->tcd_cpu = j;
