@@ -8752,6 +8752,27 @@ test_181() { # bug 22177
 }
 run_test 181 "Test open-unlinked dir ========================"
 
+test_183() { # LU-2275
+	mkdir -p $DIR/$tdir || error "creating dir $DIR/$tdir"
+	echo aaa > $DIR/$tdir/$tfile
+
+#define OBD_FAIL_MDS_NEGATIVE_POSITIVE  0x149
+	do_facet $SINGLEMDS $LCTL set_param fail_loc=0x149
+
+	ls -l $DIR/$tdir && error "ls succeeded, should have failed"
+	cat $DIR/$tdir/$tfile && error "cat succeeded, should have failed"
+
+	do_facet $SINGLEMDS $LCTL set_param fail_loc=0
+
+	# Flush negative dentry cache
+	touch $DIR/$tdir/$tfile
+
+	# We are not checking for any leaked references here, they'll
+	# become evident next time we do cleanup with module unload.
+	rm -rf $DIR/$tdir
+}
+run_test 183 "No crash or request leak in case of strange dispositions ========"
+
 # OST pools tests
 check_file_in_pool()
 {

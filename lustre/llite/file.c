@@ -659,11 +659,6 @@ restart:
         GOTO(out_och_free, rc);
 
 out_och_free:
-        if (it && it_disposition(it, DISP_ENQ_OPEN_REF)) {
-                ptlrpc_req_finished(it->d.lustre.it_data);
-                it_clear_disposition(it, DISP_ENQ_OPEN_REF);
-        }
-
         if (rc) {
                 if (och_p && *och_p) {
                         OBD_FREE(*och_p, sizeof (struct obd_client_handle));
@@ -680,6 +675,11 @@ out_openerr:
         } else {
                 ll_stats_ops_tally(ll_i2sbi(inode), LPROC_LL_OPEN, 1);
         }
+
+	if (it && it_disposition(it, DISP_ENQ_OPEN_REF)) {
+		ptlrpc_req_finished(it->d.lustre.it_data);
+		it_clear_disposition(it, DISP_ENQ_OPEN_REF);
+	}
 
         return rc;
 }
