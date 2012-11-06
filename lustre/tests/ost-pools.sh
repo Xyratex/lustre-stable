@@ -1229,8 +1229,6 @@ test_23b() {
 
     local i=0
     local TGT
-    local BUNIT_SZ=1024  # min block quota unit(kB)
-    local LIMIT=$((BUNIT_SZ * (OSTCOUNT + 1)))
     local dir=$POOL_ROOT/dir
     local file="$dir/$tfile-quota"
 
@@ -1241,36 +1239,56 @@ test_23b() {
     add_pool $POOL "$FSNAME-OST[$TGT_FIRST-$TGT_MAX/3]" "$TGT"
     create_dir $dir $POOL
 
-    AVAIL=$($LFS df -p $POOL $dir | awk '/summary/ { print $4 }')
-    [ $AVAIL -gt $MAXFREE ] &&
-        skip_env "Filesystem space $AVAIL is larger than $MAXFREE limit" &&
-            return 0
-    log "OSTCOUNT=$OSTCOUNT, OSTSIZE=$OSTSIZE"
-    log "MAXFREE=$MAXFREE, AVAIL=$AVAIL, SLOW=$SLOW"
+	local maxfree=$((1024 * 1024 * 30)) # 30G
+	local AVAIL=$(lfs_df -p $POOL $dir | awk '/summary/ { print $4 }')
+	[ $AVAIL -gt $maxfree ] &&
+		skip_env "Filesystem space $AVAIL is larger than " \
+			"$maxfree limit" && return 0
 
-    $LFS quotaoff -ug $MOUNT
-    chown $RUNAS_ID.$RUNAS_ID $dir
-    i=0
-    RC=0
-    while [ $RC -eq 0 ]; do
-        i=$((i + 1))
-        stat=$(LOCALE=C $RUNAS2 dd if=/dev/zero of=${file}$i bs=1M \
-               count=$((LIMIT * 4)) 2>&1)
-        RC=$?
-		echo "$i: $stat"
-        if [ $RC -eq 1 ]; then
-            echo $stat | grep -q "Disk quota exceeded"
-            [[ $? -eq 0 ]] && error "dd failed with EDQUOT with quota off"
+	echo "OSTCOUNT=$OSTCOUNT, OSTSIZE=$OSTSIZE, AVAIL=$AVAIL"
+	echo "MAXFREE=$maxfree, SLOW=$SLOW"
 
-            echo $stat | grep -q "No space left on device"
-            [[ $? -ne 0 ]] &&
-                error "dd did not fail with ENOSPC"
-        fi
-    done
+	chown $RUNAS_ID.$RUNAS_ID $dir
+	i=0
+	local RC=0
+	local TOTAL=0 # KB
+	local stime=$(date +%s)
+	local stat
+	local etime
+	local elapsed
+	local maxtime=300 # minimum speed: 5GB / 300sec ~= 17MB/s
+	while [ $RC -eq 0 ]; do
+		i=$((i + 1))
+		stat=$(LOCALE=C $RUNAS2 dd if=/dev/zero of=${file}$i bs=1M \
+			count=$((5 * 1024)) 2>&1)
+		RC=$?
+		TOTAL=$((TOTAL + 1024 * 1024 * 5))
+		echo "[$i iteration] $stat"
+		echo "total written: $TOTAL"
 
-    df -h
+		etime=$(date +%s)
+		elapsed=$((etime - stime))
+		echo "stime=$stime, etime=$etime, elapsed=$elapsed"
 
-    rm -rf $POOL_ROOT
+		if [ $RC -eq 1 ]; then
+			echo $stat | grep -q "Disk quota exceeded"
+			[[ $? -eq 0 ]] &&
+				error "dd failed with EDQUOT with quota off"
+
+			echo $stat | grep -q "No space left on device"
+			[[ $? -ne 0 ]] &&
+				error "dd did not fail with ENOSPC"
+		elif [ $TOTAL -gt $AVAIL ]; then
+			error "dd didn't fail with ENOSPC ($TOTAL > $AVAIL)"
+		elif [ $i -eq 1 -a $elapsed -gt $maxtime ]; then
+			log "The first 5G write used $elapsed (> $maxtime) " \
+				"seconds, terminated"
+			RC=1
+		fi
+	done
+
+	df -h
+	rm -rf $POOL_ROOT
 }
 run_test 23b "OST pools and OOS"
 
