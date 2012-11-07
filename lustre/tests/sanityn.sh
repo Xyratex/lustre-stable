@@ -329,10 +329,27 @@ test_15() {	# bug 974 - ENOSPC
 }
 run_test 15 "test out-of-space with multiple writers ==========="
 
+COUNT=${COUNT:-2500}
+if [ "$SLOW" = "yes" ]; then
+	FSXNUM=$((COUNT * 5))
+	FSXP=500
+else
+	FSXNUM=$COUNT
+	FSXP=100
+fi
+
 test_16() {
-	rm -f $MOUNT1/fsxfile
-	lfs setstripe $MOUNT1/fsxfile -c -1 # b=10919
-	fsx -c 50 -p 100 -N 2500 -l $((SIZE * 256)) -S 0 $MOUNT1/fsxfile $MOUNT2/fsxfile
+	local file1=$DIR1/$tfile
+	local file2=$DIR2/$tfile
+
+	# to allocate grant because it may run out due to test_15.
+	lfs setstripe -c -1 $file1
+	dd if=/dev/zero of=$file1 bs=$STRIPE_BYTES count=$OSTCOUNT oflag=sync
+	dd if=/dev/zero of=$file2 bs=$STRIPE_BYTES count=$OSTCOUNT oflag=sync
+	rm -f $file1
+
+	lfs setstripe -c -1 $file1 # b=10919
+	fsx -c 50 -p $FSXP -N $FSXNUM -l $((SIZE * 256)) -S 0 $file1 $file2
 }
 run_test 16 "2500 iterations of dual-mount fsx ================="
 
