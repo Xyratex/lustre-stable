@@ -16,7 +16,6 @@ export GSS_KRB5=false
 export GSS_PIPEFS=false
 export IDENTITY_UPCALL=default
 export QUOTA_AUTO=1
-
 # LOAD_LLOOP: LU-409: only load llite_lloop module if kernel < 2.6.32 or
 #             LOAD_LLOOP is true. LOAD_LLOOP is false by default.
 export LOAD_LLOOP=${LOAD_LLOOP:-false}
@@ -3561,9 +3560,45 @@ mdtuuid_from_index()
     $LFS mdts $2 | sed -ne "/^$1: /s/.* \(.*\) .*$/\1/p"
 }
 
+# Description:
+#   Return unique identifier for given hostname
+host_id() {
+	local host_name=$1
+	echo $host_name | tr [:lower:]. [:upper:]_
+}
+
+# Description:
+#   Returns list of ip addresses for each interface
+local_addr_list() {
+	ip addr | awk '/inet\ / {print $2}' | awk -F\/ '{print $1}'
+}
+
+is_local_addr() {
+	local addr=$1
+	# Cache address list to avoid mutiple execution of local_addr_list
+	LOCAL_ADDR_LIST=${LOCAL_ADDR_LIST:-$(local_addr_list)}
+	local i
+	for i in $LOCAL_ADDR_LIST ; do
+		[[ "$i" == "$addr" ]] && return 0
+	done
+	return 1
+}
+
+local_node() {
+	local host_name=$1
+	local is_local="IS_LOCAL_$(host_id $host_name)"
+	if [ -z "${!is_local-}" ] ; then
+		eval $is_local=0
+		local host_ip=$($LUSTRE/tests/resolveip $host_name)
+		is_local_addr "$host_ip" && eval $is_local=1
+	fi
+	[[ "${!is_local}" == "1" ]]
+}
+
 remote_node () {
-    local node=$1
-    [ "$node" != "$(hostname)" ]
+	local node=$1
+	local_node $node && return 1
+	return 0
 }
 
 remote_mds ()
