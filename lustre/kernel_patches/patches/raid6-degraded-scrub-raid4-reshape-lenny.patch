@@ -1,0 +1,35 @@
+--- linux-2.6.9.orig/drivers/md/raid5.c	2012-11-07 19:44:12.000000000 -0700
++++ linux-2.6.9/drivers/md/raid5.c	2012-11-07 19:44:12.000000000 -0700
+@@ -598,7 +598,7 @@
+ 
+ 		clear_bit(R5_UPTODATE, &sh->dev[i].flags);
+ 		atomic_inc(&rdev->read_errors);
+-		if (conf->mddev->degraded)
++		if (conf->mddev->degraded >= conf->max_degraded)
+ 			printk(KERN_WARNING "raid5:%s: read error not correctable (sector %llu on %s).\n",
+ 			       mdname(conf->mddev),
+ 			       (unsigned long long)sh->sector + rdev->data_offset,
+@@ -3385,6 +3385,7 @@
+ 		 */
+ 		sector_t here_new, here_old;
+ 		int old_disks;
++		int max_degraded = (mddev->level == 6 ? 2 : 1);
+ 
+ 		if (mddev->new_level != mddev->level ||
+ 		    mddev->new_layout != mddev->layout ||
+@@ -3403,13 +3404,13 @@
+ 		 * further up in new geometry must map after here in old geometry.
+ 		 */
+ 		here_new = mddev->reshape_position;
+-		if (sector_div(here_new, (mddev->chunk_size>>9)*(mddev->raid_disks-1))) {
++		if (sector_div(here_new, (mddev->chunk_size>>9)*(mddev->raid_disks - max_degraded))) {
+ 			printk(KERN_ERR "raid5: reshape_position not on a stripe boundary\n");
+ 			return -EINVAL;
+ 		}
+ 		/* here_new is the stripe we will write to */
+ 		here_old = mddev->reshape_position;
+-		sector_div(here_old, (mddev->chunk_size>>9)*(old_disks-1));
++		sector_div(here_old, (mddev->chunk_size>>9)*(old_disks - max_degraded));
+ 		/* here_old is the first stripe that we might need to read from */
+ 		if (here_new >= here_old) {
+ 			/* Reading from the same stripe as writing to - bad */
