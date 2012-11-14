@@ -3,7 +3,7 @@
 # increment this if you have made a change that should force a new kernel
 # to build built for this distribution (only -- if you want to force a kernel
 # build on all distributions, update the BUILD_GEN variable in build/lbuild)
-BUILD_GEN+=".0"
+BUILD_GEN+=".1"
 
 source ${0%/*}/lbuild-sles
 
@@ -18,6 +18,14 @@ edit_specs() {
         #cp $TOPDIR/SOURCES/kernel-$spec.spec{,.orig}
         sed -i -e "s/^\(Release: *\).*$/\1${lnxrel}_${buildid}/" \
                -e "s/^ExclusiveArch:.*/& ppc ppc64/" \
+              -e "/^%include /a\
+# build debuginfo package and donot bother with missing or unpackaged files.\n\
+%define _missing_doc_files_terminate_build 0\n\
+%define _unpackaged_files_terminate_build 0\n\
+%global __debug_package 1" \
+               -e "s/^\(%files devel-debuginfo -f\) .*$/\1 debugfiles.list/" \
+               -e "/^%files devel-debuginfo/a\
+%defattr(-,root,root)" \
                -e "/^%setup /a\
 cp %_sourcedir/linux-${lnxmaj}-lustre.patch %_builddir/%{name}-%{version}/lustre.patch;\
 grep -q lustre.patch %_sourcedir/series.conf || echo ' lustre.patch' >> %_sourcedir/series.conf" \
