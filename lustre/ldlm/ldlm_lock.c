@@ -209,7 +209,7 @@ void ldlm_lock_put(struct ldlm_lock *lock)
                            "final lock_put on destroyed lock, freeing it.");
 
                 res = lock->l_resource;
-                LASSERT(lock->l_destroyed);
+                LASSERT(LDLM_IS(lock, DESTROYED));
                 LASSERT(cfs_list_empty(&lock->l_res_link));
                 LASSERT(cfs_list_empty(&lock->l_pending_chain));
 
@@ -258,7 +258,7 @@ int ldlm_lock_remove_from_lru(struct ldlm_lock *lock)
         int rc;
 
         ENTRY;
-        if (lock->l_ns_srv) {
+        if (LDLM_IS(lock, SERVER_LOCK)) {
                 LASSERT(cfs_list_empty(&lock->l_lru));
                 RETURN(0);
         }
@@ -298,7 +298,7 @@ void ldlm_lock_touch_in_lru(struct ldlm_lock *lock)
         struct ldlm_namespace *ns = ldlm_lock_to_ns(lock);
 
         ENTRY;
-        if (lock->l_ns_srv) {
+        if (LDLM_IS(lock, SERVER_LOCK)) {
                 LASSERT(cfs_list_empty(&lock->l_lru));
                 EXIT;
                 return;
@@ -334,12 +334,12 @@ int ldlm_lock_destroy_internal(struct ldlm_lock *lock)
                 LBUG();
         }
 
-        if (lock->l_destroyed) {
+        if (LDLM_IS(lock, DESTROYED)) {
                 LASSERT(cfs_list_empty(&lock->l_lru));
                 EXIT;
                 return 0;
         }
-        lock->l_destroyed = 1;
+        LDLM_SET(lock, DESTROYED);
 
 	if (lock->l_export && lock->l_export->exp_lock_hash) {
 		/* NB: it's safe to call cfs_hash_del() even lock isn't
@@ -553,7 +553,7 @@ struct ldlm_lock *__ldlm_handle2lock(const struct lustre_handle *handle,
 
         /* It's unlikely but possible that someone marked the lock as
          * destroyed after we did handle2object on it */
-        if (flags == 0 && !lock->l_destroyed) {
+        if (flags == 0 && LDLM_NOT(lock, DESTROYED)) {
                 lu_ref_add(&lock->l_reference, "handle", cfs_current());
                 RETURN(lock);
         }
@@ -563,7 +563,7 @@ struct ldlm_lock *__ldlm_handle2lock(const struct lustre_handle *handle,
         LASSERT(lock->l_resource != NULL);
 
         lu_ref_add_atomic(&lock->l_reference, "handle", cfs_current());
-        if (unlikely(lock->l_destroyed)) {
+        if (unlikely(LDLM_IS(lock, DESTROYED))) {
                 unlock_res_and_lock(lock);
                 CDEBUG(D_INFO, "lock already destroyed: lock %p\n", lock);
                 LDLM_LOCK_PUT(lock);
@@ -784,7 +784,7 @@ void ldlm_lock_decref_internal(struct ldlm_lock *lock, __u32 mode)
             (lock->l_flags & LDLM_FL_CBPENDING)) {
                 /* If we received a blocked AST and this was the last reference,
                  * run the callback. */
-                if (lock->l_ns_srv && lock->l_export)
+                if (LDLM_IS(lock, SERVER_LOCK) && (lock->l_export != NULL))
                         CERROR("FL_CBPENDING set on non-local lock--just a "
                                "warning\n");
 
@@ -964,7 +964,7 @@ static void ldlm_granted_list_add_lock(struct ldlm_lock *lock,
         CDEBUG(D_OTHER, "About to add this lock:\n");
         ldlm_lock_dump(D_OTHER, lock, 0);
 
-        if (lock->l_destroyed) {
+        if (LDLM_IS(lock, DESTROYED)) {
                 CDEBUG(D_OTHER, "Lock destroyed, not adding to resource\n");
                 return;
         }
@@ -1080,7 +1080,8 @@ static struct ldlm_lock *search_queue(cfs_list_t *queue,
                         continue;
 
                 if (!unref &&
-                    (lock->l_destroyed || (lock->l_flags & LDLM_FL_FAILED)))
+                    (LDLM_IS(lock, DESTROYED) ||
+                     (lock->l_flags & LDLM_FL_FAILED)))
                         continue;
 
                 if ((flags & LDLM_FL_LOCAL_ONLY) &&
@@ -1277,7 +1278,8 @@ struct ldlm_lock *ldlm_lock_create(struct ldlm_namespace *ns,
         lock->l_req_mode = mode;
         lock->l_ast_data = data;
         lock->l_pid = cfs_curproc_pid();
-        lock->l_ns_srv = ns_is_server(ns);
+        if (ns_is_server(ns))
+                LDLM_SET(lock, SERVER_LOCK);
         if (cbs) {
                 lock->l_blocking_ast = cbs->lcs_blocking;
                 lock->l_completion_ast = cbs->lcs_completion;

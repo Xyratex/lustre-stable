@@ -439,7 +439,7 @@ static int ldlm_add_waiting_lock(struct ldlm_lock *lock)
         LASSERT(!(lock->l_flags & LDLM_FL_CANCEL_ON_BLOCK));
 
         cfs_spin_lock_bh(&waiting_locks_spinlock);
-        if (lock->l_destroyed) {
+        if (LDLM_IS(lock, DESTROYED)) {
                 static cfs_time_t next;
                 cfs_spin_unlock_bh(&waiting_locks_spinlock);
                 LDLM_ERROR(lock, "not waiting on destroyed lock (bug 5653)");
@@ -799,7 +799,7 @@ int ldlm_server_blocking_ast(struct ldlm_lock *lock,
                 RETURN(0);
         }
 
-        if (lock->l_destroyed) {
+        if (LDLM_IS(lock, DESTROYED)) {
                 /* What's the point? */
                 unlock_res(lock->l_resource);
                 ptlrpc_req_finished(req);
@@ -1564,13 +1564,13 @@ static void ldlm_handle_cp_callback(struct ptlrpc_request *req,
                         cfs_schedule_timeout_and_set_state(
                                 CFS_TASK_INTERRUPTIBLE, to);
                         if (lock->l_granted_mode == lock->l_req_mode ||
-                            lock->l_destroyed)
+                            LDLM_IS(lock, DESTROYED))
                                 break;
                 }
         }
 
         lock_res_and_lock(lock);
-        if (lock->l_destroyed ||
+        if (LDLM_IS(lock, DESTROYED) ||
             lock->l_granted_mode == lock->l_req_mode) {
                 /* bug 11300: the lock has already been granted */
                 unlock_res_and_lock(lock);

@@ -135,7 +135,7 @@ static int ldlm_completion_tail(struct ldlm_lock *lock)
         long delay;
         int  result;
 
-        if (lock->l_destroyed || lock->l_flags & LDLM_FL_FAILED) {
+        if (LDLM_IS(lock, DESTROYED) || LDLM_IS(lock, FAILED)) {
                 LDLM_DEBUG(lock, "client-side enqueue: destroyed");
                 result = -EIO;
         } else {

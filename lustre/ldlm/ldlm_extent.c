@@ -726,7 +726,7 @@ int ldlm_process_extent_lock(struct ldlm_lock *lock, __u64 *flags,
                          * in ldlm_lock_destroy. Anyway, this always happens
                          * when a client is being evicted. So it would be
                          * ok to return an error. -jay */
-                        if (lock->l_destroyed) {
+                        if (LDLM_IS(lock, DESTROYED)) {
                                 *err = -EAGAIN;
                                 GOTO(out, rc = -EAGAIN);
                         }

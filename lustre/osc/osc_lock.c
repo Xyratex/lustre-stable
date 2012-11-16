@@ -50,6 +50,7 @@
 #include <lustre_fid.h>
 
 #include "osc_cl_internal.h"
+#include "lustre_dlm.h"
 
 /** \addtogroup osc 
  *  @{ 
@@ -118,7 +119,7 @@ static int osc_lock_invariant(struct osc_lock *ols)
                   * ast.
                   */
                  ergo(olock != NULL && ols->ols_state < OLS_CANCELLED,
-                      !olock->l_destroyed) &&
+                      LDLM_NOT(olock, DESTROYED)) &&
                  ergo(ols->ols_state == OLS_GRANTED,
                       olock != NULL &&
                       olock->l_req_mode == olock->l_granted_mode &&

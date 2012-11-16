@@ -166,8 +166,8 @@ typedef enum {
 
 /*
  * --------------------------------------------------------------------------
- * NOTE! Starting from this point, that is, LDLM_FL_* flags with values above
- * 0x80000000 will not be sent over the wire.
+ * NOTE! Starting from this point, LDLM_FL_* flags use values at or above
+ * 0x80000000 (1<<32) and will not be sent over the wire.
  * --------------------------------------------------------------------------
  */
 
@@ -234,6 +234,25 @@ typedef enum {
  * Used by MGC locks, they are cancelled only at unmount or by callback. */
 #define LDLM_FL_NO_LRU		0x1000000000000ULL
 
+
+/**
+ * Set for locks that were removed from class hash table and will be
+ * destroyed when last reference to them is released. Set by
+ * ldlm_lock_destroy_internal().
+ *
+ * Protected by lock and resource locks.
+ */
+#define LDLM_FL_DESTROYED       0x2000000000000ULL // 1 << 49
+
+/**
+ * flag whether this is a server namespace lock
+ */
+#define LDLM_FL_SERVER_LOCK     0x4000000000000ULL // 1 << 50
+
+#define LDLM_IS(_p,  _f) (((_p)->l_flags & LDLM_FL_##_f) != 0)
+#define LDLM_NOT(_p, _f) (! LDLM_IS(_p, _f))
+#define LDLM_SET(_p, _f) ((_p)->l_flags |=  LDLM_FL_##_f)
+#define LDLM_CLR(_p, _f) ((_p)->l_flags &= ~LDLM_FL_##_f)
 
 /* The blocking callback is overloaded to perform two functions.  These flags
  * indicate which operation should be performed. */
@@ -732,18 +751,7 @@ struct ldlm_lock {
         __u64                 l_flags;
         __u32                 l_readers;
         __u32                 l_writers;
-        /*
-         * Set for locks that were removed from class hash table and will be
-         * destroyed when last reference to them is released. Set by
-         * ldlm_lock_destroy_internal().
-         *
-         * Protected by lock and resource locks.
-         */
-        __u8                  l_destroyed;
-        /**
-         * flag whether this is a server namespace lock
-         */
-        __u8                  l_ns_srv;
+
         /**
          * If the lock is granted, a process sleeps on this waitq to learn when
          * it's no longer in use.  If the lock is not granted, a process sleeps
@@ -772,6 +780,8 @@ struct ldlm_lock {
          * Temporary storage for an LVB received during an enqueue operation.
          */
         __u32                 l_lvb_len;
+        // FOUR BYTES OF PADDING
+
         void                 *l_lvb_data;
 
         void                 *l_ast_data;
@@ -791,11 +801,6 @@ struct ldlm_lock {
         cfs_time_t            l_callback_timeout;
 
         /**
-         * Pid which created this lock.
-         */
-        __u32                 l_pid;
-
-        /**
          * For ldlm_add_ast_work_item().
          */
         cfs_list_t            l_bl_ast;
@@ -810,6 +815,11 @@ struct ldlm_lock {
 
         struct ldlm_lock     *l_blocking_lock;
         int                   l_bl_ast_run;
+
+        /**
+         * Pid which created this lock.
+         */
+        __u32                 l_pid;
 
         /**
          * Protected by lr_lock, linkages to "skip lists".

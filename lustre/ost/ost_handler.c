@@ -1814,7 +1814,7 @@ static void ost_prolong_lock_one(struct ost_prolong_data *opd,
 {
 	LASSERT(lock->l_export == opd->opd_exp);
 
-	if (lock->l_destroyed) /* lock already cancelled */
+	if (LDLM_IS(lock, DESTROYED)) /* lock already cancelled */
 		return;
 
         /* XXX: never try to grab resource lock here because we're inside
