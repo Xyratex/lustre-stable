@@ -40,3 +40,4 @@ ext4-inode_info_reorganize.patch
 ext4-fix-mbgroups-access.patch 
 ext4-dont-check-before-replay.patch 
 ext4-dont-check-in-ro.patch 
+ext4-bitmap-hold.patch
