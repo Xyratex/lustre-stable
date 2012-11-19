@@ -853,6 +853,8 @@ static int fsfilt_ext3_sync(struct super_block *sb)
 #define fsfilt_ext3_ext_walk_space(inode, block, num, cb, cbdata) \
                         ext3_ext_walk_space(inode, block, num, cb, cbdata);
 
+#include <linux/lustre_version.h>
+
 struct bpointers {
         unsigned long *blocks;
         int *created;
