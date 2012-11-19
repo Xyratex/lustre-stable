@@ -1,0 +1,10 @@
+--- linux-2.6.orig/mm/swap.c	2012-09-06 01:21:34.184486903 +0400
++++ linux-2.6/mm/swap.c	2013-03-22 16:59:22.905648620 +0400
+@@ -407,6 +407,7 @@ void lru_add_drain(void)
+ 	drain_cpu_pagevecs(get_cpu());
+ 	put_cpu();
+ }
++EXPORT_SYMBOL(lru_add_drain);
+ 
+ static void lru_add_drain_per_cpu(struct work_struct *dummy)
+ {
