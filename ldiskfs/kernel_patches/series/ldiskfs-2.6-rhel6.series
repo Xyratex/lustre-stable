@@ -36,3 +36,4 @@ ext4-journal-callback.patch
 ext4-store-tree-generation-at-find.patch
 ext4_pdirop-rhel6.patch
 ext4_export_mb_stream_allocator_variables.patch
+ext4-fix-mbgroups-access.patch
