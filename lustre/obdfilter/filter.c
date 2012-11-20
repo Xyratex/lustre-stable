@@ -1261,8 +1261,6 @@ static int filter_prep_groups(struct obd_device *obd)
                 filp_close(filp, 0);
         case 1:
                 filter_cleanup_groups(obd);
-                f_dput(filter->fo_dentry_O);
-                filter->fo_dentry_O = NULL;
         default:
                 break;
         }
