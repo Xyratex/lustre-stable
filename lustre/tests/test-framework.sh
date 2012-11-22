@@ -3564,7 +3564,7 @@ mdtuuid_from_index()
 #   Return unique identifier for given hostname
 host_id() {
 	local host_name=$1
-	echo $host_name | tr [:lower:]. [:upper:]_
+	echo $host_name | md5sum | cut -d' ' -f1
 }
 
 # Description:
