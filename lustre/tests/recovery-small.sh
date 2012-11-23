@@ -351,6 +351,8 @@ test_19a() {
 
     mount_client $DIR2
 
+    # modify dir so that next revalidate would not obtain UPDATE lock as well
+    do_facet client touch $DIR
     do_facet client mcreate $DIR/$tfile        || return 1
     drop_ldlm_cancel "chmod 0777 $DIR2"
 
