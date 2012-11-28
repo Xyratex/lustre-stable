@@ -356,13 +356,9 @@ static int mgs_completion_ast_config(struct ldlm_lock *lock, __u64 flags,
         if (!(flags & (LDLM_FL_BLOCK_WAIT | LDLM_FL_BLOCK_GRANTED |
                        LDLM_FL_BLOCK_CONV))) {
                 struct fs_db *fsdb = (struct fs_db *)lock->l_ast_data;
-                struct lustre_handle lockh;
 
                 /* clear the bit before lock put */
                 cfs_clear_bit(FSDB_REVOKING_LOCK, &fsdb->fsdb_flags);
-
-                ldlm_lock2handle(lock, &lockh);
-                ldlm_lock_decref_and_cancel(&lockh, LCK_EX);
         }
 
         RETURN(ldlm_completion_ast(lock, flags, cbdata));
@@ -375,23 +371,8 @@ static int mgs_completion_ast_ir(struct ldlm_lock *lock, __u64 flags,
 
         if (!(flags & (LDLM_FL_BLOCK_WAIT | LDLM_FL_BLOCK_GRANTED |
                        LDLM_FL_BLOCK_CONV))) {
-                struct fs_db *fsdb;
-
-                /* l_ast_data is used as a marker to avoid cancel ldlm lock
-                 * twice. See LU-1259. */
-                lock_res_and_lock(lock);
-                fsdb = (struct fs_db *)lock->l_ast_data;
-                lock->l_ast_data = NULL;
-                unlock_res_and_lock(lock);
-
-                if (fsdb != NULL) {
-                        struct lustre_handle lockh;
-
-                        mgs_ir_notify_complete(fsdb);
-
-                        ldlm_lock2handle(lock, &lockh);
-                        ldlm_lock_decref_and_cancel(&lockh, LCK_EX);
-                }
+                struct fs_db *fsdb = (struct fs_db *)lock->l_ast_data;
+                mgs_ir_notify_complete(fsdb);
         }
 
         RETURN(ldlm_completion_ast(lock, flags, cbdata));
@@ -436,8 +417,9 @@ void mgs_revoke_lock(struct obd_device *obd, struct fs_db *fsdb, int type)
                         if (type == CONFIG_T_CONFIG)
                                 cfs_clear_bit(FSDB_REVOKING_LOCK,
                                               &fsdb->fsdb_flags);
-                }
-                /* lock has been cancelled in completion_ast. */
+                } else {
+			ldlm_lock_decref_and_cancel(&lockh, LCK_EX);
+		}
         }
 
         RETURN_EXIT;
