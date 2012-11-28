@@ -8,7 +8,7 @@ AC_CONFIG_AUX_DIR([.])
 
 AC_CANONICAL_SYSTEM
 
-AM_INIT_AUTOMAKE([1.9 tar-ustar])
+AM_INIT_AUTOMAKE([1.10 tar-ustar -Wno-portability])
 
 AC_PROG_CC
 
