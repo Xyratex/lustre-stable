@@ -1272,6 +1272,10 @@ int ll_statahead_enter(struct inode *dir, struct dentry **dentryp, int lookup)
         if (lli->lli_opendir_pid != cfs_curproc_pid())
                 return -EAGAIN;
 
+	/* statahead has been stopped */
+	if (lli->lli_opendir_key == NULL)
+		return -EAGAIN;
+
         /*
          * When "ls" a dentry, the system trigger more than once "revalidate" or
          * "lookup", for "getattr", for "getxattr", and maybe for others.
