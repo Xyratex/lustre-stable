@@ -1895,9 +1895,10 @@ test_46a() {
 	# wait until osts in sync
 	for (( i=2; i<=$OSTCOUNT; i++ )); do
 	    wait_osc_import_state mds ost$i FULL
+	    wait_osc_import_state client ost$i FULL
 	done
 
-        #second client see all ost's
+	#second client see all ost's
 
 	mount_client $MOUNT2 || return 8
 	$LFS setstripe $MOUNT2 -c -1 || return 9
