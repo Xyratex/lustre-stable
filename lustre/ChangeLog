@@ -5,11 +5,135 @@ TBD Oracle, Inc.
 	  2.6.32.19-0.2.1 (SLES11),
 	  2.6.18-194.17.1.el5 (RHEL 5)
 	  2.6.18-194.17.1.0.1.el5 (OEL 5)
+	  2.6.32-279.2.1.el6 (RHEL 6) - (Client ONLY)
+	  2.6.32-279.2.1.0.1.el6 (OEL 6) - (Client ONLY)
 	* Client support for unpatched kernels:
 	  (see http://wiki.lustre.org/index.php?title=Patchless_Client)
 	  2.6.16 - 2.6.32 vanilla (kernel.org)
 	* Recommended e2fsprogs version: 1.41.12-ora1
 	* The async journal commit feature (bug 19128) and the cancel
+
+Severity   : normal
+Bugzilla   :
+Description:
+Details    :
+
+Severity   : normal
+Bugzilla   : 19526 conf-sanity test_46a fix
+Description: LU-743 conf-sanity: test_46a failure
+Details    : This failure is because client still didn't see the adding OSTs so it
+             met a problem when decoding lsm because the # of OSTs was over tgt count
+             at the client side.
+
+Severity   : normal
+Bugzilla   : 24645 build kernel debuginfo rpm for sles11sp1
+Description: In order to build debuginfo rpm for SLES11 SP1, We need to modify SLES11 kernel
+             spec file in the following way:
+
+             - explicitly declare __debug_package as true(1).
+             - use debugfiles.list as the %files content instead of the default file in spec.
+             - change the file attributes.
+             - ignore some missing/unpackaged files while doing rpmbuild.
+
+             Also, we need to increase the BUILD_GEN in order to avoid future RPM reuse of
+             the testing builds.
+
+Severity   : normal
+Bugzilla   : 24646 fix a bug for raid6 driver from upstream
+Description: For more info, refer to this link:
+             http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=581392
+
+Severity   : normal
+Bugzilla   : 20997 skip peer health check for not router
+Description: this is patch from LU-630
+
+Severity   : normal
+Bugzilla   : 24636 compile fix for sles11 when jbd debug is turned on
+
+Severity   : normal
+Bugzilla   : 24376 do not shrink busy pages
+Description: llap_shrink_cache_internail() used to avoid shrinking of dirty pages
+             and pages being written. This patch makes it to avoid shrinking pages
+             which are in use.
+
+Severity   : normal
+Bugzilla   : 23206 osc_precreate, osc_create: check OSCC_FLAG_NOSPC after checking for preallocated objects
+
+Severity   : normal
+Bugzilla   : 24531 replace generic_write_sync with ll_write_sync
+Description: generic_write_sync() takes inode mutex which leads to deadlock because the mutex is taken now in
+             ll_file_aio_write/ll_file_writev.
+Details    : replace generic_write_sync() with ll_write_sync() which skips taking of i_mutex
+
+Severity   : normal
+Bugzilla   : 24419 ldlm_pools_shrink algorithm change
+Description: -shrink namespaces by batches of 64 namespaces, the batch is implemented as list
+             -stop shrinking once required number of elements is freed
+             -have ldlm_pools_recalc to operate with namespaces similar to ldlm_pools_shrink
+             -use global counters of unused locks on cliens and granted locks on servers to
+              avoid iterating over namespaces
+             -port b=21519&LU-499, a race between shrink or recalc and namespace_free
+
+Severity   : normal
+Bugzilla   : 24531 vfs locking simplification and lockless i/o for direct i/o
+Description: ll_file_write used to lock in the following order:
+             "lli_write_sem; ldlm extent lock; inode mutex (taken in generic_file_write)".
+             OTOH, direct I/O read used opposite order: "inode mutex; ldlm extent lock on
+             server". That led to a deadlock.
+
+             Another drawback of that is need to drop inode mutex on truncate before taking
+             ldlm extent lock.
+
+             This patch fixes the problem by simplifing the locking with help of using
+             version of generic_file_write routine which does not take inode mutex: "inode
+             mutex; ldlm extent lock". That makes lli_write_sem in write and mutex re-lock
+             in truncate unnecessary.
+
+             DIO read takes inode mutex as it used to be.
+
+             One more fix is to make sure that in case of DIO read fast lock matching is
+             avoided. That fixed yet another deadlock between direct i/o reads: those who
+             got a fast lock locked in order "ldlm lock; inode mutex" while those who ran
+             lockless reads locked in opposite order: "inode mutex; ldlm lock on server".
+Details    : The below summarizes read, write, truncate locking rules:
+             read:            trunc sem, ldlm
+             write:           mutex, ldlm
+             read direct:     mutex, server ldlm
+             write direct:    mutex, server ldlm
+             truncate:        mutex, trunc sem, ldlm
+
+Severity   : normal
+Bugzilla   : 24592 ENOSUPP migratepage
+Description: rhel6 kernel has "memory compaction" feature which seems to be slighlty
+             inaccurate: it misses setting page->private to 0 for pages allocated for
+             migration.
+Details    : Detect kernel with that feature and add ENOSUPP migration address space
+             operation as a workaround for the problem
+
+Severity   : normal
+Bugzilla   : 23206 handle_async_create(): do not return ENOSPC if there are preallocated objects
+
+Severity   : normal
+Bugzilla   : 24628 OEL6 support in 1.8 branch
+Description: Add OEL6 support in b1_8 branch. Kernel version is 2.6.32-279.2.1.el6.
+
+Severity   : normal
+Bugzilla   : 24580 RHEL6 support in b1_8 branch
+Description: Update RHEL6 patchless client kernel to 2.6.32-279.2.1.el6.
+
+Severity   : normal
+Bugzilla   : 23206 return 0 if precreation succeeded even partially
+
+Severity   : normal
+Bugzilla   : 20569 count bad lines correctly
+Description: -have parse_buffer() to count lines with bogus headers correctly
+             -simplification of end of line detection in parse_buffer()
+
+Severity   : normal
+Bugzilla   : 20569 test_170 fix
+Description: use perl instead of sed to process binary files properly;
+             verify that bad and good files differ;
+             minor cleanup
 
 Severity   : normal
 Bugzilla   : 24596 skip metabench for rhel 6.2 nfs client
