@@ -1715,10 +1715,9 @@ static int check_for_clients(struct obd_device *obd)
         if (obd->obd_abort_recovery || obd->obd_recovery_expired)
                 return 1;
         LASSERT(clnts <= obd->obd_max_recoverable_clients);
-        if (obd->obd_no_conn == 0 &&
-            clnts + obd->obd_stale_clients == obd->obd_max_recoverable_clients)
-                return 1;
-        return 0;
+	return (clnts + obd->obd_stale_clients ==
+		obd->obd_max_recoverable_clients);
+
 }
 
 static int check_for_next_transno(struct obd_device *obd)
