@@ -820,6 +820,13 @@ restore_quota_type () {
    quota_save_version $old_QUOTA_TYPE
 }
 
+# Handle the case when there is a space in the lfs df
+# "filesystem summary" line the same as when there is no space.
+# This will allow fixing the "lfs df" summary line in the future.
+lfs_df() {
+       $LFS df $* | sed -e 's/filesystem /filesystem_/'
+}
+
 setup_quota(){
     local mntpt=$1
 
@@ -840,11 +847,11 @@ setup_quota(){
     local quota_usrs=$QUOTA_USERS
 
     # get_filesystem_size
-    local disksz=$(lfs df $mntpt | grep "filesystem summary:"  | awk '{print $3}')
+    local disksz=$(lfs_df $mntpt | grep "summary" | awk '{print $2}')
     local blk_soft=$((disksz + 1024))
     local blk_hard=$((blk_soft + blk_soft / 20)) # Go 5% over
 
-    local Inodes=$(lfs df -i $mntpt | grep "filesystem summary:"  | awk '{print $3}')
+    local Inodes=$(lfs_df -i $mntpt | grep "summary" | awk '{print $2}')
     local i_soft=$Inodes
     local i_hard=$((i_soft + i_soft / 20))
 
