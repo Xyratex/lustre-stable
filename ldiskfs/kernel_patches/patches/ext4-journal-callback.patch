@@ -148,7 +148,7 @@ Index: linux-stage/fs/ext4/mballoc.c
  
  static inline void *mb_correct_addr_and_bit(int *bit, void *addr)
  {
-@@ -2592,8 +2593,6 @@ int ext4_mb_init(struct super_block *sb,
+@@ -2591,8 +2592,6 @@ int ext4_mb_init(struct super_block *sb,
  		}
  	}
  
@@ -157,7 +157,7 @@ Index: linux-stage/fs/ext4/mballoc.c
  	return 0;
  }
  
-@@ -2693,56 +2692,52 @@ static inline int ext4_issue_discard(str
+@@ -2695,58 +2694,54 @@ static inline int ext4_issue_discard(str
   * This function is called by the jbd2 layer once the commit has finished,
   * so we know we can free the blocks that were released with that commit.
   */
@@ -173,58 +173,18 @@ Index: linux-stage/fs/ext4/mballoc.c
  	int err, count = 0, count2 = 0;
 -	struct ext4_free_data *entry;
 -	struct list_head *l, *ltmp;
--
+ 
 -	list_for_each_safe(l, ltmp, &txn->t_private_list) {
 -		entry = list_entry(l, struct ext4_free_data, list);
- 
--		mb_debug(1, "gonna free %u blocks in group %u (0x%p):",
--			 entry->count, entry->group, entry);
 +	mb_debug(1, "gonna free %u blocks in group %u (0x%p):",
 +		 entry->efd_count, entry->efd_group, entry);
  
--		if (test_opt(sb, DISCARD)) {
--			int ret;
--			ret = ext4_issue_discard(sb, entry->group,
--					entry->start_blk, entry->count);
--			if (unlikely(ret == -EOPNOTSUPP)) {
--				ext4_warning(sb, "discard not supported, "
--						 "disabling");
--				clear_opt(EXT4_SB(sb)->s_mount_opt, DISCARD);
--			}
-+	if (test_opt(sb, DISCARD)) {
-+		int ret;
-+		ret = ext4_issue_discard(sb, entry->efd_group,
-+				entry->efd_start_blk, entry->efd_count);
-+		if (unlikely(ret == -EOPNOTSUPP)) {
-+			ext4_warning(sb, "discard not supported, "
-+					 "disabling");
-+			clear_opt(EXT4_SB(sb)->s_mount_opt, DISCARD);
- 		}
-+	}
- 
--		err = ext4_mb_load_buddy(sb, entry->group, &e4b);
--		/* we expect to find existing buddy because it's pinned */
--		BUG_ON(err != 0);
--
--		db = e4b.bd_info;
--		/* there are blocks to put in buddy to make them really free */
--		count += entry->count;
--		count2++;
--		ext4_lock_group(sb, entry->group);
--		/* Take it out of per group rb tree */
--		rb_erase(&entry->node, &(db->bb_free_root));
--		mb_free_blocks(NULL, &e4b, entry->start_blk, entry->count);
--
--		if (!db->bb_free_root.rb_node) {
--			/* No more items in the per group rb tree
--			 * balance refcounts from ext4_mb_free_metadata()
--			 */
--			page_cache_release(e4b.bd_buddy_page);
--			page_cache_release(e4b.bd_bitmap_page);
--		}
--		ext4_unlock_group(sb, entry->group);
--		kmem_cache_free(ext4_free_ext_cachep, entry);
--		ext4_mb_release_desc(&e4b);
+-		mb_debug(1, "gonna free %u blocks in group %u (0x%p):",
+-			 entry->count, entry->group, entry);
++	if (test_opt(sb, DISCARD))
++		ext4_issue_discard(sb, entry->efd_group,
++				   entry->efd_start_blk, entry->efd_count);
++
 +	err = ext4_mb_load_buddy(sb, entry->efd_group, &e4b);
 +	/* we expect to find existing buddy because it's pinned */
 +	BUG_ON(err != 0);
@@ -237,11 +197,54 @@ Index: linux-stage/fs/ext4/mballoc.c
 +	/* Take it out of per group rb tree */
 +	rb_erase(&entry->efd_node, &(db->bb_free_root));
 +	mb_free_blocks(NULL, &e4b, entry->efd_start_blk, entry->efd_count);
-+
+ 
+-		if (test_opt(sb, DISCARD))
+-			ext4_issue_discard(sb, entry->group,
+-					   entry->start_blk, entry->count);
+-
+-		err = ext4_mb_load_buddy(sb, entry->group, &e4b);
+-		/* we expect to find existing buddy because it's pinned */
+-		BUG_ON(err != 0);
+-
+-		db = e4b.bd_info;
+-		/* there are blocks to put in buddy to make them really free */
+-		count += entry->count;
+-		count2++;
+-		ext4_lock_group(sb, entry->group);
+-		/* Take it out of per group rb tree */
+-		rb_erase(&entry->node, &(db->bb_free_root));
+-		mb_free_blocks(NULL, &e4b, entry->start_blk, entry->count);
++	/*
++	 * Clear the trimmed flag for the group so that the next
++	 * ext4_trim_fs can trim it.
++	 * If the volume is mounted with -o discard, online discard
++	 * is supported and the free blocks will be trimmed online.
++	 */
++	if (!test_opt(sb, DISCARD))
++		EXT4_MB_GRP_CLEAR_TRIMMED(db);
+ 
+-		/*
+-		 * Clear the trimmed flag for the group so that the next
+-		 * ext4_trim_fs can trim it.
+-		 * If the volume is mounted with -o discard, online discard
+-		 * is supported and the free blocks will be trimmed online.
 +	if (!db->bb_free_root.rb_node) {
 +		/* No more items in the per group rb tree
 +		 * balance refcounts from ext4_mb_free_metadata()
-+		 */
+ 		 */
+-		if (!test_opt(sb, DISCARD))
+-			EXT4_MB_GRP_CLEAR_TRIMMED(db);
+-
+-		if (!db->bb_free_root.rb_node) {
+-			/* No more items in the per group rb tree
+-			 * balance refcounts from ext4_mb_free_metadata()
+-			 */
+-			page_cache_release(e4b.bd_buddy_page);
+-			page_cache_release(e4b.bd_bitmap_page);
+-		}
+-		ext4_unlock_group(sb, entry->group);
+-		kmem_cache_free(ext4_free_ext_cachep, entry);
+-		ext4_mb_release_desc(&e4b);
 +		page_cache_release(e4b.bd_buddy_page);
 +		page_cache_release(e4b.bd_bitmap_page);
  	}
@@ -251,7 +254,7 @@ Index: linux-stage/fs/ext4/mballoc.c
  
  	mb_debug(1, "freed %u blocks in %u structures\n", count, count2);
  }
-@@ -2794,22 +2789,22 @@ int __init init_ext4_mballoc(void)
+@@ -2798,22 +2793,22 @@ int __init init_ext4_mballoc(void)
  		kmem_cache_create("ext4_alloc_context",
  				     sizeof(struct ext4_allocation_context),
  				     0, SLAB_RECLAIM_ACCOUNT, NULL);
@@ -287,7 +290,7 @@ Index: linux-stage/fs/ext4/mballoc.c
  }
  
  void exit_ext4_mballoc(void)
-@@ -2821,7 +2816,7 @@ void exit_ext4_mballoc(void)
+@@ -2825,7 +2820,7 @@ void exit_ext4_mballoc(void)
  	rcu_barrier();
  	kmem_cache_destroy(ext4_pspace_cachep);
  	kmem_cache_destroy(ext4_ac_cachep);
@@ -296,7 +299,7 @@ Index: linux-stage/fs/ext4/mballoc.c
  	ext4_remove_debugfs_entry();
  }
  
-@@ -3362,8 +3357,8 @@ static void ext4_mb_generate_from_freeli
+@@ -3366,8 +3361,8 @@ static void ext4_mb_generate_from_freeli
  	n = rb_first(&(grp->bb_free_root));
  
  	while (n) {
@@ -307,7 +310,7 @@ Index: linux-stage/fs/ext4/mballoc.c
  		n = rb_next(n);
  	}
  	return;
-@@ -4623,11 +4618,11 @@ out3:
+@@ -4613,11 +4608,11 @@ out3:
   * AND the blocks are associated with the same group.
   */
  static int can_merge(struct ext4_free_data *entry1,
@@ -323,7 +326,7 @@ Index: linux-stage/fs/ext4/mballoc.c
  		return 1;
  	return 0;
  }
-@@ -4640,7 +4635,6 @@ ext4_mb_free_metadata(handle_t *handle, 
+@@ -4630,7 +4625,6 @@ ext4_mb_free_metadata(handle_t *handle, 
  	struct ext4_free_data *entry;
  	struct ext4_group_info *db = e4b->bd_info;
  	struct super_block *sb = e4b->bd_sb;
@@ -331,7 +334,7 @@ Index: linux-stage/fs/ext4/mballoc.c
  	struct rb_node **n = &db->bb_free_root.rb_node, *node;
  	struct rb_node *parent = NULL, *new_node;
  
-@@ -4648,8 +4642,8 @@ ext4_mb_free_metadata(handle_t *handle, 
+@@ -4638,8 +4632,8 @@ ext4_mb_free_metadata(handle_t *handle, 
  	BUG_ON(e4b->bd_bitmap_page == NULL);
  	BUG_ON(e4b->bd_buddy_page == NULL);
  
@@ -342,7 +345,7 @@ Index: linux-stage/fs/ext4/mballoc.c
  
  	if (!*n) {
  		/* first free block exent. We need to
-@@ -4662,15 +4656,15 @@ ext4_mb_free_metadata(handle_t *handle, 
+@@ -4652,15 +4646,15 @@ ext4_mb_free_metadata(handle_t *handle, 
  	}
  	while (*n) {
  		parent = *n;
@@ -362,7 +365,7 @@ Index: linux-stage/fs/ext4/mballoc.c
  			return 0;
  		}
  	}
-@@ -4681,34 +4675,29 @@ ext4_mb_free_metadata(handle_t *handle, 
+@@ -4671,34 +4665,29 @@ ext4_mb_free_metadata(handle_t *handle, 
  	/* Now try to see the extent can be merged to left and right */
  	node = rb_prev(new_node);
  	if (node) {
@@ -408,7 +411,7 @@ Index: linux-stage/fs/ext4/mballoc.c
  	return 0;
  }
  
-@@ -4836,11 +4825,11 @@ do_more:
+@@ -4817,11 +4806,11 @@ do_more:
  		 * blocks being freed are metadata. these blocks shouldn't
  		 * be used until this transaction is committed
  		 */
@@ -429,7 +432,7 @@ Index: linux-stage/fs/ext4/super.c
 ===================================================================
 --- linux-stage.orig/fs/ext4/super.c
 +++ linux-stage/fs/ext4/super.c
-@@ -301,6 +301,23 @@ void ext4_journal_abort_handle(const cha
+@@ -310,6 +310,23 @@ void ext4_journal_abort_handle(const cha
  
  EXPORT_SYMBOL(ext4_journal_abort_handle);
  
@@ -453,7 +456,7 @@ Index: linux-stage/fs/ext4/super.c
  /* Deal with the reporting of failure conditions on a filesystem such as
   * inconsistencies detected or read IO failures.
   *
-@@ -3040,6 +3057,8 @@ static int ext4_fill_super(struct super_
+@@ -3491,6 +3508,8 @@ static int ext4_fill_super(struct super_
  	}
  	set_task_ioprio(sbi->s_journal->j_task, journal_ioprio);
  
