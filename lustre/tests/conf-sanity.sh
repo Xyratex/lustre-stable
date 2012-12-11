@@ -2851,6 +2851,46 @@ test_63() {
 }
 run_test 63 "Verify each page can at least hold 3 ldisk inodes"
 
+test_65() { # LU-2237
+	# Currently, the test is only valid for ldiskfs backend
+	[ "$(facet_fstype $SINGLEMDS)" != "ldiskfs" ] &&
+		skip "non-ldiskfs backend" && return
+
+	local devname=$(mdsdevname ${SINGLEMDS//mds/})
+	local brpt=$(facet_mntpt brpt)
+	local opts=""
+
+	if ! do_facet $SINGLEMDS "test -b $devname"; then
+		opts="-o loop"
+	fi
+
+	stop_mds
+	local obj=$(do_facet $SINGLEMDS \
+		    "$DEBUGFS -c -R \\\"stat last_rcvd\\\" $devname" |
+		    grep Inode)
+	if [ -z "$obj" ]; then
+		# The MDT may be just re-formatted, mount the MDT for the
+		# first time to guarantee the "last_rcvd" file is there.
+		start_mds || error "fail to mount the MDS for the first time"
+		stop_mds
+	fi
+
+	# remove the "last_rcvd" file
+	do_facet $SINGLEMDS "mkdir -p $brpt"
+	do_facet $SINGLEMDS \
+		"mount -t $(facet_fstype $SINGLEMDS) $opts $devname $brpt"
+	do_facet $SINGLEMDS "rm -f ${brpt}/last_rcvd"
+	do_facet $SINGLEMDS "umount $brpt"
+
+	# restart MDS, the "last_rcvd" file should be recreated.
+	start_mds || error "fail to restart the MDS"
+	stop_mds
+	obj=$(do_facet $SINGLEMDS \
+	      "$DEBUGFS -c -R \\\"stat last_rcvd\\\" $devname" | grep Inode)
+	[ -n "$obj" ] || error "fail to re-create the last_rcvd"
+}
+run_test 65 "re-create the lost last_rcvd file when server mount"
+
 test_66() {
 	setup
 	local OST1_NID=$(do_facet ost1 $LCTL list_nids | head -1)
