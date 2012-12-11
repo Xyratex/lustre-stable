@@ -1337,8 +1337,21 @@ AC_DEFUN([LN_FUNC_DUMP_TRACE],
 		#include <asm/stacktrace.h>
 	],[
 	],[
-		AC_MSG_RESULT(yes)
-		AC_DEFINE(HAVE_DUMP_TRACE, 1, [dump_trace is exported])
+		if test x$RHEL_KERNEL = xyes; then
+			case $LINUXRELEASE in
+			2.6.3*)
+			# dump_trace() oopses in rhel6
+			AC_MSG_RESULT(no)
+			;;
+			*)
+			AC_MSG_RESULT(yes)
+			AC_DEFINE(HAVE_DUMP_TRACE, 1, [dump_trace is exported])
+			;;
+			esac
+		else
+			AC_MSG_RESULT(yes)
+			AC_DEFINE(HAVE_DUMP_TRACE, 1, [dump_trace is exported])
+		fi
 	],[
 		AC_MSG_RESULT(no)
 	],[
