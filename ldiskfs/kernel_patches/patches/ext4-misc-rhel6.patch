@@ -2,6 +2,24 @@ Index: linux-stage/fs/ext4/ext4.h
 ===================================================================
 --- linux-stage.orig/fs/ext4/ext4.h
 +++ linux-stage/fs/ext4/ext4.h
+@@ -507,7 +507,7 @@ struct ext4_new_group_data {
+  *  Mount options
+  */
+ struct ext4_mount_options {
+-	unsigned long s_mount_opt;
++	unsigned long long s_mount_opt;
+ 	uid_t s_resuid;
+ 	gid_t s_resgid;
+ 	unsigned long s_commit_interval;
+@@ -1032,7 +1032,7 @@ struct ext4_sb_info {
+ 	struct buffer_head * s_sbh;	/* Buffer containing the super block */
+ 	struct ext4_super_block *s_es;	/* Pointer to the super block in the buffer */
+ 	struct buffer_head **s_group_desc;
+-	unsigned int s_mount_opt;
++	unsigned long long s_mount_opt;
+ 	unsigned int s_mount_flags;
+ 	ext4_fsblk_t s_sb_block;
+ 	uid_t s_resuid;
 @@ -1219,6 +1219,9 @@ EXT4_INODE_BIT_FNS(state, state_flags)
  
  #define NEXT_ORPHAN(inode) EXT4_I(inode)->i_dtime
@@ -184,6 +202,15 @@ Index: linux-stage/fs/ext4/inode.c
 ===================================================================
 --- linux-stage.orig/fs/ext4/inode.c
 +++ linux-stage/fs/ext4/inode.c
+@@ -93,7 +93,7 @@ int ext4_forget(handle_t *handle, int is
+ 	BUFFER_TRACE(bh, "enter");
+ 
+ 	jbd_debug(4, "forgetting bh %p: is_metadata = %d, mode %o, "
+-		  "data mode %x\n",
++		  "data mode %llx\n",
+ 		  bh, is_metadata, inode->i_mode,
+ 		  test_opt(inode->i_sb, DATA_FLAGS));
+ 
 @@ -5264,6 +5264,7 @@ bad_inode:
  	iget_failed(inode);
  	return ERR_PTR(ret);
@@ -246,7 +273,7 @@ Index: linux-stage/fs/ext4/super.c
  	{Opt_discard, "discard"},
  	{Opt_nodiscard, "nodiscard"},
  	{Opt_init_inode_table, "init_itable=%u"},
-@@ -1717,6 +1720,8 @@ set_qf_format:
+@@ -1725,6 +1728,8 @@ set_qf_format:
  		case Opt_noinit_inode_table:
  			clear_opt(sbi->s_mount_opt, INIT_INODE_TABLE);
  			break;
@@ -255,3 +282,12 @@ Index: linux-stage/fs/ext4/super.c
  		default:
  			ext4_msg(sb, KERN_ERR,
  			       "Unrecognized mount option \"%s\" "
+@@ -1813,7 +1818,7 @@ static int ext4_setup_super(struct super
+ 	ext4_commit_super(sb, 1);
+ 	if (test_opt(sb, DEBUG))
+ 		printk(KERN_INFO "[EXT4 FS bs=%lu, gc=%u, "
+-				"bpg=%lu, ipg=%lu, mo=%04x]\n",
++				"bpg=%lu, ipg=%lu, mo=%04llx]\n",
+ 			sb->s_blocksize,
+ 			sbi->s_groups_count,
+ 			EXT4_BLOCKS_PER_GROUP(sb),
