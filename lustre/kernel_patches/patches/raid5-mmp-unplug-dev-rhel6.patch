@@ -3,20 +3,22 @@ instead of handling from cache.  This is needed for MMP
 on MD RAID devices, and in theory could be accepted in
 the upstream kernel.  Not needed for DMU.
 
-Index: linux-2.6.32-131.0.15.el6.x86_64/drivers/md/raid5.c
+Index: linux-2.6.32-279.2.1.el6.i686/drivers/md/raid5.c
 ===================================================================
---- linux-2.6.32-131.0.15.el6.x86_64.orig/drivers/md/raid5.c	2011-05-10 21:38:35.000000000 +0300
-+++ linux-2.6.32-131.0.15.el6.x86_64/drivers/md/raid5.c	2011-05-20 08:26:04.000000000 +0300
-@@ -2177,6 +2177,8 @@ static int add_stripe_bio(struct stripe_
+--- linux-2.6.32-279.2.1.el6.i686.orig/drivers/md/raid5.c
++++ linux-2.6.32-279.2.1.el6.i686/drivers/md/raid5.c
+@@ -2201,7 +2201,9 @@ static int add_stripe_bio(struct stripe_
  		bi->bi_next = *bip;
  	*bip = bi;
  	bi->bi_phys_segments++;
-+ 	if (bio_rw_flagged(bi, BIO_RW_SYNCIO) && !forwrite)
-+ 		clear_bit(R5_UPTODATE, &sh->dev[dd_idx].flags); /* force to read from disk. */
- 	spin_unlock_irq(&conf->device_lock);
- 	spin_unlock(&sh->lock);
- 
-@@ -4132,6 +4134,9 @@ static int make_request(mddev_t *mddev, 
+-
++	if (bio_rw_flagged(bi, BIO_RW_SYNCIO) && !forwrite)
++		/* force to read from disk. */
++		clear_bit(R5_UPTODATE, &sh->dev[dd_idx].flags);
+ 	if (forwrite) {
+ 		/* check if page is covered */
+ 		sector_t sector = sh->dev[dd_idx].sector;
+@@ -3914,6 +3916,9 @@ static int make_request(struct mddev *md
  		bio_endio(bi, 0);
  	}
  
