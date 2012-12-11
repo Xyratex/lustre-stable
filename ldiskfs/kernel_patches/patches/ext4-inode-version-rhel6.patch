@@ -1,8 +1,8 @@
-Index: linux-2.6.32-el6-beta/fs/ext4/inode.c
+Index: linux-stage/fs/ext4/inode.c
 ===================================================================
---- linux-2.6.32-el6-beta.orig/fs/ext4/inode.c
-+++ linux-2.6.32-el6-beta/fs/ext4/inode.c
-@@ -4920,11 +4920,11 @@ struct inode *ext4_iget(struct super_blo
+--- linux-stage.orig/fs/ext4/inode.c
++++ linux-stage/fs/ext4/inode.c
+@@ -5208,11 +5208,11 @@ struct inode *ext4_iget(struct super_blo
  	EXT4_INODE_GET_XTIME(i_atime, inode, raw_inode);
  	EXT4_EINODE_GET_XTIME(i_crtime, ei, raw_inode);
  
@@ -17,7 +17,7 @@ Index: linux-2.6.32-el6-beta/fs/ext4/inode.c
  	}
  
  	ret = 0;
-@@ -5134,11 +5134,11 @@ static int ext4_do_update_inode(handle_t
+@@ -5420,11 +5420,11 @@ static int ext4_do_update_inode(handle_t
  		for (block = 0; block < EXT4_N_BLOCKS; block++)
  			raw_inode->i_block[block] = ei->i_data[block];
  
@@ -32,11 +32,11 @@ Index: linux-2.6.32-el6-beta/fs/ext4/inode.c
  		raw_inode->i_extra_isize = cpu_to_le16(ei->i_extra_isize);
  	}
  
-Index: linux-2.6.32-el6-beta/fs/ext4/ialloc.c
+Index: linux-stage/fs/ext4/ialloc.c
 ===================================================================
---- linux-2.6.32-el6-beta.orig/fs/ext4/ialloc.c
-+++ linux-2.6.32-el6-beta/fs/ext4/ialloc.c
-@@ -1018,6 +1018,7 @@ got:
+--- linux-stage.orig/fs/ext4/ialloc.c
++++ linux-stage/fs/ext4/ialloc.c
+@@ -1027,6 +1027,7 @@ got:
  	ei->i_dtime = 0;
  	ei->i_block_group = group;
  	ei->i_last_alloc_group = ~0;
@@ -44,11 +44,20 @@ Index: linux-2.6.32-el6-beta/fs/ext4/ialloc.c
  
  	ext4_set_inode_flags(inode);
  	if (IS_DIRSYNC(inode))
-Index: linux-2.6.32-el6-beta/fs/ext4/ext4.h
+Index: linux-stage/fs/ext4/ext4.h
 ===================================================================
---- linux-2.6.32-el6-beta.orig/fs/ext4/ext4.h
-+++ linux-2.6.32-el6-beta/fs/ext4/ext4.h
-@@ -714,8 +714,12 @@ struct ext4_inode_info {
+--- linux-stage.orig/fs/ext4/ext4.h
++++ linux-stage/fs/ext4/ext4.h
+@@ -688,6 +688,8 @@ do {									       \
+ 
+ #endif /* defined(__KERNEL__) || defined(__linux__) */
+ 
++#define USE_I_FS_VERSION
++
+ /*
+  * storage for cached extent
+  */
+@@ -808,8 +810,12 @@ struct ext4_inode_info {
  	 */
  	tid_t i_sync_tid;
  	tid_t i_datasync_tid;
