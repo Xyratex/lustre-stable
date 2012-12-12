@@ -1498,8 +1498,20 @@ static int fsfilt_ext3_quotactl(struct super_block *sb,
                         if (oqc->qc_cmd == Q_QUOTAON) {
                                 lustre_quota_version_t qfmt = oqc->qc_id;
                                 char *name[][MAXQUOTAS] = LUSTRE_OPQFILES_NAMES;
+                                int ver;
+                                
+                                if (qfmt == LUSTRE_QUOTA_V2)
+#if defined(QFMT_VFS_V1)
+                                        ver = QFMT_VFS_V1;
+#else
+                                        ver = QFMT_VFS_V0;
+#endif
+                                else if (qfmt == LUSTRE_QUOTA_V1)
+                                        ver = QFMT_VFS_V0;
+                                else
+                                        GOTO(out, -EINVAL);
 
-                                rc = ll_quota_on(sb, i, QFMT_VFS_V0,
+                                rc = ll_quota_on(sb, i, ver,
                                                  name[qfmt][i], 0);
 #ifdef HAVE_QUOTA64
                                 if (rc == -ENOENT || rc == -EINVAL) {
@@ -1507,8 +1519,8 @@ static int fsfilt_ext3_quotactl(struct super_block *sb,
                                         rc = lustre_slave_quota_convert(qfmt, i);
                                         if (!rc)
                                                 rc = ll_quota_on(sb, i,
-                                                              QFMT_VFS_V0,
-                                                              name[qfmt][i], 0);
+                                                                 ver,
+                                                                 name[qfmt][i], 0);
                                         else if (rc == -ESTALE)
                                                 rc = -ENOENT;
                                 }
