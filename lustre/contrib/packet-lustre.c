@@ -8,6 +8,8 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1999 Gerald Combs
  *
+ * C-Syle: 2 space indents
+ *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -174,6 +176,12 @@ typedef enum {
 } ldlm_cmd_t;
 #define LDLM_FIRST_OPC LDLM_ENQUEUE
 
+enum seq_rpc_opc {
+  SEQ_QUERY        = 700,
+  SEQ_LAST_OPC,
+  SEQ_FIRST_OPC    = SEQ_QUERY
+};
+
 #define LDLM_FL_LOCK_CHANGED                      0x000001
 #define LDLM_FL_BLOCK_GRANTED                     0x000002
 #define LDLM_FL_BLOCK_CONV                        0x000004
@@ -336,6 +344,9 @@ static gint ett_lustre_qunit_data = -1;
 static gint ett_lustre_qunit_data_old2 = -1;
 static gint ett_lustre_qunit_data_old = -1;
 static gint ett_lustre_ldlm_lock_flags = -1 ;
+static gint ett_lustre_seq_range = -1;
+static gint ett_lustre_mdt_ioepoch = -1;
+static gint ett_lustre_capa = -1;
 
 /* -----------------------------------------------*/
 /* Header field declarations */
@@ -496,7 +507,7 @@ static int hf_lustre_mdt_rec_create_cr_mode = -1;
 static int hf_lustre_mdt_rec_create_cr_bias = -1;
 static int hf_lustre_mdt_rec_create_cr_flags_l = -1;
 static int hf_lustre_mdt_rec_create_cr_flags_h = -1;
-static int hf_lustre_mdt_rec_create_cr_padding_3 = -1;
+static int hf_lustre_mdt_rec_create_cr_umask = -1;
 static int hf_lustre_mdt_rec_create_cr_padding_4 = -1;
 
 static int hf_lustre_mdt_rec_link = -1 ;
@@ -601,12 +612,30 @@ static int hf_lustre_mdt_rec_setxattr_sx_padding_9 = -1;
 static int hf_lustre_mdt_rec_setxattr_sx_padding_10 = -1;
 static int hf_lustre_mdt_rec_setxattr_sx_padding_11 = -1;
 
+static int hf_lustre_seq_opc = -1;
+static int hf_lustre_seq_range = -1;
+static int hf_lustre_seq_range_start = -1;
+static int hf_lustre_seq_range_end = -1;
+static int hf_lustre_seq_range_index = -1;
+static int hf_lustre_seq_range_flags = -1;
+
+static int hf_lustre_mdt_ioepoch = -1;
+static int hf_lustre_mdt_ioepoch_handle = -1;
+static int hf_lustre_mdt_ioepoch_ioepoch = -1;
+static int hf_lustre_mdt_ioepoch_flags = -1;
+static int hf_lustre_mdt_ioepoch_padding = -1;
+
+static int hf_lustre_capa = -1;
+
 static int hf_lustre_lustre_handle_cookie = -1;
 static int hf_lustre_ptlrpc_body_pb_last_committed = -1;
 static int hf_lustre_ptlrpc_body_pb_version = -1;
 static int hf_lustre_lustre_msg_v1_lm_bufcount = -1;
 static int hf_lustre_obd_ioobj_ioo_id = -1;
 static int hf_lustre_ptlrpc_body_pb_slv = -1;
+static int hf_lustre_ptlrpc_body_pb_pre_version = -1;
+static int hf_lustre_ptlrpc_body_pb_padding = -1;
+static int hf_lustre_ptlrpc_body_pb_jobid = -1;
 static int hf_lustre_lustre_msg_v1_lm_handle = -1;
 static int hf_lustre_ost_lvb_lvb_atime = -1;
 static int hf_lustre_ptlrpc_body_pb_timeout = -1;
@@ -828,7 +857,8 @@ static int hf_lustre_obdo_o_blocks = -1;
 static int hf_lustre_lov_desc_ld_padding_2 = -1;
 static int hf_lustre_llog_logid_rec_lid_tail = -1;
 static int hf_lustre_obdo_o_grant = -1;
-static int hf_lustre_obdo_o_padding_2 = -1;
+static int hf_lustre_obdo_o_uid_h = -1;
+static int hf_lustre_obdo_o_gid_h = -1;
 static int hf_lustre_quota_adjust_qunit_qaq_iunit_sz = -1;
 static int hf_lustre_llog_unlink_rec_padding = -1;
 static int hf_lustre_ldlm_lock_desc_l_req_mode = -1;
@@ -1096,6 +1126,12 @@ const value_string lustre_op_codes[] = {
   { 507, "LLOG_CATINFO"},
   { 508, "LLOG_ORIGIN_HANDLE_PREV_BLOCK"},
   { 509, "LLOG_ORIGIN_HANDLE_DESTROY"},
+  /* SEQ RPC opcodes */
+  { 700, "SEQ_QUERY"},
+  { 701, "SEQ_LAST_OPC"},
+  /* FLD RPC opcodes */
+  { 900, "FLD_QUERY"},
+  { 901, "FLD_LAST_OPC"},
   { 0, NULL }
 };
 /*const value_string lustre_ldlm_mode_t_vals[] = {*/
@@ -2123,8 +2159,6 @@ lustre_dissect_struct_lu_fid(tvbuff_t *tvb _U_, int offset _U_, packet_info *pin
   proto_tree *tree = NULL;
   int old_offset;
 
-
-
   old_offset=offset;
 
   if (parent_tree) {
@@ -2855,7 +2889,10 @@ lustre_dissect_element_mdt_body_padding_10(tvbuff_t *tvb _U_, int offset _U_, pa
 }
 
 int
-lustre_dissect_struct_mdt_body(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *parent_tree _U_, int hf_index _U_)
+lustre_dissect_struct_mdt_body(tvbuff_t *tvb _U_, int offset _U_,
+			       packet_info *pinfo _U_,
+			       proto_tree *parent_tree _U_,
+			       int hf_index _U_)
 {
   proto_item *item = NULL;
   proto_tree *tree = NULL;
@@ -3286,7 +3323,7 @@ lustre_dissect_struct_mdt_rec_setattr(tvbuff_t *tvb _U_, int offset _U_, packet_
 /* IDL: 	uint32 cr_bias; */
 /* IDL: 	uint32 cr_flags_l; */
 /* IDL: 	uint32 cr_flags_h; */
-/* IDL: 	uint32 cr_padding_3; */
+/* IDL: 	uint32 cr_umask; */
 /* IDL: 	uint32 cr_padding_4; */
 /* IDL: } */
 
@@ -3461,9 +3498,9 @@ lustre_dissect_element_mdt_rec_create_cr_flags_h(tvbuff_t *tvb _U_, int offset _
 }
 
 static int
-lustre_dissect_element_mdt_rec_create_cr_padding_3(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_)
+lustre_dissect_element_mdt_rec_create_cr_umask(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_)
 {
-  offset=dissect_uint32(tvb, offset, pinfo, tree,  hf_lustre_mdt_rec_create_cr_padding_3);
+  offset=dissect_uint32(tvb, offset, pinfo, tree,  hf_lustre_mdt_rec_create_cr_umask);
 
   return offset;
 }
@@ -3477,14 +3514,15 @@ lustre_dissect_element_mdt_rec_create_cr_padding_4(tvbuff_t *tvb _U_, int offset
 }
 
 int
-lustre_dissect_struct_mdt_rec_create(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *parent_tree _U_, int hf_index _U_)
+lustre_dissect_struct_mdt_rec_create(tvbuff_t *tvb _U_, int offset _U_,
+				     packet_info *pinfo _U_,
+				     proto_tree *parent_tree _U_,
+				     int hf_index _U_)
 {
   proto_item *item = NULL;
   proto_tree *tree = NULL;
   int old_offset;
   guint32 cr_opcode ;
-
-
 
   old_offset=offset;
 
@@ -3537,13 +3575,11 @@ lustre_dissect_struct_mdt_rec_create(tvbuff_t *tvb _U_, int offset _U_, packet_i
 
   offset=lustre_dissect_element_mdt_rec_create_cr_flags_h(tvb, offset, pinfo, tree);
 
-  offset=lustre_dissect_element_mdt_rec_create_cr_padding_3(tvb, offset, pinfo, tree);
+  offset=lustre_dissect_element_mdt_rec_create_cr_umask(tvb, offset, pinfo, tree);
 
   offset=lustre_dissect_element_mdt_rec_create_cr_padding_4(tvb, offset, pinfo, tree);
 
-
   proto_item_set_len(item, offset-old_offset);
-
 
   return offset;
 }
@@ -4632,7 +4668,7 @@ lustre_dissect_element_mdt_rec_setxattr_sx_padding_11(tvbuff_t *tvb _U_, int off
 }
 
 int
-lustre_dissect_struct_mdt_rec_setxattr(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *parent_tree _U_, int hf_index _U_)
+ lustre_dissect_struct_mdt_rec_setxattr(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *parent_tree _U_, int hf_index _U_)
 {
   proto_item *item = NULL;
   proto_tree *tree = NULL;
@@ -4862,11 +4898,8 @@ lustre_dissect_struct_lov_desc(tvbuff_t *tvb _U_, int offset _U_, packet_info *p
 static int
 lustre_dissect_struct_obd_uuid(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *parent_tree _U_, int hf_index _U_)
 {
-
   /* the lenght of the string is 40 bytes max, with  \0 inside */
-
   proto_tree_add_item(parent_tree, hf_index, tvb, offset, 40, TRUE);
-
 
   offset+=40;
   return offset;
@@ -5198,21 +5231,9 @@ lustre_dissect_element_ldlm_intent_opc(tvbuff_t *tvb _U_, int offset _U_, packet
 int
 lustre_dissect_struct_ldlm_intent(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *parent_tree _U_, int hf_index _U_)
 {
-  // proto_item *item = NULL;
-  //proto_tree *tree = NULL;
-  int old_offset;
   guint64 intent_opc;
   proto_item * opcode_item = NULL;
   proto_tree * opcode_tree = NULL;
-
-  old_offset=offset;
-  // if (parent_tree) {
-  //     item = proto_tree_add_item(parent_tree, hf_index, tvb, offset, -1, TRUE);
-  //     tree = proto_item_add_subtree(item, ett_lustre_ldlm_intent);
-  //     //tree = parent_tree; /* TODO : !!!!!!!!!!!!!!! ATTENTIon à revoir,
-  //     //fait rapidement pour ne pas avoir le subtree */
-  // }
-
 
   intent_opc = tvb_get_letoh64(tvb,offset);
   if (parent_tree){
@@ -5223,8 +5244,6 @@ lustre_dissect_struct_ldlm_intent(tvbuff_t *tvb _U_, int offset _U_, packet_info
   offset=lustre_dissect_element_ldlm_intent_opc(tvb, offset, pinfo, opcode_tree);
 
   offset=ldlm_opcode_process(tvb, offset, pinfo, parent_tree, intent_opc);
-
-
 
   return offset;
 }
@@ -5445,7 +5464,7 @@ lustre_dissect_struct_ldlm_request(tvbuff_t *tvb _U_, int offset _U_, packet_inf
   proto_item *item = NULL;
   proto_tree *tree = NULL;
   int old_offset;
-  guint32 lock_flag ;
+  guint32 lock_flag;
   guint32 ldlm_type;
 
   old_offset=offset;
@@ -5456,7 +5475,8 @@ lustre_dissect_struct_ldlm_request(tvbuff_t *tvb _U_, int offset _U_, packet_inf
   }
 
   lock_flag = tvb_get_letohl(tvb,offset);
-  offset=lustre_dissect_element_ldlm_lock_flags(tvb, offset, pinfo, tree, hf_lustre_ldlm_request_lock_flags);
+  offset=lustre_dissect_element_ldlm_lock_flags(tvb, offset, pinfo, tree,
+						hf_lustre_ldlm_request_lock_flags);
 
   offset=lustre_dissect_element_ldlm_request_lock_count(tvb, offset, pinfo, tree);
 
@@ -5471,8 +5491,6 @@ lustre_dissect_struct_ldlm_request(tvbuff_t *tvb _U_, int offset _U_, packet_inf
 }
 
 
-
-
 /* IDL: struct ldlm_reply { */
 /* IDL: 	uint32 lock_flags; */
 /* IDL: 	uint32 lock_padding; */
@@ -5483,7 +5501,6 @@ lustre_dissect_struct_ldlm_request(tvbuff_t *tvb _U_, int offset _U_, packet_inf
 /* IDL: 	uint64 lock_policy_res1; */
 /* IDL: 	uint64 lock_policy_res2; */
 /* IDL: } */
-
 
 static int
 lustre_dissect_element_ldlm_lock_flags(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *parent_tree _U_, int hf_index _U_)
@@ -7379,7 +7396,8 @@ lustre_dissect_struct_llogd_conn_body(tvbuff_t *tvb _U_, int offset _U_, packet_
 /* IDL: } o_handle; */
 /* IDL: 	struct llog_cookie { */
 /* IDL: } o_lcookie; */
-/* IDL: 	uint64 o_padding_2; */
+/* IDL: 	uint32 o_uid_h; */
+/* IDL: 	uint32 o_gid_h; */
 /* IDL: 	uint64 o_padding_3; */
 /* IDL: 	uint64 o_padding_4; */
 /* IDL: 	uint64 o_padding_5; */
@@ -7575,7 +7593,7 @@ lustre_dissect_element_obdo_o_stripe_idx(tvbuff_t *tvb _U_, int offset _U_, pack
 static int
 lustre_dissect_element_obdo_o_parent_ver(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_)
 {
-  offset=dissect_uint64(tvb, offset, pinfo, tree,  hf_lustre_obdo_o_parent_ver);
+  offset=dissect_uint32(tvb, offset, pinfo, tree,  hf_lustre_obdo_o_parent_ver);
 
   return offset;
 }
@@ -7595,9 +7613,17 @@ lustre_dissect_element_obdo_o_lcookie(tvbuff_t *tvb _U_, int offset _U_, packet_
 }
 
 static int
-lustre_dissect_element_obdo_o_padding_2(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_)
+lustre_dissect_element_obdo_o_uid_h(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_)
 {
-  offset=dissect_uint64(tvb, offset, pinfo, tree,  hf_lustre_obdo_o_padding_2);
+  offset=dissect_uint32(tvb, offset, pinfo, tree,  hf_lustre_obdo_o_uid_h);
+
+  return offset;
+}
+
+static int
+lustre_dissect_element_obdo_o_gid_h(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_)
+{
+  offset=dissect_uint32(tvb, offset, pinfo, tree,  hf_lustre_obdo_o_gid_h);
 
   return offset;
 }
@@ -7640,7 +7666,6 @@ lustre_dissect_struct_obdo(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo
   proto_item *item = NULL;
   proto_tree *tree = NULL;
   int old_offset;
-
 
 
   old_offset=offset;
@@ -7696,7 +7721,9 @@ lustre_dissect_struct_obdo(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo
 
   offset=lustre_dissect_element_obdo_o_lcookie(tvb, offset, pinfo, tree);
 
-  offset=lustre_dissect_element_obdo_o_padding_2(tvb, offset, pinfo, tree);
+  offset=lustre_dissect_element_obdo_o_uid_h(tvb, offset, pinfo, tree);
+
+  offset=lustre_dissect_element_obdo_o_gid_h(tvb, offset, pinfo, tree);
 
   offset=lustre_dissect_element_obdo_o_padding_3(tvb, offset, pinfo, tree);
 
@@ -7732,8 +7759,6 @@ lustre_dissect_struct_ost_body(tvbuff_t *tvb _U_, int offset _U_, packet_info *p
   proto_item *item = NULL;
   proto_tree *tree = NULL;
   int old_offset;
-
-
 
   old_offset=offset;
 
@@ -7961,6 +7986,99 @@ lustre_dissect_struct_qunit_data_old(tvbuff_t *tvb _U_, int offset _U_, packet_i
   return offset;
 }
 
+int
+lustre_dissect_struct_seq_opc(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *parent_tree _U_)
+{
+  offset=dissect_uint32(tvb, offset, pinfo, parent_tree,  hf_lustre_seq_opc);
+  /* Pad out to 8 bytes */
+  offset=add_extra_padding(tvb,offset,pinfo,parent_tree);
+
+  return offset;
+}
+
+int
+lustre_dissect_struct_seq_range(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *parent_tree _U_, int hf_index _U_)
+{
+  proto_item *item = NULL;
+  proto_tree *tree = NULL;
+  int old_offset;
+
+  old_offset=offset;
+
+  if (parent_tree) {
+    item = proto_tree_add_item(parent_tree, hf_index, tvb, offset, -1, TRUE);
+    tree = proto_item_add_subtree(item, ett_lustre_seq_range);
+  }
+
+  offset=dissect_uint64(tvb, offset, pinfo, tree, hf_lustre_seq_range_start);
+  offset=dissect_uint64(tvb, offset, pinfo, tree, hf_lustre_seq_range_end);
+  offset=dissect_uint32(tvb, offset, pinfo, tree, hf_lustre_seq_range_index);
+  offset=dissect_uint32(tvb, offset, pinfo, tree, hf_lustre_seq_range_flags);
+
+  if (item)
+    proto_item_set_len(item, offset-old_offset);
+
+  return offset;
+}
+
+int
+lustre_dissect_struct_mdt_ioepoch(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *parent_tree _U_, int hf_index _U_)
+{
+  proto_item *item = NULL;
+  proto_tree *tree = NULL;
+  int old_offset;
+
+  old_offset=offset;
+
+  if (parent_tree) {
+    item = proto_tree_add_item(parent_tree, hf_index, tvb, offset, -1, TRUE);
+    tree = proto_item_add_subtree(item, ett_lustre_mdt_ioepoch);
+  }
+
+  offset=lustre_dissect_struct_handle_cookie(tvb, offset, pinfo, tree, hf_lustre_mdt_ioepoch_handle);
+  offset=dissect_uint64(tvb, offset, pinfo, tree, hf_lustre_mdt_ioepoch_ioepoch);
+  offset=dissect_uint32(tvb, offset, pinfo, tree, hf_lustre_mdt_ioepoch_flags);
+  offset=dissect_uint32(tvb, offset, pinfo, tree, hf_lustre_mdt_ioepoch_padding);
+
+  if (item)
+    proto_item_set_len(item, offset-old_offset);
+  return offset;
+}
+
+int
+lustre_dissect_struct_capa(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *parent_tree _U_, int hf_index _U_, guint32 buf_num)
+{
+  proto_item *item = NULL;
+  proto_tree *tree = NULL;
+  int old_offset;
+  int data_len;
+
+  old_offset=offset;
+
+  if(buf_num+1>LUSTRE_BUFCOUNT)
+    return offset;
+
+  data_len = tvb_get_letohl(tvb, LUSTRE_BUFLEN_OFF + sizeof(guint32) * buf_num);
+  if (data_len == 0)
+    return offset;
+
+  if (parent_tree) {
+    item = proto_tree_add_item(parent_tree, hf_index, tvb, offset, -1, TRUE);
+    tree = proto_item_add_subtree(item, ett_lustre_capa);
+  }
+
+  g_print("BUG: decode of lustre_capa NYI\n");
+  if (check_col(pinfo->cinfo, COL_INFO))
+    col_append_str(pinfo->cinfo, COL_PROTOCOL, "BUG");
+
+  offset+=120;
+
+  if (item)
+    proto_item_set_len(item, offset-old_offset);
+  return offset;
+}
+
+
 
 /* ------------------------------------------------------------------------- */
 /* dissect string .
@@ -7977,28 +8095,33 @@ static int
 lustre_dissect_element_string (tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *parent_tree _U_, int hf_index _U_, guint32 buf_num)
 {
   proto_item *item = NULL;
-
   int old_offset;
   guint32 string_len;
 
   old_offset=offset;
 
-  // if (parent_tree) { item = proto_tree_add_item(parent_tree, hf_index, tvb,
-  // offset, -1, TRUE); //     tree = proto_item_add_subtree(item,
-  // ett_lustre); }
+  /* if (parent_tree) {
+   *   item = proto_tree_add_item(parent_tree, hf_index, tvb, offset, -1, TRUE);
+   *   tree = proto_item_add_subtree(item, ett_lustre);
+   * }
+   */
 
   if(buf_num+1>LUSTRE_BUFCOUNT)
     return offset;
 
   string_len = tvb_get_letohl(tvb, LUSTRE_BUFLEN_OFF + 4 * buf_num) ; /* 4 because a buflen is on a guint32 */
+  /*    g_print("buf_num:%d (max:%d) BUFLEN_OFF:%#x strlen:%d\n",
+	buf_num, LUSTRE_BUFCOUNT,
+	LUSTRE_BUFLEN_OFF, string_len);*/
+
   proto_tree_add_item(parent_tree, hf_index, tvb, offset, string_len, TRUE);
   if(string_len>1)
-    display_info_fstr(parent_tree, pinfo->cinfo, COL_INFO, " filename : %s", tvb_get_string(tvb,offset,string_len) );
+    display_info_fstr(parent_tree, pinfo->cinfo, COL_INFO, " filename : %s",
+		      (const gchar *) tvb_get_string(tvb,offset,string_len) );
 
   offset+=string_len;
   proto_item_set_len(item, offset-old_offset);
   offset=add_extra_padding(tvb,offset,pinfo,parent_tree); /* after a string we must be aligned to 8 bytes. */
-
 
   return offset;
 }
@@ -8010,14 +8133,14 @@ lustre_dissect_element_data(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinf
 {
   proto_item *item = NULL;
 
-  guint32 data_len ;
+  guint32 data_len;
   int old_offset;
 
   old_offset=offset;
   if(buf_num+1>LUSTRE_BUFCOUNT)
     return offset;
 
-  data_len = tvb_get_letohl(tvb, LUSTRE_BUFLEN_OFF + 4 * buf_num) ; /* 4 because a buflen is on a guint32 */
+  data_len = tvb_get_letohl(tvb, LUSTRE_BUFLEN_OFF + sizeof(guint32) * buf_num);
   proto_tree_add_item(parent_tree, hf_index, tvb, offset, data_len, TRUE);
 
   offset+=data_len;
@@ -8029,6 +8152,7 @@ lustre_dissect_element_data(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinf
 /* ------------------------------------------------------------------------ */
 
 
+/* Process REINT opcode requests */
 static int reint_opcode_process(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree * tree _U_)
 {
   guint32 opcode  ;
@@ -8057,16 +8181,18 @@ static int reint_opcode_process(tvbuff_t *tvb _U_, int offset _U_, packet_info *
           hf_lustre_ldlm_request) ;
       /*TODO : need to be check*/
       break;
-    case  REINT_UNLINK : /* mds_unlink_unpack : [mdt_rec_unlink][filename][ldlm_req] */
-      /* [mdt_rec_unlink][filename][ldlm_req][..]*/
+    case  REINT_UNLINK :
+      /* reint_unlink_client: [mdt_rec_unlink][capa1][filename][ldlm_req] */
       offset=lustre_dissect_struct_mdt_rec_unlink(tvb, offset, pinfo, tree, hf_lustre_mdt_rec_unlink);
-      offset=lustre_dissect_element_string(tvb, offset, pinfo, tree, hf_lustre_reint_name, LUSTRE_REQ_REC_OFF+1);
-      if ( (tvb_get_letohl(tvb,LUSTRE_BUFLEN_OFF+4*(LUSTRE_REQ_REC_OFF +2))) == 112) /* TODO : ugly .. but
+      offset=lustre_dissect_struct_capa(tvb, offset, pinfo, tree, hf_lustre_capa, LUSTRE_REQ_REC_OFF+1);
+      if ( (tvb_get_letohl(tvb,LUSTRE_BUFLEN_OFF+4*(LUSTRE_REQ_REC_OFF +2))) == 112) { /* TODO : ugly .. but
                                                                                         for now we have to do this */
         offset=lustre_dissect_struct_obd_quotactl(tvb, offset, pinfo, tree, hf_lustre_obd_quotactl);
-      else
-        offset=lustre_dissect_struct_ldlm_request(tvb, offset, pinfo, tree, hf_lustre_ldlm_request) ;
 
+      } else {
+        offset=lustre_dissect_element_string(tvb, offset, pinfo, tree, hf_lustre_reint_name, LUSTRE_REQ_REC_OFF+2);
+        offset=lustre_dissect_struct_ldlm_request(tvb, offset, pinfo, tree, hf_lustre_ldlm_request) ;
+      }
       break;
     case  REINT_RENAME : /*mds_rename_unpack : [mdt_rec_rename][filename source][filename target_name][ldlm_request] */
       offset=lustre_dissect_struct_mdt_rec_rename(tvb, offset, pinfo, tree, hf_lustre_mdt_rec_rename);
@@ -8263,15 +8389,16 @@ lustre_mds_opcode_process(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo 
       offset=lustre_dissect_struct_mdt_body(tvb, offset, pinfo, tree, hf_lustre_mdt_body) ;
       break;
 
-    case MDS_CLOSE: /* TODO : check the corresponding structure in lustre code */
+    case MDS_CLOSE:
       if(pb_type==PTL_RPC_MSG_REQUEST)
-      { /* [mdt_body] [lov_mds_md][log_cookie] */
-        offset=lustre_dissect_struct_mdt_body(tvb, offset, pinfo, tree, hf_lustre_mdt_body) ;
-        if(LUSTRE_BUFCOUNT>=3)
-          offset=lustre_dissect_struct_lov_mds_md_v1(tvb,offset,pinfo,tree,hf_lustre_lov_mds_md_v1);
-        if(LUSTRE_BUFCOUNT>=4)
-          if( tvb_get_letohl(tvb,LUSTRE_BUFLEN_OFF+4*(LUSTRE_REQ_REC_OFF+2)) > 0)
-            offset=lustre_dissect_struct_llog_cookie(tvb,offset,pinfo,tree,hf_lustre_llog_cookie);
+      { /* [mdt_ioepoch][rec_reint][capa1] */
+	offset=lustre_dissect_struct_mdt_ioepoch(tvb, offset, pinfo, tree, hf_lustre_mdt_ioepoch);
+
+	if(LUSTRE_BUFCOUNT>=3)
+	  offset=lustre_dissect_struct_mdt_rec_setattr(tvb, offset, pinfo, tree, hf_lustre_mdt_rec_setattr);
+
+	if(LUSTRE_BUFCOUNT>=4)
+	  offset=lustre_dissect_struct_capa(tvb,offset,pinfo,tree, hf_lustre_capa, 4);
       }
       if(pb_type==PTL_RPC_MSG_REPLY)
       { /* [mdt_body][md][cookie] TODO : check that (reread the code about shrink in lustre) */
@@ -8298,22 +8425,23 @@ lustre_mds_opcode_process(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo 
     case MDS_REINT:
       /* the structure depend on the intent_opcode */
       if(pb_type==PTL_RPC_MSG_REQUEST)
-        offset=reint_opcode_process(tvb, offset, pinfo, tree);
+	offset=reint_opcode_process(tvb, offset, pinfo, tree);
       if(pb_type==PTL_RPC_MSG_REPLY)
       {
-        /*[mdt_body][??][llog_logid_rec] */
-        offset=lustre_dissect_struct_mdt_body(tvb, offset, pinfo, tree, hf_lustre_mdt_body) ;
-        if(tvb_get_letohl(tvb,LUSTRE_BUFLEN_OFF+4*(LUSTRE_REQ_REC_OFF+1)) > 0){
-          /* OPEN, RENAME, and UNLINK */
-          if(tvb_get_letohl(tvb, LUSTRE_BUFLEN_OFF+4*(LUSTRE_REQ_REC_OFF+1)) > 0){ /* rec_unlink or rec_rename */
-            offset=lustre_dissect_element_data(tvb, offset, pinfo, tree, hf_lustre_mds_xattr_eadata,
-                LUSTRE_REQ_REC_OFF+1); // replace by eadata TODO TODO //
-            if(tvb_get_letohl(tvb,LUSTRE_BUFLEN_OFF+4*(LUSTRE_REQ_REC_OFF+2)) > 0) /* with unlink or rename we have 4 buffers handler.c line 1691*/
-              offset=lustre_dissect_element_data(tvb, offset, pinfo, tree,
-                  hf_lustre_mds_xattr_eadata, LUSTRE_REQ_REC_OFF+2); // replace withe eadata TODO TODO //
-          }
-        }
-
+	/*[mdt_body][??][llog_logid_rec] */
+	offset=lustre_dissect_struct_mdt_body(tvb, offset, pinfo, tree, hf_lustre_mdt_body) ;
+	if(tvb_get_letohl(tvb,LUSTRE_BUFLEN_OFF+4*(LUSTRE_REQ_REC_OFF+1)) > 0){
+	  /* OPEN, RENAME, and UNLINK */
+	  /* rec_unlink or rec_rename */
+	  if(tvb_get_letohl(tvb, LUSTRE_BUFLEN_OFF+4*(LUSTRE_REQ_REC_OFF+1)) > 0){
+	    offset=lustre_dissect_element_data(tvb, offset, pinfo, tree,
+					       hf_lustre_mds_xattr_eadata,
+					       LUSTRE_REQ_REC_OFF+1); // replace by eadata TODO TODO //
+	    if(tvb_get_letohl(tvb,LUSTRE_BUFLEN_OFF+4*(LUSTRE_REQ_REC_OFF+2)) > 0) /* with unlink or rename we have 4 buffers handler.c line 1691*/
+	      offset=lustre_dissect_element_data(tvb, offset, pinfo, tree,
+						 hf_lustre_mds_xattr_eadata, LUSTRE_REQ_REC_OFF+2); // replace withe eadata TODO TODO //
+	  }
+	}
       }
       break;
     case MDS_SET_INFO:
@@ -8352,98 +8480,104 @@ lustre_mds_opcode_process(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo 
 static int
 lustre_ldlm_opcode_process(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree * tree _U_, guint32 opc _U_, guint32 pb_type)
 {
+  switch (opc) {
+  case LDLM_ENQUEUE:
+    /* [ldlm_request] if we have one more buffer it's
+     * [intent_opcode] and the opcode give us the corresponding
+     * intent structure [intent] */
+    if (pb_type==PTL_RPC_MSG_REQUEST)
+    {
+      offset=lustre_dissect_struct_ldlm_request(tvb, offset, pinfo, tree,
+						hf_lustre_ldlm_request);
+      if (LUSTRE_BUFCOUNT>=3)
+	offset=lustre_dissect_struct_ldlm_intent(tvb, offset, pinfo, tree,
+						 hf_lustre_ldlm_intent);
+    }
+    if (pb_type==PTL_RPC_MSG_REPLY)
+    {
+      guint32 ldlm_type;
+      guint32 magic;
+      /*[ldlm_reply]*/
+      offset=lustre_dissect_struct_ldlm_reply(tvb, offset, pinfo, tree,
+					      hf_lustre_ldlm_reply,
+					      &ldlm_type) ;
+      if (LUSTRE_BUFCOUNT>2 && (tvb_get_letohl(tvb,LUSTRE_BUFLEN_OFF+sizeof(guint32)*2) == 40))
+	/* TODO :this code need to be check and test, the
+	 * lustre corresponding code is'nt explicit, so not
+	 * sure to have this buffer, but in example it works
+	 * fine
+	 */
+	offset=lustre_dissect_struct_ost_lvb(tvb, offset, pinfo, tree,
+					     hf_lustre_ost_lvb);
 
-  switch (opc)
-  {
-    case LDLM_ENQUEUE:
-      /*[ldlm_request] if we have one more buffer it's [intent_opcode] and the opcode give us the
-       * corresponding intent structure [intent] */
-      if(pb_type==PTL_RPC_MSG_REQUEST)
-      {
-        offset=lustre_dissect_struct_ldlm_request(tvb, offset, pinfo, tree, hf_lustre_ldlm_request) ;
-        if (LUSTRE_BUFCOUNT>=3)
-          offset=lustre_dissect_struct_ldlm_intent(tvb, offset, pinfo, tree, hf_lustre_ldlm_intent);
+      else if (LUSTRE_BUFCOUNT>2) {
+	offset=lustre_dissect_struct_mdt_body(tvb, offset, pinfo, tree,
+					      hf_lustre_mdt_body) ;
+	/*g_print("buflen_off+4*3 = %d", tvb_get_letohl(tvb,LUSTRE_BUFLEN_OFF+4*LUSTRE_DLM_INTENT_REC_OFF));*/
+	if(LUSTRE_BUFCOUNT>2 &&
+	   (tvb_get_letohl(tvb,LUSTRE_BUFLEN_OFF+4*LUSTRE_DLM_INTENT_REC_OFF) > 0))
+	{
+	  magic=tvb_get_letohl(tvb, offset); /* TODO : replace this with a macro */
+	  switch(magic)
+	  {
+	  case LOV_MAGIC_V1:
+	    offset=lustre_dissect_struct_lov_mds_md_v1(tvb,offset,pinfo,tree,hf_lustre_lov_mds_md_v1);
+	    break;
+	  default:
+	    offset=lustre_dissect_element_data(tvb, offset, pinfo, tree,
+					       hf_lustre_extra_padding, LUSTRE_DLM_INTENT_REC_OFF);
+	    break;
+	  };
+	}
       }
+    }
+    break;
+
+  case LDLM_CONVERT:
+    if(pb_type==PTL_RPC_MSG_REQUEST)
+      /*[ldlm_request]*/
+      offset=lustre_dissect_struct_ldlm_request(tvb, offset, pinfo, tree, hf_lustre_ldlm_request) ;
+    if(pb_type==PTL_RPC_MSG_REPLY)
+      /*[ldlm_reply]*/
+      offset=lustre_dissect_struct_ldlm_reply(tvb, offset, pinfo, tree, hf_lustre_ldlm_reply, NULL) ;
+    break;
+
+  case LDLM_CANCEL:
+    if(pb_type==PTL_RPC_MSG_REQUEST)
+      /*[ldlm_request]*/
+      offset=lustre_dissect_struct_ldlm_request(tvb, offset, pinfo, tree, hf_lustre_ldlm_request) ;
+    /*[nothing en reply]*/
+    break;
+
+  case LDLM_BL_CALLBACK: /* TODO : check the corresponding code in lustre*/
+    if(pb_type==PTL_RPC_MSG_REQUEST)
+      /*[ldlm_request]*/
+      offset=lustre_dissect_struct_ldlm_request(tvb, offset, pinfo, tree, hf_lustre_ldlm_request) ;
+    break;
+
+  case LDLM_CP_CALLBACK:
+    if(pb_type==PTL_RPC_MSG_REQUEST){
+      /*[ldlm_request] if the third buffer exist we have [lvb data] so it's [ost_lvb] : TODO :
+       * check that */
+      offset=lustre_dissect_struct_ldlm_request(tvb, offset, pinfo, tree, hf_lustre_ldlm_request) ;
+      if(LUSTRE_BUFCOUNT>=3)
+	offset=lustre_dissect_struct_ost_lvb(tvb,offset,pinfo,tree,hf_lustre_ost_lvb);
+    }
+    /*reply : [nothing] */
+    break;
+
+  case LDLM_GL_CALLBACK:
+    if(pb_type==PTL_RPC_MSG_REQUEST)
+      /*[ldlm_request] */
+      offset=lustre_dissect_struct_ldlm_request(tvb, offset, pinfo, tree, hf_lustre_ldlm_request) ;
+    else
       if(pb_type==PTL_RPC_MSG_REPLY)
-      {
-        guint32 ldlm_type;
-        guint32 magic;
-        /*[ldlm_reply]*/
-        offset=lustre_dissect_struct_ldlm_reply(tvb, offset, pinfo, tree, hf_lustre_ldlm_reply,&ldlm_type) ;
-        if(LUSTRE_BUFCOUNT>2 && (tvb_get_letohl(tvb,LUSTRE_BUFLEN_OFF+4*2) == 40))
-          /* TODO :this code need to be check and test, the lustre corresponding code is'nt explicit, so
-           * not sure to have this buffer, but in example it works fine
-           */
-          offset=lustre_dissect_struct_ost_lvb(tvb, offset, pinfo, tree, hf_lustre_ost_lvb);
-        else
-          if(LUSTRE_BUFCOUNT>2)
-          {
-            offset=lustre_dissect_struct_mdt_body(tvb, offset, pinfo, tree, hf_lustre_mdt_body) ;
-            /*g_print("buflen_off+4*3 = %d", tvb_get_letohl(tvb,LUSTRE_BUFLEN_OFF+4*LUSTRE_DLM_INTENT_REC_OFF));*/
-            if(LUSTRE_BUFCOUNT>2 &&
-                (tvb_get_letohl(tvb,LUSTRE_BUFLEN_OFF+4*LUSTRE_DLM_INTENT_REC_OFF) > 0))
-            {
-              magic=tvb_get_letohl(tvb, offset); /* TODO : replace this with a macro */
-              switch(magic)
-              {
-                case LOV_MAGIC_V1:
-                  offset=lustre_dissect_struct_lov_mds_md_v1(tvb,offset,pinfo,tree,hf_lustre_lov_mds_md_v1);
-                  break;
-                default:
-                  offset=lustre_dissect_element_data(tvb, offset, pinfo, tree,
-                      hf_lustre_extra_padding, LUSTRE_DLM_INTENT_REC_OFF);
-                  break;
-              };
-            }
-          }
-      }
-      break;
+	/*reply : [ost_lvb] <-- need to be check*/
+	offset=lustre_dissect_struct_ost_lvb(tvb, offset, pinfo, tree, hf_lustre_ost_lvb);
+    break;
 
-    case LDLM_CONVERT:
-      if(pb_type==PTL_RPC_MSG_REQUEST)
-        /*[ldlm_request]*/
-        offset=lustre_dissect_struct_ldlm_request(tvb, offset, pinfo, tree, hf_lustre_ldlm_request) ;
-      if(pb_type==PTL_RPC_MSG_REPLY)
-        /*[ldlm_reply]*/
-        offset=lustre_dissect_struct_ldlm_reply(tvb, offset, pinfo, tree, hf_lustre_ldlm_reply, NULL) ;
-      break;
-
-    case LDLM_CANCEL:
-      if(pb_type==PTL_RPC_MSG_REQUEST)
-        /*[ldlm_request]*/
-        offset=lustre_dissect_struct_ldlm_request(tvb, offset, pinfo, tree, hf_lustre_ldlm_request) ;
-      /*[nothing en reply]*/
-      break;
-
-    case LDLM_BL_CALLBACK: /* TODO : check the corresponding code in lustre*/
-      if(pb_type==PTL_RPC_MSG_REQUEST)
-        /*[ldlm_request]*/
-        offset=lustre_dissect_struct_ldlm_request(tvb, offset, pinfo, tree, hf_lustre_ldlm_request) ;
-      break;
-
-    case LDLM_CP_CALLBACK:
-      if(pb_type==PTL_RPC_MSG_REQUEST){
-        /*[ldlm_request] if the third buffer exist we have [lvb data] so it's [ost_lvb] : TODO :
-         * check that */
-        offset=lustre_dissect_struct_ldlm_request(tvb, offset, pinfo, tree, hf_lustre_ldlm_request) ;
-        if(LUSTRE_BUFCOUNT>=3)
-          offset=lustre_dissect_struct_ost_lvb(tvb,offset,pinfo,tree,hf_lustre_ost_lvb);
-      }
-      /*reply : [nothing] */
-      break;
-
-    case LDLM_GL_CALLBACK:
-      if(pb_type==PTL_RPC_MSG_REQUEST)
-        /*[ldlm_request] */
-        offset=lustre_dissect_struct_ldlm_request(tvb, offset, pinfo, tree, hf_lustre_ldlm_request) ;
-      else
-        if(pb_type==PTL_RPC_MSG_REPLY)
-          /*reply : [ost_lvb] <-- need to be check*/
-          offset=lustre_dissect_struct_ost_lvb(tvb, offset, pinfo, tree, hf_lustre_ost_lvb);
-      break;
-
-    default :
-      break;
+  default :
+    break;
   }
   return offset;
 }
@@ -8577,6 +8711,26 @@ lustre_llog_opcode_process(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo
   return offset;
 }
 
+static int
+lustre_seq_opcode_process(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_,
+			  proto_tree * tree _U_, guint32 opc _U_, guint32 pb_type)
+{
+  switch (opc) {
+  case SEQ_QUERY:
+    if (pb_type == PTL_RPC_MSG_REQUEST)
+      offset=lustre_dissect_struct_seq_opc(tvb, offset, pinfo, tree);
+    offset=lustre_dissect_struct_seq_range(tvb, offset, pinfo, tree, hf_lustre_seq_range);
+    break;
+
+  default:
+    g_print("error: SEQ Opcode: %d unknown\n", opc);
+    if (check_col(pinfo->cinfo, COL_INFO))
+      col_append_str(pinfo->cinfo, COL_PROTOCOL, "BUG");
+    break;
+  };
+
+  return offset;
+}
 /* process lustre opcode :
    check if opcode is in range_opcode, and call the corresponding opcode process function */
 static int
@@ -8600,7 +8754,10 @@ lustre_opcode_process(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_,
   if( (opc>=LLOG_FIRST_OPC) && (opc<=LLOG_LAST_OPC)) /* LLOG Opcodes */
     offset=lustre_llog_opcode_process( tvb , offset ,pinfo ,  tree , opc , pb_type) ;
 
-  return offset ;
+  if( (opc >= SEQ_FIRST_OPC) && (opc <= SEQ_LAST_OPC) ) /* SEQ Opcodes */
+    offset=lustre_seq_opcode_process(tvb, offset, pinfo, tree, opc, pb_type);
+
+  return offset;
 }
 
 /* ----------------------------------------------- */
@@ -8620,34 +8777,46 @@ add_extra_padding(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, pro
 /* ----------------------------------------------- */
 
 static int
-ldlm_opcode_process(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree * tree _U_, guint64 intent_opc _U_)
+ldlm_opcode_process(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_,
+		    proto_tree * tree _U_, guint64 intent_opc _U_)
 {
   /* all corresponding code is in mdc_locks.c in function mdc_enqueue() */
   /* if 0x0003 we have CREAT + OPEN
-  */
+   */
   if (intent_opc & IT_OPEN) {
     /* mdc_intent_open_pack(), d'où [opcode][mdc_rec_create][name][eada] */
-    offset=lustre_dissect_struct_mdt_rec_create(tvb, offset, pinfo, tree, hf_lustre_mdt_rec_create);
-    offset=lustre_dissect_element_string(tvb, offset, pinfo, tree, hf_lustre_reint_name, LUSTRE_DLM_INTENT_REC_OFF+1);
-    offset=lustre_dissect_element_data(tvb, offset, pinfo, tree, hf_lustre_mds_xattr_eadata,
-        LUSTRE_DLM_INTENT_REC_OFF+2); /* TODO : replace hf with eada hf */
-
+    offset=lustre_dissect_struct_mdt_rec_create(tvb, offset, pinfo, tree,
+						hf_lustre_mdt_rec_create);
+    offset=lustre_dissect_element_string(tvb, offset, pinfo, tree,
+					 hf_lustre_reint_name,
+					 LUSTRE_DLM_INTENT_REC_OFF+3);
+    offset=lustre_dissect_element_data(tvb, offset, pinfo, tree,
+				       hf_lustre_mds_xattr_eadata,
+				       LUSTRE_DLM_INTENT_REC_OFF+4);
+    /* TODO : replace hf with eada hf */
   }
+
   if (intent_opc & IT_UNLINK){
     /* mdc_intent_unlink_pack(), d'où [opcode][mdt_rec_unlink][name] */
-    offset=lustre_dissect_struct_mdt_rec_unlink(tvb, offset, pinfo, tree, hf_lustre_mdt_rec_unlink);
-    offset=lustre_dissect_element_string(tvb, offset, pinfo, tree, hf_lustre_reint_name, LUSTRE_DLM_INTENT_REC_OFF+1);
+    offset=lustre_dissect_struct_mdt_rec_unlink(tvb, offset, pinfo, tree,
+						hf_lustre_mdt_rec_unlink);
+    offset=lustre_dissect_element_string(tvb, offset, pinfo, tree,
+					 hf_lustre_reint_name,
+					 LUSTRE_DLM_INTENT_REC_OFF+1);
   }
   if (intent_opc & IT_GETATTR){
     /* mdc_intent_lookup_pack, d'où [mdt_body][name] */
     offset=lustre_dissect_struct_mdt_body(tvb, offset, pinfo, tree, hf_lustre_mdt_body) ;
-    offset=lustre_dissect_element_string(tvb, offset, pinfo, tree, hf_lustre_reint_name, LUSTRE_DLM_INTENT_REC_OFF+1);
+    offset=lustre_dissect_element_string(tvb, offset, pinfo, tree, hf_lustre_reint_name,
+					 LUSTRE_DLM_INTENT_REC_OFF+1);
   }
 
   if (intent_opc & IT_LOOKUP){
-    /* mdc_intent_lookup_pack, d'où [mdt_body][name] */
-    offset=lustre_dissect_struct_mdt_body(tvb, offset, pinfo, tree, hf_lustre_mdt_body) ;
-    offset=lustre_dissect_element_string(tvb, offset, pinfo, tree, hf_lustre_reint_name, LUSTRE_DLM_INTENT_REC_OFF+1);
+    /* mdc_intent_lookup_pack, d'où [mdt_body][capa][name] */
+    offset=lustre_dissect_struct_mdt_body(tvb, offset, pinfo, tree, hf_lustre_mdt_body);
+    offset=lustre_dissect_struct_capa(tvb, offset, pinfo, tree, hf_lustre_capa, LUSTRE_DLM_INTENT_REC_OFF+1);
+    offset=lustre_dissect_element_string(tvb, offset, pinfo, tree, hf_lustre_reint_name,
+					 LUSTRE_DLM_INTENT_REC_OFF+2);
   }
   return offset;
 }
@@ -9041,17 +9210,42 @@ lustre_dissect_element_ptlrpc_body_pb_slv(tvbuff_t *tvb _U_, int offset _U_, pac
 }
 
 static int
+lustre_dissect_element_ptlrpc_body_pb_pre_version(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_)
+{
+  offset=dissect_uint64(tvb, offset, pinfo, tree, hf_lustre_ptlrpc_body_pb_pre_version);
+
+  return offset;
+}
+
+static int
+lustre_dissect_element_ptlrpc_body_pb_padding(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_)
+{
+  offset=dissect_uint64(tvb, offset, pinfo, tree, hf_lustre_ptlrpc_body_pb_padding);
+
+  return offset;
+}
+
+static int
+lustre_dissect_element_ptlrpc_body_pb_jobid(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *parent_tree _U_)
+{
+
+  /* the lenght of the string is 32 bytes max, with  \0 inside */
+  proto_tree_add_item(parent_tree, hf_lustre_ptlrpc_body_pb_jobid, tvb, offset, 32, TRUE);
+
+  offset+=32;
+  return offset;
+}
+
+
+static int
 lustre_dissect_struct_ptlrpc_body(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *parent_tree _U_, int hf_index _U_, guint32 buf_len _U_ )
 {
   proto_item *item = NULL;
   proto_tree *tree = NULL;
-  int old_offset;
-
-  guint32 opc, pb_type;
-
+  int old_offset, i;
+  guint32 opc, pb_type, pb_version;
 
   old_offset=offset;
-
 
   if (parent_tree) {
     item = proto_tree_add_item(parent_tree, hf_index, tvb, offset, -1, TRUE);
@@ -9065,6 +9259,8 @@ lustre_dissect_struct_ptlrpc_body(tvbuff_t *tvb _U_, int offset _U_, packet_info
 
   offset=lustre_dissect_element_ptlrpc_body_pb_type(tvb, offset, pinfo, tree);
 
+  pb_version = tvb_get_letohl(tvb, offset) & ~LUSTRE_VERSION_MASK;
+  //g_print("msg_v2_version_offset %d : version == %d \n", offset, pb_version);
   offset=lustre_dissect_element_ptlrpc_body_pb_version(tvb, offset, pinfo, tree);
 
   // g_print("msg_v2_opcode_offset %d  \n", offset);
@@ -9095,7 +9291,24 @@ lustre_dissect_struct_ptlrpc_body(tvbuff_t *tvb _U_, int offset _U_, packet_info
 
   offset=lustre_dissect_element_ptlrpc_body_pb_slv(tvb, offset, pinfo, tree);
 
+  /* pb_pre_versions */
+  for(i = 0; i < 4; ++i) {
+    offset=lustre_dissect_element_ptlrpc_body_pb_pre_version(tvb, offset, pinfo, tree);
+  }
 
+  for(i = 0; i < 4; ++i) {
+    offset=lustre_dissect_element_ptlrpc_body_pb_padding(tvb, offset, pinfo, tree);
+  }
+
+  if (pb_version == LUSTRE_PTLRPC_MSG_VERSION && offset-old_offset < buf_len) {
+    offset=lustre_dissect_element_ptlrpc_body_pb_jobid(tvb, offset, pinfo, tree);
+  }
+
+  if (offset-old_offset != buf_len) {
+    g_print("ptlbody offset-old:%d buf_len:%d\n",
+	    offset-old_offset, buf_len);
+    col_append_str(pinfo->cinfo, COL_PROTOCOL, "BUG");
+  }
 
   proto_item_set_len(item, offset-old_offset);
 
@@ -9253,8 +9466,6 @@ lustre_dissect_struct_msg_v2(tvbuff_t *tvb _U_, int offset _U_, packet_info *pin
     offset=dissect_uint32(tvb, offset, pinfo, tree, hf_lustre_extra_padding);
   }
 
-
-
   current_buf_len = tvb_get_letohl(tvb, buf_len_offset);
   offset=lustre_dissect_struct_ptlrpc_body(tvb,offset, pinfo, tree, hf_lustre_ptlrpc_body_pb, current_buf_len);
 
@@ -9262,8 +9473,6 @@ lustre_dissect_struct_msg_v2(tvbuff_t *tvb _U_, int offset _U_, packet_info *pin
 
   return offset;
 }
-
-
 
 
 static void
@@ -9356,7 +9565,7 @@ void proto_register_dcerpc_lustre(void)
     { &hf_lustre_mdt_body_capability,
       { "Capability", "lustre.mdt_body.capability", FT_UINT32, BASE_DEC, NULL, 0, "", HFILL }},
     { &hf_lustre_mdt_body_mode,
-      { "Mode", "lustre.mdt_body.mode", FT_UINT32, BASE_DEC, NULL, 0, "", HFILL }},
+      { "Mode", "lustre.mdt_body.mode", FT_UINT32, BASE_OCT, NULL, 0, "", HFILL }},
     { &hf_lustre_mdt_body_uid,
       { "Uid", "lustre.mdt_body.uid", FT_UINT32, BASE_DEC, NULL, 0, "", HFILL }},
     { &hf_lustre_mdt_body_gid,
@@ -9439,7 +9648,7 @@ void proto_register_dcerpc_lustre(void)
     { &hf_lustre_mdt_rec_setattr_sa_attr_flags,
       { "Sa Attr Flags", "lustre.mdt_rec_setattr.sa_attr_flags", FT_UINT32, BASE_DEC, NULL, 0, "", HFILL }},
     { &hf_lustre_mdt_rec_setattr_sa_mode,
-      { "Sa Mode", "lustre.mdt_rec_setattr.sa_mode", FT_UINT32, BASE_DEC, NULL, 0, "", HFILL }},
+      { "Sa Mode", "lustre.mdt_rec_setattr.sa_mode", FT_UINT32, BASE_OCT, NULL, 0, "", HFILL }},
     { &hf_lustre_mdt_rec_setattr_sa_padding_2,
       { "Sa Padding 2", "lustre.mdt_rec_setattr.sa_padding_2", FT_UINT32, BASE_DEC, NULL, 0, "", HFILL }},
     { &hf_lustre_mdt_rec_setattr_sa_padding_3,
@@ -9484,24 +9693,24 @@ void proto_register_dcerpc_lustre(void)
     { &hf_lustre_mdt_rec_create_cr_ioepoch,
       { "Cr Ioepoch", "lustre.mdt_rec_create.cr_ioepoch", FT_UINT64, BASE_DEC, NULL, 0, "", HFILL }},
     { &hf_lustre_mdt_rec_create_cr_padding_1,
-      { "Cr Padding 1", "lustre.mdt_rec_create.cr_padding_1", FT_UINT32, BASE_DEC, NULL, 0, "", HFILL }},
+      { "Cr Padding 1", "lustre.mdt_rec_create.cr_padding_1", FT_UINT64, BASE_DEC, NULL, 0, "", HFILL }},
     { &hf_lustre_mdt_rec_create_cr_mode,
-      { "Cr Mode", "lustre.mdt_rec_create.cr_mode", FT_UINT32, BASE_DEC, NULL, 0, "", HFILL }},
+      { "Cr Mode", "lustre.mdt_rec_create.cr_mode", FT_UINT32, BASE_OCT, NULL, 0, "", HFILL }},
     { &hf_lustre_mdt_rec_create_cr_bias,
       { "Cr Bias", "lustre.mdt_rec_create.cr_bias", FT_UINT32, BASE_DEC, NULL, 0, "", HFILL }},
     { &hf_lustre_mdt_rec_create_cr_flags_l,
       { "Cr Flags L", "lustre.mdt_rec_create.cr_flags_l", FT_UINT32, BASE_DEC, NULL, 0, "", HFILL }},
     { &hf_lustre_mdt_rec_create_cr_flags_h,
       { "Cr Flags H", "lustre.mdt_rec_create.cr_flags_h", FT_UINT32, BASE_DEC, NULL, 0, "", HFILL }},
-    { &hf_lustre_mdt_rec_create_cr_padding_3,
-      { "Cr Padding 3", "lustre.mdt_rec_create.cr_padding_3", FT_UINT32, BASE_DEC, NULL, 0, "", HFILL }},
+    { &hf_lustre_mdt_rec_create_cr_umask,
+      { "Cr Umask", "lustre.mdt_rec_create.cr_umask", FT_UINT32, BASE_OCT, NULL, 0, "", HFILL }},
     { &hf_lustre_mdt_rec_create_cr_padding_4,
       { "Cr Padding 4", "lustre.mdt_rec_create.cr_padding_4", FT_UINT32, BASE_DEC, NULL, 0, "", HFILL }},
 
     { &hf_lustre_mdt_rec_link,
       { "mdt rec link", "lustre.mdt_rec_link", FT_NONE, BASE_NONE, NULL , 0 , "", HFILL}},
     { &hf_lustre_mdt_rec_link_lk_opcode,
-      { "Lk Opcode", "lustre.mdt_rec_link.lk_opcode", FT_UINT32, BASE_DEC,VALS(lustre_mds_reint_t_vals) , 0, "", HFILL }},
+      { "Lk Opcode", "lustre.mdt_rec_link.lk_opcode", FT_UINT32, BASE_DEC, VALS(lustre_mds_reint_t_vals) , 0, "", HFILL }},
     { &hf_lustre_mdt_rec_link_lk_cap,
       { "Lk Cap", "lustre.mdt_rec_link.lk_cap", FT_UINT32, BASE_DEC, NULL, 0, "", HFILL }},
     { &hf_lustre_mdt_rec_link_lk_fsuid,
@@ -9576,17 +9785,17 @@ void proto_register_dcerpc_lustre(void)
     { &hf_lustre_mdt_rec_unlink_ul_time,
       { "Ul Time", "lustre.mdt_rec_unlink.ul_time",FT_ABSOLUTE_TIME, BASE_DEC, NULL, 0, "", HFILL }},
     { &hf_lustre_mdt_rec_unlink_ul_padding_2,
-      { "Ul Padding 2", "lustre.mdt_rec_unlink.ul_padding_2", FT_UINT32, BASE_DEC, NULL, 0, "", HFILL }},
+      { "Ul Padding 2", "lustre.mdt_rec_unlink.ul_padding_2", FT_UINT64, BASE_DEC, NULL, 0, "", HFILL }},
     { &hf_lustre_mdt_rec_unlink_ul_padding_3,
-      { "Ul Padding 3", "lustre.mdt_rec_unlink.ul_padding_3", FT_UINT32, BASE_DEC, NULL, 0, "", HFILL }},
+      { "Ul Padding 3", "lustre.mdt_rec_unlink.ul_padding_3", FT_UINT64, BASE_DEC, NULL, 0, "", HFILL }},
     { &hf_lustre_mdt_rec_unlink_ul_padding_4,
-      { "Ul Padding 4", "lustre.mdt_rec_unlink.ul_padding_4", FT_UINT32, BASE_DEC, NULL, 0, "", HFILL }},
+      { "Ul Padding 4", "lustre.mdt_rec_unlink.ul_padding_4", FT_UINT64, BASE_DEC, NULL, 0, "", HFILL }},
     { &hf_lustre_mdt_rec_unlink_ul_padding_5,
-      { "Ul Padding 5", "lustre.mdt_rec_unlink.ul_padding_5", FT_UINT32, BASE_DEC, NULL, 0, "", HFILL }},
+      { "Ul Padding 5", "lustre.mdt_rec_unlink.ul_padding_5", FT_UINT64, BASE_DEC, NULL, 0, "", HFILL }},
     { &hf_lustre_mdt_rec_unlink_ul_bias,
       { "Ul Bias", "lustre.mdt_rec_unlink.ul_bias", FT_UINT32, BASE_DEC, NULL, 0, "", HFILL }},
     { &hf_lustre_mdt_rec_unlink_ul_mode,
-      { "Ul Mode", "lustre.mdt_rec_unlink.ul_mode", FT_UINT32, BASE_DEC, NULL, 0, "", HFILL }},
+      { "Ul Mode", "lustre.mdt_rec_unlink.ul_mode", FT_UINT32, BASE_OCT, NULL, 0, "", HFILL }},
     { &hf_lustre_mdt_rec_unlink_ul_padding_6,
       { "Ul Padding 6", "lustre.mdt_rec_unlink.ul_padding_6", FT_UINT32, BASE_DEC, NULL, 0, "", HFILL }},
     { &hf_lustre_mdt_rec_unlink_ul_padding_7,
@@ -9635,7 +9844,7 @@ void proto_register_dcerpc_lustre(void)
     { &hf_lustre_mdt_rec_rename_rn_bias,
       { "Rn Bias", "lustre.mdt_rec_rename.rn_bias", FT_UINT32, BASE_DEC, NULL, 0, "", HFILL }},
     { &hf_lustre_mdt_rec_rename_rn_mode,
-      { "Rn Mode", "lustre.mdt_rec_rename.rn_mode", FT_UINT32, BASE_DEC, NULL, 0, "", HFILL }},
+      { "Rn Mode", "lustre.mdt_rec_rename.rn_mode", FT_UINT32, BASE_OCT, NULL, 0, "", HFILL }},
     { &hf_lustre_mdt_rec_rename_rn_padding_5,
       { "Rn Padding 5", "lustre.mdt_rec_rename.rn_padding_5", FT_UINT32, BASE_DEC, NULL, 0, "", HFILL }},
     { &hf_lustre_mdt_rec_rename_rn_padding_6,
@@ -9710,6 +9919,14 @@ void proto_register_dcerpc_lustre(void)
       { "Ioo Id", "lustre.obd_ioobj.ioo_id", FT_UINT64, BASE_DEC, NULL, 0, "", HFILL }},
     { &hf_lustre_ptlrpc_body_pb_slv,
       { "Pb Slv", "lustre.ptlrpc_body.pb_slv", FT_UINT64, BASE_DEC, NULL, 0, "", HFILL }},
+
+    { &hf_lustre_ptlrpc_body_pb_pre_version,
+      { "Pb Pre-Version", "lustre.ptlrpc_body.pb_pre_version", FT_UINT64, BASE_DEC, NULL, 0, "", HFILL }},
+    { &hf_lustre_ptlrpc_body_pb_padding,
+      { "Pb Padding", "lustre.ptlrpc_body.pb_padding", FT_UINT64, BASE_DEC, NULL, 0, "", HFILL }},
+    { &hf_lustre_ptlrpc_body_pb_jobid,
+      { "Pb JobId", "lustre.ptlrpc_body.pb_jobid", FT_STRING, BASE_NONE, NULL, 0, "", HFILL }},
+
     { &hf_lustre_lustre_msg_v1_lm_handle,
       { "Lm Handle", "lustre.lustre_msg_v1.lm_handle", FT_NONE, BASE_HEX, NULL, 0, "", HFILL }},
     { &hf_lustre_ost_lvb_lvb_atime,
@@ -9865,7 +10082,7 @@ void proto_register_dcerpc_lustre(void)
     { &hf_lustre_ptlrpc_body_pb_last_xid,
       { "Pb Last Xid", "lustre.ptlrpc_body.pb_last_xid", FT_UINT64, BASE_DEC, NULL, 0, "", HFILL }},
     { &hf_lustre_ptlrpc_body_pb_status,
-      { "Pb Status", "lustre.ptlrpc_body.pb_status", FT_UINT32, BASE_DEC, NULL, 0, "", HFILL }},
+      { "Pb Status", "lustre.ptlrpc_body.pb_status", FT_INT32, BASE_DEC, NULL, 0, "", HFILL }},
     { &hf_lustre_niobuf_remote_flags,
       { "Flags", "lustre.niobuf_remote.flags", FT_UINT32, BASE_DEC, NULL, 0, "", HFILL }},
     { &hf_lustre_ll_fid_id,
@@ -9982,7 +10199,6 @@ void proto_register_dcerpc_lustre(void)
       { "mds reint old name", "lustre.mds_reint_old_name", FT_STRING, BASE_NONE, NULL, 0, "", HFILL }},
     { &hf_lustre_reint_new_name,
       { "mds reint new name", "lustre.mds_reint_new_name", FT_STRING, BASE_NONE, NULL, 0, "", HFILL }},
-
 
 
     { &hf_lustre_obdo_o_valid,
@@ -10111,7 +10327,7 @@ void proto_register_dcerpc_lustre(void)
     { &hf_lustre_ldlm_request_lock_flags,
       { "Lock Flags", "lustre.ldlm_request.lock_flags", FT_UINT32, BASE_HEX, NULL, 0 , "", HFILL }},
     { &hf_lustre_obdo_o_mode,
-      { "O Mode", "lustre.obdo.o_mode", FT_UINT32, BASE_DEC, NULL, 0, "", HFILL }},
+      { "O Mode", "lustre.obdo.o_mode", FT_UINT32, BASE_OCT, NULL, 0, "", HFILL }},
     { &hf_lustre_mgs_target_info_mti_svname,
       { "Mti Svname", "lustre.mgs_target_info.mti_svname", FT_UINT8, BASE_DEC, NULL, 0, "", HFILL }},
     { &hf_lustre_llogd_body_lgd_logid,
@@ -10261,8 +10477,10 @@ void proto_register_dcerpc_lustre(void)
       { "Lid Tail", "lustre.llog_logid_rec.lid_tail", FT_NONE, BASE_HEX, NULL, 0, "", HFILL }},
     { &hf_lustre_obdo_o_grant,
       { "O Grant", "lustre.obdo.o_grant", FT_UINT64, BASE_DEC, NULL, 0, "", HFILL }},
-    { &hf_lustre_obdo_o_padding_2,
-      { "O Padding 2", "lustre.obdo.o_padding_2", FT_UINT64, BASE_DEC, NULL, 0, "", HFILL }},
+    { &hf_lustre_obdo_o_uid_h,
+      { "O Uid H", "lustre.obdo.o_uid_h", FT_UINT32, BASE_DEC, NULL, 0, "", HFILL }},
+    { &hf_lustre_obdo_o_gid_h,
+      { "O Gid H", "lustre.obdo.o_gid_h", FT_UINT32, BASE_DEC, NULL, 0, "", HFILL }},
     { &hf_lustre_quota_adjust_qunit_qaq_iunit_sz,
       { "Qaq Iunit Sz", "lustre.quota_adjust_qunit.qaq_iunit_sz", FT_UINT64, BASE_DEC, NULL, 0, "", HFILL }},
     { &hf_lustre_llog_unlink_rec_padding,
@@ -10371,12 +10589,12 @@ void proto_register_dcerpc_lustre(void)
       { "End", "lustre.ldlm_flock.end", FT_UINT64, BASE_DEC, NULL, 0, "", HFILL }},
     { &hf_lustre_mgs_target_info_mti_nid_count,
       { "Mti Nid Count", "lustre.mgs_target_info.mti_nid_count", FT_UINT32, BASE_DEC, NULL, 0, "", HFILL }},
-    /* ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- */
+    /* -------------------------------------------------------------------- */
     { &hf_lustre_mgs_target_info,
       { "mgs target info", "lustre.mgs_target_info", FT_NONE, BASE_NONE, NULL, 0, "", HFILL }},
     { &hf_lustre_mgs_send_param,
       { "mgs send param", "lustre.mgs_send_param", FT_NONE, BASE_NONE, NULL, 0, "", HFILL }},
-    /* ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- */
+    /* -------------------------------------------------------------------- */
     { &hf_lustre_ost_lvb,
       { "ost lvb data", "lustre.ost_lvb", FT_NONE, BASE_NONE, NULL, 0, "", HFILL }},
 
@@ -10434,8 +10652,37 @@ void proto_register_dcerpc_lustre(void)
     { &hf_lustre_obd_dqblk_dqb_btime,
       { "Dqb Btime", "lustre.obd_dqblk.dqb_btime", FT_ABSOLUTE_TIME, BASE_DEC, NULL, 0, "", HFILL }},
     { &hf_lustre_obd_dqblk_dqb_ihardlimit,
-      { "Dqb Ihardlimit", "lustre.obd_dqblk.dqb_ihardlimit", FT_UINT64, BASE_DEC, NULL, 0, "", HFILL }}
+      { "Dqb Ihardlimit", "lustre.obd_dqblk.dqb_ihardlimit", FT_UINT64, BASE_DEC, NULL, 0, "", HFILL } },
 
+    /* seq */
+    { &hf_lustre_seq_opc,
+      { "Seq OPC", "lustre.seq_opc", FT_UINT32, BASE_DEC, NULL, 0, "", HFILL } },
+    { &hf_lustre_seq_range,
+      { "Seq Range", "lustre.range", FT_NONE, BASE_NONE, NULL, 0, "", HFILL } },
+    { &hf_lustre_seq_range_start,
+      { "Seq Range Start", "lustre.seq_range.start", FT_UINT64, BASE_HEX, NULL, 0, "", HFILL } },
+    { &hf_lustre_seq_range_end,
+      { "Seq Range End", "lustre.seq_range.end", FT_UINT64, BASE_HEX, NULL, 0, "", HFILL } },
+    { &hf_lustre_seq_range_index,
+      { "Seq Range Index", "lustre.seq_range.index", FT_UINT32, BASE_DEC, NULL, 0, "", HFILL } },
+    { &hf_lustre_seq_range_flags,
+      { "Seq Range Flags", "lustre.seq_range.flags", FT_UINT32, BASE_HEX, NULL, 0, "", HFILL } },
+
+    /* struct mdt_ioepoch */
+    { &hf_lustre_mdt_ioepoch,
+      { "MDT ioepoch", "lustre.mdt_ioepoch", FT_NONE, BASE_NONE, NULL, 0, "", HFILL } },
+    { &hf_lustre_mdt_ioepoch_handle,
+      { "Handle", "lustre.mdt_ioepoch.handle", FT_NONE, BASE_NONE, NULL, 0, "", HFILL } },
+    { &hf_lustre_mdt_ioepoch_ioepoch,
+      { "ioepoch", "lustre.mdt_ioepoch.ioepoch", FT_UINT64, BASE_DEC, NULL, 0, "", HFILL } },
+    { &hf_lustre_mdt_ioepoch_flags,
+      { "flags", "lustre.mdt_ioepoch.flags", FT_UINT32, BASE_DEC, NULL, 0, "", HFILL } },
+    { &hf_lustre_mdt_ioepoch_padding,
+      { "Padding", "lustre.mdt_ioepoch.padding", FT_UINT32, BASE_HEX, NULL, 0, "", HFILL } },
+
+    /* struct lustre_capa */
+    { &hf_lustre_capa,
+      { "Capability", "lustre.capa", FT_NONE, BASE_NONE, NULL, 0, "", HFILL } },
   };
 
 
@@ -10544,8 +10791,10 @@ void proto_register_dcerpc_lustre(void)
     &ett_lustre_qunit_data_old,
     &ett_lustre_ldlm_lock_flags,
     &ett_lustre_llog_log_llh_flags,
-
-  };
+    &ett_lustre_seq_range,
+    &ett_lustre_mdt_ioepoch,
+    &ett_lustre_capa,
+	};
 
   proto_lustre = proto_register_protocol("Lustre", "lustre", "lustre");
   proto_register_field_array(proto_lustre, hf, array_length (hf));
