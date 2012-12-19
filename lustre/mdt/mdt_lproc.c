@@ -177,8 +177,8 @@ static int lproc_mdt_attach_rename_seqstat(struct mdt_device *mdt)
         for (i = 0; i < RENAME_LAST; i++)
                 spin_lock_init(&mdt->mdt_rename_stats.hist[i].oh_lock);
 
-        return lprocfs_obd_seq_create(obd, "rename_stats", 0444,
-                                      &mdt_rename_stats_fops, mdt);
+	return lprocfs_obd_seq_create(obd, "rename_stats", 0644,
+				      &mdt_rename_stats_fops, mdt);
 }
 
 void mdt_rename_counter_tally(struct mdt_thread_info *info,
