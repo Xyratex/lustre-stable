@@ -1,0 +1,38 @@
+diff -upr linux-2.6.32-220.17.1.el6/include/linux/sunrpc/svc.h linux-2.6.32-220.17.1.el6.new/include/linux/sunrpc/svc.h
+--- linux-2.6.32-220.17.1.el6/include/linux/sunrpc/svc.h	2012-04-26 19:48:57.000000000 +0300
++++ linux-2.6.32-220.17.1.el6.new/include/linux/sunrpc/svc.h	2012-12-21 15:36:03.975785185 +0200
+@@ -50,6 +50,7 @@ struct svc_pool {
+ 	unsigned int		sp_nrthreads;	/* # of threads in pool */
+ 	struct list_head	sp_all_threads;	/* all server threads */
+ 	struct svc_pool_stats	sp_stats;	/* statistics on pool operation */
++	int			sp_task_pending;/* has pending task */
+ } ____cacheline_aligned_in_smp;
+ 
+ /*
+diff -upr linux-2.6.32-220.17.1.el6/net/sunrpc/svc_xprt.c linux-2.6.32-220.17.1.el6.new/net/sunrpc/svc_xprt.c
+--- linux-2.6.32-220.17.1.el6/net/sunrpc/svc_xprt.c	2012-04-26 19:51:29.000000000 +0300
++++ linux-2.6.32-220.17.1.el6.new/net/sunrpc/svc_xprt.c	2012-12-21 15:39:57.654769415 +0200
+@@ -510,7 +510,8 @@ void svc_wake_up(struct svc_serv *serv)
+ 			rqstp->rq_xprt = NULL;
+ 			 */
+ 			wake_up(&rqstp->rq_wait);
+-		}
++		} else
++			pool->sp_task_pending = 1;
+ 		spin_unlock_bh(&pool->sp_lock);
+ 	}
+ }
+@@ -664,7 +665,13 @@ int svc_recv(struct svc_rqst *rqstp, lon
+ 		 * long for cache updates.
+ 		 */
+ 		rqstp->rq_chandle.thread_wait = 1*HZ;
++		pool->sp_task_pending = 0;
+ 	} else {
++		if (pool->sp_task_pending) {
++			pool->sp_task_pending = 0;
++			spin_unlock_bh(&pool->sp_lock);
++			return -EAGAIN;
++		}
+ 		/* No data pending. Go to sleep */
+ 		svc_thread_enqueue(pool, rqstp);
+ 
