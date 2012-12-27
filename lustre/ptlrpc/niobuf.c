@@ -410,6 +410,7 @@ static void ptlrpc_at_set_reply(struct ptlrpc_request *req, int flags)
  */
 int ptlrpc_send_reply(struct ptlrpc_request *req, int flags)
 {
+	struct obd_export *exp = req->rq_export;
         struct ptlrpc_service     *svc = req->rq_rqbd->rqbd_service;
         struct ptlrpc_reply_state *rs = req->rq_reply_state;
         struct ptlrpc_connection  *conn;
@@ -433,14 +434,13 @@ int ptlrpc_send_reply(struct ptlrpc_request *req, int flags)
 
         /* There may be no rq_export during failover */
 
-        if (unlikely(req->rq_export && req->rq_export->exp_obd &&
-                     req->rq_export->exp_obd->obd_fail)) {
-                /* Failed obd's only send ENODEV */
-                req->rq_type = PTL_RPC_MSG_ERR;
-                req->rq_status = -ENODEV;
-                CDEBUG(D_HA, "sending ENODEV from failed obd %d\n",
-                       req->rq_export->exp_obd->obd_minor);
-        }
+	if (unlikely(exp && exp->exp_obd && exp->exp_obd->obd_fail)) {
+		/* Failed obd's only send ENODEV */
+		req->rq_type = PTL_RPC_MSG_ERR;
+		req->rq_status = -ENODEV;
+		CDEBUG(D_HA, "sending ENODEV from failed obd %d\n",
+		       exp->exp_obd->obd_minor);
+	}
 
         if (req->rq_type != PTL_RPC_MSG_ERR)
                 req->rq_type = PTL_RPC_MSG_REPLY;
@@ -454,10 +454,10 @@ int ptlrpc_send_reply(struct ptlrpc_request *req, int flags)
 
         ptlrpc_at_set_reply(req, flags);
 
-        if (req->rq_export == NULL || req->rq_export->exp_connection == NULL)
-                conn = ptlrpc_connection_get(req->rq_peer, req->rq_self, NULL);
-        else
-                conn = ptlrpc_connection_addref(req->rq_export->exp_connection);
+	if (exp == NULL || exp->exp_connection == NULL)
+		conn = ptlrpc_connection_get(req->rq_peer, req->rq_self, NULL);
+	else
+		conn = ptlrpc_connection_addref(exp->exp_connection);
 
         if (unlikely(conn == NULL)) {
                 CERROR("not replying on NULL connection\n"); /* bug 9635 */
@@ -470,6 +470,15 @@ int ptlrpc_send_reply(struct ptlrpc_request *req, int flags)
                 goto out;
 
         req->rq_sent = cfs_time_current_sec();
+
+	/* Remove in-process RPCs from the special list where duplicate
+	 * processing handled */
+	if (exp) {
+		CDEBUG(D_HA, "remove request from exp_rpcs_in_progress_list \n");
+		cfs_spin_lock(&exp->exp_rpcs_in_progress_lock);
+		cfs_list_del_init(&req->rq_exp_list_in_progress);
+		cfs_spin_unlock(&exp->exp_rpcs_in_progress_lock);
+	}
 
         rc = ptl_send_buf (&rs->rs_md_h, rs->rs_repbuf, rs->rs_repdata_len,
                            (rs->rs_difficult && !rs->rs_no_ack) ?

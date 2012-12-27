@@ -769,6 +769,7 @@ static void class_export_destroy(struct obd_export *exp)
         LASSERT(cfs_list_empty(&exp->exp_uncommitted_replies));
         LASSERT(cfs_list_empty(&exp->exp_req_replay_queue));
         LASSERT(cfs_list_empty(&exp->exp_hp_rpcs));
+	LASSERT(cfs_list_empty(&exp->exp_rpcs_in_progress));
         obd_destroy_export(exp);
         class_decref(obd, "export", exp);
 
@@ -849,10 +850,12 @@ struct obd_export *class_new_export(struct obd_device *obd,
         CFS_INIT_LIST_HEAD(&export->exp_req_replay_queue);
         CFS_INIT_LIST_HEAD(&export->exp_handle.h_link);
         CFS_INIT_LIST_HEAD(&export->exp_hp_rpcs);
+	CFS_INIT_LIST_HEAD(&export->exp_rpcs_in_progress);
 	class_handle_hash(&export->exp_handle, &export_handle_ops);
 	export->exp_last_request_time = cfs_time_current_sec();
         cfs_spin_lock_init(&export->exp_lock);
         cfs_spin_lock_init(&export->exp_rpc_lock);
+	cfs_spin_lock_init(&export->exp_rpcs_in_progress_lock);
         CFS_INIT_HLIST_NODE(&export->exp_uuid_hash);
         CFS_INIT_HLIST_NODE(&export->exp_nid_hash);
         cfs_spin_lock_init(&export->exp_bl_list_lock);

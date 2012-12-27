@@ -474,6 +474,8 @@ struct ptlrpc_request {
         cfs_list_t rq_history_list;
         /** server-side per-export list */
         cfs_list_t rq_exp_list;
+	/** server-side per-export list for requests in progress */
+	cfs_list_t rq_exp_list_in_progress;
         /** server-side hp handlers */
         struct ptlrpc_hpreq_ops *rq_ops;
         /** history sequence # */
