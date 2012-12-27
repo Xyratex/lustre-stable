@@ -671,6 +671,7 @@ void ptlrpc_server_drop_request(struct ptlrpc_request *req)
 {
         struct ptlrpc_request_buffer_desc *rqbd = req->rq_rqbd;
         struct ptlrpc_service             *svc = rqbd->rqbd_service;
+	struct obd_export                 *exp = req->rq_export;
         int                                refcount;
         cfs_list_t                        *tmp;
         cfs_list_t                        *nxt;
@@ -694,11 +695,14 @@ void ptlrpc_server_drop_request(struct ptlrpc_request *req)
                 LASSERT(cfs_list_empty(&req->rq_timed_list));
         cfs_spin_unlock(&svc->srv_at_lock);
 
-        /* finalize request */
-        if (req->rq_export) {
-                class_export_put(req->rq_export);
-                req->rq_export = NULL;
-        }
+	/* finalize request */
+	if (exp) {
+		cfs_spin_lock(&exp->exp_rpcs_in_progress_lock);
+		cfs_list_del_init(&req->rq_exp_list_in_progress);
+		cfs_spin_unlock(&exp->exp_rpcs_in_progress_lock);
+		class_export_put(exp);
+		req->rq_export = NULL;
+	}
 
         cfs_spin_lock(&svc->srv_lock);
 
@@ -1088,6 +1092,7 @@ static int ptlrpc_at_send_early_reply(struct ptlrpc_request *req)
         reqcopy->rq_pack_bulk = 0;
         reqcopy->rq_pack_udesc = 0;
         reqcopy->rq_packed_final = 0;
+	CFS_INIT_LIST_HEAD(&reqcopy->rq_exp_list_in_progress);
         sptlrpc_svc_ctx_addref(reqcopy);
         /* We only need the reqmsg for the magic */
         reqcopy->rq_reqmsg = reqmsg;
@@ -1506,6 +1511,7 @@ static int
 ptlrpc_server_handle_req_in(struct ptlrpc_service *svc)
 {
         struct ptlrpc_request *req;
+	struct obd_export     *exp = NULL;
         __u32                  deadline;
         int                    rc;
         ENTRY;
@@ -1588,13 +1594,55 @@ ptlrpc_server_handle_req_in(struct ptlrpc_service *svc)
 
         CDEBUG(D_RPCTRACE, "got req x"LPU64"\n", req->rq_xid);
 
-        req->rq_export = class_conn2export(
-                lustre_msg_get_handle(req->rq_reqmsg));
-        if (req->rq_export) {
-		class_export_rpc_get(req->rq_export);
+	req->rq_export = class_conn2export(lustre_msg_get_handle(req->rq_reqmsg));
+	exp = req->rq_export;
+	if (exp) {
+		/* Let's check if we are already handling earlier incarnation
+		 * of this request */
+		cfs_spin_lock(&exp->exp_rpcs_in_progress_lock);
+		if ((lustre_msg_get_flags(req->rq_reqmsg) & MSG_RESENT) &&
+		    (cfs_atomic_read(&exp->exp_rpc_count) > 1) &&
+		    (req->rq_xid <= exp->exp_max_xid_seen)) {
+			struct ptlrpc_request *tmp;
+
+			rc = 0;
+			/* This list should not be longer than max_requests
+			 * in flights on the client, so it is not all that
+			 * long. Also we only hit this codepath in case of
+			 * a resent request which makes it even more rarely
+			 * hit */
+			cfs_list_for_each_entry(tmp,
+					&exp->exp_rpcs_in_progress,
+					rq_exp_list_in_progress) {
+				/* Found duplicate one */
+				if (tmp->rq_xid == req->rq_xid) {
+					rc = -EBUSY;
+					break;
+				}
+			}
+			if (rc) {
+				cfs_spin_unlock(
+					&exp->exp_rpcs_in_progress_lock);
+				DEBUG_REQ(D_HA, req,
+					  "Found duplicate req in "
+					  "processing\n");
+				DEBUG_REQ(D_HA, tmp,
+					  "Request being processed\n");
+				goto err_req;
+			}
+		}
+		/* Add in-process RPCs into a special list and remember
+		 * max seen xid for duplicate xid processing detection */
+		cfs_list_add(&req->rq_exp_list_in_progress,
+			     &exp->exp_rpcs_in_progress);
+		if (exp->exp_max_xid_seen < req->rq_xid)
+			exp->exp_max_xid_seen = req->rq_xid;
+		cfs_spin_unlock(&exp->exp_rpcs_in_progress_lock);
+
+		class_export_rpc_get(exp);
                 rc = ptlrpc_check_req(req);
                 if (rc == 0) {
-                        rc = sptlrpc_target_export_check(req->rq_export, req);
+			rc = sptlrpc_target_export_check(exp, req);
                         if (rc)
                                 DEBUG_REQ(D_ERROR, req, "DROPPING req with "
                                           "illegal security flavor,");
@@ -1602,7 +1650,7 @@ ptlrpc_server_handle_req_in(struct ptlrpc_service *svc)
 
                 if (rc)
                         goto err_req;
-                ptlrpc_update_export_timer(req->rq_export, 0);
+                ptlrpc_update_export_timer(exp, 0);
         }
 
         /* req_in handling should/must be fast */
@@ -1634,8 +1682,8 @@ ptlrpc_server_handle_req_in(struct ptlrpc_service *svc)
         RETURN(1);
 
 err_req:
-	if (req->rq_export)
-		class_export_rpc_put(req->rq_export);
+	if (exp)
+		class_export_rpc_put(exp);
         cfs_spin_lock(&svc->srv_rq_lock);
         svc->srv_n_active_reqs++;
         cfs_spin_unlock(&svc->srv_rq_lock);

@@ -243,6 +243,7 @@ struct obd_export {
                                   /* client timed out and tried to reconnect,
                                    * but couldn't because of active rpcs */
                                   exp_abort_active_req:1;
+	__u64                     exp_max_xid_seen;
         /* also protected by exp_lock */
         enum lustre_sec_part      exp_sp_peer;
         struct sptlrpc_flavor     exp_flvr;             /* current */
@@ -252,6 +253,10 @@ struct obd_export {
         /** protects exp_hp_rpcs */
         cfs_spinlock_t            exp_rpc_lock;
         cfs_list_t                exp_hp_rpcs;  /* (potential) HP RPCs */
+
+	/* RPC being handled */
+	cfs_spinlock_t		  exp_rpcs_in_progress_lock;
+	cfs_list_t		  exp_rpcs_in_progress;
 
         /** blocking dlm lock list, protected by exp_bl_list_lock */
         cfs_list_t                exp_bl_list;
