@@ -1160,6 +1160,7 @@ TESTLOG_PREFIX=$TESTLOG_PREFIX \
 TESTNAME=$TESTNAME \
 DBENCH_LIB=$DBENCH_LIB \
 DBENCH_SRC=$DBENCH_SRC \
+LFS=$LFS \
 run_${load}.sh" &
     local ppid=$!
     log "Started client load: ${load} on $client"
