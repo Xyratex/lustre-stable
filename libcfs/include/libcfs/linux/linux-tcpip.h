@@ -82,9 +82,11 @@ libcfs_sock_wmem_queued(struct socket *sock)
 }
 
 #ifndef HAVE_SK_SLEEP
-static inline wait_queue_head_t *sk_sleep(struct sock *sk)
+static inline wait_queue_head_t *cfs_sk_sleep(struct sock *sk)
 {
         return sk->sk_sleep;
 }
+#else
+#define cfs_sk_sleep(sk)	sk_sleep(sk)
 #endif
 #endif
