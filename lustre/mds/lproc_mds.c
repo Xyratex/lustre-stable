@@ -251,16 +251,19 @@ static int lprocfs_wr_group_upcall(struct file *file, const char *buffer,
 {
         struct obd_device *obd = data;
         struct upcall_cache *hash = obd->u.mds.mds_group_hash;
-        char kernbuf[UC_CACHE_UPCALL_MAXPATH] = { '\0' };
+        int rc;
+        char *kernbuf;
 
         if (count >= UC_CACHE_UPCALL_MAXPATH) {
                 CERROR("%s: group upcall too long\n", obd->obd_name);
                 return -EINVAL;
         }
 
-        if (copy_from_user(kernbuf, buffer,
-                           min(count, UC_CACHE_UPCALL_MAXPATH - 1)))
-                return -EFAULT;
+        OBD_ALLOC(kernbuf, count + 1);
+        if (kernbuf == NULL)
+                GOTO(failed, rc = -ENOMEM);
+        if (copy_from_user(kernbuf, buffer, count))
+                GOTO(failed, rc = -EFAULT);
 
         /* Remove any extraneous bits from the upcall (e.g. linefeeds) */
         sscanf(kernbuf, "%s", hash->uc_upcall);
@@ -269,8 +272,13 @@ static int lprocfs_wr_group_upcall(struct file *file, const char *buffer,
                 CWARN("%s: write to upcall name %s for MDS %s\n",
                       obd->obd_name, hash->uc_upcall, obd->obd_name);
         CWARN("%s: group upcall set to %s\n", obd->obd_name, hash->uc_upcall);
+        OBD_FREE(kernbuf, count + 1);
+        RETURN(count);
 
-        return count;
+ failed:
+        if (kernbuf)
+                OBD_FREE(kernbuf, count + 1);
+        RETURN(rc);
 }
 
 static int lprocfs_wr_group_flush(struct file *file, const char *buffer,

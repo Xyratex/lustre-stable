@@ -1077,7 +1077,7 @@ Index: linux-2.6.16.54-0.2.5/fs/ext3/extents.c
 + */
 +int ext3_ext_insert_extent(handle_t *handle, struct ext3_extents_tree *tree,
 +			   struct ext3_ext_path *path,
-+			   struct ext3_extent *newext)
++			   struct ext3_extent *newext, int flag)
 +{
 +	struct ext3_extent_header * eh;
 +	struct ext3_extent *ex, *fex;
@@ -1529,7 +1529,7 @@ Index: linux-2.6.16.54-0.2.5/fs/ext3/extents.c
 +	EXT_ASSERT(npath[depth].p_ext->ee_block == ex->ee_block);
 +	EXT_ASSERT(npath[depth].p_ext->ee_len == ex->ee_len);
 +
-+	err = ext3_ext_insert_extent(handle, tree, npath, &tex);
++	err = ext3_ext_insert_extent(handle, tree, npath, &tex, 0);
 +	ext3_ext_drop_refs(npath);
 +	kfree(npath);
 +
@@ -1915,7 +1915,7 @@ Index: linux-2.6.16.54-0.2.5/fs/ext3/extents.c
 +	needed = 4; /* bitmap + group desc + sb + inode */
 +
 +#ifdef CONFIG_QUOTA
-+	needed += 2 * EXT3_SINGLEDATA_TRANS_BLOCKS;
++	needed += 2 * EXT3_SINGLEDATA_TRANS_BLOCKS(tree->inode->i_sb);
 +#endif
 +	return needed;
 +}
@@ -2123,7 +2123,7 @@ Index: linux-2.6.16.54-0.2.5/fs/ext3/extents.c
 +	newex.ee_start = newblock;
 +	newex.ee_start_hi = 0;
 +	newex.ee_len = 1;
-+	err = ext3_ext_insert_extent(handle, &tree, path, &newex);
++	err = ext3_ext_insert_extent(handle, &tree, path, &newex, 0);
 +	if (err)
 +		goto out2;
 +	
@@ -2238,7 +2238,7 @@ Index: linux-2.6.16.54-0.2.5/fs/ext3/extents.c
 +	 * FIXME: real calculation should be here
 +	 * it depends on blockmap format of qouta file
 +	 */
-+	needed += 2 * EXT3_SINGLEDATA_TRANS_BLOCKS;
++	needed += 2 * EXT3_SINGLEDATA_TRANS_BLOCKS(inode->i_sb);
 +#endif
 +
 +	return needed;
@@ -2797,7 +2797,7 @@ Index: linux-2.6.16.54-0.2.5/include/linux/ext3_extents.h
 +extern void ext3_init_tree_desc(struct ext3_extents_tree *, struct inode *);
 +extern int ext3_extent_tree_init(handle_t *, struct ext3_extents_tree *);
 +extern int ext3_ext_calc_credits_for_insert(struct ext3_extents_tree *, struct ext3_ext_path *);
-+extern int ext3_ext_insert_extent(handle_t *, struct ext3_extents_tree *, struct ext3_ext_path *, struct ext3_extent *);
++extern int ext3_ext_insert_extent(handle_t *, struct ext3_extents_tree *, struct ext3_ext_path *, struct ext3_extent *, int);
 +extern int ext3_ext_walk_space(struct ext3_extents_tree *, unsigned long, unsigned long, ext_prepare_callback);
 +extern int ext3_ext_remove_space(struct ext3_extents_tree *, unsigned long, unsigned long);
 +extern struct ext3_ext_path * ext3_ext_find_extent(struct ext3_extents_tree *, int, struct ext3_ext_path *);
@@ -2825,3 +2825,49 @@ Index: linux-2.6.16.54-0.2.5/include/linux/ext3_fs_i.h
  };
  
  #endif	/* _LINUX_EXT3_FS_I */
+Index: linux-2.6.16.54-0.2.5/include/linux/ext3_jbd.h
+===================================================================
+--- linux-2.6.16.54-0.2.5.orig/include/linux/ext3_jbd.h
++++ linux-2.6.16.54-0.2.5/include/linux/ext3_jbd.h
+@@ -26,9 +26,18 @@
+  * 
+  * We may have to touch one inode, one bitmap buffer, up to three
+  * indirection blocks, the group and superblock summaries, and the data
+- * block to complete the transaction.  */
++ * block to complete the transaction.
++ *
++ * For extents-enabled fs we may have to allocate and modify upto
++ * 5 levels of tree + root which is stored in inode. */
++
++#define EXT3_SINGLEDATA_TRANS_BLOCKS(sb)				\
++	(EXT3_HAS_INCOMPAT_FEATURE(sb, EXT3_FEATURE_INCOMPAT_EXTENTS)	\
++		|| test_opt(sb, EXTENTS) ? 27U : 8U)
++ 
+ 
+-#define EXT3_SINGLEDATA_TRANS_BLOCKS	8U
++/* Indicate that EXT3_SINGLEDATA_TRANS_BLOCKS takes the sb as argument */
++#define EXT3_SINGLEDATA_TRANS_BLOCKS_HAS_SB
+ 
+ /* Extended attribute operations touch at most two data buffers,
+  * two bitmap buffers, and two group summaries, in addition to the inode
+@@ -42,7 +51,7 @@
+  * superblock only gets updated once, of course, so don't bother
+  * counting that again for the quota updates. */
+ 
+-#define EXT3_DATA_TRANS_BLOCKS(sb)	(EXT3_SINGLEDATA_TRANS_BLOCKS + \
++#define EXT3_DATA_TRANS_BLOCKS(sb)	(EXT3_SINGLEDATA_TRANS_BLOCKS(sb) + \
+ 					 EXT3_XATTR_TRANS_BLOCKS - 2 + \
+ 					 2*EXT3_QUOTA_TRANS_BLOCKS(sb))
+ 
+@@ -78,9 +87,9 @@
+ /* Amount of blocks needed for quota insert/delete - we do some block writes
+  * but inode, sb and group updates are done only once */
+ #define EXT3_QUOTA_INIT_BLOCKS(sb) (test_opt(sb, QUOTA) ? (DQUOT_INIT_ALLOC*\
+-		(EXT3_SINGLEDATA_TRANS_BLOCKS-3)+3+DQUOT_INIT_REWRITE) : 0)
++		(EXT3_SINGLEDATA_TRANS_BLOCKS(sb)-3)+3+DQUOT_INIT_REWRITE) : 0)
+ #define EXT3_QUOTA_DEL_BLOCKS(sb) (test_opt(sb, QUOTA) ? (DQUOT_DEL_ALLOC*\
+-		(EXT3_SINGLEDATA_TRANS_BLOCKS-3)+3+DQUOT_DEL_REWRITE) : 0)
++		(EXT3_SINGLEDATA_TRANS_BLOCKS(sb)-3)+3+DQUOT_DEL_REWRITE) : 0)
+ #else
+ #define EXT3_QUOTA_TRANS_BLOCKS(sb) 0
+ #define EXT3_QUOTA_INIT_BLOCKS(sb) 0

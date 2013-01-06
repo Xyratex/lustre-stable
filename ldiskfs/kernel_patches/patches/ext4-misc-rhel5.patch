@@ -165,20 +165,6 @@ Index: linux-2.6.18.i386/fs/ext4/mballoc.c
 ===================================================================
 --- linux-2.6.18.i386.orig/fs/ext4/mballoc.c
 +++ linux-2.6.18.i386/fs/ext4/mballoc.c
-@@ -4355,6 +4355,13 @@
- 		kmem_cache_free(ext4_ac_cachep, ac);
- }
- 
-+/* For backward compatibility, since Lustre uses this symbol */
-+void ext4_mb_discard_inode_preallocations(struct inode *inode)
-+{
-+	ext4_discard_preallocations(inode);
-+}
-+EXPORT_SYMBOL(ext4_mb_discard_inode_preallocations);
-+
- /*
-  * finds all preallocated spaces and return blocks being freed to them
-  * if preallocated space becomes full (no block is used from the space)
 @@ -4965,3 +4965,6 @@ error_return:
  		kmem_cache_free(ext4_ac_cachep, ac);
  	return;

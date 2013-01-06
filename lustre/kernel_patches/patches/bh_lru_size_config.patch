@@ -1,0 +1,12 @@
+--- linux-2.6.32-131.6.1/fs/buffer.c
++++ linux-2.6.32-131.6.1-pdo/fs/buffer.c
+@@ -1250,8 +1250,7 @@
+  * The LRUs themselves only need locking against invalidate_bh_lrus.  We use
+  * a local interrupt disable for that.
+  */
+-
+-#define BH_LRU_SIZE	8
++#define BH_LRU_SIZE	16
+ 
+ struct bh_lru {
+ 	struct buffer_head *bhs[BH_LRU_SIZE];

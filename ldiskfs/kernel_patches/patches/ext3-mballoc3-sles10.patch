@@ -225,7 +225,7 @@ Index: linux-2.6.16.46-0.14/fs/ext3/extents.c
  	newex.ee_start_hi = 0;
 -	newex.ee_len = 1;
 +	newex.ee_len = ar.len;
- 	err = ext3_ext_insert_extent(handle, &tree, path, &newex);
+ 	err = ext3_ext_insert_extent(handle, &tree, path, &newex, 0);
  	if (err) {
  		/* free data blocks we just allocated */
 -		ext3_free_blocks(handle, inode, newex.ee_start, newex.ee_len);

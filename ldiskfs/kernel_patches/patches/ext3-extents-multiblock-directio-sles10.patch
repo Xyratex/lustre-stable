@@ -72,7 +72,7 @@
 @@ -2119,8 +2276,11 @@ int ext3_ext_get_block(handle_t *handle,
  	newex.ee_start_hi = 0;
  	newex.ee_len = 1;
- 	err = ext3_ext_insert_extent(handle, &tree, path, &newex);
+ 	err = ext3_ext_insert_extent(handle, &tree, path, &newex, 0);
 -	if (err)
 +	if (err) {
 +		/* free data blocks we just allocated */

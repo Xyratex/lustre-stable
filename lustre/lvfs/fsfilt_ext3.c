@@ -65,7 +65,7 @@
 # include <quota/quotaio_v2.h>
 # include <quota/quota_tree.h>
 # define V2_DQTREEOFF    QT_TREEOFF
-#else
+#elif defined(HAVE_FS_QUOTAIO_V1_H)
 # include <quotaio_v1.h>
 # include <quotaio_v2.h>
 # include <quota_tree.h>
@@ -103,21 +103,11 @@ extern int ext3_xattr_set_handle(handle_t *, struct inode *, int, const char *, 
 #define FSFILT_DELETE_TRANS_BLOCKS(sb)    EXT3_DELETE_TRANS_BLOCKS(sb)
 #endif
 
-#ifdef EXT3_SINGLEDATA_TRANS_BLOCKS_HAS_SB
 /* for kernels 2.6.18 and later */
 #define FSFILT_SINGLEDATA_TRANS_BLOCKS(sb) EXT3_SINGLEDATA_TRANS_BLOCKS(sb)
-#else
-#define FSFILT_SINGLEDATA_TRANS_BLOCKS(sb) EXT3_SINGLEDATA_TRANS_BLOCKS
-#endif
 
-#ifdef EXT_INSERT_EXTENT_WITH_5ARGS
 #define fsfilt_ext3_ext_insert_extent(handle, inode, path, newext, flag) \
                ext3_ext_insert_extent(handle, inode, path, newext, flag)
-#else
-#define fsfilt_ext3_ext_insert_extent(handle, inode, path, newext, flag) \
-               ext3_ext_insert_extent(handle, inode, path, newext)
-#endif
-
 
 static cfs_mem_cache_t *fcb_cache;
 
@@ -886,14 +876,6 @@ static int fsfilt_ext3_sync(struct super_block *sb)
 #define ext3_ext_base2inode(tree)       (tree->inode)
 #define fsfilt_ext3_ext_walk_space(tree, block, num, cb, cbdata) \
                         ext3_ext_walk_space(tree, block, num, cb);
-#endif
-
-#ifdef EXT_INSERT_EXTENT_WITH_5ARGS
-#define fsfilt_ext3_ext_insert_extent(handle, inode, path, newext, flag) \
-               ext3_ext_insert_extent(handle, inode, path, newext, flag)
-#else
-#define fsfilt_ext3_ext_insert_extent(handle, inode, path, newext, flag) \
-               ext3_ext_insert_extent(handle, inode, path, newext)
 #endif
 
 #include <linux/lustre_version.h>
@@ -2093,7 +2075,7 @@ static int fsfilt_ext3_quotacheck(struct super_block *sb,
 #endif
                                 continue;
                         }
-                        
+
                         used_count -= ext3_itable_unused_count(sb, desc);
 #ifdef HAVE_EXT4_LDISKFS
                         ext3_unlock_group(sb, group);

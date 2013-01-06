@@ -1,0 +1,92 @@
+Index: linux-2.6.32-71.18.1.el6/include/linux/dcache.h
+===================================================================
+--- linux-2.6.32-71.18.1.el6.orig/include/linux/dcache.h
++++ linux-2.6.32-71.18.1.el6/include/linux/dcache.h
+@@ -213,6 +213,7 @@
+ #define DCACHE_MANAGE_TRANSIT	0x40000	/* manage transit from this dirent */
+ #define DCACHE_MANAGED_DENTRY \
+ 	(DCACHE_MOUNTED|DCACHE_NEED_AUTOMOUNT|DCACHE_MANAGE_TRANSIT)
++#define DCACHE_LUSTRE_INVALID  0x4000000  /* Lustre invalidated */
+ 
+ extern spinlock_t dcache_lock;
+ extern seqlock_t rename_lock;
+@@ -289,6 +290,7 @@
+  * This adds the entry to the hash queues.
+  */
+ extern void d_rehash(struct dentry *);
++extern void d_rehash_cond(struct dentry *, int lock);
+ 
+ /**
+  * d_add - add dentry to hash queues
+@@ -324,6 +326,7 @@
+ 
+ /* used for rename() and baskets */
+ extern void d_move(struct dentry *, struct dentry *);
++extern void d_move_locked(struct dentry *, struct dentry *);
+ extern struct dentry *d_ancestor(struct dentry *, struct dentry *);
+ 
+ /* appendix may either be NULL or be used for transname suffixes */
+Index: linux-2.6.32-71.18.1.el6/fs/dcache.c
+===================================================================
+--- linux-2.6.32-71.18.1.el6.orig/fs/dcache.c
++++ linux-2.6.32-71.18.1.el6/fs/dcache.c
+@@ -280,6 +280,13 @@
+ 		spin_unlock(&dcache_lock);
+ 		return 0;
+ 	}
++
++	/* network invalidation by Lustre */
++	if (dentry->d_flags & DCACHE_LUSTRE_INVALID) {
++		spin_unlock(&dcache_lock);
++		return 0;
++	}
++
+ 	/*
+ 	 * Check whether to do a partial shrink_dcache
+ 	 * to get rid of unused child entries.
+@@ -1574,15 +1581,24 @@
+  * Adds a dentry to the hash according to its name.
+  */
+  
+-void d_rehash(struct dentry * entry)
++void d_rehash_cond(struct dentry * entry, int lock)
+ {
+-	spin_lock(&dcache_lock);
++	if (lock)
++		spin_lock(&dcache_lock);
+ 	spin_lock(&entry->d_lock);
+ 	_d_rehash(entry);
+ 	spin_unlock(&entry->d_lock);
+-	spin_unlock(&dcache_lock);
++	if (lock)
++		spin_unlock(&dcache_lock);
++}
++EXPORT_SYMBOL(d_rehash_cond);
++
++void d_rehash(struct dentry * entry)
++{
++	d_rehash_cond(entry, 1);
+ }
+ 
++
+ /*
+  * When switching names, the actual string doesn't strictly have to
+  * be preserved in the target - because we're dropping the target
+@@ -1655,7 +1671,7 @@
+  * Update the dcache to reflect the move of a file name. Negative
+  * dcache entries should not be moved in this way.
+  */
+-static void d_move_locked(struct dentry * dentry, struct dentry * target)
++void d_move_locked(struct dentry * dentry, struct dentry * target)
+ {
+ 	struct hlist_head *list;
+ 
+@@ -1712,7 +1728,7 @@
+ 	spin_unlock(&dentry->d_lock);
+ 	write_sequnlock(&rename_lock);
+ }
+-
++EXPORT_SYMBOL(d_move_locked);
+ /**
+  * d_move - move a dentry
+  * @dentry: entry to move
