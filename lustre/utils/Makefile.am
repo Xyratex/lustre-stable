@@ -26,6 +26,9 @@ sbin_PROGRAMS = mkfs.lustre tunefs.lustre lctl wiretest \
 	l_getidentity llverfs llverdev \
 	llog_reader lr_reader lshowmount lustre_rsync \
 	ll_recover_lost_found_objs ltrack_stats ll_decode_filter_fid
+if GETIDENTITY_NSS_BUILD
+sbin_PROGRAMS += l_getidentity_nss
+endif
 if LIBPTHREAD
 sbin_PROGRAMS += loadgen
 endif
@@ -143,6 +146,13 @@ l_adsidentity_LDADD := $(LIBPTLCTL) $(LDAP)
 l_adsidentity_DEPENDENCIES := $(LIBPTLCTL)
 
 CONFDIR_DATA += configs/ads.conf
+endif
+
+if GETIDENTITY_NSS_BUILD
+l_getidentity_nss_SOURCES = l_getidentity_nss.c
+l_getidentity_nss_LDADD := $(LIBPTLCTL)
+l_getidentity_nss_LDFLAGS = -ldl
+l_getidentity_nss_DEPENDENCIES := $(LIBPTLCTL)
 endif
 
 ltrack_stats_SOURCES = ltrack_stats.c
