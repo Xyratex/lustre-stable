@@ -937,14 +937,17 @@ static int echo_device_init(const struct lu_env *env, struct lu_device *d,
 }
 
 static struct lu_device *echo_device_fini(const struct lu_env *env,
-                                          struct lu_device *d)
+					  struct lu_device *d)
 {
-        struct echo_device *ed = cl2echo_dev(lu2cl_dev(d));
-        struct lu_device *next = ed->ed_next;
+	struct echo_device *ed = cl2echo_dev(lu2cl_dev(d));
+	struct lu_device *next = ed->ed_next;
+	ENTRY;
 
-        while (next && !ed->ed_next_ismd)
-                next = next->ld_type->ldt_ops->ldto_device_fini(env, next);
-        return NULL;
+	obd_zombie_barrier();
+
+	while (next && !ed->ed_next_ismd)
+		next = next->ld_type->ldt_ops->ldto_device_fini(env, next);
+	RETURN(NULL);
 }
 
 static void echo_lock_release(const struct lu_env *env,

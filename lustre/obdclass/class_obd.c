@@ -376,7 +376,11 @@ int class_handle_ioctl(unsigned int cmd, unsigned long arg)
                         GOTO(out, err = -EINVAL);
                 }
 
-                obd = class_num2obd(index);
+		read_lock(&obd_dev_lock);
+		obd = class_num2obd(index);
+		if (obd)
+			class_incref(obd, __FUNCTION__, current);
+		read_unlock(&obd_dev_lock);
                 if (!obd)
                         GOTO(out, err = -ENOENT);
 
@@ -405,9 +409,17 @@ int class_handle_ioctl(unsigned int cmd, unsigned long arg)
                         GOTO(out, err = -EINVAL);
                 if (strnlen(data->ioc_inlbuf4, MAX_OBD_NAME) >= MAX_OBD_NAME)
                         GOTO(out, err = -EINVAL);
-                obd = class_name2obd(data->ioc_inlbuf4);
-        } else if (data->ioc_dev < class_devno_max()) {
-                obd = class_num2obd(data->ioc_dev);
+		read_lock(&obd_dev_lock);
+		obd = class_name2obd(data->ioc_inlbuf4);
+		if (obd)
+			class_incref(obd, __FUNCTION__, current);
+		read_unlock(&obd_dev_lock);
+	} else if (data->ioc_dev < class_devno_max()) {
+		read_lock(&obd_dev_lock);
+		obd = class_num2obd(data->ioc_dev);
+		if (obd)
+			class_incref(obd, __FUNCTION__, current);
+		read_unlock(&obd_dev_lock);
         } else {
                 CERROR("OBD ioctl: No device\n");
                 GOTO(out, err = -EINVAL);
@@ -449,6 +461,8 @@ int class_handle_ioctl(unsigned int cmd, unsigned long arg)
         }
 
  out:
+	if (obd)
+		class_decref(obd, __FUNCTION__, current);
         if (buf)
                 obd_ioctl_freedata(buf, len);
         RETURN(err);
