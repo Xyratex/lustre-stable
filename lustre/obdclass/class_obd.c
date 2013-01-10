@@ -60,7 +60,7 @@ cfs_atomic_t libcfs_kmemory = {0};
 
 struct obd_device *obd_devs[MAX_OBD_DEVICES];
 cfs_list_t obd_types;
-cfs_spinlock_t obd_dev_lock = CFS_SPIN_LOCK_UNLOCKED;
+cfs_rwlock_t obd_dev_lock = CFS_RW_LOCK_UNLOCKED;
 
 #ifndef __KERNEL__
 __u64 obd_max_pages = 0;
@@ -264,7 +264,11 @@ int class_handle_ioctl(unsigned int cmd, unsigned long arg)
                         GOTO(out, err = -EINVAL);
                 }
 
-                obd = class_num2obd(index);
+		cfs_read_lock(&obd_dev_lock);
+		obd = class_num2obd(index);
+		if (obd)
+			class_incref(obd, __FUNCTION__, cfs_current());
+		cfs_read_unlock(&obd_dev_lock);
                 if (!obd)
                         GOTO(out, err = -ENOENT);
 
@@ -293,9 +297,17 @@ int class_handle_ioctl(unsigned int cmd, unsigned long arg)
                         GOTO(out, err = -EINVAL);
                 if (strnlen(data->ioc_inlbuf4, MAX_OBD_NAME) >= MAX_OBD_NAME)
                         GOTO(out, err = -EINVAL);
-                obd = class_name2obd(data->ioc_inlbuf4);
-        } else if (data->ioc_dev < class_devno_max()) {
-                obd = class_num2obd(data->ioc_dev);
+		cfs_read_lock(&obd_dev_lock);
+		obd = class_name2obd(data->ioc_inlbuf4);
+		if (obd)
+			class_incref(obd, __FUNCTION__, cfs_current());
+		cfs_read_unlock(&obd_dev_lock);
+	} else if (data->ioc_dev < class_devno_max()) {
+		cfs_read_lock(&obd_dev_lock);
+		obd = class_num2obd(data->ioc_dev);
+		if (obd)
+			class_incref(obd, __FUNCTION__, cfs_current());
+		cfs_read_unlock(&obd_dev_lock);
         } else {
                 CERROR("OBD ioctl: No device\n");
                 GOTO(out, err = -EINVAL);
@@ -337,6 +349,8 @@ int class_handle_ioctl(unsigned int cmd, unsigned long arg)
         }
 
  out:
+	if (obd)
+		class_decref(obd, __FUNCTION__, cfs_current());
         if (buf)
                 obd_ioctl_freedata(buf, len);
         RETURN(err);
@@ -367,24 +381,6 @@ EXPORT_SYMBOL(at_history);
 EXPORT_SYMBOL(ptlrpc_put_connection_superhack);
 
 EXPORT_SYMBOL(proc_lustre_root);
-
-EXPORT_SYMBOL(class_register_type);
-EXPORT_SYMBOL(class_unregister_type);
-EXPORT_SYMBOL(class_get_type);
-EXPORT_SYMBOL(class_put_type);
-EXPORT_SYMBOL(class_name2dev);
-EXPORT_SYMBOL(class_name2obd);
-EXPORT_SYMBOL(class_uuid2dev);
-EXPORT_SYMBOL(class_uuid2obd);
-EXPORT_SYMBOL(class_find_client_obd);
-EXPORT_SYMBOL(class_devices_in_group);
-EXPORT_SYMBOL(class_conn2export);
-EXPORT_SYMBOL(class_exp2obd);
-EXPORT_SYMBOL(class_conn2obd);
-EXPORT_SYMBOL(class_exp2cliimp);
-EXPORT_SYMBOL(class_conn2cliimp);
-EXPORT_SYMBOL(class_disconnect);
-EXPORT_SYMBOL(class_num2obd);
 
 /* uuid.c */
 EXPORT_SYMBOL(class_uuid_unparse);
@@ -535,7 +531,6 @@ int init_obdclass(void)
         if (err)
                 return err;
 
-        cfs_spin_lock_init(&obd_dev_lock);
         CFS_INIT_LIST_HEAD(&obd_types);
 
         err = cfs_psdev_register(&obd_psdev);
