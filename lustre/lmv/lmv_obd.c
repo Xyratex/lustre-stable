@@ -843,15 +843,20 @@ static int lmv_iocontrol(unsigned int cmd, struct obd_export *exp,
                                             karg, uarg);
                         if (err == -ENODATA && cmd == OBD_IOC_POLL_QUOTACHECK) {
                                 RETURN(err);
-                        } else if (err) {
-                                if (lmv->tgts[i].ltd_active) {
-                                        CERROR("error: iocontrol MDC %s on MDT"
-                                               "idx %d cmd %x: err = %d\n",
-                                                lmv->tgts[i].ltd_uuid.uuid,
-                                                i, cmd, err);
-                                        if (!rc)
-                                                rc = err;
-                                }
+                        } else if (err && lmv->tgts[i].ltd_active) {
+				if (err == -ENOENT) {
+					CWARN("iocontrol MDC %s on MDT"
+					      "idx %d cmd %x: err = %d\n",
+					      lmv->tgts[i].ltd_uuid.uuid,
+					      i, cmd, err);
+				} else {
+					CERROR("error: iocontrol MDC %s on MDT"
+					       "idx %d cmd %x: err = %d\n",
+					       lmv->tgts[i].ltd_uuid.uuid,
+					       i, cmd, err);
+				}
+				if (!rc)
+					rc = err;
                         } else
                                 set = 1;
                 }
