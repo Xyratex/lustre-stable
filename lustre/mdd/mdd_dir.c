@@ -1130,7 +1130,6 @@ static int mdd_create_sanity_check(const struct lu_env *env,
         struct lu_fid     *fid       = &info->mti_fid;
         struct mdd_object *obj       = md2mdd_obj(pobj);
         struct mdd_device *m         = mdo2mdd(pobj);
-        int lookup                   = spec->sp_cr_lookup;
         int rc;
         ENTRY;
 
@@ -1143,7 +1142,7 @@ static int mdd_create_sanity_check(const struct lu_env *env,
          * exists or not because MDT performs lookup for it.
          * name length check is done in lookup.
          */
-        if (lookup) {
+	if (spec->sp_cr_lookup) {
                 /*
                  * Check if the name already exist, though it will be checked in
                  * _index_insert also, for avoiding rolling back if exists

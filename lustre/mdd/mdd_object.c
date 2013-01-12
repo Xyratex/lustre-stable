@@ -1310,7 +1310,7 @@ static int mdd_fix_attr(const struct lu_env *env, struct mdd_object *obj,
                         la->la_valid &= ~(LA_MTIME | LA_CTIME);
         } else {
                 if (la->la_valid & (LA_SIZE | LA_BLOCKS)) {
-                        if (!((ma->ma_attr_flags & MDS_OPEN_OWNEROVERRIDE) &&
+                        if (!((ma->ma_attr_flags & MDS_OWNEROVERRIDE) &&
                               (uc->uc_fsuid == tmp_la->la_uid)) &&
                             !(ma->ma_attr_flags & MDS_PERM_BYPASS)) {
                                 rc = mdd_permission_internal_locked(env, obj,
