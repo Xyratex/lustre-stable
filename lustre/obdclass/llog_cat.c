@@ -289,7 +289,8 @@ int llog_cat_add_rec(struct llog_handle *cathandle, struct llog_rec_hdr *rec,
         /* loghandle is already locked by llog_cat_current_log() for us */
         rc = llog_write_rec(loghandle, rec, reccookie, 1, buf, -1);
         if (rc < 0)
-                CERROR("llog_write_rec %d: lh=%p\n", rc, loghandle);
+		CDEBUG_LIMIT(rc == -ENOSPC ? D_HA : D_ERROR,
+			     "llog_write_rec %d: lh=%p\n", rc, loghandle);
         cfs_up_write(&loghandle->lgh_lock);
         if (rc == -ENOSPC) {
                 /* to create a new plain log */
