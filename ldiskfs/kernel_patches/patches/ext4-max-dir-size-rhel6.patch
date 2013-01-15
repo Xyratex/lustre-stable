@@ -1,29 +1,47 @@
-Index: linux-2.6.32-el6-beta/fs/ext4/ialloc.c
+Index: linux-stage/fs/ext4/super.c
 ===================================================================
---- linux-2.6.32-el6-beta.orig/fs/ext4/ialloc.c
-+++ linux-2.6.32-el6-beta/fs/ext4/ialloc.c
-@@ -825,11 +825,15 @@ struct inode *ext4_new_inode(handle_t *h
- 	sb = dir->i_sb;
- 	ngroups = ext4_get_groups_count(sb);
- 	trace_ext4_request_inode(dir, mode);
-+
-+	sbi = EXT4_SB(sb);
-+	if (sbi->s_max_dir_size > 0 && i_size_read(dir) >= sbi->s_max_dir_size)
-+		return ERR_PTR(-EFBIG);
-+
- 	inode = new_inode(sb);
- 	if (!inode)
- 		return ERR_PTR(-ENOMEM);
- 	ei = EXT4_I(inode);
--	sbi = EXT4_SB(sb);
+--- linux-stage.orig/fs/ext4/super.c
++++ linux-stage/fs/ext4/super.c
+@@ -999,6 +999,9 @@ static int ext4_show_options(struct seq_
+ 		seq_printf(seq, ",init_inode_table=%u",
+ 			   (unsigned) sbi->s_li_wait_mult);
  
- 	if (!goal)
- 		goal = sbi->s_inode_goal;
-Index: linux-2.6.32-el6-beta/fs/ext4/super.c
-===================================================================
---- linux-2.6.32-el6-beta.orig/fs/ext4/super.c
-+++ linux-2.6.32-el6-beta/fs/ext4/super.c
-@@ -2601,6 +2601,7 @@ EXT4_RO_ATTR(lifetime_write_kbytes);
++	if (sbi->s_max_dir_size)
++		seq_printf(seq, "max_dir_size=%lu", sbi->s_max_dir_size);
++
+ 	ext4_show_quota_options(seq, sb);
+ 
+ 	return 0;
+@@ -1186,6 +1189,7 @@ enum {
+ 	Opt_mballoc, Opt_bigendian_extents, Opt_force_over_128tb,
+ 	Opt_discard, Opt_nodiscard,
+ 	Opt_init_inode_table, Opt_noinit_inode_table,
++	Opt_max_dir_size_kb,
+ };
+ 
+ static const match_table_t tokens = {
+@@ -1263,6 +1267,7 @@ static const match_table_t tokens = {
+ 	{Opt_init_inode_table, "init_itable=%u"},
+ 	{Opt_init_inode_table, "init_itable"},
+ 	{Opt_noinit_inode_table, "noinit_itable"},
++	{Opt_max_dir_size_kb, "max_dir_size_kb=%u"},
+ 	{Opt_err, NULL},
+ };
+ 
+@@ -1648,6 +1653,12 @@ set_qf_format:
+ 		case Opt_nodelalloc:
+ 			clear_opt(sbi->s_mount_opt, DELALLOC);
+ 			break;
++		case Opt_max_dir_size_kb:
++			if (match_int(&args[0], &option))
++				return 0;
++			if (option < 0)
++				return 0;
++			sbi->s_max_dir_size = option * 1024;
+ 		case Opt_stripe:
+ 			if (match_int(&args[0], &option))
+ 				return 0;
+@@ -2374,6 +2385,7 @@ EXT4_RO_ATTR(lifetime_write_kbytes);
  EXT4_ATTR_OFFSET(inode_readahead_blks, 0644, sbi_ui_show,
  		 inode_readahead_blks_store, s_inode_readahead_blks);
  EXT4_RW_ATTR_SBI_UI(inode_goal, s_inode_goal);
@@ -31,7 +49,7 @@ Index: linux-2.6.32-el6-beta/fs/ext4/super.c
  EXT4_RW_ATTR_SBI_UI(mb_stats, s_mb_stats);
  EXT4_RW_ATTR_SBI_UI(mb_max_to_scan, s_mb_max_to_scan);
  EXT4_RW_ATTR_SBI_UI(mb_min_to_scan, s_mb_min_to_scan);
-@@ -2615,6 +2616,7 @@ static struct attribute *ext4_attrs[] = 
+@@ -2389,6 +2401,7 @@ static struct attribute *ext4_attrs[] = 
  	ATTR_LIST(lifetime_write_kbytes),
  	ATTR_LIST(inode_readahead_blks),
  	ATTR_LIST(inode_goal),
@@ -39,29 +57,42 @@ Index: linux-2.6.32-el6-beta/fs/ext4/super.c
  	ATTR_LIST(mb_stats),
  	ATTR_LIST(mb_max_to_scan),
  	ATTR_LIST(mb_min_to_scan),
-Index: linux-2.6.32-el6-beta/fs/ext4/ext4.h
+@@ -2884,6 +2897,7 @@ static int ext4_fill_super(struct super_
+ 	sbi->s_sb_block = sb_block;
+ 	sbi->s_sectors_written_start = part_stat_read(sb->s_bdev->bd_part,
+ 						      sectors[1]);
++	sbi->s_max_dir_size = 0;
+ 
+ 	unlock_kernel();
+ 
+Index: linux-stage/fs/ext4/ext4.h
 ===================================================================
---- linux-2.6.32-el6-beta.orig/fs/ext4/ext4.h
-+++ linux-2.6.32-el6-beta/fs/ext4/ext4.h
-@@ -1029,6 +1029,8 @@ struct ext4_sb_info {
-
-	unsigned int s_log_groups_per_flex;
-	struct flex_groups *s_flex_groups;
-+
+--- linux-stage.orig/fs/ext4/ext4.h
++++ linux-stage/fs/ext4/ext4.h
+@@ -1114,6 +1114,7 @@ struct ext4_sb_info {
+ 	unsigned long s_mb_prealloc_table_size;
+ 	unsigned int s_mb_group_prealloc;
+ 	unsigned int s_max_writeback_mb_bump;
 +	unsigned long s_max_dir_size;
-
-	/* workqueue for dio unwritten */
-	struct workqueue_struct *dio_unwritten_wq;
-@@ -1353,6 +1355,12 @@ struct mmp_struct {
- #define EXT4_MMP_MIN_CHECK_INTERVAL	5
+ 	/* where last allocation was done - for stream allocation */
+ 	unsigned long s_mb_last_group;
+ 	unsigned long s_mb_last_start;
+Index: linux-stage/fs/ext4/namei.c
+===================================================================
+--- linux-stage.orig/fs/ext4/namei.c
++++ linux-stage/fs/ext4/namei.c
+@@ -59,6 +59,14 @@ static struct buffer_head *ext4_append(h
+ 	* have to be serialized -bzzz */
+ 	down(&ei->i_append_sem);
  
- /*
-+ * max directory size tunable
-+ */
-+#define EXT4_DEFAULT_MAX_DIR_SIZE	0
-+#define EXT4_MAX_DIR_SIZE_NAME		"max_dir_size"
++	if (unlikely(EXT4_SB(inode->i_sb)->s_max_dir_size &&
++		     (inode->i_size >=
++		     EXT4_SB(inode->i_sb)->s_max_dir_size))) {
++		*err = -ENOSPC;
++		up(&ei->i_append_sem);
++		return NULL;
++	}
 +
-+/*
-  * Function prototypes
-  */
+ 	*block = inode->i_size >> inode->i_sb->s_blocksize_bits;
  
+ 	bh = ext4_bread(handle, inode, *block, 1, err);
