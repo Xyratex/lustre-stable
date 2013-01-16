@@ -3,8 +3,8 @@ TBD Oracle, Inc.
 	* Support for kernels:
 	  2.6.16.60-0.69.1 (SLES 10),
 	  2.6.32.19-0.2.1 (SLES11),
-	  2.6.18-194.17.1.el5 (RHEL 5)
-	  2.6.18-194.17.1.0.1.el5 (OEL 5)
+	  2.6.18-308.24.1.el5 (RHEL 5)
+	  2.6.18-308.24.1.el5 (OEL 5)
 	  2.6.32-279.2.1.el6 (RHEL 6) - (Client ONLY)
 	  2.6.32-279.2.1.0.1.el6 (OEL 6) - (Client ONLY)
 	* Client support for unpatched kernels:

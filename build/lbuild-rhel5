@@ -9,7 +9,7 @@ BUILD_GEN+=".0"
 
 source ${0%/*}/lbuild-rhel
 
-SPEC_NAME="kernel-2.6.spec"
+SPEC_NAME="kernel.spec"
 
 patch_spec() {
     local buildid="$1"
