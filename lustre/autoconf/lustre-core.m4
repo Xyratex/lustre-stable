@@ -1800,24 +1800,6 @@ LB_LINUX_TRY_COMPILE([
 ])
 ])
 
-# LC_WALK_SPACE_HAS_DATA_SEM
-#
-# 2.6.33 ext4_ext_walk_space() takes i_data_sem internally.
-# Not a very robust check, but it will hopefully last long
-# enough until it can avoid being conditional.
-#
-AC_DEFUN([LC_WALK_SPACE_HAS_DATA_SEM],
-[AC_MSG_CHECKING([if ext4_ext_walk_space() takes i_data_sem])
-WALK_SPACE_DATA_SEM="$(awk '/ext4_ext_walk_space/,/ext4_ext_find_extent/' $LINUX/fs/ext4/extents.c | grep -c 'down_read.*i_data_sem')"
-if test "$WALK_SPACE_DATA_SEM" != 0 ; then
-        AC_DEFINE(WALK_SPACE_HAS_DATA_SEM, 1,
-                  [ext4_ext_walk_space takes i_data_sem])
-        AC_MSG_RESULT([yes])
-else
-        AC_MSG_RESULT([no])
-fi
-])
-
 # 2.6.32 without DQUOT_INIT defined.
 AC_DEFUN([LC_DQUOT_INIT],
 [AC_MSG_CHECKING([if DQUOT_INIT is defined])
@@ -2040,9 +2022,6 @@ AC_DEFUN([LC_PROG_LINUX],
           # 2.6.32
           LC_EXPORT_BDI_REGISTER
           LC_SB_BDI
-          if test x$enable_server = xyes ; then
-              LC_WALK_SPACE_HAS_DATA_SEM
-          fi
           LC_DQUOT_INIT
           LC_REQUEST_QUEUE_LIMITS
           LC_HAVE_COMPACTION_H
