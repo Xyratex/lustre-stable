@@ -4,6 +4,7 @@ iopen-2.6.18-rhel5-ext4.patch
 ext4-map_inode_page-2.6.18-rhel5.patch
 export-ext4-2.6-rhel5.patch
 ext4-remove-cond_resched-calls-rhel5.patch
+ext4-nlink-2.6-rhel5.patch
 ext4-inode-version-rhel5.patch
 ext4-mmp-rhel5.patch
 ext4-lookup-dotdot-rhel5.patch
@@ -15,7 +16,7 @@ ext4-mballoc-extra-checks-rhel5.patch
 ext4-big-endian-check-2.6-rhel5.patch
 ext4-alloc-policy-2.6-rhel5.patch
 ext4-misc-rhel5.patch
-ext4-force_over_16tb-rhel5.patch
+ext4-force_over_24tb-rhel5.patch
 ext4-pdir-fix-rhel5.patch
 ext4-osd-iop-common.patch
 ext4-osd-iam-exports.patch
@@ -28,8 +29,8 @@ ext4_data_in_dirent.patch
 ext4-extents-mount-option-rhel5.patch
 ext4-fiemap-2.6-rhel5.patch
 ext4-mballoc-skip-grps.patch
-ext4-back-dquot-to-rhel54.patch
 ext4-disable-mb-cache-rhel5.patch
 ext4-remove-extents-warning-rhel5.patch
 ext4-disable-delalloc-rhel5.patch
 ext4-failed-mount-b23368.patch
+ext4-mballoc-group_check-rhel5.patch

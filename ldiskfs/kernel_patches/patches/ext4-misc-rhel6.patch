@@ -108,16 +108,6 @@ Index: linux-stage/fs/ext4/extents.c
 ===================================================================
 --- linux-stage.orig/fs/ext4/extents.c
 +++ linux-stage/fs/ext4/extents.c
-@@ -1866,9 +1866,7 @@ int ext4_ext_walk_space(struct inode *in
- 	while (block < last && block != EXT_MAX_BLOCKS) {
- 		num = last - block;
- 		/* find extent for this block */
--		down_read(&EXT4_I(inode)->i_data_sem);
- 		path = ext4_ext_find_extent(inode, block, path);
--		up_read(&EXT4_I(inode)->i_data_sem);
- 		if (IS_ERR(path)) {
- 			err = PTR_ERR(path);
- 			path = NULL;
 @@ -2133,6 +2131,55 @@ int ext4_ext_calc_credits_for_single_ext
  }
  
@@ -174,16 +164,7 @@ Index: linux-stage/fs/ext4/extents.c
   * How many index/leaf blocks need to change/allocate to modify nrblocks?
   *
   * if nrblocks are fit in a single extent (chunk flag is 1), then
-@@ -3968,10 +4015,23 @@ int ext4_fiemap(struct inode *inode, str
- 		 * Walk the extent tree gathering extent information.
- 		 * ext4_ext_fiemap_cb will push extents back to user.
- 		 */
-+		down_read(&EXT4_I(inode)->i_data_sem);
- 		error = ext4_ext_walk_space(inode, start_blk, len_blks,
- 					  ext4_ext_fiemap_cb, fieinfo);
-+		up_read(&EXT4_I(inode)->i_data_sem);
- 	}
- 
+@@ -4024,3 +4024,14 @@ int ext4_fiemap(struct inode *inode, str
  	return error;
  }
  

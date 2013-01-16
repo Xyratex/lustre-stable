@@ -205,17 +205,6 @@ Index: linux-stage/fs/ext4/super.c
  
  __u32 ext4_used_dirs_count(struct super_block *sb,
  			      struct ext4_group_desc *bg)
-@@ -998,8 +1000,8 @@ static void dump_mmp_msg(struct super_bl
- 	ext4_warning(sb, function, "%s", msg);
- 	ext4_warning(sb, function, "MMP failure info: last update time: %llu, "
- 		     "last update node: %s, last update device: %s\n",
--		     le64_to_cpu(mmp->mmp_time), mmp->mmp_nodename,
--		     mmp->mmp_bdevname);
-+		     (unsigned long long)(le64_to_cpu(mmp->mmp_time)),
-+		     mmp->mmp_nodename, mmp->mmp_bdevname);
- }
- 
- /*
 @@ -1436,6 +1438,7 @@ enum {
  	Opt_jqfmt_vfsold, Opt_jqfmt_vfsv0, Opt_quota, Opt_noquota,
  	Opt_ignore, Opt_barrier, Opt_nobarrier, Opt_err, Opt_resize,
