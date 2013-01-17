@@ -1172,8 +1172,11 @@ int mdd_object_initialize(const struct lu_env *env, const struct lu_fid *pfid,
 	 * because below function doesn't consider umask).
 	 * I'd suggest set all object attributes in creation time, see above.
 	 */
+	LASSERT(ma->ma_attr.la_valid & LA_MODE);
 	ma->ma_attr.la_valid &= ~LA_MODE;
         rc = mdd_attr_set_internal(env, child, &ma->ma_attr, handle, 0);
+	/* arguments are supposed to stay the same */
+	ma->ma_attr.la_valid |= LA_MODE;
         if (rc != 0)
                 RETURN(rc);
 
