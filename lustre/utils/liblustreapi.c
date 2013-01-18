@@ -3105,6 +3105,7 @@ static int rmtacl_notify(int ops)
                 }
 
                 rc = ioctl(fd, LL_IOC_RMTACL, ops);
+		close(fd);
                 if (rc < 0) {
                         rc = -errno;
                         llapi_error(LLAPI_MSG_ERROR, rc, "ioctl %d\n", fd);
@@ -3116,8 +3117,6 @@ static int rmtacl_notify(int ops)
 
 out:
         endmntent(fp);
-	if (fd >= 0)
-		close(fd);
 	return ((rc != 0) ? rc : found);
 }
 
