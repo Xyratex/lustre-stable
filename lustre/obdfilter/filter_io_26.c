@@ -125,6 +125,10 @@ static void record_finish_io(struct filter_iobuf *iobuf, int rw, int rc)
                 cfs_waitq_signal(&iobuf->dr_wait);
 }
 
+#ifndef __REQ_WRITE /* pre-2.6.35 */
+#define __REQ_WRITE BIO_RW
+#endif
+
 #ifdef HAVE_BIO_ENDIO_2ARG
 #define DIO_RETURN(a)
 static void dio_complete_routine(struct bio *bio, int error)
@@ -170,7 +174,7 @@ static int dio_complete_routine(struct bio *bio, unsigned int done, int error)
         }
 
         /* the check is outside of the cycle for performance reason -bzzz */
-        if (!cfs_test_bit(BIO_RW, &bio->bi_rw)) {
+        if (!cfs_test_bit(__REQ_WRITE, &bio->bi_rw)) {
                 bio_for_each_segment(bvl, bio, i) {
                         if (likely(error == 0))
                                 SetPageUptodate(bvl->bv_page);
