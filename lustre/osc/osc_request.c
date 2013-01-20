@@ -113,6 +113,7 @@ static int osc_unpackmd(struct obd_export *exp, struct lov_stripe_md **lsmp,
                         struct lov_mds_md *lmm, int lmm_bytes)
 {
         int lsm_size;
+        struct obd_import *imp = class_exp2cliimp(exp);
         ENTRY;
 
         if (lmm != NULL) {
@@ -158,7 +159,11 @@ static int osc_unpackmd(struct obd_export *exp, struct lov_stripe_md **lsmp,
                 LASSERT((*lsmp)->lsm_object_id);
         }
 
-        (*lsmp)->lsm_maxbytes = LUSTRE_STRIPE_MAXBYTES;
+        if (imp != NULL &&
+            (imp->imp_connect_data.ocd_connect_flags & OBD_CONNECT_MAXBYTES))
+                (*lsmp)->lsm_maxbytes = imp->imp_connect_data.ocd_maxbytes;
+        else
+                (*lsmp)->lsm_maxbytes = LUSTRE_STRIPE_MAXBYTES;
 
         RETURN(lsm_size);
 }

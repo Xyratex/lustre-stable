@@ -2429,6 +2429,9 @@ static int filter_connect_internal(struct obd_export *exp,
                                    obd_export_nid2str(exp));
         }
 
+        if (data->ocd_connect_flags & OBD_CONNECT_MAXBYTES)
+                data->ocd_maxbytes = exp->exp_obd->u.obt.obt_sb->s_maxbytes;
+
         /* FIXME: Do the same with the MDS UUID and fsd_peeruuid.
          * FIXME: We don't strictly need the COMPAT flag for that,
          * FIXME: as fsd_peeruuid[0] will tell us if that is set.
@@ -3084,7 +3087,7 @@ static int filter_unpackmd(struct obd_export *exp, struct lov_stripe_md **lsmp,
                 LASSERT((*lsmp)->lsm_object_id);
         }
 
-        (*lsmp)->lsm_maxbytes = LUSTRE_STRIPE_MAXBYTES;
+        (*lsmp)->lsm_maxbytes = exp->exp_obd->u.obt.obt_sb->s_maxbytes;
 
         RETURN(lsm_size);
 }

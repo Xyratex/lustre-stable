@@ -1981,7 +1981,7 @@ void lustre_swab_connect(struct obd_connect_data *ocd)
         __swab32s(&ocd->ocd_cksum_types);
         __swab32s(&ocd->ocd_max_easize);
         CLASSERT(offsetof(typeof(*ocd), padding1) != 0);
-        CLASSERT(offsetof(typeof(*ocd), padding2) != 0);
+        __swab64s(&ocd->ocd_maxbytes);
 }
 
 void lustre_swab_obdo (struct obdo  *o)

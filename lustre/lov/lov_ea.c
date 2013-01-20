@@ -228,10 +228,13 @@ int lsm_unpackmd_v1(struct lov_obd *lov, struct lov_stripe_md *lsm,
 {
         struct lov_oinfo *loi;
         int i;
+        __u64 stripe_maxbytes = OBD_OBJECT_EOF;
 
         lsm_unpackmd_common(lsm, lmm);
 
         for (i = 0; i < lsm->lsm_stripe_count; i++) {
+                struct obd_import *imp;
+
                 /* XXX LOV STACKING call down to osc_unpackmd() */
                 loi = lsm->lsm_oinfo[i];
                 loi->loi_id = le64_to_cpu(lmm->lmm_objects[i].l_object_id);
@@ -249,7 +252,26 @@ int lsm_unpackmd_v1(struct lov_obd *lov, struct lov_stripe_md *lsm,
                         lov_dump_lmm_v1(D_WARNING, lmm);
                         return -EINVAL;
                 }
+                /* calculate the minimum stripe max bytes */
+                imp = lov->lov_tgts[loi->loi_ost_idx]->ltd_obd->u.cli.cl_import;
+                if (imp != NULL) {
+                        if (!(imp->imp_connect_data.ocd_connect_flags &
+                              OBD_CONNECT_MAXBYTES)) {
+                                imp->imp_connect_data.ocd_maxbytes =
+                                                         LUSTRE_STRIPE_MAXBYTES;
+                        }
+                        if (stripe_maxbytes >
+                                            imp->imp_connect_data.ocd_maxbytes){
+                                stripe_maxbytes =
+                                             imp->imp_connect_data.ocd_maxbytes;
+                        }
+                }
         }
+
+        /* no ost connected yet */
+        if (stripe_maxbytes == OBD_OBJECT_EOF)
+                stripe_maxbytes = LUSTRE_STRIPE_MAXBYTES;
+        lsm->lsm_maxbytes = stripe_maxbytes * lsm->lsm_stripe_count;
 
         return 0;
 }
@@ -664,6 +686,7 @@ int lsm_unpackmd_v3(struct lov_obd *lov, struct lov_stripe_md *lsm,
         struct lov_mds_md_v3 *lmm;
         struct lov_oinfo *loi;
         int i;
+        __u64 stripe_maxbytes = OBD_OBJECT_EOF;
 
         lmm = (struct lov_mds_md_v3 *)lmmv1;
 
@@ -671,6 +694,8 @@ int lsm_unpackmd_v3(struct lov_obd *lov, struct lov_stripe_md *lsm,
         strncpy(lsm->lsm_pool_name, lmm->lmm_pool_name, LOV_MAXPOOLNAME);
 
         for (i = 0; i < lsm->lsm_stripe_count; i++) {
+                struct obd_import *imp;
+
                 /* XXX LOV STACKING call down to osc_unpackmd() */
                 loi = lsm->lsm_oinfo[i];
                 loi->loi_id = le64_to_cpu(lmm->lmm_objects[i].l_object_id);
@@ -688,7 +713,25 @@ int lsm_unpackmd_v3(struct lov_obd *lov, struct lov_stripe_md *lsm,
                         lov_dump_lmm_v3(D_WARNING, lmm);
                         return -EINVAL;
                 }
+                /* calculate the minimum stripe max bytes */
+                imp = lov->lov_tgts[loi->loi_ost_idx]->ltd_obd->u.cli.cl_import;
+                if (imp != NULL) {
+                        if (!(imp->imp_connect_data.ocd_connect_flags &
+                              OBD_CONNECT_MAXBYTES)) {
+                                imp->imp_connect_data.ocd_maxbytes =
+                                                         LUSTRE_STRIPE_MAXBYTES;
+                        }
+                        if (stripe_maxbytes>imp->imp_connect_data.ocd_maxbytes){
+                                stripe_maxbytes =
+                                             imp->imp_connect_data.ocd_maxbytes;
+                        }
+                }
         }
+
+        /* no ost connected yet */
+        if (stripe_maxbytes == OBD_OBJECT_EOF)
+                stripe_maxbytes = LUSTRE_STRIPE_MAXBYTES;
+        lsm->lsm_maxbytes = stripe_maxbytes * lsm->lsm_stripe_count;
 
         return 0;
 }

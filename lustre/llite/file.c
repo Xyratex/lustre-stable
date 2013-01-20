@@ -1841,6 +1841,9 @@ repeat:
         chunk = 0; /* just to fix gcc's warning */
         end = *ppos + count - 1;
 
+        if (end > maxbytes - 1)
+                end = maxbytes - 1;
+
         if (file->f_flags & O_APPEND) {
                 lock_start = 0;
                 lock_end = OBD_OBJECT_EOF;
@@ -1859,6 +1862,10 @@ repeat:
                 /* and chunk shouldn't be too large even if striping is wide */
                 if (end - *ppos > sbi->ll_max_rw_chunk)
                         end = *ppos + sbi->ll_max_rw_chunk - 1;
+
+                if (end > maxbytes - 1)
+                        end = maxbytes - 1;
+
                 lock_start = *ppos;
                 lock_end = end;
                 chunk = end - *ppos + 1;

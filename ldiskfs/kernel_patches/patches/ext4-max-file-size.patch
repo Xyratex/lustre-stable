@@ -1,0 +1,79 @@
+diff -rbBu linux-stage.orig/fs/ext4/extents.c linux-stage/fs/ext4/extents.c
+--- linux-stage.orig/fs/ext4/extents.c	2013-01-14 22:39:46.000000000 -0700
++++ linux-stage/fs/ext4/extents.c	2013-01-14 22:39:46.000000000 -0700
+@@ -1861,10 +1861,15 @@
+ 	struct ext4_ext_path *path = NULL;
+ 	struct ext4_ext_cache cbex;
+ 	struct ext4_extent *ex;
+-	ext4_lblk_t next, start = 0, end = 0;
+-	ext4_lblk_t last = block + num;
++	__u64 next, start = 0, end = 0, last;
+ 	int depth, exists, err = 0;
+ 
++	/* make sure that block + num does not overflow */
++	if (block + num == 0)
++		num--;
++
++	last = (__u64)block + num;
++
+ 	BUG_ON(func == NULL);
+ 	BUG_ON(inode == NULL);
+ 
+@@ -1894,18 +1899,18 @@
+ 			/* there is no extent yet, so try to allocate
+ 			 * all requested space */
+ 			start = block;
+-			end = block + num;
++			end = (__u64)block + num;
+ 		} else if (le32_to_cpu(ex->ee_block) > block) {
+ 			/* need to allocate space before found extent */
+ 			start = block;
+ 			end = le32_to_cpu(ex->ee_block);
+-			if (block + num < end)
+-				end = block + num;
+-		} else if (block >= le32_to_cpu(ex->ee_block)
++			if ((__u64)block + num < end)
++				end = (__u64)block + num;
++		} else if (block >= (__u64)le32_to_cpu(ex->ee_block)
+ 					+ ext4_ext_get_actual_len(ex)) {
+ 			/* need to allocate space after found extent */
+ 			start = block;
+-			end = block + num;
++			end = (__u64)block + num;
+ 			if (end >= next)
+ 				end = next;
+ 		} else if (block >= le32_to_cpu(ex->ee_block)) {
+@@ -1914,10 +1919,10 @@
+ 			 * by found extent
+ 			 */
+ 			start = block;
+-			end = le32_to_cpu(ex->ee_block)
++			end = (__u64)le32_to_cpu(ex->ee_block)
+ 				+ ext4_ext_get_actual_len(ex);
+-			if (block + num < end)
+-				end = block + num;
++			if ((__u64)block + num < end)
++				end = (__u64)block + num;
+ 			exists = 1;
+ 		} else {
+ 			BUG();
+@@ -1960,6 +1965,10 @@
+ 			path = NULL;
+ 		}
+ 
++		/* 32-bit overflow */
++		if (cbex.ec_block + cbex.ec_len < cbex.ec_block)
++			break;
++
+ 		block = cbex.ec_block + cbex.ec_len;
+ 	}
+ 
+@@ -2013,7 +2022,7 @@
+ 				block,
+ 				le32_to_cpu(ex->ee_block),
+ 				 ext4_ext_get_actual_len(ex));
+-	} else if (block >= le32_to_cpu(ex->ee_block)
++	} else if (block >= (__u64)le32_to_cpu(ex->ee_block)
+ 			+ ext4_ext_get_actual_len(ex)) {
+ 		ext4_lblk_t next;
+ 		lblock = le32_to_cpu(ex->ee_block)

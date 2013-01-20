@@ -2371,6 +2371,55 @@ test_59() {
 }
 run_test 59 "writeconf mount option"
 
+test_60() {
+	local saved_opts=$OST_MKFS_OPTS
+
+	# we dont want to do test with an 32-bit OSS.
+	do_facet ost1 uname -m | grep -q i686 && { skip "OSS is 32-bit" && return; }
+	# make sure that OSS ldiskfs is ext4-based
+	do_facet ost1 modinfo ldiskfs | grep -q 'Fourth Extended Filesystem' || \
+		{ skip "OSS ldiskfs is not ext4-based." && return; }
+
+	OST_MKFS_OPTS="$saved_opts --mkfsoptions=\\\"-t ext4\\\""
+	reformat_and_config
+
+	start_mds || return 1
+	start_ost || return 2
+	mount_client $MOUNT || return 3
+
+	# make sure this feature is enabled
+	$LCTL get_param osc.*OST0000*.connect_flags | grep -q object_max_bytes ||
+		{ skip "OST0000 does not handle > 2TB objects" && return; }
+
+	local TiB=$((2**40))
+	local KiB=$((2**10))
+
+	# write one 1 byte to offset 16TiB - 4KiB - 1
+	dd if=/dev/zero of=$MOUNT/$tfile bs=1 count=1 \
+		seek=$((16 * TiB - 4 * KiB - 1)) || return 4
+	sync
+	rm -f $MOUNT/$tfile || return 5
+
+	# cross file size limit boundary, dd should return none-zero
+	dd if=/dev/zero of=$MOUNT/$tfile bs=1 count=$((8 * KiB)) \
+		seek=$((16 * TiB - 8 * KiB)) && return 6
+	sync
+
+	# read one byte from offset 16TiB - 4KiB - 1
+	dd if=$MOUNT/$tfile of=/dev/null bs=1 count=1 \
+		seek=$((16 * TiB - 4 * KiB - 1)) || return 7
+
+	local file_sz=$(stat $MOUNT/$tfile | grep Size | awk '{print $2}')
+	local good_sz=$((16 * TiB - 4 * KiB))
+	[ $file_sz -eq $good_sz ] || return 8
+	rm -f $MOUNT/$tfile || return 9
+
+	stopall
+	OST_MKFS_OPTS=$saved_opts
+	reformat
+}
+run_test 60 "Object can be larger than 2TB in size on ext4-based OSTs"
+
 if ! combined_mgs_mds ; then
 	stop mgs
 fi

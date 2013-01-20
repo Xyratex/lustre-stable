@@ -385,7 +385,8 @@ static int client_common_fill_super(struct super_block *sb,
                                   OBD_CONNECT_REQPORTAL | OBD_CONNECT_BRW_SIZE |
                                   OBD_CONNECT_SRVLOCK   | OBD_CONNECT_CANCELSET|
                                   OBD_CONNECT_AT        | OBD_CONNECT_FID      |
-                                  OBD_CONNECT_VBR       | OBD_CONNECT_TRUNCLOCK;
+                                  OBD_CONNECT_VBR       | OBD_CONNECT_TRUNCLOCK|
+                                  OBD_CONNECT_MAXBYTES;
 
         if (!OBD_FAIL_CHECK(OBD_FAIL_OSC_CONNECT_CKSUM)) {
                 /* OBD_CONNECT_CKSUM should always be set, even if checksums are
@@ -1867,6 +1868,7 @@ static void ll_replace_lsm(struct inode *inode, struct lov_stripe_md *lsm)
         lli->lli_maxbytes = lsm->lsm_maxbytes;
         if (lli->lli_maxbytes > PAGE_CACHE_MAXBYTES)
                 lli->lli_maxbytes = PAGE_CACHE_MAXBYTES;
+        inode->i_sb->s_maxbytes = lli->lli_maxbytes;
 }
 
 void ll_update_inode(struct inode *inode, struct lustre_md *md)
@@ -1899,6 +1901,7 @@ void ll_update_inode(struct inode *inode, struct lustre_md *md)
                         lli->lli_maxbytes = lsm->lsm_maxbytes;
                         if (lli->lli_maxbytes > PAGE_CACHE_MAXBYTES)
                                 lli->lli_maxbytes = PAGE_CACHE_MAXBYTES;
+                        inode->i_sb->s_maxbytes = lli->lli_maxbytes;
                 } else {
                         spin_unlock(&lli->lli_lock);
                         if ((lli->lli_smd->lsm_magic == lsm->lsm_magic ||
