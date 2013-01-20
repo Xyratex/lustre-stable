@@ -80,6 +80,10 @@
 #include <lustre_ver.h>
 #include "mount_utils.h"
 
+#ifdef HAVE_SELINUX
+#include <selinux/selinux.h>
+#endif
+
 #ifndef PATH_MAX
 #define PATH_MAX 4096
 #endif
@@ -1046,6 +1050,29 @@ static int __l_mkdir(char * filepnm, int mode , struct mkfs_opts *mop)
         return 0;
 }
 
+/*
+ * Concatenate context of the temporary mount point iff selinux is enabled
+ */
+#ifdef HAVE_SELINUX
+void append_context_for_mount(char *mntpt, struct mkfs_opts *mop)
+{
+       security_context_t fcontext;
+
+       if (getfilecon(mntpt, &fcontext) < 0) {
+               /* Continuing with default behaviour */
+               fprintf(stderr, "%s: Get file context failed : %s\n",
+                       progname, strerror(errno));
+               return;
+       }
+
+       if (fcontext != NULL) {
+               strcat(mop->mo_ldd.ldd_mount_opts, ",context=");
+               strcat(mop->mo_ldd.ldd_mount_opts, fcontext);
+               freecon(fcontext);
+       }
+}
+#endif
+
 /* Write the server config files */
 int write_local_files(struct mkfs_opts *mop)
 {
@@ -1062,6 +1089,14 @@ int write_local_files(struct mkfs_opts *mop)
                         progname, mntpt, strerror(errno));
                 return errno;
         }
+
+	/*
+	 * Append file context to mount options if SE Linux is enabled
+	 */
+#ifdef HAVE_SELINUX
+	if (is_selinux_enabled() > 0)
+		append_context_for_mount(mntpt, mop);
+#endif
 
         dev = mop->mo_device;
         if (mop->mo_flags & MO_IS_LOOP)
