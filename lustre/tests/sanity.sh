@@ -1897,6 +1897,154 @@ test_39c() {
 }
 run_test 39c "mtime change on rename ==========================="
 
+# bug 24554
+test_39d() {
+	# remount with "-o rw" instead of default $MOUNTOPT to be sure that
+	# client is mounted without noatime and nodiratime
+	remount_client $MOUNT "-o rw"
+
+	mkdir -p $DIR/$tdir
+	echo hello >> $DIR/$tdir/$tfile
+
+	local ATIME0=$(stat -c %X $DIR/$tdir/$tfile)
+
+	sleep 2
+
+	cat $DIR/$tdir/$tfile
+	local ATIME1=$(stat -c %X $DIR/$tdir/$tfile)
+	# cached atime should change
+	[ "$ATIME0" -lt "$ATIME1" ] ||
+		error "rw: file cached atime did not change ($ATIME0 $ATIME1)"
+
+	remount_client $MOUNT "-o rw"
+	local ATIME2=$(stat -c %X $DIR/$tdir/$tfile)
+	[ "$ATIME1" -eq "$ATIME2" ] ||
+		error "rw: file atime changed after mount ($ATIME1 $ATIME2)"
+
+	echo "-o rw: Done"
+
+	remount_client $MOUNT "-o noatime"
+	local ATIME3=$(stat -c %X $DIR/$tdir/$tfile)
+
+	sleep 2
+
+	chmod o+x $DIR/$tdir/$tfile
+	cat $DIR/$tdir/$tfile
+	local ATIME4=$(stat -c %X $DIR/$tdir/$tfile)
+	[ "$ATIME2" -eq "$ATIME3" ] ||
+		error "noatime: file atime changed after mount ($ATIME2 $ATIME3)"
+	[ "$ATIME2" -eq "$ATIME4" ] ||
+		error "noatime: file atime changed ($ATIME2 $ATIME4)"
+	echo "-o noatime: Done"
+
+	remount_client $MOUNT "-o nodiratime"
+	local ATIME5=$(stat -c %X $DIR/$tdir/$tfile)
+
+	sleep 2
+
+	# new kernels (RHEL6, for instance) have relatime mount flag
+	# turned on by default if noatime is not set. With that flag atime
+	# is only updated if current atime is earlier than either ctime or
+	# mtime. chmod is here to update ctime.
+	chmod o+x $DIR/$tdir/$tfile
+	cat $DIR/$tdir/$tfile
+	local ATIME6=$(stat -c %X $DIR/$tdir/$tfile)
+
+	[ "$ATIME4" -eq "$ATIME5" ] ||
+		error "nodiratime: file atime changed after mount ($ATIME4 $ATIME5)"
+	[ "$ATIME4" -lt "$ATIME6" ] ||
+		error "nodiratime: file atime did not change ($ATIME4 $ATIME6)"
+	echo "-o nodiratime: Done"
+
+	remount_client $MOUNT
+}
+run_test 39d "test file with rw,noatime and nodiratime"
+
+test_39e() {
+	# remount with "-o rw" instead of default $MOUNTOPT to be sure that
+	# client is mounted without noatime and nodiratime
+	remount_client $MOUNT "-o rw"
+
+	local ATIME_DIFF=$(do_facet mds lctl get_param -n mds.*.atime_diff)
+	local atime_diff=3
+	local sleep_more=$((atime_diff + 1))
+	local sleep_less=$((atime_diff - 1))
+
+	do_facet mds lctl set_param -n mds.*.atime_diff=$atime_diff
+
+	echo atime_diff=$atime_diff
+
+	rm -rf $DIR/$tdir
+	mkdir -p $DIR/$tdir
+	echo hello >> $DIR/$tdir/$tfile
+	local ATIME0=$(stat -c %X $DIR/$tdir)
+
+	echo sleep $sleep_less seconds...
+	sleep $sleep_less
+
+	ls $DIR/$tdir
+	local ATIME1=$(stat -c %X $DIR/$tdir)
+	# cached atime should change
+	[ "$ATIME0" -lt "$ATIME1" ] ||
+		error "rw: dir cached atime did not change ($ATIME0 $ATIME1)"
+
+	remount_client $MOUNT "-o rw"
+	local ATIME2=$(stat -c %X $DIR/$tdir)
+	# dir atime does not change: it is accesed in less than atime_diff
+	[ "$ATIME0" -eq "$ATIME2" ] ||
+		error "rw: dir atime changed ($ATIME0 $ATIME2)"
+
+	echo sleep $sleep_more seconds...
+	sleep $sleep_more
+	
+	chmod o+x $DIR/$tdir
+	ls $DIR/$tdir
+	ATIME3=$(stat -c %X $DIR/$tdir)
+	[ "$ATIME2" -lt "$ATIME3" ] ||
+		error "rw: dir cached atime did not change ($ATIME2 $ATIME3)"
+
+	remount_client $MOUNT "-o rw"
+
+	local ATIME4=$(stat -c %X $DIR/$tdir)
+	[ "$ATIME3" -eq "$ATIME4" ] ||
+		error "rw: dir atime did not change ($ATIME3, $ATIME4)"
+	echo "-o rw: Done"
+
+	remount_client $MOUNT "-o noatime"
+	local ATIME5=$(stat -c %X $DIR/$tdir)
+
+	sleep $sleep_more
+
+	chmod o+x $DIR/$tdir
+	ls $DIR/$tdir
+	local ATIME6=$(stat -c %X $DIR/$tdir)
+
+	[ "$ATIME4" -eq "$ATIME5" ] ||
+		error "noatime: dir atime changed after mount ($ATIME4 $ATIME5)"
+	[ "$ATIME5" -eq "$ATIME6" ] ||
+		error "noatime: dir atime changed ($ATIME5 $ATIME6)"
+	echo "-o noatime: Done"
+
+	remount_client $MOUNT "-o nodiratime"
+	local ATIME7=$(stat -c %X $DIR/$tdir)
+
+	sleep $sleep_more
+
+	chmod o+x $DIR/$tdir
+	ls $DIR/$tdir
+	local ATIME8=$(stat -c %X $DIR/$tdir)
+
+	[ "$ATIME6" -eq "$ATIME7" ] ||
+		error "nodiratime: dir atime changed after mount ($ATIME6 $ATIME7)"
+	[ "$ATIME7" -eq "$ATIME8" ] ||
+		error "nodiratime: dir atime changed ($ATIME7 $ATIME8)"
+	echo "-o nodiratime: Done"
+
+	remount_client $MOUNT
+	do_facet mds lctl set_param -n mds.*.atime_diff=$ATIME_DIFF
+}
+run_test 39e "test directory with rw,noatime and nodiratime"
+
 test_40() {
 	dd if=/dev/zero of=$DIR/f40 bs=4096 count=1
 	$RUNAS $OPENFILE -f O_WRONLY:O_TRUNC $DIR/f40 && error
