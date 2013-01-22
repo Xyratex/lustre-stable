@@ -1,22 +1,179 @@
-TBD Oracle, Inc.
+2013-01-22 Oracle, Inc.
 	* version 1.8.8
 	* Support for kernels:
 	  2.6.16.60-0.69.1 (SLES 10),
 	  2.6.32.19-0.2.1 (SLES11),
 	  2.6.18-308.24.1.el5 (RHEL 5)
 	  2.6.18-308.24.1.el5 (OEL 5)
-	  2.6.32-279.2.1.el6 (RHEL 6) - (Client ONLY)
-	  2.6.32-279.2.1.0.1.el6 (OEL 6) - (Client ONLY)
+	  2.6.32-279.2.1.el6 (RHEL 6)
+	  2.6.32-279.2.1.0.1.el6 (OEL 6)
 	* Client support for unpatched kernels:
 	  (see http://wiki.lustre.org/index.php?title=Patchless_Client)
 	  2.6.16 - 2.6.32 vanilla (kernel.org)
-	* Recommended e2fsprogs version: 1.41.12-ora1
+	* Recommended e2fsprogs version: 1.42.ora1
+	  NOTE: Testing has been completed on all RHEL and OEL Operating Systems
+	  but, while it should work with all SLES Operating Systems, testing is
+	  not complete yet.  SLES tested e2fsprogs version: 1.41.12-ora1.
+	  A note will be added to the Release Notes wiki page when testing has
+	  been completed, as well as removing this NOTE.
 	* The async journal commit feature (bug 19128) and the cancel
 
 Severity   : normal
-Bugzilla   :
-Description:
-Details    :
+Bugzilla   : 20128 Allow objects larger than 2TB in size
+
+Severity   : normal
+Bugzilla   : 24606 Misc changes
+Description: - Remove unneeded patch file: ext4-store-tree-generation-at-find.patch
+	     - Remove the hack for fsfilt_ext3_statfs()
+	     - Use the correct spec file for rpmbuild
+	     - Update the ChangeLog
+
+Severity   : normal
+Bugzilla   : 24606 Stop hacking around i_data_sem
+Description: - Let ext4_ext_walk_space() itself handle the semaphore.
+	     - Remove macro WALK_SPACE_HAS_DATA_SEM.
+	     - Redefine macro fsfilt_up_truncate_sem().
+
+Severity   : normal
+Bugzilla   : 24606 ldiskfs changes for the new kernel
+Description: Ldiskfs related changes for kernel 2.6.18-308.24.1.el5:
+	     - Update related patches.
+	     - Add Force over 24TB option.
+	     - Add upstream patch to avoid loading bitmaps from full groups.
+	     - Update the series file.
+
+Severity   : normal
+Bugzilla   : 24606 Update RHEL5 and OEL5 kernel patches
+Description: The kernel is updated to 2.6.18-308.24.1.el5.
+Details    : Kernel related changes:
+	       - Update some kernel patches to adapt to the new kernel.
+	       - Remove unneeded kernel patch: md-avoid-corrupted-ldiskfs-after-rebuild.patch.
+	       - Add a new upstream patch (soft RAID6 bug): make-bi_phys_segments-uint.patch.
+	       - Update kernel configs, series, and targets, etc.
+
+Severity   : normal
+Bugzilla   : 24580 add OEL6 server support
+
+Severity   : normal
+Bugzilla   : 24580 quota fix
+Description: specify QFMT_VFS_V1 if available
+
+Severity   : normal
+Bugzilla   : 24580 define ext4_mb_discard_inode_preallocations for rhel5
+
+Severity   : normal
+Bugzilla   : 24580 disable dump_trace for rhel6
+
+Severity   : normal
+Bugzilla   : 24580 use inode version in rhel6 server
+
+Severity   : normal
+Bugzilla   : 24580 update ldiskfs patches
+
+Severity   : normal
+Bugzilla   : 24580 ldiskfs for 2.6.32-279
+
+Severity   : normal
+Bugzilla   : 24580 update to 2.6.32-279
+
+Severity   : normal
+Bugzilla   : 24580 long long s_mount_opt for rhel6
+
+Severity   : normal
+Bugzilla   : 24580 deadlock fix
+
+Severity   : normal
+Bugzilla   : 24580 minor conflict resolving
+
+Severity   : normal
+Bugzilla   : 24580 RHEL6 server support
+Description: Add RHEL6 server (kernel version is 2.6.32-279.2.1.el6) support.
+             This introduces many changes and new features of ldiskfs (ext4) such
+	     as mmp, large EA, fs data in dirent, open file by inode number, etc.
+	     
+	     NOTE: This patch only suffice mount and further tuning is needed for
+	     other file operations, which will be dealt with in later patches.
+
+Severity   : normal
+Bugzilla   : 19526 conf-sanity test_46a fix
+Description: LU-743 conf-sanity: test_46a failure
+Details    : This failure is because client still didn't see the adding OSTs so
+	     it met a problem when decoding lsm because the # of OSTs was over
+	     tgt count at the client side.
+
+Severity   : normal
+Bugzilla   : 24645 build kernel debuginfo rpm for sles11sp1
+Description: In order to build debuginfo rpm for SLES11 SP1, We need to modify
+             SLES11 kernel spec file in the following way:
+	        - explicitly declare __debug_package as true(1).
+		- use debugfiles.list as the %files content instead of the default file in spec.
+		- change the file attributes.
+		- ignore some missing/unpackaged files while doing rpmbuild.
+	     Also, we need to increase the BUILD_GEN in order to avoid future RPM reuse
+	     of the testing builds.
+
+Severity   : normal
+Bugzilla   : 24596 skip metabench for rhel 6.2 nfs client
+Description: rhel 6.2 nfs client bug
+Details    : https://bugzilla.redhat.com/show_bug.cgi?id=790729
+
+Severity   : normal
+Bugzilla   : 24515 test_7 activate osc failed
+Description: take into account the possible race between activation from lctl
+             and activation from pinger thread
+
+Severity   : normal
+Bugzilla   : 24580 RHEL6 support in b1_8 branch
+Description: RHEL6.2 support along with build code refactor.
+Details    : This patch is largely based on the patches in the following bugs:
+	        22375 RHEL6 patchless client support.
+		24089 Avoid reuse cache storage collisions.
+		24090 Distro and target autodetection.
+		24091 Find_linux_rpms utility.
+		24092 Build src.rpm for lustre if requested.
+		24300 Don't run autogen.sh in the spl and zfs repos.
+		LU-62   Adds support to build RHEL6 patchless client.
+		LU-73   Re-org of rhel* build code to max code reuse.
+		LU-402  Check if dump_trace wants address argument
+		LU-1116 Update RHEL6.2 kernel to 2.6.32-220.7.1.el6.
+	     For more information, please refer to the individual bug.
+
+Severity   : normal
+Bugzilla   : 22065 ko2iblnd failover deadlock fix
+
+Severity   : normal
+Bugzilla   : 20288 IB bonding & fix kiblnd_check_conns deadlock
+Bugzilla   : 20153 IB bonding & fix kiblnd_check_conns deadlock
+Description: Combined patch for IB bonding issues of Bug 20288 (att 25001)
+             and Bug 20153 (att 26145) from Atul.
+
+Severity   : normal
+Bugzilla   : LU-278 build: Only warn for tag/version mismatch
+Description: The configure process should NOT abort just because the most
+             recent tag is not of the form that upstream uses to tag Lustre.
+	     Downstream developers may use their own tags, or just add
+	     extensions to upsteam's version tags.
+
+Severity   : normal
+Bugzilla   : 24458 files sometimes show up as zero size or missing
+Description: LU-274 Update LVB from disk when glimpse callback return error
+Details    : Client ll_glimpse_callback() could fail to get inode if the
+             inode is already been cleared, and this glimpse callback will
+	     fail for -ELDLM_NO_LOCK_DATA, so server should update LVB from
+	     disk (in filter_intent_policy()) when it received such error
+	     from client.
+
+Severity   : normal
+Bugzilla   : 22281 This patch combines patches from bug 22281
+Description: This patch combines all the patches from bug 22281.
+Details    : It mainly deals with the build subsystem:
+		- add config opts like --downstream-release, --enable-dist, etc.
+		- add BUILDID support.
+		- build lustre with an external ldiskfs package.
+	     Check bug 22281 for details.
+
+Severity   : normal
+Bugzilla   : 24450 new test: check bast timeout serialization 
 
 Severity   : normal
 Bugzilla   : 19526 conf-sanity test_46a fix
