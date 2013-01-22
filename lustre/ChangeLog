@@ -19,6 +19,12 @@
 	* The async journal commit feature (bug 19128) and the cancel
 
 Severity   : normal
+Bugzilla   : 24554 noatime fix
+
+Severity   : normal
+Bugzilla   : 24554 noatime,nodiratime fix
+
+Severity   : normal
 Bugzilla   : 20128 Allow objects larger than 2TB in size
 
 Severity   : normal
