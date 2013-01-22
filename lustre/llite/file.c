@@ -1626,8 +1626,9 @@ repeat:
                         GOTO(out, retval = -ENOMEM);
                 }
 
+                file_accessed(file);
+
                 lov_stripe_lock(lsm);
-                LTIME_S(inode->i_atime) = LTIME_S(CURRENT_TIME);
                 xtimes->lvb_atime = LTIME_S(inode->i_atime);
                 obd_update_lvb(sbi->ll_osc_exp, lsm, xtimes,
                                OBD_MD_FLATIME);
@@ -1641,8 +1642,6 @@ repeat:
                         ll_ra_read_init(file, &bead, *ppos, count);
                 }
 
-                /* BUG: 5972 */
-                file_accessed(file);
 #ifdef HAVE_FILE_READV
                 retval = generic_file_readv(file, iov_copy, nrsegs_copy, ppos);
 #else
@@ -3471,9 +3470,12 @@ int ll_inode_revalidate_it(struct dentry *dentry, struct lookup_intent *it)
 
         /* if object not yet allocated, don't validate size */
         if (rc == 0 && ll_i2info(inode)->lli_smd == NULL) {
-                LTIME_S(inode->i_atime) = ll_i2info(inode)->lli_lvb.lvb_atime;
-                LTIME_S(inode->i_mtime) = ll_i2info(inode)->lli_lvb.lvb_mtime;
-                LTIME_S(inode->i_ctime) = ll_i2info(inode)->lli_lvb.lvb_ctime;
+                if (S_ISREG(inode->i_mode)) {
+                        LTIME_S(inode->i_atime) = ll_i2info(inode)->lli_lvb.lvb_atime;
+                        LTIME_S(inode->i_mtime) = ll_i2info(inode)->lli_lvb.lvb_mtime;
+                        LTIME_S(inode->i_ctime) = ll_i2info(inode)->lli_lvb.lvb_ctime;
+                }
+                CWARN("atime %lu\n", LTIME_S(inode->i_atime));
                 RETURN(0);
         }
 
