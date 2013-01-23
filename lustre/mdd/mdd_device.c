@@ -2178,52 +2178,6 @@ static struct obd_ops mdd_obd_device_ops = {
         .o_owner = THIS_MODULE
 };
 
-/* context key constructor/destructor: mdd_ucred_key_init, mdd_ucred_key_fini */
-LU_KEY_INIT_FINI(mdd_ucred, struct md_ucred);
-
-static struct lu_context_key mdd_ucred_key = {
-        .lct_tags = LCT_SESSION,
-        .lct_init = mdd_ucred_key_init,
-        .lct_fini = mdd_ucred_key_fini
-};
-
-/**
- * Get ucred key if session exists and ucred key is allocated on it.
- * Return NULL otherwise.
- */
-struct md_ucred *md_ucred(const struct lu_env *env)
-{
-        if (!env->le_ses)
-                return NULL;
-        return lu_context_key_get(env->le_ses, &mdd_ucred_key);
-}
-EXPORT_SYMBOL(md_ucred);
-
-/**
- * Get ucred key and check if it is properly initialized.
- * Return NULL otherwise.
- */
-struct md_ucred *md_ucred_check(const struct lu_env *env)
-{
-        struct md_ucred *uc = md_ucred(env);
-        if (uc && uc->mu_valid != UCRED_OLD && uc->mu_valid != UCRED_NEW)
-                return NULL;
-        return uc;
-}
-EXPORT_SYMBOL(md_ucred_check);
-
-/**
- * Get ucred key, which must exist and must be properly initialized.
- * Assert otherwise.
- */
-struct md_ucred *md_ucred_assert(const struct lu_env *env)
-{
-        struct md_ucred *uc = md_ucred_check(env);
-        LASSERT(uc != NULL);
-        return uc;
-}
-EXPORT_SYMBOL(md_ucred_assert);
-
 /*
  * context key constructor/destructor:
  * mdd_capainfo_key_init, mdd_capainfo_key_fini
@@ -2514,8 +2468,7 @@ static int mdd_iocontrol(const struct lu_env *env, struct md_device *m,
 }
 
 /* type constructor/destructor: mdd_type_init, mdd_type_fini */
-LU_TYPE_INIT_FINI(mdd, &mdd_thread_key, &mdd_ucred_key, &mdd_capainfo_key,
-                  &mdd_quota_key);
+LU_TYPE_INIT_FINI(mdd, &mdd_thread_key, &mdd_capainfo_key, &mdd_quota_key);
 
 const struct md_device_operations mdd_ops = {
         .mdo_statfs         = mdd_statfs,

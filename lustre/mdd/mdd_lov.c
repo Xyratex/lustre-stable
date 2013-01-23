@@ -297,7 +297,7 @@ static int mdd_lov_set_dir_md(const struct lu_env *env,
 int mdd_lsm_sanity_check(const struct lu_env *env,  struct mdd_object *obj)
 {
         struct lu_attr   *tmp_la = &mdd_env_info(env)->mti_la;
-        struct md_ucred  *uc     = md_ucred_assert(env);
+        struct lu_ucred  *uc     = lu_ucred_assert(env);
         int rc;
         ENTRY;
 
@@ -305,7 +305,7 @@ int mdd_lsm_sanity_check(const struct lu_env *env,  struct mdd_object *obj)
         if (rc)
                 RETURN(rc);
 
-        if ((uc->mu_fsuid != tmp_la->la_uid) &&
+        if ((uc->uc_fsuid != tmp_la->la_uid) &&
             !mdd_capable(uc, CFS_CAP_FOWNER))
                 rc = mdd_permission_internal_locked(env, obj, tmp_la,
                                                     MAY_WRITE, MOR_TGT_CHILD);

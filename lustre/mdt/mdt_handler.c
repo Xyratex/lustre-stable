@@ -5803,14 +5803,14 @@ struct lu_context_key mdt_txn_key = {
         .lct_fini = mdt_txn_key_fini
 };
 
-struct md_ucred *mdt_ucred(const struct mdt_thread_info *info)
+struct lu_ucred *mdt_ucred(const struct mdt_thread_info *info)
 {
-        return md_ucred(info->mti_env);
+	return lu_ucred(info->mti_env);
 }
 
-struct md_ucred *mdt_ucred_check(const struct mdt_thread_info *info)
+struct lu_ucred *mdt_ucred_check(const struct mdt_thread_info *info)
 {
-        return md_ucred_check(info->mti_env);
+	return lu_ucred_check(info->mti_env);
 }
 
 /**

@@ -358,7 +358,7 @@ static inline int mdd_is_sticky(const struct lu_env *env,
                                 struct mdd_object *cobj)
 {
         struct lu_attr *tmp_la = &mdd_env_info(env)->mti_la;
-        struct md_ucred *uc = md_ucred_assert(env);
+        struct lu_ucred *uc = lu_ucred_assert(env);
         int rc;
 
         if (pobj) {
@@ -366,17 +366,17 @@ static inline int mdd_is_sticky(const struct lu_env *env,
                 if (rc)
                         return rc;
 
-                if (!(tmp_la->la_mode & S_ISVTX) ||
-                     (tmp_la->la_uid == uc->mu_fsuid))
-                        return 0;
+		if (!(tmp_la->la_mode & S_ISVTX) ||
+		    (tmp_la->la_uid == uc->uc_fsuid))
+			return 0;
         }
 
         rc = mdd_la_get(env, cobj, tmp_la, BYPASS_CAPA);
         if (rc)
                 return rc;
 
-        if (tmp_la->la_uid == uc->mu_fsuid)
-                return 0;
+	if (tmp_la->la_uid == uc->uc_fsuid)
+		return 0;
 
         return !mdd_capable(uc, CFS_CAP_FOWNER);
 }
@@ -553,10 +553,10 @@ static int __mdd_index_insert_only(const struct lu_env *env,
         ENTRY;
 
         if (dt_try_as_dir(env, next)) {
-                struct md_ucred  *uc = md_ucred_check(env);
+                struct lu_ucred  *uc = lu_ucred_check(env);
                 int ignore_quota;
 
-                ignore_quota = uc ? uc->mu_cap & CFS_CAP_SYS_RESOURCE_MASK : 1;
+                ignore_quota = uc ? uc->uc_cap & CFS_CAP_SYS_RESOURCE_MASK : 1;
                 rc = next->do_index_ops->dio_insert(env, next,
                                                     (struct dt_rec*)lf,
                                                     (const struct dt_key *)name,
@@ -1427,7 +1427,7 @@ static int mdd_create(const struct lu_env *env,
         }
 
         if (S_ISLNK(attr->la_mode)) {
-                struct md_ucred  *uc = md_ucred_assert(env);
+                struct lu_ucred  *uc = lu_ucred_assert(env);
                 struct dt_object *dt = mdd_object_child(son);
                 const char *target_name = spec->u.sp_symname;
 		int sym_len = strlen(target_name) + 1;
@@ -1435,10 +1435,10 @@ static int mdd_create(const struct lu_env *env,
                 loff_t pos = 0;
 
                 buf = mdd_buf_get_const(env, target_name, sym_len);
-                rc = dt->do_body_ops->dbo_write(env, dt, buf, &pos, handle,
-                                                mdd_object_capa(env, son),
-                                                uc->mu_cap &
-                                                CFS_CAP_SYS_RESOURCE_MASK);
+		rc = dt->do_body_ops->dbo_write(env, dt, buf, &pos, handle,
+						mdd_object_capa(env, son),
+						uc->uc_cap &
+						CFS_CAP_SYS_RESOURCE_MASK);
 
                 if (rc == sym_len)
                         rc = 0;

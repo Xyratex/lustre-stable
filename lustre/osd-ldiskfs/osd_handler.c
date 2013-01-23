@@ -225,7 +225,7 @@ static int osd_object_invariant(const struct lu_object *l)
 static inline void
 osd_push_ctxt(const struct lu_env *env, struct osd_ctxt *save)
 {
-        struct md_ucred    *uc = md_ucred_check(env);
+        struct lu_ucred    *uc = lu_ucred_check(env);
         struct cred        *tc;
 
         if (uc == NULL) {
@@ -237,12 +237,12 @@ osd_push_ctxt(const struct lu_env *env, struct osd_ctxt *save)
         save->oc_gid = current_fsgid();
         save->oc_cap = current_cap();
         if ((tc = prepare_creds())) {
-                tc->fsuid         = uc->mu_fsuid;
-                tc->fsgid         = uc->mu_fsgid;
+                tc->fsuid         = uc->uc_fsuid;
+                tc->fsgid         = uc->uc_fsgid;
                 commit_creds(tc);
         }
         /* XXX not suboptimal */
-        cfs_curproc_cap_unpack(uc->mu_cap);
+        cfs_curproc_cap_unpack(uc->uc_cap);
 }
 
 static inline void
@@ -250,7 +250,7 @@ osd_pop_ctxt(const struct lu_env *env, struct osd_ctxt *save)
 {
         struct cred *tc;
 
-        if (md_ucred_check(env) == NULL)
+        if (lu_ucred_check(env) == NULL)
                 return;
 
         if ((tc = prepare_creds())) {
@@ -1812,7 +1812,7 @@ static int __osd_oi_insert(const struct lu_env *env, struct osd_object *obj,
         struct osd_thread_info *info = osd_oti_get(env);
         struct osd_inode_id    *id   = &info->oti_id;
         struct osd_device      *osd  = osd_obj2dev(obj);
-        struct md_ucred        *uc   = md_ucred_check(env);
+        struct lu_ucred        *uc   = lu_ucred_check(env);
         cfs_cap_t               ignore_quota;
 
         LASSERT(obj->oo_inode != NULL);
@@ -1820,7 +1820,7 @@ static int __osd_oi_insert(const struct lu_env *env, struct osd_object *obj,
         id->oii_ino = obj->oo_inode->i_ino;
         id->oii_gen = obj->oo_inode->i_generation;
 
-        ignore_quota = uc ? uc->mu_cap & CFS_CAP_SYS_RESOURCE_MASK : 1;
+        ignore_quota = uc ? uc->uc_cap & CFS_CAP_SYS_RESOURCE_MASK : 1;
         return osd_oi_insert(info, &osd->od_oi, fid, id, th, ignore_quota);
 }
 

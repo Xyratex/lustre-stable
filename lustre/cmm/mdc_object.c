@@ -318,7 +318,7 @@ static int mdc_attr_set(const struct lu_env *env, struct md_object *mo,
         struct mdc_device *mc = md2mdc_dev(md_obj2dev(mo));
         const struct lu_attr *la = &ma->ma_attr;
         struct mdc_thread_info *mci;
-        struct md_ucred *uc = md_ucred(env);
+        struct lu_ucred *uc = lu_ucred_check(env);
         int rc;
         ENTRY;
 
@@ -333,14 +333,13 @@ static int mdc_attr_set(const struct lu_env *env, struct md_object *mo,
         mdc_attr_time(&mci->mci_opdata.op_attr.ia_ctime, la->la_ctime);
         mci->mci_opdata.op_attr.ia_mode = la->la_mode;
         mci->mci_opdata.op_attr.ia_valid = ATTR_CTIME_SET;
-        if (uc &&
-            ((uc->mu_valid == UCRED_OLD) || (uc->mu_valid == UCRED_NEW))) {
-                mci->mci_opdata.op_fsuid = uc->mu_fsuid;
-                mci->mci_opdata.op_fsgid = uc->mu_fsgid;
-                mci->mci_opdata.op_cap = uc->mu_cap;
-                if (uc->mu_ginfo || (uc->mu_valid == UCRED_OLD)) {
-                        mci->mci_opdata.op_suppgids[0] = uc->mu_suppgids[0];
-                        mci->mci_opdata.op_suppgids[1] = uc->mu_suppgids[1];
+        if (uc) {
+                mci->mci_opdata.op_fsuid = uc->uc_fsuid;
+                mci->mci_opdata.op_fsgid = uc->uc_fsgid;
+                mci->mci_opdata.op_cap = uc->uc_cap;
+                if (uc->uc_ginfo || (uc->uc_valid == UCRED_OLD)) {
+                        mci->mci_opdata.op_suppgids[0] = uc->uc_suppgids[0];
+                        mci->mci_opdata.op_suppgids[1] = uc->uc_suppgids[1];
                 } else {
                         mci->mci_opdata.op_suppgids[0] =
                                 mci->mci_opdata.op_suppgids[1] = -1;
@@ -373,7 +372,7 @@ static int mdc_object_create(const struct lu_env *env,
         struct lu_attr *la = &ma->ma_attr;
         struct mdc_thread_info *mci;
         const void *symname;
-        struct md_ucred *uc = md_ucred(env);
+        struct lu_ucred *uc = lu_ucred_check(env);
         int rc, symlen;
         uid_t uid;
         gid_t gid;
@@ -390,16 +389,15 @@ static int mdc_object_create(const struct lu_env *env,
         /* Parent fid is needed to create dotdot on the remote node. */
         mci->mci_opdata.op_fid1 = *(spec->u.sp_pfid);
         mci->mci_opdata.op_mod_time = la->la_ctime;
-        if (uc &&
-            ((uc->mu_valid == UCRED_OLD) || (uc->mu_valid == UCRED_NEW))) {
-                uid = uc->mu_fsuid;
+        if (uc) {
+                uid = uc->uc_fsuid;
                 if (la->la_mode & S_ISGID)
                         gid = la->la_gid;
                 else
-                        gid = uc->mu_fsgid;
-                cap = uc->mu_cap;
-                if (uc->mu_ginfo || (uc->mu_valid == UCRED_OLD))
-                        mci->mci_opdata.op_suppgids[0] = uc->mu_suppgids[0];
+                        gid = uc->uc_fsgid;
+                cap = uc->uc_cap;
+                if (uc->uc_ginfo || (uc->uc_valid == UCRED_OLD))
+                        mci->mci_opdata.op_suppgids[0] = uc->uc_suppgids[0];
                 else
                         mci->mci_opdata.op_suppgids[0] = -1;
         } else {
@@ -450,7 +448,7 @@ static int mdc_ref_add(const struct lu_env *env, struct md_object *mo,
         struct mdc_device *mc = md2mdc_dev(md_obj2dev(mo));
         const struct lu_attr *la = &ma->ma_attr;
         struct mdc_thread_info *mci;
-        struct md_ucred *uc = md_ucred(env);
+        struct lu_ucred *uc = lu_ucred_check(env);
         int rc;
         ENTRY;
 
@@ -461,14 +459,13 @@ static int mdc_ref_add(const struct lu_env *env, struct md_object *mo,
         mci->mci_opdata.op_bias = MDS_CROSS_REF;
         mci->mci_opdata.op_fid1 = *lu_object_fid(&mo->mo_lu);
         mci->mci_opdata.op_mod_time = la->la_ctime;
-        if (uc &&
-            ((uc->mu_valid == UCRED_OLD) || (uc->mu_valid == UCRED_NEW))) {
-                mci->mci_opdata.op_fsuid = uc->mu_fsuid;
-                mci->mci_opdata.op_fsgid = uc->mu_fsgid;
-                mci->mci_opdata.op_cap = uc->mu_cap;
-                if (uc->mu_ginfo || (uc->mu_valid == UCRED_OLD)) {
-                        mci->mci_opdata.op_suppgids[0] = uc->mu_suppgids[0];
-                        mci->mci_opdata.op_suppgids[1] = uc->mu_suppgids[1];
+        if (uc) {
+                mci->mci_opdata.op_fsuid = uc->uc_fsuid;
+                mci->mci_opdata.op_fsgid = uc->uc_fsgid;
+                mci->mci_opdata.op_cap = uc->uc_cap;
+                if (uc->uc_ginfo || (uc->uc_valid == UCRED_OLD)) {
+                        mci->mci_opdata.op_suppgids[0] = uc->uc_suppgids[0];
+                        mci->mci_opdata.op_suppgids[1] = uc->uc_suppgids[1];
                 } else {
                         mci->mci_opdata.op_suppgids[0] =
                                 mci->mci_opdata.op_suppgids[1] = -1;
@@ -498,7 +495,7 @@ static int mdc_ref_del(const struct lu_env *env, struct md_object *mo,
         struct mdc_device *mc = md2mdc_dev(md_obj2dev(mo));
         struct lu_attr *la = &ma->ma_attr;
         struct mdc_thread_info *mci;
-        struct md_ucred *uc = md_ucred(env);
+        struct lu_ucred *uc = lu_ucred_check(env);
         int rc;
         ENTRY;
 
@@ -511,13 +508,12 @@ static int mdc_ref_del(const struct lu_env *env, struct md_object *mo,
         mci->mci_opdata.op_fid1 = *lu_object_fid(&mo->mo_lu);
         mci->mci_opdata.op_mode = la->la_mode;
         mci->mci_opdata.op_mod_time = la->la_ctime;
-        if (uc &&
-            ((uc->mu_valid == UCRED_OLD) || (uc->mu_valid == UCRED_NEW))) {
-                mci->mci_opdata.op_fsuid = uc->mu_fsuid;
-                mci->mci_opdata.op_fsgid = uc->mu_fsgid;
-                mci->mci_opdata.op_cap = uc->mu_cap;
-                if (uc->mu_ginfo || (uc->mu_valid == UCRED_OLD))
-                        mci->mci_opdata.op_suppgids[0] = uc->mu_suppgids[0];
+        if (uc) {
+                mci->mci_opdata.op_fsuid = uc->uc_fsuid;
+                mci->mci_opdata.op_fsgid = uc->uc_fsgid;
+                mci->mci_opdata.op_cap = uc->uc_cap;
+                if (uc->uc_ginfo || (uc->uc_valid == UCRED_OLD))
+                        mci->mci_opdata.op_suppgids[0] = uc->uc_suppgids[0];
                 else
                         mci->mci_opdata.op_suppgids[0] = -1;
         } else {
@@ -581,7 +577,7 @@ static int mdc_rename_tgt(const struct lu_env *env, struct md_object *mo_p,
         struct mdc_device *mc = md2mdc_dev(md_obj2dev(mo_p));
         struct lu_attr *la = &ma->ma_attr;
         struct mdc_thread_info *mci;
-        struct md_ucred *uc = md_ucred(env);
+        struct lu_ucred *uc = lu_ucred_check(env);
         int rc;
         ENTRY;
 
@@ -595,14 +591,13 @@ static int mdc_rename_tgt(const struct lu_env *env, struct md_object *mo_p,
         mci->mci_opdata.op_fid2 = *lf;
         mci->mci_opdata.op_mode = la->la_mode;
         mci->mci_opdata.op_mod_time = la->la_ctime;
-        if (uc &&
-            ((uc->mu_valid == UCRED_OLD) || (uc->mu_valid == UCRED_NEW))) {
-                mci->mci_opdata.op_fsuid = uc->mu_fsuid;
-                mci->mci_opdata.op_fsgid = uc->mu_fsgid;
-                mci->mci_opdata.op_cap = uc->mu_cap;
-                if (uc->mu_ginfo || (uc->mu_valid == UCRED_OLD)) {
-                        mci->mci_opdata.op_suppgids[0] = uc->mu_suppgids[0];
-                        mci->mci_opdata.op_suppgids[1] = uc->mu_suppgids[1];
+        if (uc) {
+                mci->mci_opdata.op_fsuid = uc->uc_fsuid;
+                mci->mci_opdata.op_fsgid = uc->uc_fsgid;
+                mci->mci_opdata.op_cap = uc->uc_cap;
+                if (uc->uc_ginfo || (uc->uc_valid == UCRED_OLD)) {
+                        mci->mci_opdata.op_suppgids[0] = uc->uc_suppgids[0];
+                        mci->mci_opdata.op_suppgids[1] = uc->uc_suppgids[1];
                 } else {
                         mci->mci_opdata.op_suppgids[0] =
                                 mci->mci_opdata.op_suppgids[1] = -1;
