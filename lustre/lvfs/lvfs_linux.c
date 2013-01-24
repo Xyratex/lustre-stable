@@ -490,13 +490,15 @@ int dev_check_rdonly(lvfs_sbdev_type dev);
 
 void __lvfs_set_rdonly(lvfs_sbdev_type dev, lvfs_sbdev_type jdev)
 {
+        CDEBUG(D_IOCTL | D_HA, "set dev %lx rdonly\n", (long)dev);
+        dev_set_rdonly(dev);
+	/* we need to be sure all fs modification exist on journal 
+	 * and later may restored */
         if (jdev && (jdev != dev)) {
                 CDEBUG(D_IOCTL | D_HA, "set journal dev %lx rdonly\n",
                        (long)jdev);
                 dev_set_rdonly(jdev);
         }
-        CDEBUG(D_IOCTL | D_HA, "set dev %lx rdonly\n", (long)dev);
-        dev_set_rdonly(dev);
 }
 
 int lvfs_check_rdonly(lvfs_sbdev_type dev)

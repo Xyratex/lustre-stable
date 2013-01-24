@@ -1,0 +1,35 @@
+Index: linux-stage/fs/ext4/super.c
+===================================================================
+--- linux-stage.orig/fs/ext4/super.c	2013-01-24 13:38:51.000000000 +0200
++++ linux-stage/fs/ext4/super.c	2013-01-24 13:41:56.000000000 +0200
+@@ -3347,10 +3347,6 @@ static int ext4_fill_super(struct super_
+ 			goto failed_mount2;
+ 		}
+ 	}
+-	if (!ext4_check_descriptors(sb, &first_not_zeroed)) {
+-		ext4_msg(sb, KERN_ERR, "group descriptors corrupted!");
+-		goto failed_mount2;
+-	}
+ 	if (EXT4_HAS_INCOMPAT_FEATURE(sb, EXT4_FEATURE_INCOMPAT_FLEX_BG))
+ 		if (!ext4_fill_flex_info(sb)) {
+ 			ext4_msg(sb, KERN_ERR,
+@@ -3453,6 +3449,7 @@ static int ext4_fill_super(struct super_
+ 		goto no_journal;
+ 	}
+ 
++
+ 	if (ext4_blocks_count(es) > 0xffffffffULL &&
+ 	    !jbd2_journal_set_features(EXT4_SB(sb)->s_journal, 0, 0,
+ 				       JBD2_FEATURE_INCOMPAT_64BIT)) {
+@@ -3507,6 +3504,11 @@ static int ext4_fill_super(struct super_
+ 
+ no_journal:
+ 
++	if (!ext4_check_descriptors(sb, &first_not_zeroed)) {
++		ext4_msg(sb, KERN_ERR, "group descriptors corrupted!");
++		goto failed_mount_wq;
++	}
++
+ 	if (test_opt(sb, NOBH)) {
+ 		if (!(test_opt(sb, DATA_FLAGS) == EXT4_MOUNT_WRITEBACK_DATA)) {
+ 			ext4_msg(sb, KERN_WARNING, "Ignoring nobh option - "
