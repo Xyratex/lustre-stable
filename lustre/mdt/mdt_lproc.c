@@ -273,7 +273,7 @@ int mdt_procfs_init(struct mdt_device *mdt, const char *name)
         RETURN(rc);
 }
 
-int mdt_procfs_fini(struct mdt_device *mdt)
+void mdt_procfs_fini(struct mdt_device *mdt)
 {
         struct lu_device *ld = &mdt->mdt_md_dev.md_lu_dev;
         struct obd_device *obd = ld->ld_obd;
@@ -292,8 +292,6 @@ int mdt_procfs_fini(struct mdt_device *mdt)
         }
         lprocfs_free_md_stats(obd);
         lprocfs_free_obd_stats(obd);
-
-        RETURN(0);
 }
 
 void mdt_time_start(const struct mdt_thread_info *info)

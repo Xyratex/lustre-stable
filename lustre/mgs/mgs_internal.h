@@ -220,7 +220,7 @@ int mgs_fs_cleanup(struct obd_device *obddev);
 #define strsuf(buf, suffix) (strcmp((buf)+strlen(buf)-strlen(suffix), (suffix)))
 #ifdef LPROCFS
 int lproc_mgs_setup(struct obd_device *dev);
-int lproc_mgs_cleanup(struct obd_device *obd);
+void lproc_mgs_cleanup(struct obd_device *obd);
 int lproc_mgs_add_live(struct obd_device *obd, struct fs_db *fsdb);
 int lproc_mgs_del_live(struct obd_device *obd, struct fs_db *fsdb);
 void lprocfs_mgs_init_vars(struct lprocfs_static_vars *lvars);

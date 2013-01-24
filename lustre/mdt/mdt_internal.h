@@ -820,7 +820,7 @@ void mdt_counter_incr(struct obd_export *exp, int opcode);
 void mdt_stats_counter_init(struct lprocfs_stats *stats);
 void lprocfs_mdt_init_vars(struct lprocfs_static_vars *lvars);
 int mdt_procfs_init(struct mdt_device *mdt, const char *name);
-int mdt_procfs_fini(struct mdt_device *mdt);
+void mdt_procfs_fini(struct mdt_device *mdt);
 void mdt_rename_counter_tally(struct mdt_thread_info *info,
                               struct mdt_device *mdt, struct obd_export *exp,
                               struct mdt_object *src, struct mdt_object *tgt);

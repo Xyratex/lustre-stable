@@ -165,12 +165,12 @@ int lproc_mgs_setup(struct obd_device *obd)
         return rc;
 }
 
-int lproc_mgs_cleanup(struct obd_device *obd)
+void lproc_mgs_cleanup(struct obd_device *obd)
 {
         struct mgs_obd *mgs;
 
-        if (!obd)
-                return -EINVAL;
+	if (obd == NULL)
+		return;
 
         mgs = &obd->u.mgs;
         if (mgs->mgs_proc_live) {
@@ -180,10 +180,9 @@ int lproc_mgs_cleanup(struct obd_device *obd)
                 mgs->mgs_proc_live = NULL;
         }
         lprocfs_free_per_client_stats(obd);
+	lprocfs_obd_cleanup(obd);
         lprocfs_free_obd_stats(obd);
         lprocfs_free_md_stats(obd);
-
-        return lprocfs_obd_cleanup(obd);
 }
 
 static int mgs_live_seq_show(struct seq_file *seq, void *v)
