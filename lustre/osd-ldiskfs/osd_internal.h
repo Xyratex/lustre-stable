@@ -58,15 +58,6 @@
 
 #include <ldiskfs/ldiskfs.h>
 #include <ldiskfs/ldiskfs_jbd2.h>
-#ifdef HAVE_LDISKFS_JOURNAL_CALLBACK_ADD
-# define journal_callback ldiskfs_journal_cb_entry
-# define osd_journal_callback_set(handle, func, jcb) \
-         ldiskfs_journal_callback_add(handle, func, jcb)
-#else
-# define osd_journal_callback_set(handle, func, jcb) \
-         journal_callback_set(handle, func, jcb)
-#endif
-
 
 /* LUSTRE_OSD_NAME */
 #include <obd.h>
