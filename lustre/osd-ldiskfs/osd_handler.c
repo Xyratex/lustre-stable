@@ -2770,6 +2770,8 @@ static ssize_t osd_read(const struct lu_env *env, struct dt_object *dt,
 
 static int osd_ldiskfs_writelink(struct inode *inode, char *buffer, int buflen)
 {
+	/* LU-2634: clear the extent format for fast symlink */
+	ldiskfs_clear_inode_flag(inode, LDISKFS_INODE_EXTENTS);
 
         memcpy((char*)&LDISKFS_I(inode)->i_data, (char *)buffer,
                buflen);
