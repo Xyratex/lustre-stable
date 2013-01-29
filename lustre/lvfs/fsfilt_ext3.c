@@ -834,8 +834,8 @@ static int fsfilt_ext3_sync(struct super_block *sb)
 # define fsfilt_down_truncate_sem(inode)  down(&LDISKFS_I(inode)->truncate_sem);
 #else
 # ifdef HAVE_EXT4_LDISKFS
-#   define fsfilt_up_truncate_sem(inode) do{ }while(0)
-#   define fsfilt_down_truncate_sem(inode) do{ }while(0)
+#   define fsfilt_up_truncate_sem(inode) up_write((&LDISKFS_I(inode)->i_data_sem));
+#   define fsfilt_down_truncate_sem(inode) down_write((&LDISKFS_I(inode)->i_data_sem));
 # else
 #  define fsfilt_up_truncate_sem(inode)  mutex_unlock(&LDISKFS_I(inode)->truncate_mutex);
 #  define fsfilt_down_truncate_sem(inode)  mutex_lock(&LDISKFS_I(inode)->truncate_mutex);
@@ -856,8 +856,8 @@ static int fsfilt_ext3_sync(struct super_block *sb)
 #define ext3_ext_base                   inode
 #define ext3_ext_base2inode(inode)      (inode)
 #define EXT_DEPTH(inode)                ext_depth(inode)
-#define fsfilt_ext3_ext_walk_space(inode, block, num, cb, cbdata) \
-                        ext3_ext_walk_space(inode, block, num, cb, cbdata);
+#define fsfilt_ext3_ext_walk_space(inode, block, num, cb, cbdata, locked) \
+                        ext3_ext_walk_space(inode, block, num, cb, cbdata, locked);
 #else
 #define ext3_ext_base                   ext3_extents_tree
 #define ext3_ext_base2inode(tree)       (tree->inode)
@@ -1129,7 +1129,8 @@ int fsfilt_map_nblocks(struct inode *inode, unsigned long block,
         bp.create = create;
 
         fsfilt_down_truncate_sem(inode);
-        err = fsfilt_ext3_ext_walk_space(base, block, num, ext3_ext_new_extent_cb, &bp);
+        err = fsfilt_ext3_ext_walk_space(base, block, num,
+                                         ext3_ext_new_extent_cb, &bp, 1);
         ext3_ext_invalidate_cache(base);
         fsfilt_up_truncate_sem(inode);
 
