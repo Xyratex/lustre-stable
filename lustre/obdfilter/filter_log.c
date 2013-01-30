@@ -152,7 +152,6 @@ static int filter_recov_log_unlink_cb(struct llog_ctxt *ctxt,
         struct obd_export *exp = ctxt->loc_obd->obd_self_export;
         struct llog_unlink_rec *lur;
         struct obdo *oa;
-        obd_id oid;
         obd_count count;
         int rc = 0;
         ENTRY;
@@ -166,7 +165,6 @@ static int filter_recov_log_unlink_cb(struct llog_ctxt *ctxt,
         oa->o_seq = lur->lur_oseq;
         oa->o_valid = OBD_MD_FLID | OBD_MD_FLGROUP;
         oa->o_lcookie = *cookie;
-        oid = oa->o_id;
         /* objid gap may require to destroy several objects in row */
         count = lur->lur_count + 1;
 
@@ -183,14 +181,14 @@ static int filter_recov_log_unlink_cb(struct llog_ctxt *ctxt,
                 rc = filter_destroy(exp, oa, NULL, NULL, NULL, NULL);
                 if (rc == 0)
                         CDEBUG(D_RPCTRACE, "object "LPU64" is destroyed\n",
-                               oid);
+                               oa->o_id);
                 else if (rc != -ENOENT)
                         CEMERG("error destroying object "LPU64": %d\n",
-                               oid, rc);
+                               oa->o_id, rc);
                 else
                         rc = 0;
                 count--;
-                oid++;
+                oa->o_id++;
         }
         OBDO_FREE(oa);
 
