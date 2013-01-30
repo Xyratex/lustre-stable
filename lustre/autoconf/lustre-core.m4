@@ -1136,6 +1136,21 @@ LB_LINUX_TRY_COMPILE([
 ])
 ])
 
+# 2.6.34 has renamed dquot options to dquot_*, check for dquot_suspend
+AC_DEFUN([LC_HAVE_DQUOT_SUSPEND],
+[AC_MSG_CHECKING([if dquot_suspend is defined])
+LB_LINUX_TRY_COMPILE([
+	#include <linux/quotaops.h>
+],[
+	dquot_suspend(NULL, -1);
+],[
+	AC_DEFINE(HAVE_DQUOT_SUSPEND, 1, [dquot_suspend is defined])
+	AC_MSG_RESULT([yes])
+],[
+	AC_MSG_RESULT([no])
+])
+])
+
 # LC_LOCK_MAP_ACQUIRE
 # after 2.6.27 lock_map_acquire replaces lock_acquire
 AC_DEFUN([LC_LOCK_MAP_ACQUIRE],
@@ -1889,6 +1904,9 @@ AC_DEFUN([LC_PROG_LINUX],
          LC_CACHE_UPCALL
          LC_SELINUX_IS_ENABLED
 	 LC_VFS_INODE_NEWSIZE_OK
+
+	 # 2.6.34
+	 LC_HAVE_DQUOT_SUSPEND
 
          # 2.6.35, 3.0.0
          LC_FILE_FSYNC
