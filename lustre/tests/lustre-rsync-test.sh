@@ -12,13 +12,14 @@ SRCDIR=`dirname $0`
 export PATH=$PWD/$SRCDIR:$SRCDIR:$PWD/$SRCDIR/../utils:$PATH:/sbin
 
 ONLY=${ONLY:-"$*"}
-[ -n "$ONLY" ] && SLOW=yes
 ALWAYS_EXCEPT="$LRSYNC_EXCEPT"
 # bug number for skipped test:
 # UPDATE THE COMMENT ABOVE WITH BUG NUMBERS WHEN CHANGING ALWAYS_EXCEPT!
 
-[ "$ALWAYS_EXCEPT$EXCEPT" ] && \
-        echo "Skipping tests: `echo $ALWAYS_EXCEPT $EXCEPT`"
+[ "$SLOW" = "no" ] && EXCEPT_SLOW=""
+
+[ "$ALWAYS_EXCEPT$EXCEPT" ] &&
+	echo "Skipping tests: `echo $ALWAYS_EXCEPT $EXCEPT`"
 
 KILL=/bin/kill
 
@@ -206,12 +207,11 @@ run_test 1 "Simple Replication"
 
 # Test 2a - Replicate files created by dbench 
 test_2a() {
-    [ "$SLOW" = "no" ] && skip "Skipping slow test" && return
-    init_src
-    init_changelog
+	init_src
+	init_changelog
 
-    # Run dbench
-    sh rundbench -C -D $DIR/$tdir 2 -t $DBENCH_TIME || error "dbench failed!"
+	# Run dbench
+	sh rundbench -C -D $DIR/$tdir 2 -t $DBENCH_TIME || error "dbench failed"
 
     # Replicate the changes to $TGT
     $LRSYNC -s $DIR -t $TGT -t $TGT2 -m $MDT0 -u $CL_USER -l $LREPL_LOG
@@ -220,28 +220,26 @@ test_2a() {
     check_diff $DIR/$tdir $TGT/$tdir 2a
     check_diff $DIR/$tdir $TGT2/$tdir 2a
 
-    fini_changelog
-    cleanup_src_tgt
-    return 0
+	fini_changelog
+	cleanup_src_tgt
+	return 0
 }
 run_test 2a "Replicate files created by dbench."
 
 
 # Test 2b - Replicate files changed by dbench.
 test_2b() {
-    [ "$SLOW" = "no" ] && skip "Skipping slow test" && return
+	init_src
+	init_changelog
 
-    init_src
-    init_changelog
+	# Run dbench
+	sh rundbench -C -D $DIR/$tdir 2 -t $DBENCH_TIME &
+	sleep 20
 
-    # Run dbench
-    sh rundbench -C -D $DIR/$tdir 2 -t $DBENCH_TIME &
-    sleep 20
-
-    local child_pid=$(pgrep dbench)
-    echo PIDs: $child_pid
-    echo Stopping dbench
-    $KILL -SIGSTOP $child_pid
+	local child_pid=$(pgrep dbench)
+	echo PIDs: $child_pid
+	echo Stopping dbench
+	$KILL -SIGSTOP $child_pid
 
     echo Starting replication
     $LRSYNC -s $DIR -t $TGT -t $TGT2 -m $MDT0 -u $CL_USER -l $LREPL_LOG
@@ -277,12 +275,11 @@ run_test 2b "Replicate files changed by dbench."
 
 # Test 2c - Replicate files while dbench is running 
 test_2c() {
-    [ "$SLOW" = "no" ] && skip "Skipping slow test" && return
-    init_src
-    init_changelog
+	init_src
+	init_changelog
 
-    # Run dbench
-    sh rundbench -C -D $DIR/$tdir 2 -t $DBENCH_TIME &
+	# Run dbench
+	sh rundbench -C -D $DIR/$tdir 2 -t $DBENCH_TIME &
 
     # Replicate the changes to $TGT
     sleep 10 # give dbench a headstart
@@ -302,44 +299,41 @@ test_2c() {
     check_diff $DIR/$tdir $TGT/$tdir 2c
     check_diff $DIR/$tdir $TGT2/$tdir 2c
 
-    fini_changelog
-    cleanup_src_tgt
-    return 0
+	fini_changelog
+	cleanup_src_tgt
+	return 0
 }
 run_test 2c "Replicate files while dbench is running."
 
 # Test 3a - Replicate files created by createmany
 test_3a() {
-    [ "$SLOW" = "no" ] && skip "Skipping slow test" && return
+	init_src
+	init_changelog
 
-    init_src
-    init_changelog
-
-    local numfiles=1000
-    createmany -o $DIR/$tdir/$tfile $numfiles || error "createmany failed!"
+	local numfiles=1000
+	createmany -o $DIR/$tdir/$tfile $numfiles || error "createmany failed"
 
     # Replicate the changes to $TGT
     $LRSYNC -s $DIR -t $TGT -t $TGT2 -m $MDT0 -u $CL_USER -l $LREPL_LOG
     check_diff $DIR/$tdir $TGT/$tdir 3a
     check_diff $DIR/$tdir $TGT2/$tdir 3a
 
-    fini_changelog
-    cleanup_src_tgt
-    return 0
+	fini_changelog
+	cleanup_src_tgt
+	return 0
 }
 run_test 3a "Replicate files created by createmany"
 
 
 # Test 3b - Replicate files created by writemany
 test_3b() {
-    [ "$SLOW" = "no" ] && skip "Skipping slow test" && return
+	init_src
+	init_changelog
 
-    init_src
-    init_changelog
-
-    local time=60
-    local threads=5
-    writemany -q -a $DIR/$tdir/$tfile $time $threads || error "writemany failed!"
+	local time=60
+	local threads=5
+	writemany -q -a $DIR/$tdir/$tfile $time $threads ||
+		error "writemany failed"
 
     # Replicate the changes to $TGT
     $LRSYNC -s $DIR -t $TGT -t $TGT2 -m $MDT0 -u $CL_USER -l $LREPL_LOG
@@ -347,38 +341,34 @@ test_3b() {
     check_diff $DIR/$tdir $TGT/$tdir 3b
     check_diff $DIR/$tdir $TGT2/$tdir 3b
 
-    fini_changelog
-    cleanup_src_tgt
-    return 0
+	fini_changelog
+	cleanup_src_tgt
+	return 0
 }
 run_test 3b "Replicate files created by writemany"
 
 # Test 3c - Replicate files created by createmany/unlinkmany
 test_3c() {
-    [ "$SLOW" = "no" ] && skip "Skipping slow test" && return
+	init_src
+	init_changelog
 
-    init_src
-    init_changelog
-
-    local numfiles=1000
-    createmany -o $DIR/$tdir/$tfile $numfiles || error "createmany failed!"
-    unlinkmany $DIR/$tdir/$tfile $numfiles || error "unlinkmany failed!"
+	local numfiles=1000
+	createmany -o $DIR/$tdir/$tfile $numfiles || error "createmany failed"
+	unlinkmany $DIR/$tdir/$tfile $numfiles || error "unlinkmany failed"
 
     # Replicate the changes to $TGT
     $LRSYNC -s $DIR -t $TGT -t $TGT2 -m $MDT0  -u $CL_USER -l $LREPL_LOG
     check_diff $DIR/$tdir $TGT/$tdir 3c
     check_diff $DIR/$tdir $TGT2/$tdir 3c
 
-    fini_changelog
-    cleanup_src_tgt
-    return 0
+	fini_changelog
+	cleanup_src_tgt
+	return 0
 }
 run_test 3c "Replicate files created by createmany/unlinkmany"
 
 # Test 4 - Replicate files created by iozone
 test_4() {
-    [ "$SLOW" = "no" ] && skip "Skipping slow test" && return
-
     which iozone > /dev/null 2>&1
     if [ $? -ne 0 ]; then
 	skip "iozone not found. Skipping test"
@@ -428,13 +418,11 @@ run_test 4 "Replicate files created by iozone"
 
 # Test 5a - Stop / start lustre_rsync
 test_5a() {
-    [ "$SLOW" = "no" ] && skip "Skipping slow test" && return
+	init_src
+	init_changelog
 
-    init_src
-    init_changelog
-
-    NUMTEST=2000
-    createmany -o $DIR/$tdir/$tfile $NUMTEST
+	NUMTEST=2000
+	createmany -o $DIR/$tdir/$tfile $NUMTEST
 
     # Replicate the changes to $TGT
     
@@ -448,21 +436,19 @@ test_5a() {
     check_diff $DIR/$tdir $TGT/$tdir 5a
     check_diff $DIR/$tdir $TGT2/$tdir 5a
 
-    fini_changelog
-    cleanup_src_tgt
-    return 0
+	fini_changelog
+	cleanup_src_tgt
+	return 0
 }
 run_test 5a "Stop / start lustre_rsync"
 
 # Test 5b - Kill / restart lustre_rsync
 test_5b() {
-    [ "$SLOW" = "no" ] && skip "Skipping slow test" && return
+	init_src
+	init_changelog
 
-    init_src
-    init_changelog
-
-    NUMTEST=2000
-    createmany -o $DIR/$tdir/$tfile $NUMTEST
+	NUMTEST=2000
+	createmany -o $DIR/$tdir/$tfile $NUMTEST
 
     # Replicate the changes to $TGT
     
@@ -476,9 +462,9 @@ test_5b() {
     check_diff $DIR/$tdir $TGT/$tdir 5b
     check_diff $DIR/$tdir $TGT2/$tdir 5b
 
-    fini_changelog
-    cleanup_src_tgt
-    return 0
+	fini_changelog
+	cleanup_src_tgt
+	return 0
 }
 run_test 5b "Kill / restart lustre_rsync"
 
