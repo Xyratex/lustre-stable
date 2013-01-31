@@ -1128,6 +1128,7 @@ extern void lustre_swab_ptlrpc_body(struct ptlrpc_body *pb);
 #define OBD_CONNECT_NANOSEC_TIME 0x800000000000ULL/* nanosecond timestamps */
 #define OBD_CONNECT_LIGHTWEIGHT 0x1000000000000ULL/* lightweight connection */
 #define OBD_CONNECT_SHORTIO   0x2000000000000ULL  /* short io */
+#define OBD_CONNECT_PINGLESS    0x4000000000000ULL /* pings not required */
 
 /* XXX README XXX:
  * Please DO NOT add flag values here before first ensuring that this same
