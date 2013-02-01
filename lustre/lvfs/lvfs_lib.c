@@ -79,9 +79,6 @@ void lprocfs_counter_add(struct lprocfs_stats *stats, int idx, long amount)
 	if (stats == NULL)
 		return;
 
-	LASSERT(ergo((stats->ls_flags & LPROCFS_STATS_FLAG_IRQ_SAFE) == 0,
-		     !cfs_in_interrupt()));
-
 	/* With per-client stats, statistics are allocated only for
 	 * single CPU area, so the smp_id should be 0 always. */
 	smp_id = lprocfs_stats_lock(stats, LPROCFS_GET_SMP_ID, &flags);
@@ -98,8 +95,13 @@ void lprocfs_counter_add(struct lprocfs_stats *stats, int idx, long amount)
 		 * as memory allocation could trigger memory shrinker call
 		 * ldlm_pool_shrink(), which calls lprocfs_counter_add().
 		 * LU-1727.
+		 *
+		 * Only obd_memory uses LPROCFS_STATS_FLAG_IRQ_SAFE
+		 * flag, because it needs accurate counting lest memory leak
+		 * check reports error.
 		 */
-		if (cfs_in_interrupt())
+		if (cfs_in_interrupt() &&
+		    (stats->ls_flags & LPROCFS_STATS_FLAG_IRQ_SAFE) != 0)
 			percpu_cntr->lc_sum_irq += amount;
 		else
 			percpu_cntr->lc_sum += amount;
@@ -125,9 +127,6 @@ void lprocfs_counter_sub(struct lprocfs_stats *stats, int idx, long amount)
 	if (stats == NULL)
 		return;
 
-	LASSERT(ergo((stats->ls_flags & LPROCFS_STATS_FLAG_IRQ_SAFE) == 0,
-		     !cfs_in_interrupt()));
-
 	/* With per-client stats, statistics are allocated only for
 	 * single CPU area, so the smp_id should be 0 always. */
 	smp_id = lprocfs_stats_lock(stats, LPROCFS_GET_SMP_ID, &flags);
@@ -143,8 +142,13 @@ void lprocfs_counter_sub(struct lprocfs_stats *stats, int idx, long amount)
 		 * softirq context - right now that's the only case we're in
 		 * softirq context here, use separate counter for that.
 		 * bz20650.
+		 *
+		 * Only obd_memory uses LPROCFS_STATS_FLAG_IRQ_SAFE
+		 * flag, because it needs accurate counting lest memory leak
+		 * check reports error.
 		 */
-		if (cfs_in_interrupt())
+		if (cfs_in_interrupt() &&
+		    (stats->ls_flags & LPROCFS_STATS_FLAG_IRQ_SAFE) != 0)
 			percpu_cntr->lc_sum_irq -= amount;
 		else
 			percpu_cntr->lc_sum -= amount;
