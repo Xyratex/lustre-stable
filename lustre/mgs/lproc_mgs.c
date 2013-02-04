@@ -256,7 +256,9 @@ int lproc_mgs_del_live(struct obd_device *obd, struct fs_db *fsdb)
         if (!mgs->mgs_proc_live)
                 return 0;
 
-        lprocfs_remove_proc_entry(fsdb->fsdb_name, mgs->mgs_proc_live);
+	/* didn't create the proc file for MGSSELF_NAME */
+	if (!test_bit(FSDB_MGS_SELF, &fsdb->fsdb_flags))
+		lprocfs_remove_proc_entry(fsdb->fsdb_name, mgs->mgs_proc_live);
         return 0;
 }
 
