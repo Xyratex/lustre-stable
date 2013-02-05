@@ -1382,7 +1382,7 @@ check_seq_oid()
                 #local ff=$(do_facet ost$ost $LL_DECODE_FILTER_FID $obj_file)
 
                 local obj_file="O/$seq/d$((oid %32))/$oid"
-                local ff=$(do_facet ost$ost "$DEBUGFS -c -R 'stat $obj_file' \
+                local ff=$(do_facet ost$ost "sync; $DEBUGFS -c -R 'stat $obj_file' \
                            $dev 2>/dev/null" | grep "parent=")
 
                 [ -z "$ff" ] && error "$obj_file: no filter_fid info"
@@ -1421,15 +1421,13 @@ test_27z() {
         # We need to send a write to every object to get parent FID info set.
         # This _should_ also work for setattr, but does not currently.
         # touch $DIR/$tdir/$tfile-1 ||
-        dd if=/dev/zero of=$DIR/$tdir/$tfile-1 bs=1M count=1 ||
+        # make sure write RPCs have been sent to OSTs by oflag=sync
+        dd if=/dev/zero of=$DIR/$tdir/$tfile-1 bs=1M count=1 oflag=sync ||
                 { error "dd $tfile-1 failed"; return 2; }
         $SETSTRIPE -c -1 -i $((OSTCOUNT - 1)) -S 1M $DIR/$tdir/$tfile-2 ||
                 { error "setstripe -c -1 failed"; return 3; }
-        dd if=/dev/zero of=$DIR/$tdir/$tfile-2 bs=1M count=$OSTCOUNT ||
+        dd if=/dev/zero of=$DIR/$tdir/$tfile-2 bs=1M count=$OSTCOUNT oflag=sync ||
                 { error "dd $tfile-2 failed"; return 4; }
-
-        # make sure write RPCs have been sent to OSTs
-        sync; sleep 5; sync
 
         check_seq_oid $DIR/$tdir/$tfile-1 || return 5
         check_seq_oid $DIR/$tdir/$tfile-2 || return 6
