@@ -640,6 +640,25 @@ ostdevlabel() {
     echo -n $label
 }
 
+get_osd_param() {
+       local nodes=$1
+       local device=${2:-$FSNAME-OST*}
+       local name=$3
+
+       do_nodes $nodes "$LCTL get_param -n obdfilter.$device.$name \
+               osd-*.$device.$name 2>&1" | grep -v 'Found no match'
+}
+
+set_osd_param() {
+       local nodes=$1
+       local device=${2:-$FSNAME-OST*}
+       local name=$3
+       local value=$4
+
+       do_nodes $nodes "$LCTL set_param -n obdfilter.$device.$name=$value \
+               osd-*.$device.$name=$value 2>&1" | grep -v 'Found no match'
+}
+
 set_debug_size () {
     local dz=${1:-$DEBUG_SIZE}
 
