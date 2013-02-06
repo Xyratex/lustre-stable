@@ -861,7 +861,7 @@ static int fsfilt_ext3_sync(struct super_block *sb)
 #else
 #define ext3_ext_base                   ext3_extents_tree
 #define ext3_ext_base2inode(tree)       (tree->inode)
-#define fsfilt_ext3_ext_walk_space(tree, block, num, cb, cbdata) \
+#define fsfilt_ext3_ext_walk_space(tree, block, num, cb, cbdata, locked) \
                         ext3_ext_walk_space(tree, block, num, cb);
 #endif
 
