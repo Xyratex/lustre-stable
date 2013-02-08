@@ -183,13 +183,13 @@ Conflicts: %{name}-deps-sles
 This package has RPM dependencies appropriate for RHEL, RHL, and FC
 systems.
 
-%package headers
+%package devel
 Summary: Lustre include headers
 Group: Development/Kernel
-Provides: %{name}-headers = %{version}
+Provides: %{name}-devel = %{version}
 Requires: %{name} = %{version}, %{name}-modules = %{version}
 
-%description headers
+%description devel
 This package contains the headers required to build ancillary
 kernel modules that work closely with the standard lustre modules.
 
@@ -262,16 +262,20 @@ make -j $RPM_BUILD_NCPUS -s
 add_hdr_file() {
     declare destfil= destdir= f=
 
-    # change lustre-source/lustre-%v/libcfs/include/libcfs/bitmap.h into
-    # lustre-%v/libcfs/bitmap.h
-    # then install into /usr/include/lustre-%v/libcfs/bitmap.h
+    # mirror all lustre headers from
+    #   lustre-source/lustre-%v/{libsysio,lustre,libcfs,lnet}/include/
+    # into
+    #   /usr/src/lustre-%v-headers/{libsysio,lustre,libcfs,lnet}/include/
     #
+    # for example:
+    #   lustre-source/lustre-%v/libcfs/include/libcfs/bitmap.h
+    # is installed as
+    #   /usr/src/lustre-%v-headers/libcfs/include/libcfs/bitmap.h
+
     while read f
     do
-        destfil=/usr/include/$(echo $f | \
-            sed 's@/include/@/@
-		s@/\([a-z]*\)/\1/@/\1/@
-		s@^lustre-source/@@')
+        destfil=/usr/src/$(echo $f | \
+            sed 's@^lustre-source/\(lustre-%{version}\)/@\1-headers/@')
         destdir=$RPM_BUILD_ROOT/$(dirname $destfil)
         test -d ${destdir} || mkdir -p ${destdir}
         cp $f ${destdir}/.
@@ -279,12 +283,12 @@ add_hdr_file() {
     done
 
     f=$RPM_BUILD_DIR/lustre-%{version}/config.h
-    destfil=usr/include/lustre-%{version}/config.h
+    destfil=usr/src/lustre-%{version}-headers/config.h
     cp $f $RPM_BUILD_ROOT/$destfil
     echo "%attr(-, root, root) /${destfil}"
 
     f=$RPM_BUILD_DIR/lustre-%{version}/Module.symvers
-    destfil=usr/include/lustre-%{version}/Module.symvers
+    destfil=usr/src/lustre-%{version}-headers/Module.symvers
     cp $f $RPM_BUILD_ROOT/${destfil}
     echo "%attr(-, root, root) /${destfil}"
 }
@@ -391,7 +395,7 @@ cd $OLDPWD
 
 find lustre-source/lustre-%{version} -type f -name '*.h' | \
     fgrep /include/ | \
-    add_hdr_file > lustre-headers.files
+    add_hdr_file > lustre-devel.files
 
 %files -f lustre.files
 
@@ -400,7 +404,7 @@ find lustre-source/lustre-%{version} -type f -name '*.h' | \
 %attr(-, root, root) %doc ChangeLog-lustre
 %attr(-, root, root) %doc ChangeLog-lnet
 
-%files headers -f lustre-headers.files
+%files devel -f lustre-devel.files
 
 %files source
 %attr(-, root, root) /usr/src/lustre-%{version}
