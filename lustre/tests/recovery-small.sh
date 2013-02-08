@@ -352,6 +352,9 @@ test_19a() {
 
     mount_client $DIR2
 
+    # cancel cached locks from OST to avoid eviction from it
+    cancel_lru_locks osc
+
     # modify dir so that next revalidate would not obtain UPDATE lock as well
     do_facet client touch $DIR
     do_facet client mcreate $DIR/$tfile        || return 1
@@ -373,6 +376,9 @@ test_19b() {
     local BEFORE=`date +%s`
 
     mount_client $DIR2
+
+    # cancel cached locks from MDT to avoid eviction from it
+    cancel_lru_locks mdc
 
     do_facet client $MULTIOP $DIR/$tfile Ow  || return 1
     drop_ldlm_cancel $MULTIOP $DIR2/$tfile Ow
