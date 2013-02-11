@@ -87,20 +87,12 @@ ldlm_flocks_overlap(struct ldlm_lock *lock, struct ldlm_lock *new)
                 lock->l_policy_data.l_flock.start));
 }
 
-static inline int ldlm_flock_blocking_link(struct ldlm_lock *req,
+static inline void ldlm_flock_blocking_link(struct ldlm_lock *req,
                                            struct ldlm_lock *lock)
 {
-        int rc = 0;
-
         /* For server only */
         if (req->l_export == NULL)
-                return 0;
-
-        if (req->l_export->exp_flock_hash == NULL) {
-                rc = ldlm_init_flock_export(req->l_export);
-                if (rc)
-                        goto error;
-        }
+                return;
 
         LASSERT(cfs_hlist_unhashed(&req->l_exp_flock_hash));
 
@@ -113,8 +105,6 @@ static inline int ldlm_flock_blocking_link(struct ldlm_lock *req,
         cfs_hash_add(req->l_export->exp_flock_hash,
                      &req->l_policy_data.l_flock.owner,
                      &req->l_exp_flock_hash);
-error:
-        return rc;
 }
 
 static inline void ldlm_flock_blocking_unlink(struct ldlm_lock *req)
@@ -254,7 +244,6 @@ ldlm_process_flock_lock(struct ldlm_lock *req, int *flags, int first_enq,
         int overlaps = 0;
         int splitted = 0;
         const struct ldlm_callback_suite null_cbs = { NULL };
-        int rc;
         ENTRY;
 
         CDEBUG(D_DLMTRACE, "flags %#x owner "LPU64" pid %u mode %u start "LPU64
@@ -332,12 +321,7 @@ reprocess:
 
                         /* add lock to blocking list before deadlock
                          * check to prevent race */
-                        rc = ldlm_flock_blocking_link(req, lock);
-                        if (rc) {
-                                ldlm_flock_destroy(req, mode, *flags);
-                                *err = rc;
-                                RETURN(LDLM_ITER_STOP);
-                        }
+                        ldlm_flock_blocking_link(req, lock);
 
                         if (ldlm_flock_deadlock(req, lock)) {
                                 ldlm_flock_blocking_unlink(req);
@@ -854,6 +838,9 @@ static cfs_hash_ops_t ldlm_export_flock_ops = {
 
 int ldlm_init_flock_export(struct obd_export *exp)
 {
+	if( strcmp(exp->exp_obd->obd_type->typ_name, LUSTRE_MDT_NAME) != 0)
+		RETURN(0);
+
         exp->exp_flock_hash =
                 cfs_hash_create(obd_uuid2str(&exp->exp_client_uuid),
                                 HASH_EXP_LOCK_CUR_BITS,
