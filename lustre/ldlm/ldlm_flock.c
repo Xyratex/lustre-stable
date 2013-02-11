@@ -837,6 +837,9 @@ static cfs_hash_ops_t ldlm_export_flock_ops = {
 
 int ldlm_init_flock_export(struct obd_export *exp)
 {
+	if( strcmp(exp->exp_obd->obd_type->typ_name, LUSTRE_MDT_NAME) != 0)
+		RETURN(0);
+
         exp->exp_flock_hash =
                 cfs_hash_create(obd_uuid2str(&exp->exp_client_uuid),
                                 HASH_EXP_LOCK_CUR_BITS,
