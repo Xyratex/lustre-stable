@@ -2288,7 +2288,7 @@ struct mdd_changelog_user_data {
         __u32 mcud_id;
         __u32 mcud_minid;  /**< user id with lowest rec reference */
         __u32 mcud_usercount;
-        int   mcud_found:1;
+	unsigned int mcud_found:1;
         struct mdd_device   *mcud_mdd;
         const struct lu_env *mcud_env;
 };

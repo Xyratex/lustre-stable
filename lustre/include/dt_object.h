@@ -624,8 +624,8 @@ struct thandle {
         /** the last operation result in this transaction.
          * this value is used in recovery */
         __s32             th_result;
-        /** whether we need sync commit */
-        int               th_sync;
+	/** whether we need sync commit */
+	unsigned int		th_sync:1;
 };
 
 /**

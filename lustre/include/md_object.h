@@ -152,6 +152,7 @@ struct md_attr {
         struct lu_attr          ma_attr;
         struct lov_mds_md      *ma_lmm;
         int                     ma_lmm_size;
+	unsigned int            ma_big_lmm_used:1;
         struct lmv_stripe_md   *ma_lmv;
         int                     ma_lmv_size;
         void                   *ma_acl;
@@ -162,7 +163,6 @@ struct md_attr {
         struct md_hsm           ma_hsm;
         struct md_som_data     *ma_som;
         struct lu_fid           ma_pfid;
-        int                     ma_big_lmm_used:1;
 };
 
 /** Additional parameters for create */
