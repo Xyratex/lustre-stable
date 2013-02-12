@@ -1033,7 +1033,8 @@ regular_open:
 out:
         req->rq_status = rc;
         lustre_msg_set_status(req->rq_repmsg, req->rq_status);
-        LASSERT(ergo(rc < 0, lustre_msg_get_transno(req->rq_repmsg) == 0));
+        LASSERT(ergo(rc < 0 && rc != -EREMOTE,
+		lustre_msg_get_transno(req->rq_repmsg) == 0));
 }
 
 int mdt_open_by_fid(struct mdt_thread_info* info,
