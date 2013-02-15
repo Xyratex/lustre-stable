@@ -2864,6 +2864,73 @@ test_63() {
 }
 run_test 63 "Verify each page can at least hold 3 ldisk inodes"
 
+test_66() {
+	setup
+	local OST1_NID=$(do_facet ost1 $LCTL list_nids | head -1)
+	local MDS_NID=$(do_facet $SINGLEMDS $LCTL list_nids | head -1)
+
+	echo "replace_nids should fail if MDS, OSTs and clients are UP"
+	do_facet mgs $LCTL replace_nids $FSNAME-OST0000 $OST1_NID &&
+		error "replace_nids fail"
+
+	umount_client $MOUNT || error "unmounting client failed"
+	echo "replace_nids should fail if MDS and OSTs are UP"
+	do_facet mgs $LCTL replace_nids $FSNAME-OST0000 $OST1_NID &&
+		error "replace_nids fail"
+
+	stop_ost
+	echo "replace_nids should fail if MDS is UP"
+	do_facet mgs $LCTL replace_nids $FSNAME-OST0000 $OST1_NID &&
+		error "replace_nids fail"
+
+	stop_mds || error "stopping mds failed"
+
+	if combined_mgs_mds; then
+		start_mds "-o nosvc" ||
+			error "starting mds with nosvc option failed"
+	fi
+
+	echo "command should accept two parameters"
+	do_facet mgs $LCTL replace_nids $FSNAME-OST0000 &&
+		error "command should accept two params"
+
+	echo "correct device name should be passed"
+	do_facet mgs $LCTL replace_nids $FSNAME-WRONG0000 $OST1_NID &&
+		error "wrong devname"
+
+	echo "wrong nids list should not destroy the system"
+	do_facet mgs $LCTL replace_nids $FSNAME-OST0000 "wrong nids list" &&
+		error "wrong parse"
+
+	echo "replace OST nid"
+	do_facet mgs $LCTL replace_nids $FSNAME-OST0000 $OST1_NID ||
+		error "replace nids failed"
+
+	echo "command should accept two parameters"
+	do_facet mgs $LCTL replace_nids $FSNAME-MDT0000 &&
+		error "command should accept two params"
+
+	echo "wrong nids list should not destroy the system"
+	do_facet mgs $LCTL replace_nids $FSNAME-MDT0000 "wrong nids list" &&
+		error "wrong parse"
+
+	echo "replace MDS nid"
+	do_facet mgs $LCTL replace_nids $FSNAME-MDT0000 $MDS_NID ||
+		error "replace nids failed"
+
+	if ! combined_mgs_mds ; then
+		stop_mgs
+	else
+		stop_mds
+	fi
+
+	setup_noconfig
+	check_mount || error "error after nid replace"
+	cleanup
+	reformat
+}
+run_test 66 "replace nids"
+
 test_70() { # MRP-153
 	local paramkey="mgsnode"
 	local paramval1="192.0.2.254@tcp" # Reserved IPs, see RFC 5735
@@ -2904,48 +2971,6 @@ test_70() { # MRP-153
 	reformat
 }
 run_test 70 "check tunefs correctly handles parameter addition and removal"
-
-test_71() {
-    setup
-    local OST_NID=$($LCTL list_nids | head -1)
-    local MDS_NID=$($LCTL list_nids | head -1)
-    local MDSDEV=$(mdsdevname ${SINGLEMDS//mds/})
-
-    echo "replace_nids should fail if MDS, OSTs and clients are UP"
-    $LCTL replace_nids $FSNAME-OST0000 $OST_NID && error "replace_nids fail"
-    manual_umount_client
-    echo "replace_nids should fail if MDS and OSTs are UP"
-    $LCTL replace_nids $FSNAME-OST0000 $OST_NID && error "replace_nids fail" 
-    stop_ost2
-    stop_ost
-    echo "replace_nids should fail if MDS is UP"
-    $LCTL replace_nids $FSNAME-OST0000 $OST_NID && error "replace_nids fail"
-    stop_mds
-
-    start $SINGLEMDS $MDSDEV $MDS_MOUNT_OPTS -o nosvc -n
-    echo "command should accept two parameters"
-    $LCTL replace_nids $FSNAME-OST0000 && error "command should accept two params"
-    echo "correct device name should be passed"
-    $LCTL replace_nids $FSNAME-WRONG0000 $OST_NID && error "wrong devname"
-    echo "wrong nids list should not destroy the system"
-    $LCTL replace_nids $FSNAME-OST0000 "wrong nids list" && error "wrong parse"
-    echo "replace OST nid"
-    $LCTL replace_nids $FSNAME-OST0000 $OST_NID || error "replace nids failed"
-
-    echo "command should accept two parameters"
-    $LCTL replace_nids $FSNAME-MDT0000 && error "command should accept two params"
-    echo "wrong nids list should not destroy the system"
-    $LCTL replace_nids $FSNAME-MDT0000 "wrong nids list" && error "wrong parse"
-    echo "replace MDS nid"
-    $LCTL replace_nids $FSNAME-MDT0000 $MDS_NID || error "replace nids failed"
-    stop_mds -f
-
-    setup
-    check_mount || error "error after nid replace"
-    cleanup
-    reformat
-}
-run_test 71 "replace nids"
 
 test_72() { #LU-2634
 	local mdsdev=$(mdsdevname 1)
