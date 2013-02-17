@@ -256,7 +256,7 @@ test_13() {	# bug 2451 - directory coherency
 }
 run_test 13 "test directory page revocation ===================="
 
-test_14() {
+test_14aa() {
 	mkdir -p $DIR1/$tdir
 	cp -p /bin/ls $DIR1/$tdir/$tfile
 	multiop_bg_pause $DIR1/$tdir/$tfile Ow_c || return 1
@@ -266,9 +266,9 @@ test_14() {
 	kill -USR1 $MULTIPID
 	wait $MULTIPID || return 2
 }
-run_test 14 "execution of file open for write returns -ETXTBSY ="
+run_test 14aa "execution of file open for write returns -ETXTBSY ="
 
-test_14a() {
+test_14ab() {
         mkdir -p $DIR1/d14
 	cp -p `which multiop` $DIR1/d14/multiop || error "cp failed"
         MULTIOP_PROG=$DIR1/d14/multiop multiop_bg_pause $TMP/test14.junk O_c || return 1
@@ -278,7 +278,7 @@ test_14a() {
         wait $MULTIOP_PID || return 3
         rm $TMP/test14.junk $DIR1/d14/multiop || error "removing multiop"
 }
-run_test 14a "open(RDWR) of executing file returns -ETXTBSY ===="
+run_test 14ab "open(RDWR) of executing file returns -ETXTBSY ===="
 
 test_14b() { # bug 3192, 7040
         mkdir -p $DIR1/d14
