@@ -59,20 +59,23 @@ sem_t sem;
 #define ALIGN 65535
 
 char usage[] =
-"Usage: %s filename command-sequence\n"
+"Usage: %s filename command-sequence [path...]\n"
 "    command-sequence items:\n"
 "        c  close\n"
+"        B[num] call setstripe ioctl to create stripes\n"
 "        C[num] create with optional stripes\n"
 "        d  mkdir\n"
 "        D  open(O_DIRECTORY)\n"
 "        f  statfs\n"
 "        G gid get grouplock\n"
 "        g gid put grouplock\n"
-"        L  link\n"
-"        l  symlink\n"
+"        K  link path to filename\n"
+"        L  link filename to path\n"
+"        l  symlink filename to path\n"
 "        m  mknod\n"
 "        M  rw mmap to EOF (must open and stat prior)\n"
-"        N  rename\n"
+"        n  rename path to filename\n"
+"        N  rename filename to path\n"
 "        o  open(O_RDONLY)\n"
 "        O  open(O_CREAT|O_RDWR)\n"
 "        r[num] read [optional length]\n"
@@ -118,27 +121,28 @@ pop_arg(int argc, char *argv[])
 }
 
 struct flag_mapping {
-       const char *string;
-       const int  flag;
+	const char *string;
+	const int  flag;
 } flag_table[] = {
-       {"O_RDONLY", O_RDONLY},
-       {"O_WRONLY", O_WRONLY},
-       {"O_RDWR", O_RDWR},
-       {"O_CREAT", O_CREAT},
-       {"O_EXCL", O_EXCL},
-       {"O_NOCTTY", O_NOCTTY},
-       {"O_TRUNC", O_TRUNC},
-       {"O_APPEND", O_APPEND},
-       {"O_NONBLOCK", O_NONBLOCK},
-       {"O_NDELAY", O_NDELAY},
-       {"O_SYNC", O_SYNC},
+	{"O_RDONLY", O_RDONLY},
+	{"O_WRONLY", O_WRONLY},
+	{"O_RDWR", O_RDWR},
+	{"O_CREAT", O_CREAT},
+	{"O_EXCL", O_EXCL},
+	{"O_NOCTTY", O_NOCTTY},
+	{"O_TRUNC", O_TRUNC},
+	{"O_APPEND", O_APPEND},
+	{"O_NONBLOCK", O_NONBLOCK},
+	{"O_NDELAY", O_NDELAY},
+	{"O_SYNC", O_SYNC},
 #ifdef O_DIRECT
-       {"O_DIRECT", O_DIRECT},
+	{"O_DIRECT", O_DIRECT},
 #endif
-       {"O_LARGEFILE", O_LARGEFILE},
-       {"O_DIRECTORY", O_DIRECTORY},
-       {"O_NOFOLLOW", O_NOFOLLOW},
-       {"", -1}
+	{"O_LARGEFILE", O_LARGEFILE},
+	{"O_DIRECTORY", O_DIRECTORY},
+	{"O_NOFOLLOW", O_NOFOLLOW},
+	{"O_LOV_DELAY_CREATE", O_LOV_DELAY_CREATE},
+	{"", -1}
 };
 
 int get_flags(char *data, int *rflags)
@@ -186,6 +190,7 @@ int main(int argc, char **argv)
 {
         char *fname, *commands;
         const char *newfile;
+	const char	*oldpath;
         struct stat st;
         struct statfs stfs;
         size_t mmap_len = 0, i;
@@ -195,6 +200,7 @@ int main(int argc, char **argv)
         int save_errno;
         int verbose = 0;
         int gid = 0;
+	struct lov_user_md_v3 lum;
 
         if (argc < 3) {
                 fprintf(stderr, usage, argv[0]);
@@ -226,6 +232,18 @@ int main(int argc, char **argv)
                         }
                         fd = -1;
                         break;
+		case 'B':
+			lum = (struct lov_user_md_v3) {
+				.lmm_magic = LOV_USER_MAGIC_V3,
+				.lmm_stripe_count = atoi(commands + 1),
+			};
+
+			if (ioctl(fd, LL_IOC_LOV_SETSTRIPE, &lum) < 0) {
+				save_errno = errno;
+				perror("LL_IOC_LOV_SETSTRIPE");
+				exit(save_errno);
+			}
+			break;
                 case 'C':
                         len = atoi(commands+1);
                         fd = llapi_file_open(fname, O_CREAT | O_WRONLY, 0644,
@@ -274,6 +292,17 @@ int main(int argc, char **argv)
                                 exit(save_errno);
                         }
                         break;
+		case 'K':
+			oldpath = POP_ARG();
+			if (oldpath == NULL)
+				oldpath = fname;
+
+			if (link(oldpath, fname)) {
+				save_errno = errno;
+				perror("link()");
+				exit(save_errno);
+			}
+			break;
                 case 'l':
                         newfile = POP_ARG();
                         if (!newfile)
@@ -284,16 +313,17 @@ int main(int argc, char **argv)
                                 exit(save_errno);
                         }
                         break;
-                case 'L':
-                        newfile = POP_ARG();
-                        if (!newfile)
-                                newfile = fname;
-                        if (link(fname, newfile)) {
-                                save_errno = errno;
-                                perror("symlink()");
-                                exit(save_errno);
-                        }
-                        break;
+		case 'L':
+			newfile = POP_ARG();
+			if (newfile == NULL)
+				newfile = fname;
+
+			if (link(fname, newfile)) {
+				save_errno = errno;
+				perror("link()");
+				exit(save_errno);
+			}
+			break;
                 case 'm':
                         if (mknod(fname, S_IFREG | 0644, 0) == -1) {
                                 save_errno = errno;
@@ -316,6 +346,17 @@ int main(int argc, char **argv)
                                 exit(save_errno);
                         }
                         break;
+		case 'n':
+			oldpath = POP_ARG();
+			if (oldpath == NULL)
+				oldpath = fname;
+
+			if (rename(oldpath, fname) < 0) {
+				save_errno = errno;
+				perror("rename()");
+				exit(save_errno);
+			}
+			break;
                 case 'N':
                         newfile = POP_ARG();
                         if (!newfile)
@@ -487,6 +528,7 @@ int main(int argc, char **argv)
                                 exit(save_errno);
                         }
                         break;
+		case '-':
                 case '0':
                 case '1':
                 case '2':
