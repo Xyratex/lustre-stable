@@ -121,7 +121,7 @@ void oscc_fini_obd(struct obd_device *obd);
 int oscc_init(void);
 void oscc_fini(void);
 void osc_wake_cache_waiters(struct client_obd *cli);
-int osc_shrink_grant_to_target(struct client_obd *cli, long target);
+int osc_shrink_grant_to_target(struct client_obd *cli, __u64 target_bytes);
 
 /*
  * cl integration.
