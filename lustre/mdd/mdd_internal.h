@@ -86,6 +86,7 @@ enum mdd_txn_op {
         MDD_TXN_CREATE_DATA_OP,
         MDD_TXN_MKDIR_OP,
         MDD_TXN_CLOSE_OP,
+	MDD_TXN_NOP = MDD_TXN_CLOSE_OP,
         MDD_TXN_LAST_OP
 };
 
@@ -471,9 +472,11 @@ struct llog_changelog_rec;
 int mdd_changelog_llog_write(struct mdd_device         *mdd,
                              struct llog_changelog_rec *rec,
                              struct thandle            *handle);
-int mdd_changelog_llog_cancel(struct mdd_device *mdd, long long endrec);
-int mdd_changelog_write_header(struct mdd_device *mdd, int markerflags);
-int mdd_changelog_on(struct mdd_device *mdd, int on);
+int mdd_changelog_llog_cancel(const struct lu_env *env,
+			      struct mdd_device *mdd, long long endrec);
+int mdd_changelog_write_header(const struct lu_env *env,
+			       struct mdd_device *mdd, int markerflags);
+int mdd_changelog_on(const struct lu_env *env, struct mdd_device *mdd, int on);
 
 /* mdd_permission.c */
 #define mdd_cap_t(x) (x)
