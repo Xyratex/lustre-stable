@@ -125,7 +125,7 @@ static void record_finish_io(struct filter_iobuf *iobuf, int rw, int rc)
                 cfs_waitq_signal(&iobuf->dr_wait);
 }
 
-#ifndef __REQ_WRITE /* pre-2.6.35 */
+#ifndef REQ_WRITE /* pre-2.6.35 */
 #define __REQ_WRITE BIO_RW
 #endif
 
