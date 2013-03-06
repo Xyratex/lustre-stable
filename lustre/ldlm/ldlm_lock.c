@@ -117,15 +117,15 @@ void ldlm_convert_policy_to_local(struct obd_export *exp, ldlm_type_t type,
                                   ldlm_policy_data_t *lpolicy)
 {
         ldlm_policy_wire_to_local_t convert;
-        int new_client;
 
         /** some badnes for 2.0.0 clients, but 2.0.0 isn't supported */
-        new_client = (exp->exp_connect_data.ocd_connect_flags & OBD_CONNECT_FULL20) != 0;
-        if (new_client)
-               convert = ldlm_policy_wire21_to_local[type - LDLM_MIN_TYPE];
-        else
-               convert = ldlm_policy_wire18_to_local[type - LDLM_MIN_TYPE];
-
+	if ((exp->exp_connect_data.ocd_connect_flags & OBD_CONNECT_FULL20) != 0)
+		convert = ldlm_policy_wire21_to_local[type - LDLM_MIN_TYPE];
+	else if ((exp->exp_connect_data.ocd_connect_flags &
+		 OBD_CONNECT_FLOCK_OWNER) != 0 && type == LDLM_FLOCK)
+		convert = ldlm_policy_wire21_to_local[type - LDLM_MIN_TYPE];
+	else
+		convert = ldlm_policy_wire18_to_local[type - LDLM_MIN_TYPE];
         convert(wpolicy, lpolicy);
 }
 
