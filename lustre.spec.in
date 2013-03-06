@@ -187,6 +187,7 @@ systems.
 Summary: Lustre include headers
 Group: Development/Kernel
 Provides: %{name}-devel = %{version}
+Obsoletes: %{name}-headers
 Requires: %{name} = %{version}, %{name}-modules = %{version}
 
 %description devel
