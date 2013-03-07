@@ -2720,10 +2720,10 @@ static int ost_setup(struct obd_device *obd, struct lustre_cfg* lcfg)
 
 	conf = (typeof(conf)) {
 		.psc_nbufs           = OST_NBUFS,
-		.psc_bufsize         = OST_BUFSIZE,
+		.psc_bufsize         = OST_IO_BUFSIZE,
 		.psc_nbufs_mem_max   = ost_io_mem,
-		.psc_max_req_size    = OST_MAXREQSIZE,
-		.psc_max_reply_size  = OST_MAXREPSIZE,
+		.psc_max_req_size    = OST_IO_MAXREQSIZE,
+		.psc_max_reply_size  = OST_IO_MAXREPSIZE,
 		.psc_req_portal      = OST_IO_PORTAL,
 		.psc_rep_portal      = OSC_REPLY_PORTAL,
 		.psc_watchdog_factor = OSS_SERVICE_WATCHDOG_FACTOR,
@@ -2732,6 +2732,7 @@ static int ost_setup(struct obd_device *obd, struct lustre_cfg* lcfg)
 		.psc_ctx_tags        = LCT_DT_THREAD,
 		.psc_hpreq_handler   = ost_hpreq_handler,
 	};
+
         ost->ost_io_service =
 		ptlrpc_init_svc_conf(&conf, ost_handle,
 				     "ost_io", obd->obd_proc_entry,
