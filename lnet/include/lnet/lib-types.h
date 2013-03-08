@@ -463,6 +463,7 @@ typedef struct {
         cfs_list_t        lr_list;              /* chain on net */
         lnet_peer_t      *lr_gateway;           /* router node */
         unsigned int      lr_hops;              /* how far I am */
+	unsigned int		lr_priority;	/* route priority */
 } lnet_route_t;
 
 typedef struct {
