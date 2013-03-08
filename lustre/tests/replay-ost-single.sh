@@ -173,7 +173,7 @@ kbytesfree() {
 test_6() {
     remote_mds_nodsh && skip "remote MDS with nodsh" && return 0
 
-    f=$TDIR/$tfile
+	local f=$TDIR/$tfile
     rm -f $f
     sync && sleep 2 && sync  # wait for delete thread
 
@@ -182,20 +182,21 @@ test_6() {
     wait_mds_ost_sync || return 4
     wait_destroy_complete || return 5
 
-    before=`kbytesfree`
+	local before=$(kbytesfree)
     dd if=/dev/urandom bs=4096 count=1280 of=$f || return 28
     lfs getstripe $f
     stripe_index=$(lfs getstripe -i $f)
 
     sync
-    sleep 2 # ensure we have a fresh statfs
+	sleep 4 # ensure we have a fresh statfs and changes have stablalized
     sync
 
     #define OBD_FAIL_MDS_REINT_NET_REP       0x119
     do_facet $SINGLEMDS "lctl set_param fail_loc=0x80000119"
-    after_dd=`kbytesfree`
+	local after_dd=$(kbytesfree)
     log "before: $before after_dd: $after_dd"
-    (( $before > $after_dd )) || return 1
+	(( $before > $after_dd )) ||
+		error "space grew after dd: before:$before after_dd:$after_dd"
     rm -f $f
     fail ost$((stripe_index + 1))
     wait_recovery_complete ost$((stripe_index + 1)) ||
@@ -205,14 +206,15 @@ test_6() {
     # let the delete happen
     wait_mds_ost_sync || return 4
     wait_destroy_complete || return 5
-    after=`kbytesfree`
+	local after=$(kbytesfree)
     log "before: $before after: $after"
-    (( $before <= $after + 40 )) || return 3   # take OST logs into account
+	(( $before <= $after + $(fs_log_size) )) ||
+		error "$before > $after + logsize $(fs_log_size)"
 }
 run_test 6 "Fail OST before obd_destroy"
 
 test_7() {
-    f=$TDIR/$tfile
+	local f=$TDIR/$tfile
     rm -f $f
     sync && sleep 5 && sync	# wait for delete thread
 
@@ -221,14 +223,20 @@ test_7() {
     wait_mds_ost_sync || return 4
     wait_destroy_complete || return 5
 
-    before=`kbytesfree`
-    dd if=/dev/urandom bs=4096 count=1280 of=$f || return 4
+	local before=$(kbytesfree)
+	dd if=/dev/urandom bs=4096 count=1280 of=$f || error "dd to file failed: $?"
     sync
-    sleep 2 # ensure we have a fresh statfs
-    sync
-    after_dd=`kbytesfree`
-    log "before: $before after_dd: $after_dd"
-    (( $before > $after_dd )) || return 1
+	local after_dd=$(kbytesfree)
+	while (( $before <= $after_dd && $i < 10 )); do
+		sync
+		sleep 1
+		let ++i
+		after_dd=$(kbytesfree)
+	done
+
+	log "before: $before after_dd: $after_dd took $i seconds"
+	(( $before > $after_dd )) ||
+		error "space grew after dd: before:$before after_dd:$after_dd"
     replay_barrier ost1
     rm -f $f
     fail ost1
@@ -238,9 +246,10 @@ test_7() {
     # let the delete happen
     wait_mds_ost_sync || return 4
     wait_destroy_complete || return 5
-    after=`kbytesfree`
+	local after=$(kbytesfree)
     log "before: $before after: $after"
-    (( $before <= $after + 40 )) || return 3	# take OST logs into account
+	(( $before <= $after + $(fs_log_size) )) ||
+		 error "$before > $after + logsize $(fs_log_size)"
 }
 run_test 7 "Fail OST before obd_destroy"
 
