@@ -8,7 +8,7 @@
 set -e
 
 # bug number for skipped test: 13297 2108 9789 3637 9789 3561 12622 5188
-ALWAYS_EXCEPT="                27u   42a  42b  42c  42d  45   51d   68b   $SANITY_EXCEPT"
+ALWAYS_EXCEPT="                42a  42b  42c  42d  45   51d   68b   $SANITY_EXCEPT"
 # UPDATE THE COMMENT ABOVE WITH BUG NUMBERS WHEN CHANGING ALWAYS_EXCEPT!
 
 
@@ -1181,6 +1181,7 @@ test_27u() { # bug 4900
 #define OBD_FAIL_MDS_OSC_PRECREATE      0x139
         do_facet $SINGLEMDS lctl set_param fail_loc=0x139
         mkdir -p $DIR/$tdir
+	rm -rf $DIR/$tdir/*
         createmany -o $DIR/$tdir/t- 1000
         do_facet $SINGLEMDS lctl set_param fail_loc=0
 
