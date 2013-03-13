@@ -3983,10 +3983,10 @@ static int mdt_start_ptlrpc_service(struct mdt_device *m)
 
         conf = (typeof(conf)) {
                 .psc_nbufs           = MDS_NBUFS,
-                .psc_bufsize         = MDS_BUFSIZE,
+		.psc_bufsize         = MDS_REG_BUFSIZE,
 		.psc_nbufs_mem_max   = mdt_regular_mem,
-                .psc_max_req_size    = MDS_MAXREQSIZE,
-                .psc_max_reply_size  = MDS_MAXREPSIZE,
+		.psc_max_req_size    = MDS_REG_MAXREQSIZE,
+		.psc_max_reply_size  = MDS_REG_MAXREPSIZE,
                 .psc_req_portal      = MDS_REQUEST_PORTAL,
                 .psc_rep_portal      = MDC_REPLY_PORTAL,
                 .psc_watchdog_factor = MDT_SERVICE_WATCHDOG_FACTOR,

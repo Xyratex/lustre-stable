@@ -161,6 +161,50 @@
 #define MDT_MAX_THREADS 512UL
 #endif
 #define MDS_NBUFS       64
+
+/**
+ * This is the size of a maximum REINT_SETXATTR request:
+ *
+ *   lustre_msg		 56 (32 + 4 x 5 + 4)
+ *   ptlrpc_body	184
+ *   mdt_rec_setxattr	136
+ *   lustre_capa	120
+ *   name		256 (XATTR_NAME_MAX)
+ *   value	      65536 (XATTR_SIZE_MAX)
+ */
+#define MDS_EA_MAXREQSIZE	66288
+
+/**
+ * These are the maximum request and reply sizes (rounded up to 1 KB
+ * boundaries) for the "regular" MDS_REQUEST_PORTAL and MDS_REPLY_PORTAL.
+ *
+ * MDS incoming request with LOV EA
+ * 24 = sizeof(struct lov_ost_data), i.e: replay of opencreate
+ */
+#define MDS_REG_MAXREQSIZE	(((max(MDS_EA_MAXREQSIZE, \
+				max(MDS_MAXREQSIZE, \
+				362 + LOV_MAX_STRIPE_COUNT * 24)) + \
+				1023) >> 10) << 10)
+#define MDS_REG_MAXREPSIZE	MDS_REG_MAXREQSIZE
+
+/*
+ * MDS_REG_BUFSIZE should at least be MDS_REG_MAXREQSIZE + SPTLRPC_MAX_PAYLOAD.
+ * However, we need to allocate a much larger buffer for it because LNet
+ * requires each MD(rqbd) has at least MDS_REQ_MAXREQSIZE bytes left to avoid
+ * dropping of maximum-sized incoming request.  So if MDS_REG_BUFSIZE is only a
+ * little larger than MDS_REG_MAXREQSIZE, then it can only fit in one request
+ * even there are about MDS_REG_MAX_REQSIZE bytes left in a rqbd, and memory
+ * utilization is very low.
+  *
+  * In the meanwhile, size of rqbd can't be too large, because rqbd can't be
+  * reused until all requests fit in it have been processed and released,
+  * which means one long blocked request can prevent the rqbd be reused.
+ * Now we set request buffer size to 160 KB, so even each rqbd is unlinked
+ * from LNet with unused 65 KB, buffer utilization will be about 59%.
+ * Please check LU-2432 for details.
+ */
+#define MDS_REG_BUFSIZE		max(MDS_REG_MAXREQSIZE + SPTLRPC_MAX_PAYLOAD, \
+				    160 * 1024)
 /**
  * Assume file name length = FNAME_MAX = 256 (true for ext3).
  *        path name length = PATH_MAX = 4096
@@ -183,7 +227,8 @@
 #define MDS_MAXREQSIZE  MDS_MAXREPSIZE
 
 /** MDS_BUFSIZE = max_reqsize + max sptlrpc payload size */
-#define MDS_BUFSIZE     2*(MDS_MAXREQSIZE + 1024)
+#define MDS_BUFSIZE		max(MDS_MAXREQSIZE + SPTLRPC_MAX_PAYLOAD, \
+				    8 * 1024)
 
 /** FLD_MAXREQSIZE == lustre_msg + __u32 padding + ptlrpc_body + opc + md_fld */
 #define FLD_MAXREQSIZE  (160)
