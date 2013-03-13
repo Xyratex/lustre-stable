@@ -132,13 +132,13 @@ umask 077
 
 OLDDEBUG="`lctl get_param -n debug 2> /dev/null`"
 lctl set_param debug=-1 2> /dev/null || true
-test_0() {
+test_0a() {
 	touch $DIR/$tfile
 	$CHECKSTAT -t file $DIR/$tfile || error
 	rm $DIR/$tfile
 	$CHECKSTAT -a $DIR/$tfile || error
 }
-run_test 0 "touch .../$tfile ; rm .../$tfile ====================="
+run_test 0a "touch .../file; rm .../file"
 
 test_0b() {
 	chmod 0755 $DIR || error
@@ -152,69 +152,30 @@ test_0c() {
 }
 run_test 0c "check import proc ============================="
 
-test_1a() {
-	mkdir $DIR/d1
-	mkdir $DIR/d1/d2
-	mkdir $DIR/d1/d2 && error "we expect EEXIST, but not returned"
-	$CHECKSTAT -t dir $DIR/d1/d2 || error
-}
-run_test 1a "mkdir .../d1; mkdir .../d1/d2 ====================="
+test_1() {
+	mkdir -p $DIR/$tdir
+	mkdir $DIR/$tdir/d2
+	mkdir $DIR/$tdir/d2 && error "re-mkdir succeeded"
+	$CHECKSTAT -t dir $DIR/$tdir/d2 || error "no dir $DIR/$tdir/d2"
 
-test_1b() {
-	rmdir $DIR/d1/d2
-	rmdir $DIR/d1
-	$CHECKSTAT -a $DIR/d1 || error
+	rmdir $DIR/$tdir/d2
+	rmdir $DIR/$tdir
+	$CHECKSTAT -a $DIR/$tdir || error "dir $DIR/$tdir is not absent"
 }
-run_test 1b "rmdir .../d1/d2; rmdir .../d1 ====================="
+run_test 1 "mkdir .../dir .../dir/dir .../dir/dir; rmdir .../dir/dir .../dir"
 
-test_2a() {
-	mkdir $DIR/d2
-	touch $DIR/d2/f
-	$CHECKSTAT -t file $DIR/d2/f || error
-}
-run_test 2a "mkdir .../d2; touch .../d2/f ======================"
+test_2() {
+	mkdir -p $DIR/$tdir
+	$CHECKSTAT -t dir $DIR/$tdir || error "no dir $DIR/$tdir"
 
-test_2b() {
-	rm -r $DIR/d2
-	$CHECKSTAT -a $DIR/d2 || error
-}
-run_test 2b "rm -r .../d2; checkstat .../d2/f ======================"
+	touch $DIR/$tdir/$tfile
+	$CHECKSTAT -t file $DIR/$tdir/$tfile ||
+		error "no file $DIR/$tdir/$tfile"
 
-test_3a() {
-	mkdir $DIR/d3
-	$CHECKSTAT -t dir $DIR/d3 || error
+	rm -r $DIR/$tdir
+	$CHECKSTAT -a $DIR/$tdir || error "dir $DIR/$tdir is not absent"
 }
-run_test 3a "mkdir .../d3 ======================================"
-
-test_3b() {
-	if [ ! -d $DIR/d3 ]; then
-		mkdir $DIR/d3
-	fi
-	touch $DIR/d3/f
-	$CHECKSTAT -t file $DIR/d3/f || error
-}
-run_test 3b "touch .../d3/f ===================================="
-
-test_3c() {
-	rm -r $DIR/d3
-	$CHECKSTAT -a $DIR/d3 || error
-}
-run_test 3c "rm -r .../d3 ======================================"
-
-test_4a() {
-	mkdir $DIR/d4
-	$CHECKSTAT -t dir $DIR/d4 || error
-}
-run_test 4a "mkdir .../d4 ======================================"
-
-test_4b() {
-	if [ ! -d $DIR/d4 ]; then
-		mkdir $DIR/d4
-	fi
-	mkdir $DIR/d4/d2
-	$CHECKSTAT -t dir $DIR/d4/d2 || error
-}
-run_test 4b "mkdir .../d4/d2 ==================================="
+run_test 2 "mkdir .../dir; touch .../dir/file; rm -r .../dir"
 
 test_5() {
 	mkdir $DIR/d5
@@ -225,60 +186,43 @@ test_5() {
 run_test 5 "mkdir .../d5 .../d5/d2; chmod .../d5/d2 ============"
 
 test_6a() {
-	touch $DIR/f6a
-	chmod 0666 $DIR/f6a || error
-	$CHECKSTAT -t file -p 0666 -u \#$UID $DIR/f6a || error
-}
-run_test 6a "touch .../f6a; chmod .../f6a ======================"
+	touch $DIR/$tfile
+	chmod 0666 $DIR/$tfile || error "chmod failed"
+	$CHECKSTAT -t file -p 0666 -u \#$UID $DIR/$tfile ||
+		error "wrong perms, owner or no file $DIR/$tfile"
 
-test_6b() {
 	[ $RUNAS_ID -eq $UID ] && skip_env "RUNAS_ID = UID = $UID -- skipping" && return
-	if [ ! -f $DIR/f6a ]; then
-		touch $DIR/f6a
-		chmod 0666 $DIR/f6a
-	fi
-	$RUNAS chmod 0444 $DIR/f6a && error
-	$CHECKSTAT -t file -p 0666 -u \#$UID $DIR/f6a || error
+	$RUNAS chmod 0444 $DIR/$tfile && error "runas chmod succeeded"
+	$CHECKSTAT -t file -p 0666 -u \#$UID $DIR/$tfile ||
+		error "changed perms, owner or no file $DIR/$tfile"
 }
-run_test 6b "$RUNAS chmod .../f6a (should return error) =="
+run_test 6a "touch .../file; chmod .../file; runas chmod .../file"
 
 test_6c() {
 	[ $RUNAS_ID -eq $UID ] && skip_env "RUNAS_ID = UID = $UID -- skipping" && return
-	touch $DIR/f6c
-	chown $RUNAS_ID $DIR/f6c || error
-	$CHECKSTAT -t file -u \#$RUNAS_ID $DIR/f6c || error
-}
-run_test 6c "touch .../f6c; chown .../f6c ======================"
+	touch $DIR/$tfile
+	chown $RUNAS_ID $DIR/$tfile || error "chown failed"
+	$CHECKSTAT -t file -u \#$RUNAS_ID $DIR/$tfile ||
+		error "wrong owner or no file $DIR/$tfile"
 
-test_6d() {
-	[ $RUNAS_ID -eq $UID ] && skip_env "RUNAS_ID = UID = $UID -- skipping" && return
-	if [ ! -f $DIR/f6c ]; then
-		touch $DIR/f6c
-		chown $RUNAS_ID $DIR/f6c
-	fi
-	$RUNAS chown $UID $DIR/f6c && error
-	$CHECKSTAT -t file -u \#$RUNAS_ID $DIR/f6c || error
+	$RUNAS chown $UID $DIR/$tfile && error "runas chown succeeded"
+	$CHECKSTAT -t file -u \#$RUNAS_ID $DIR/$tfile ||
+		error "changed owner or no file $DIR/$tfile"
 }
-run_test 6d "$RUNAS chown .../f6c (should return error) =="
+run_test 6c "touch .../file; chown .../file; runas chown .../file"
 
 test_6e() {
 	[ $RUNAS_ID -eq $UID ] && skip_env "RUNAS_ID = UID = $UID -- skipping" && return
-	touch $DIR/f6e
-	chgrp $RUNAS_ID $DIR/f6e || error
-	$CHECKSTAT -t file -u \#$UID -g \#$RUNAS_ID $DIR/f6e || error
-}
-run_test 6e "touch .../f6e; chgrp .../f6e ======================"
+	touch $DIR/$tfile
+	chgrp $RUNAS_ID $DIR/$tfile || error "chgrp failed"
+	$CHECKSTAT -t file -u \#$UID -g \#$RUNAS_ID $DIR/$tfile ||
+		error "wrong owner, group or no file $DIR/$tfile"
 
-test_6f() {
-	[ $RUNAS_ID -eq $UID ] && skip_env "RUNAS_ID = UID = $UID -- skipping" && return
-	if [ ! -f $DIR/f6e ]; then
-		touch $DIR/f6e
-		chgrp $RUNAS_ID $DIR/f6e
-	fi
-	$RUNAS chgrp $UID $DIR/f6e && error
-	$CHECKSTAT -t file -u \#$UID -g \#$RUNAS_ID $DIR/f6e || error
+	$RUNAS chgrp $UID $DIR/$tfile && error "runas chgrp succeeded"
+	$CHECKSTAT -t file -u \#$UID -g \#$RUNAS_ID $DIR/$tfile ||
+		error "changed owner, group or no file $DIR/$tfile"
 }
-run_test 6f "$RUNAS chgrp .../f6e (should return error) =="
+run_test 6e "touch .../file; chgrp .../file; runas chgrp .../file"
 
 test_6g() {
 	[ $RUNAS_ID -eq $UID ] && skip_env "RUNAS_ID = UID = $UID -- skipping" && return
