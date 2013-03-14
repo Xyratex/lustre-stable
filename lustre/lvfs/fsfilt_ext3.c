@@ -1152,8 +1152,6 @@ cleanup:
         return rc;
 }
 
-extern int ext3_map_inode_page(struct inode *inode, struct page *page,
-                               unsigned long *blocks, int *created, int create);
 int fsfilt_ext3_map_bm_inode_pages(struct inode *inode, struct page **page,
                                    int pages, unsigned long *blocks,
                                    int *created, int create)
@@ -1163,7 +1161,7 @@ int fsfilt_ext3_map_bm_inode_pages(struct inode *inode, struct page **page,
         int rc = 0, i, *cr;
 
         for (i = 0, cr = created, b = blocks; i < pages; i++, page++) {
-                rc = ext3_map_inode_page(inode, *page, b, cr, create);
+                rc = ext3_map_inode_page(inode, *page, b, create);
                 if (rc) {
                         CERROR("ino %lu, blk %lu cr %u create %d: rc %d\n",
                                inode->i_ino, *b, *cr, create, rc);
