@@ -2603,7 +2603,7 @@ static int ldlm_setup(void)
 #endif
 
 	conf = (typeof(conf)) {
-		.psc_nbufs           = LDLM_NBUFS,
+		.psc_nbufs           = LDLM_CLIENT_NBUFS,
 		.psc_bufsize         = LDLM_BUFSIZE,
 		.psc_nbufs_mem_max   = ldlm_cb_mem,
 		.psc_max_req_size    = LDLM_MAXREQSIZE,
@@ -2627,7 +2627,7 @@ static int ldlm_setup(void)
 
 
 	conf = (typeof(conf)) {
-		.psc_nbufs           = LDLM_NBUFS,
+		.psc_nbufs           = LDLM_SERVER_NBUFS,
 		.psc_bufsize         = LDLM_BUFSIZE,
 		.psc_nbufs_mem_max   = ldlm_cn_mem,
 		.psc_max_req_size    = LDLM_MAXREQSIZE,

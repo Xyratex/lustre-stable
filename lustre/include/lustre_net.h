@@ -149,7 +149,8 @@
 #define LDLM_THREADS_AUTO_MAX min_t(unsigned, cfs_num_online_cpus() * \
                                   cfs_num_online_cpus() * 32, 128)
 #define LDLM_BL_THREADS  LDLM_THREADS_AUTO_MIN
-#define LDLM_NBUFS      (64 * cfs_num_online_cpus())
+#define LDLM_CLIENT_NBUFS 1
+#define LDLM_SERVER_NBUFS 64
 #define LDLM_BUFSIZE    (8 * 1024)
 #define LDLM_MAXREQSIZE (5 * 1024)
 #define LDLM_MAXREPSIZE (1024)
@@ -159,7 +160,7 @@
 #ifndef MDT_MAX_THREADS
 #define MDT_MAX_THREADS 512UL
 #endif
-#define MDS_NBUFS       (64 * cfs_num_online_cpus())
+#define MDS_NBUFS       64
 /**
  * Assume file name length = FNAME_MAX = 256 (true for ext3).
  *        path name length = PATH_MAX = 4096
@@ -201,7 +202,7 @@
 /** MGS threads must be >= 3, see bug 22458 comment #28 */
 #define MGS_THREADS_AUTO_MIN 3
 #define MGS_THREADS_AUTO_MAX 32
-#define MGS_NBUFS       (64 * cfs_num_online_cpus())
+#define MGS_NBUFS       64
 #define MGS_BUFSIZE     (8 * 1024)
 #define MGS_MAXREQSIZE  (7 * 1024)
 #define MGS_MAXREPSIZE  (9 * 1024)
@@ -225,7 +226,7 @@
 
 #define OST_MAXREPSIZE  (9 * 1024)
 
-#define OST_NBUFS       (64 * cfs_num_online_cpus())
+#define OST_NBUFS       64
 #define OST_BUFSIZE     (OST_MAXREQSIZE + 1024)
 
 /* Macro to hide a typecast. */
