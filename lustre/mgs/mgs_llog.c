@@ -3489,6 +3489,7 @@ int mgs_write_log_target(struct obd_device *obd,
                            get repeat setup instructions for already running
                            osc's. So don't update the client/mdt logs. */
                         mti->mti_flags &= ~LDD_F_UPDATE;
+			rc = 0;
                 }
         }
 
