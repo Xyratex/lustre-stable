@@ -1923,15 +1923,25 @@ int ll_flush(struct file *file, fl_owner_t id)
         return rc ? -EIO : 0;
 }
 
+/*
+ * When dentry is provided (the 'else' case), *file->f_dentry may be
+ * null and dentry must be used directly rather than pulled from
+ * *file->f_dentry as is done otherwise.
+ */
+
 #ifdef HAVE_FILE_FSYNC_4ARGS
 int ll_fsync(struct file *file, loff_t start, loff_t end, int data)
+{
+	struct dentry *dentry = file->f_dentry;
 #elif defined(HAVE_FILE_FSYNC_2ARGS)
 int ll_fsync(struct file *file, int data)
+{
+	struct dentry *dentry = file->f_dentry;
 #else
 int ll_fsync(struct file *file, struct dentry *dentry, int data)
-#endif
 {
-        struct inode *inode = file->f_dentry->d_inode;
+#endif
+        struct inode *inode = dentry->d_inode;
         struct ll_inode_info *lli = ll_i2info(inode);
         struct lov_stripe_md *lsm = lli->lli_smd;
         struct ptlrpc_request *req;
