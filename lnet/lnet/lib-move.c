@@ -929,7 +929,6 @@ lnet_ni_peer_alive(lnet_peer_t *lp)
 
         LASSERT (lnet_peer_aliveness_enabled(lp));
         LASSERT (ni->ni_lnd->lnd_query != NULL);
-        LASSERT (the_lnet.ln_routing == 1);
 
         LNET_UNLOCK();
         (ni->ni_lnd->lnd_query)(ni, lp->lp_nid, &last_alive);
@@ -949,7 +948,6 @@ lnet_peer_is_alive (lnet_peer_t *lp, cfs_time_t now)
         cfs_time_t deadline;
 
         LASSERT (lnet_peer_aliveness_enabled(lp));
-        LASSERT (the_lnet.ln_routing == 1);
 
         /* Trust lnet_notify() if it has more recent aliveness news, but
          * ignore the initial assumed death (see lnet_peers_start_down()).
@@ -980,10 +978,6 @@ int
 lnet_peer_alive_locked (lnet_peer_t *lp)
 {
         cfs_time_t now = cfs_time_current();
-
-        /* LU-630: only router checks peer health. */
-        if (the_lnet.ln_routing == 0)
-                return 1;
 
         if (!lnet_peer_aliveness_enabled(lp))
                 return -ENODEV;
