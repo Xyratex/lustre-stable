@@ -9190,6 +9190,25 @@ test_225b () {
 }
 run_test 225b "Metadata survey sanity with stripe_count = 1"
 
+test_226() {
+        local p="$TMP/sanityN-$TESTNAME.parameters"
+        save_lustre_params $HOSTNAME "llite.*.xattr_cache" > $p
+        lctl set_param llite.*.xattr_cache 1 || { skip "xattr cache is not supported"; return 0; }
+
+        mkdir -p $DIR/$tdir
+        touch $DIR/$tdir/$tfile
+        $LCTL set_param fail_loc=0x1402
+        setfattr -n user.attr -v value $DIR/$tdir/$tfile && error
+        # attr pre-2.4.44-7 had a bug: http://git.savannah.gnu.org/cgit/attr.git/commit/?id=93c92ed
+        getfattr -n user.attr $DIR/$tdir/$tfile && error
+        $LCTL set_param fail_loc=0x0
+        rm -rf $DIR/$tdir
+
+        restore_lustre_params < $p
+        rm -f $p
+}
+run_test 226 "xattr cache should not crash on ENOMEM"
+
 #
 # tests that do cleanup/setup should be run at the end
 #

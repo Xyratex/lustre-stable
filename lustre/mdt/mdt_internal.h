@@ -141,6 +141,8 @@ struct mdt_device {
         int                        mdt_max_mdsize;
         int                        mdt_max_cookiesize;
 
+	int			   mdt_max_ea_size;
+
         struct upcall_cache        *mdt_identity_cache;
 
         /* sptlrpc rules */

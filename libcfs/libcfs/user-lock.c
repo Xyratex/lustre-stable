@@ -242,6 +242,12 @@ int cfs_down_write_trylock(cfs_rw_semaphore_t *s)
 	return 1;
 }
 
+void cfs_downgrade_write(cfs_rw_semaphore_t *s)
+{
+	LASSERT(s != NULL);
+	(void)s;
+}
+
 void cfs_up_read(cfs_rw_semaphore_t *s)
 {
         LASSERT(s != NULL);

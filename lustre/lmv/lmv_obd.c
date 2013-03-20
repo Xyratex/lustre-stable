@@ -213,6 +213,9 @@ static int lmv_notify(struct obd_device *obd, struct obd_device *watched,
                  */
                 obd->obd_self_export->exp_connect_data.ocd_connect_flags =
                         conn_data->ocd_connect_flags;
+		obd->obd_self_export->exp_connect_data.ocd_ibits_known =
+			conn_data->ocd_ibits_known;
+
         }
 #if 0
         else if (ev == OBD_NOTIFY_DISCON) {
@@ -2709,6 +2712,8 @@ static int lmv_get_info(struct obd_export *exp, __u32 keylen,
                 if (!rc && KEY_IS(KEY_CONN_DATA)) {
                         exp->exp_connect_data.ocd_connect_flags =
                         ((struct obd_connect_data *)val)->ocd_connect_flags;
+			exp->exp_connect_data.ocd_ibits_known =
+			((struct obd_connect_data *)val)->ocd_ibits_known;
                 }
                 RETURN(rc);
         } else if (KEY_IS(KEY_TGT_COUNT)) {

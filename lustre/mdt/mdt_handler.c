@@ -3099,14 +3099,19 @@ enum mdt_it_code {
         MDT_IT_NR
 };
 
-static int mdt_intent_getattr(enum mdt_it_code opcode,
-                              struct mdt_thread_info *info,
-                              struct ldlm_lock **,
-			      __u64);
 static int mdt_intent_reint(enum mdt_it_code opcode,
                             struct mdt_thread_info *info,
                             struct ldlm_lock **,
 			    __u64);
+
+static int mdt_intent_getattr(enum mdt_it_code opcode,
+                              struct mdt_thread_info *info,
+                              struct ldlm_lock **,
+			      __u64);
+static int mdt_intent_getxattr(enum mdt_it_code opcode,
+				struct mdt_thread_info *info,
+				struct ldlm_lock **lockp,
+				__u64 flags);
 
 static struct mdt_it_flavor {
         const struct req_format *it_fmt;
@@ -3163,10 +3168,10 @@ static struct mdt_it_flavor {
                 .it_act   = NULL
         },
         [MDT_IT_GETXATTR] = {
-                .it_fmt   = NULL,
+		.it_fmt   = &RQF_LDLM_INTENT_GETXATTR,
                 .it_flags = 0,
-                .it_act   = NULL
-        }
+		.it_act   = mdt_intent_getxattr
+        },
 };
 
 int mdt_intent_lock_replace(struct mdt_thread_info *info,
@@ -3306,6 +3311,44 @@ static void mdt_intent_fixup_resent(struct mdt_thread_info *info,
 
         DEBUG_REQ(D_DLMTRACE, req, "no existing lock with rhandle "LPX64,
                   remote_hdl.cookie);
+}
+
+static int mdt_intent_getxattr(enum mdt_it_code opcode,
+				struct mdt_thread_info *info,
+				struct ldlm_lock **lockp,
+				__u64 flags)
+{
+	struct mdt_lock_handle *lhc = &info->mti_lh[MDT_LH_RMT];
+	struct ldlm_reply      *ldlm_rep = NULL;
+	int rc, grc;
+
+	/*
+	 * Initialize lhc->mlh_reg_lh either from a previously granted lock
+	 * (for the resend case) or a new lock. Below we will use it to
+	 * replace the original lock.
+	 */
+	mdt_intent_fixup_resent(info, *lockp, NULL, lhc);
+	if (!lustre_handle_is_used(&lhc->mlh_reg_lh)) {
+		mdt_lock_reg_init(lhc, (*lockp)->l_req_mode);
+		rc = mdt_object_lock(info, info->mti_object, lhc,
+					MDS_INODELOCK_XATTR,
+					MDT_LOCAL_LOCK);
+		if (rc)
+			return rc;
+	}
+
+	grc = mdt_getxattr(info);
+
+	rc = mdt_intent_lock_replace(info, lockp, NULL, lhc, flags);
+
+	if (mdt_info_req(info)->rq_repmsg != NULL)
+		ldlm_rep = req_capsule_server_get(info->mti_pill, &RMF_DLM_REP);
+	if (ldlm_rep == NULL)
+		RETURN(err_serious(-EFAULT));
+
+	ldlm_rep->lock_policy_res2 = grc;
+
+	return rc;
 }
 
 static int mdt_intent_getattr(enum mdt_it_code opcode,
@@ -4687,6 +4730,11 @@ static int mdt_init0(const struct lu_env *env, struct mdt_device *m,
         if (m->mdt_opts.mo_acl)
                 identity_upcall = MDT_IDENTITY_UPCALL_PATH;
 
+
+	rc = next->md_ops->mdo_maxeasize_get(env, next, &m->mdt_max_ea_size);
+	if (rc)
+		GOTO(err_quota, rc);
+
         m->mdt_identity_cache = upcall_cache_init(obd->obd_name,identity_upcall,
                                                 &mdt_identity_upcall_cache_ops);
         if (IS_ERR(m->mdt_identity_cache)) {
@@ -5000,6 +5048,7 @@ static int mdt_connect_internal(struct obd_export *exp,
                 exp->exp_connect_data = *data;
                 cfs_spin_unlock(&exp->exp_lock);
                 exp->exp_mdt_data.med_ibits_known = data->ocd_ibits_known;
+		data->ocd_xattr_size = mdt->mdt_max_ea_size;
         }
 
 #if 0

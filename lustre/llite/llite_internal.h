@@ -127,7 +127,8 @@ enum lli_flags {
         LLIF_CONTENDED          = (1 << 4),
         /* Truncate uses server lock for this file */
         LLIF_SRVLOCK            = (1 << 5),
-
+	/* Xattr cache is attached to the file */
+	LLIF_XATTR_CACHE	= (1 << 6),
 };
 
 struct ll_inode_info {
@@ -253,7 +254,24 @@ struct ll_inode_info {
          */
         struct lov_stripe_md           *lli_smd;
         struct cl_object               *lli_clob;
+
+	cfs_rw_semaphore_t		lli_xattrs_list_rwsem;
+	cfs_mutex_t			lli_xattrs_enq_lock;
+	cfs_list_t			lli_xattrs;
 };
+
+int ll_xattr_cache_destroy(struct inode *inode);
+int ll_xattr_cache_get(struct inode *inode,
+			const char *name,
+			char *buffer,
+			size_t size,
+			__u64 valid);
+int ll_xattr_cache_update(struct inode *inode,
+			const char *name,
+			const char *newval,
+			size_t size,
+			__u64 valid,
+			int flags);
 
 /*
  * Locking to guarantee consistency of non-atomic updates to long long i_size,
@@ -374,6 +392,7 @@ enum stats_track_type {
 #define LL_SBI_32BIT_API       0x2000 /* generate 32 bit inodes. */
 #define LL_SBI_64BIT_HASH      0x4000 /* support 64-bits dir hash/offset */
 #define LL_SBI_VERBOSE        0x10000 /* verbose mount/umount */
+#define LL_SBI_XATTR_CACHE    0x20000 /* support for xattr cache */
 
 /* default value for ll_sb_info->contention_time */
 #define SBI_DEFAULT_CONTENTION_SECONDS     60
@@ -468,6 +487,8 @@ struct ll_sb_info {
         struct rmtacl_ctl_table   ll_rct;
         struct eacl_table         ll_et;
         struct vfsmount          *ll_mnt;
+
+	int			  ll_xattr_cache_enabled;
 };
 
 #define LL_DEFAULT_MAX_RW_CHUNK      (32 * 1024 * 1024)
@@ -684,7 +705,8 @@ extern int ll_inode_revalidate_it(struct dentry *, struct lookup_intent *,
 extern int ll_have_md_lock(struct inode *inode, __u64 *bits,
                            ldlm_mode_t l_req_mode);
 extern ldlm_mode_t ll_take_md_lock(struct inode *inode, __u64 bits,
-                                   struct lustre_handle *lockh);
+				   struct lustre_handle *lockh,
+				   ldlm_mode_t mode);
 int __ll_inode_revalidate_it(struct dentry *, struct lookup_intent *,
                              __u64 bits);
 int ll_revalidate_nd(struct dentry *dentry, struct nameidata *nd);

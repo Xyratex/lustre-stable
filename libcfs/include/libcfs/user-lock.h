@@ -184,6 +184,7 @@ void cfs_init_rwsem(cfs_rw_semaphore_t *s);
 void cfs_down_read(cfs_rw_semaphore_t *s);
 int cfs_down_read_trylock(cfs_rw_semaphore_t *s);
 void cfs_down_write(cfs_rw_semaphore_t *s);
+void cfs_downgrade_write(cfs_rw_semaphore_t *s);
 int cfs_down_write_trylock(cfs_rw_semaphore_t *s);
 void cfs_up_read(cfs_rw_semaphore_t *s);
 void cfs_up_write(cfs_rw_semaphore_t *s);

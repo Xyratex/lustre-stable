@@ -2,8 +2,8 @@
 
 set -e
 
-#         bug  5494 5493
-ALWAYS_EXCEPT="24   52 $RECOVERY_SMALL_EXCEPT"
+#         bug  5494 5493 MRP-975
+ALWAYS_EXCEPT="24   52     106   $RECOVERY_SMALL_EXCEPT"
 
 PTLDEBUG=${PTLDEBUG:--1}
 LUSTRE=${LUSTRE:-`dirname $0`/..}
@@ -1476,6 +1476,28 @@ test_105()
         return 0
 }
 run_test 105 "IR: NON IR clients support"
+
+test_106()
+{
+        local p="$TMP/sanityN-$TESTNAME.parameters"
+        save_lustre_params $HOSTNAME "llite.*.xattr_cache" > $p
+        lctl set_param llite.*.xattr_cache 1 ||
+                { skip "xattr cache is not supported"; return 0; }
+
+        touch $DIR/$tfile
+        # skip open intent, drop reply from PW refill:
+        # OBD_FAIL_LDLM_REPLY | OBD_FAIL_ONCE | OBD_FAIL_SKIP
+        do_facet $SINGLEMDS lctl set_param fail_loc=0xa000030c
+        do_facet $SINGLEMDS lctl set_param fail_val=1
+        setfattr -n user.attr -v value $DIR/$tfile || error
+        do_facet $SINGLEMDS lctl set_param fail_loc=0
+        rm -f $DIR/$tfile
+
+        restore_lustre_params < $p
+        rm -f $p
+
+}
+run_test 106 "drop reply from getxattr in cached mode"
 
 complete $(basename $0) $SECONDS
 check_and_cleanup_lustre

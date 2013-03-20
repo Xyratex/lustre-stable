@@ -2188,7 +2188,8 @@ int ll_have_md_lock(struct inode *inode, __u64 *bits,  ldlm_mode_t l_req_mode)
 }
 
 ldlm_mode_t ll_take_md_lock(struct inode *inode, __u64 bits,
-                            struct lustre_handle *lockh)
+                            struct lustre_handle *lockh,
+			    ldlm_mode_t mode)
 {
         ldlm_policy_data_t policy = { .l_inodebits = {bits}};
         struct lu_fid *fid;
@@ -2201,7 +2202,7 @@ ldlm_mode_t ll_take_md_lock(struct inode *inode, __u64 bits,
 
         flags = LDLM_FL_BLOCK_GRANTED | LDLM_FL_CBPENDING;
         rc = md_lock_match(ll_i2mdexp(inode), flags, fid, LDLM_IBITS, &policy,
-                           LCK_CR|LCK_CW|LCK_PR|LCK_PW, lockh);
+				mode, lockh);
         RETURN(rc);
 }
 

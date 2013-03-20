@@ -1228,7 +1228,7 @@ struct obd_connect_data {
         __u8  ocd_blocksize;     /* log2 of the backend filesystem blocksize */
         __u8  ocd_inodespace;    /* log2 of the per-inode space consumption */
         __u16 ocd_grant_extent;  /* per-extent grant overhead, in 1K blocks */
-        __u32 ocd_unused;        /* also fix lustre_swab_connect */
+	__u32 ocd_xattr_size;    /* maximum xattr refill size */
         __u64 ocd_transno;       /* first transno from client to be replayed */
         __u32 ocd_group;         /* MDS group on OST */
         __u32 ocd_cksum_types;   /* supported checksum algorithms */
@@ -1456,6 +1456,9 @@ struct lov_mds_md_v3 {            /* LOV EA mds/wire data (little-endian) */
 #define OBD_MD_FLRMTRGETFACL    (0x0008000000000000ULL) /* lfs rgetfacl case */
 
 #define OBD_MD_FLDATAVERSION (0x0010000000000000ULL) /* iversion sum */
+#define OBD_MD_FLXATTRALL    (0x0020000000000000ULL) /* xattr list with values */
+#define OBD_MD_FLXATTRLOCKED (0x0040000000000000ULL) /* xattr call is performed
+                                                      * under the xattr lock */
 
 #define OBD_MD_FLGETATTR (OBD_MD_FLID    | OBD_MD_FLATIME | OBD_MD_FLMTIME | \
                           OBD_MD_FLCTIME | OBD_MD_FLSIZE  | OBD_MD_FLBLKSZ | \
@@ -1610,9 +1613,10 @@ extern void lustre_swab_generic_32s (__u32 *val);
 #define MDS_INODELOCK_LOOKUP 0x000001       /* dentry, mode, owner, group */
 #define MDS_INODELOCK_UPDATE 0x000002       /* size, links, timestamps */
 #define MDS_INODELOCK_OPEN   0x000004       /* For opened files */
+#define MDS_INODELOCK_XATTR  0x000008       /* extended attributes */
 
 /* Do not forget to increase MDS_INODELOCK_MAXSHIFT when adding new bits */
-#define MDS_INODELOCK_MAXSHIFT 2
+#define MDS_INODELOCK_MAXSHIFT 3
 /* This FULL lock is useful to take on unlink sort of operations */
 #define MDS_INODELOCK_FULL ((1<<(MDS_INODELOCK_MAXSHIFT+1))-1)
 

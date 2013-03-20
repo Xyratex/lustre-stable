@@ -117,6 +117,7 @@ typedef struct rw_semaphore cfs_rw_semaphore_t;
 #define cfs_down_read_trylock(s)  down_read_trylock(s)
 #define cfs_up_read(s)            up_read(s)
 #define cfs_down_write(s)         down_write(s)
+#define cfs_downgrade_write(s)    downgrade_write(s)
 #define cfs_down_write_trylock(s) down_write_trylock(s)
 #define cfs_up_write(s)           up_write(s)
 

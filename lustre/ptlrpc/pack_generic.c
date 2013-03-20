@@ -1628,7 +1628,7 @@ void lustre_swab_connect(struct obd_connect_data *ocd)
         /* ocd_blocksize and ocd_inodespace don't need to be swabbed because
          * they are 8-byte values */
         __swab16s(&ocd->ocd_grant_extent);
-        __swab32s(&ocd->ocd_unused);
+	__swab32s(&ocd->ocd_xattr_size);
         __swab64s(&ocd->ocd_transno);
         __swab32s(&ocd->ocd_group);
         __swab32s(&ocd->ocd_cksum_types);

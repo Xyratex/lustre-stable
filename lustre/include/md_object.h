@@ -337,6 +337,9 @@ struct md_device_operations {
         int (*mdo_maxsize_get)(const struct lu_env *env, struct md_device *m,
                                int *md_size, int *cookie_size);
 
+	int (*mdo_maxeasize_get)(const struct lu_env *env, struct md_device *m,
+				int *easize);
+
         int (*mdo_statfs)(const struct lu_env *env, struct md_device *m,
                           struct obd_statfs *sfs);
 

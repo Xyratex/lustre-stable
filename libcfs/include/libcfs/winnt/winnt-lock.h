@@ -428,6 +428,25 @@ static inline void cfs_down_write(cfs_rw_semaphore_t *s)
 #define cfs_down_write_nested cfs_down_write
 
 /*
+ * cfs_downgrade_write
+ *   Atomically convert a write lock to a read lock
+ *
+ * Arguments:
+ *   rwsem:  pointer to the cfs_rw_semaphore_t structure
+ *
+ * Return Value:
+ *   N/A
+ *
+ * Notes:
+ *   N/A
+ */
+
+static inline void cfs_downgrade_write(cfs_rw_semaphore_t *s)
+{
+	ExConvertExclusiveToSharedLite(&(s->rwsem));
+}
+
+/*
  * down_write_trylock
  *   To acquire write-lock of the cfs_rw_semaphore without blocking
  *

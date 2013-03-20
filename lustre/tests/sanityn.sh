@@ -1921,6 +1921,46 @@ test_51() {
 }
 run_test 51 "alloc_rr should be allocate on correct order"
 
+test_52() {
+        local p="$TMP/sanityN-$TESTNAME.parameters"
+        save_lustre_params $HOSTNAME "llite.*.xattr_cache" > $p
+        lctl set_param llite.*.xattr_cache 1 || { skip "xattr cache is not supported"; return 0; }
+
+        touch $DIR1/$tfile
+        setfattr -n user.attr1 -v value1 $DIR1/$tfile || error 1
+        getfattr -n user.attr1 $DIR2/$tfile | grep value1 || error 2
+        setfattr -n user.attr1 -v value2 $DIR2/$tfile || error 3
+        getfattr -n user.attr1 $DIR1/$tfile | grep value2 || error 4
+        rm -f $DIR2/$tfile
+
+        restore_lustre_params < $p
+        rm -f $p
+}
+run_test 52 "getxattr/setxattr cache should be consistent between nodes"
+
+test_53() {
+        local p="$TMP/sanityN-$TESTNAME.parameters"
+        save_lustre_params $HOSTNAME "llite.*.xattr_cache" > $p
+        lctl set_param llite.*.xattr_cache 1 || { skip "xattr cache is not supported"; return 0; }
+
+        touch $DIR1/$tfile
+        setfattr -n user.attr1 -v value1 $DIR1/$tfile || error 1
+        getfattr -n user.attr1 $DIR2/$tfile || error 2
+        getfattr -n user.attr1 $DIR1/$tfile || error 3
+        clear_llite_stats
+        # PR lock should be cached by now on both clients
+        getfattr -n user.attr1 $DIR1/$tfile || error 4
+        # 2 hits for getfattr(0)+getfattr(size)
+        [ $(calc_llite_stats getxattr_hits) -eq 2 ] || error "not cached in $DIR1"
+        getfattr -n user.attr1 $DIR2/$tfile || error 5
+        # 4 hits for more getfattr(0)+getfattr(size)
+        [ $(calc_llite_stats getxattr_hits) -eq 4 ] || error "not cached in $DIR2"
+        rm -f $DIR2/$tfile
+
+        restore_lustre_params < $p
+        rm -f $p
+}
+run_test 53 "getxattr should not cause xattr lock cancellation"
 
 log "cleanup: ======================================================"
 
