@@ -604,6 +604,16 @@ cleanup_gss() {
     fi
 }
 
+facet_number() {
+       local facet=$1
+
+       if [ $facet == mgs ]; then
+               return 1
+       fi
+
+       echo -n $facet | sed -e 's/^fs[0-9]\+//' | sed -e 's/^[a-z]\+//'
+}
+
 mdsdevlabel() {
     local num=$1
     local device=`mdsdevname $num`
