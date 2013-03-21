@@ -589,8 +589,7 @@ int ldlm_pool_recalc(struct ldlm_pool *pl)
         if (recalc_interval_sec <= 0)
                 goto recalc;
 
-        cfs_spin_lock(&pl->pl_lock);
-        recalc_interval_sec = cfs_time_current_sec() - pl->pl_recalc_time;
+	cfs_spin_lock(&pl->pl_lock);
         if (recalc_interval_sec > 0) {
                 /*
                  * Update pool statistics every 1s.
@@ -610,12 +609,12 @@ int ldlm_pool_recalc(struct ldlm_pool *pl)
                 count = pl->pl_ops->po_recalc(pl);
                 lprocfs_counter_add(pl->pl_stats, LDLM_POOL_RECALC_STAT,
                                     count);
-                return count;
         }
+	recalc_interval_sec = pl->pl_recalc_time - cfs_time_current_sec() +
+			      pl->pl_recalc_period;
 
-        return 0;
+        return recalc_interval_sec;
 }
-EXPORT_SYMBOL(ldlm_pool_recalc);
 
 /**
  * Pool shrink wrapper. Will call either client or server pool recalc callback
@@ -1187,12 +1186,13 @@ static int ldlm_pools_cli_shrink(SHRINKER_ARGS(sc, nr_to_scan, gfp_mask))
                                  shrink_param(sc, gfp_mask));
 }
 
-void ldlm_pools_recalc(ldlm_side_t client)
+int ldlm_pools_recalc(ldlm_side_t client)
 {
         __u32 nr_l = 0, nr_p = 0, l;
         struct ldlm_namespace *ns;
         struct ldlm_namespace *ns_old = NULL;
         int nr, equal = 0;
+	int time = 50; /* seconds of sleep if no active namespaces */
 
         /*
          * No need to setup pool limit for client pools.
@@ -1324,14 +1324,19 @@ void ldlm_pools_recalc(ldlm_side_t client)
 		ldlm_namespace_move_to_active_locked(ns, client);
 		mutex_unlock(ldlm_namespace_lock(client));
 
-                /*
-                 * After setup is done - recalc the pool.
-                 */
-                if (!skip) {
-                        ldlm_pool_recalc(&ns->ns_pool);
-                        ldlm_namespace_put(ns);
-                }
+		/*
+		 * After setup is done - recalc the pool.
+		 */
+		if (!skip) {
+			int ttime = ldlm_pool_recalc(&ns->ns_pool);
+
+			if (ttime < time)
+				time = ttime;
+
+			ldlm_namespace_put(ns);
+		}
         }
+	return time;
 }
 EXPORT_SYMBOL(ldlm_pools_recalc);
 
@@ -1339,6 +1344,7 @@ static int ldlm_pools_thread_main(void *arg)
 {
         struct ptlrpc_thread *thread = (struct ptlrpc_thread *)arg;
         char *t_name = "ldlm_poold";
+	int s_time, c_time;
         ENTRY;
 
 	cfs_daemonize_ctxt(t_name);
@@ -1351,18 +1357,18 @@ static int ldlm_pools_thread_main(void *arg)
         while (1) {
                 struct l_wait_info lwi;
 
-                /*
-                 * Recal all pools on this tick.
-                 */
-                ldlm_pools_recalc(LDLM_NAMESPACE_SERVER);
-                ldlm_pools_recalc(LDLM_NAMESPACE_CLIENT);
+		/*
+		 * Recal all pools on this tick.
+		 */
+		s_time = ldlm_pools_recalc(LDLM_NAMESPACE_SERVER);
+		c_time = ldlm_pools_recalc(LDLM_NAMESPACE_CLIENT);
 
-                /*
-                 * Wait until the next check time, or until we're
-                 * stopped.
-                 */
-                lwi = LWI_TIMEOUT(cfs_time_seconds(LDLM_POOLS_THREAD_PERIOD),
-                                  NULL, NULL);
+		/*
+		 * Wait until the next check time, or until we're
+		 * stopped.
+		 */
+		lwi = LWI_TIMEOUT(cfs_time_seconds(min(s_time, c_time)),
+				  NULL, NULL);
                 l_wait_event(thread->t_ctl_waitq, (thread->t_flags &
                                                    (SVC_STOPPING|SVC_EVENT)),
                              &lwi);
@@ -1573,9 +1579,9 @@ void ldlm_pools_fini(void)
 }
 EXPORT_SYMBOL(ldlm_pools_fini);
 
-void ldlm_pools_recalc(ldlm_side_t client)
+int ldlm_pools_recalc(ldlm_side_t client)
 {
-        return;
+        return 0;
 }
 EXPORT_SYMBOL(ldlm_pools_recalc);
 #endif /* HAVE_LRU_RESIZE_SUPPORT */
