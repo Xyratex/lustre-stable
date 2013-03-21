@@ -1325,7 +1325,7 @@ static void osc_lock_cancel(const struct lu_env *env,
                 dlmlock->l_flags |= LDLM_FL_CBPENDING;
                 unlock_res_and_lock(dlmlock);
                 if (do_cancel)
-                        result = ldlm_cli_cancel(&olck->ols_handle, 0);
+			result = ldlm_cli_cancel(&olck->ols_handle, LCF_ASYNC);
                 if (result < 0)
                         CL_LOCK_DEBUG(D_ERROR, env, lock,
                                       "lock %p cancel failure with error(%d)\n",
