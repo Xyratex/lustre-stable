@@ -766,10 +766,11 @@ static int get_root_path(int want, char *fsname, int *outfd, char *path,
 
                 mntlen = strlen(mnt.mnt_dir);
                 ptr = strrchr(mnt.mnt_fsname, '/');
-                if (!ptr && !len) {
-                        rc = -EINVAL;
-                        break;
-                }
+		/* thanks to the call to llapi_is_lustre_mnt() above,
+		 * we are sure that mnt.mnt_fsname contains ":/",
+		 * so ptr should never be NULL */
+		if (ptr == NULL)
+			continue;
                 ptr++;
 
                 /* Check the fsname for a match, if given */
