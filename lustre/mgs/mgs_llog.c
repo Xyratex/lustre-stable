@@ -1570,9 +1570,12 @@ static int add_param(char *params, char *key, char *val)
 	return 0;
 }
 
-static int mgs_steal_llog_handler(struct llog_handle *llh,
-                                  struct llog_rec_hdr *rec,
-                                  void *data)
+/**
+ * Walk through client config log record and convert the related records
+ * into the target.
+ **/
+static int mgs_steal_client_llog_handler(struct llog_handle *llh,
+					 struct llog_rec_hdr *rec, void *data)
 {
         struct obd_device * obd;
         struct mgs_target_info *mti, *tmti;
@@ -1631,6 +1634,7 @@ static int mgs_steal_llog_handler(struct llog_handle *llh,
                         LASSERT(last_step == marker->cm_step);
                         last_step = -1;
                         got_an_osc_or_mdc = 0;
+			memset(tmti, 0, sizeof(*tmti));
                         rc = record_start_log(obd, &mdt_llh, mti->mti_svname);
 			if (rc)
 				RETURN(rc);
@@ -1653,6 +1657,7 @@ static int mgs_steal_llog_handler(struct llog_handle *llh,
                         LASSERT(last_step == marker->cm_step);
                         last_step = -1;
                         got_an_osc_or_mdc = 0;
+			memset(tmti, 0, sizeof(*tmti));
                         RETURN(rc);
                 }
         }
@@ -1766,7 +1771,8 @@ static int mgs_steal_llog_for_mdt_from_client(struct obd_device *obd,
         if (rc)
                 GOTO(out_close, rc);
 
-        rc = llog_process(loghandle, mgs_steal_llog_handler, (void *)comp, NULL);
+	rc = llog_process(loghandle, mgs_steal_client_llog_handler,
+			  (void *)comp, NULL);
         CDEBUG(D_MGS, "steal llog re = %d\n", rc);
 out_close:
         rc2 = llog_close(loghandle);
@@ -2391,7 +2397,7 @@ static int mgs_write_log_osc_to_lov(struct obd_device *obd, struct fs_db *fsdb,
 	/* NB: don't change record order, because upon MDT steal OSC config
 	 * from client, it treats all nids before LCFG_SETUP as target nids
 	 * (multiple interfaces), while nids after as failover node nids.
-	 * See mgs_steal_llog_handler() LCFG_ADD_UUID.
+	 * See mgs_steal_client_llog_handler() LCFG_ADD_UUID.
 	 */
         for (i = 0; i < mti->mti_nid_count; i++) {
                 CDEBUG(D_MGS, "add nid %s\n", libcfs_nid2str(mti->mti_nids[i]));
