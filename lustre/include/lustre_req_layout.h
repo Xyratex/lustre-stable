@@ -193,6 +193,7 @@ extern struct req_format RQF_OST_PUNCH;
 extern struct req_format RQF_OST_SYNC;
 extern struct req_format RQF_OST_DESTROY;
 extern struct req_format RQF_OST_BRW_READ;
+extern struct req_format RQF_OST_BRW_READ_SHORTIO;
 extern struct req_format RQF_OST_BRW_WRITE;
 extern struct req_format RQF_OST_STATFS;
 extern struct req_format RQF_OST_SET_GRANT_INFO;

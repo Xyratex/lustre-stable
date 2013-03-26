@@ -752,9 +752,11 @@ static int ost_brw_read(struct ptlrpc_request *req, struct obd_trans_info *oti)
                 }
         }
 
-	req_capsule_set_size(&req->rq_pill, &RMF_SHORT_IO, RCL_SERVER,
-			     (body->oa.o_flags & OBD_FL_SHORT_IO) ?
-			     remote_nb[0].len : 0);
+	if (body->oa.o_flags & OBD_FL_SHORT_IO) {
+		req_capsule_extend(&req->rq_pill, &RQF_OST_BRW_READ_SHORTIO);
+		req_capsule_set_size(&req->rq_pill, &RMF_SHORT_IO, RCL_SERVER,
+				     remote_nb[0].len);
+	}
 
         rc = req_capsule_server_pack(&req->rq_pill);
         if (rc)

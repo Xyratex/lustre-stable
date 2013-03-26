@@ -510,6 +510,11 @@ static const struct req_msg_field *ost_brw_client[] = {
 static const struct req_msg_field *ost_brw_read_server[] = {
         &RMF_PTLRPC_BODY,
         &RMF_OST_BODY,
+};
+
+static const struct req_msg_field *ost_brw_read_shortio_server[] = {
+        &RMF_PTLRPC_BODY,
+        &RMF_OST_BODY,
         &RMF_SHORT_IO
 };
 
@@ -597,6 +602,7 @@ static struct req_format *req_formats[] = {
         &RQF_OST_SYNC,
         &RQF_OST_DESTROY,
         &RQF_OST_BRW_READ,
+        &RQF_OST_BRW_READ_SHORTIO,
         &RQF_OST_BRW_WRITE,
         &RQF_OST_STATFS,
         &RQF_OST_SET_GRANT_INFO,
@@ -1300,6 +1306,10 @@ EXPORT_SYMBOL(RQF_OST_DESTROY);
 struct req_format RQF_OST_BRW_READ =
         DEFINE_REQ_FMT0("OST_BRW_READ", ost_brw_client, ost_brw_read_server);
 EXPORT_SYMBOL(RQF_OST_BRW_READ);
+
+struct req_format RQF_OST_BRW_READ_SHORTIO =
+        DEFINE_REQ_FMT0("OST_BRW_READ_SHORTIO", ost_brw_client, ost_brw_read_shortio_server);
+EXPORT_SYMBOL(RQF_OST_BRW_READ_SHORTIO);
 
 struct req_format RQF_OST_BRW_WRITE =
         DEFINE_REQ_FMT0("OST_BRW_WRITE", ost_brw_client, ost_brw_write_server);

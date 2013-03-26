@@ -1339,7 +1339,7 @@ static int osc_brw_prep_request(int cmd, struct client_obd *cli,struct obdo *oa,
                                                 &RQF_OST_BRW_WRITE);
         } else {
                 opc = OST_READ;
-                req = ptlrpc_request_alloc(cli->cl_import, &RQF_OST_BRW_READ);
+                req = ptlrpc_request_alloc(cli->cl_import, &RQF_OST_BRW_READ_SHORTIO);
         }
         if (req == NULL)
                 RETURN(-ENOMEM);
