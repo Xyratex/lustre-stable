@@ -987,7 +987,9 @@ int cl_lock_state_wait(const struct lu_env *env, struct cl_lock *lock)
                 cl_lock_mutex_get(env, lock);
                 cfs_set_current_state(CFS_TASK_RUNNING);
                 cfs_waitq_del(&lock->cll_wq, &waiter);
-                result = cfs_signal_pending() ? -EINTR : 0;
+		/* Returning ERESTARTSYS instead of EINTR so syscalls
+		 * can be restarted if signals are pending here */
+                result = cfs_signal_pending() ? -ERESTARTSYS : 0;
 
                 /* Restore old blocked signals */
                 cfs_restore_sigs(blocked);
