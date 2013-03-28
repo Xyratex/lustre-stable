@@ -267,11 +267,12 @@ static int lov_io_subio_init(const struct lu_env *env, struct lov_io *lio,
                              struct cl_io *io)
 {
         struct lov_object    *lov = lio->lis_object;
-        struct lov_stripe_md *lsm = lov_r0(lov)->lo_lsm;
+        struct lov_stripe_md *lsm;
         int result;
+	ENTRY;
 
-        LASSERT(lio->lis_object != NULL);
-        ENTRY;
+	LASSERT(lio->lis_object != NULL);
+        lsm = lov_r0(lov)->lo_lsm;
 
         /*
          * Need to be optimized, we can't afford to allocate a piece of memory

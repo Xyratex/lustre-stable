@@ -2642,7 +2642,8 @@ static int mdt_req_handle(struct mdt_thread_info *info,
                                  */
                                 rc = -EPROTO;
                         } else {
-                                if (info->mti_mdt->mdt_opts.mo_compat_resname)
+				if (info->mti_mdt &&
+				    info->mti_mdt->mdt_opts.mo_compat_resname)
                                         rc = mdt_lock_resname_compat(
                                                                 info->mti_mdt,
                                                                 dlm_req);
@@ -2691,7 +2692,7 @@ static int mdt_req_handle(struct mdt_thread_info *info,
 
         LASSERT(current->journal_info == NULL);
 
-        if (rc == 0 && (flags & HABEO_CLAVIS) &&
+	if (rc == 0 && (flags & HABEO_CLAVIS) && info->mti_mdt &&
             info->mti_mdt->mdt_opts.mo_compat_resname) {
                 struct ldlm_reply *dlmrep;
 
