@@ -303,8 +303,7 @@ struct obd_device *class_newdev(const char *type_name, const char *name)
         for (i = 0; i < class_devno_max(); i++) {
                 struct obd_device *obd = class_num2obd(i);
 
-                if (obd && obd->obd_name &&
-                    (strcmp(name, obd->obd_name) == 0)) {
+		if (obd && (strcmp(name, obd->obd_name) == 0)) {
                         CERROR("Device %s already exists, won't add\n", name);
                         if (result) {
                                 LASSERTF(result->obd_magic == OBD_DEVICE_MAGIC,
@@ -380,7 +379,7 @@ int class_name2dev(const char *name)
         for (i = 0; i < class_devno_max(); i++) {
                 struct obd_device *obd = class_num2obd(i);
 
-                if (obd && obd->obd_name && strcmp(name, obd->obd_name) == 0) {
+		if (obd && strcmp(name, obd->obd_name) == 0) {
                         /* Make sure we finished attaching before we give
                            out any references */
                         LASSERT(obd->obd_magic == OBD_DEVICE_MAGIC);
