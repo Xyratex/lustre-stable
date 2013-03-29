@@ -429,17 +429,6 @@ struct lu_device_type_operations {
 };
 
 /**
- * Flags for the object layers.
- */
-enum lu_object_flags {
-        /**
-         * this flags is set if lu_object_operations::loo_object_init() has
-         * been called for this layer. Used by lu_object_alloc().
-         */
-        LU_OBJECT_ALLOCATED = (1 << 0)
-};
-
-/**
  * Common object attributes.
  */
 struct lu_attr {
@@ -516,14 +505,6 @@ struct lu_object {
          * Linkage into list of all layers.
          */
         cfs_list_t                         lo_linkage;
-        /**
-         * Depth. Top level layer depth is 0.
-         */
-        int                                lo_depth;
-        /**
-         * Flags from enum lu_object_flags.
-         */
-        unsigned long                      lo_flags;
         /**
          * Link to the device, for debugging.
          */
