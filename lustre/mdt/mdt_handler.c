@@ -4575,7 +4575,7 @@ static int mdt_init0(const struct lu_env *env, struct mdt_device *m,
         struct lu_device          *child_lu_dev;
         struct md_device          *next;
         int                        rc;
-        int                        node_id;
+	long                       node_id;
         mntopt_t                   mntopts;
         __u32                      flags = 0;
         ENTRY;

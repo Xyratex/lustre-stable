@@ -86,7 +86,8 @@ static int llog_check_cb(struct llog_handle *handle, struct llog_rec_hdr *rec,
                          void *data)
 {
         struct obd_ioctl_data *ioc_data = (struct obd_ioctl_data *)data;
-        static int l, remains, from, to;
+	static int l, remains;
+	static long from, to;
         static char *out;
         char *endp;
         int cur_index, rc = 0;
@@ -178,7 +179,8 @@ static int llog_print_cb(struct llog_handle *handle, struct llog_rec_hdr *rec,
                          void *data)
 {
         struct obd_ioctl_data *ioc_data = (struct obd_ioctl_data *)data;
-        static int l, remains, from, to;
+	static int l, remains;
+	static long from, to;
         static char *out;
         char *endp;
         int cur_index;
