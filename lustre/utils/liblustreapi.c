@@ -261,10 +261,10 @@ int llapi_stripe_limit_check(unsigned long long stripe_size, int stripe_offset,
                 return rc;
         }
         if (stripe_size >= (1ULL << 32)){
-                rc = -EINVAL;
+                rc = -EPERM;
                 llapi_error(LLAPI_MSG_ERROR, rc,
-                            "warning: stripe size larger than 4G "
-                            "is not currently supported and would wrap");
+                            "warning: stripe size equal to OR greater "
+			    "than 4G ");
                 return rc;
         }
         return 0;
