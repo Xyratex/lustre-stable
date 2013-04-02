@@ -3309,28 +3309,33 @@ log_trace_dump() {
 ##################################
 
 error_noexit() {
-    local TYPE=${TYPE:-"FAIL"}
+	local TYPE=${TYPE:-"FAIL"}
 
-    local dump=true
-    # do not dump logs if $1=false
-    if [ "x$1" = "xfalse" ]; then
-        shift
-        dump=false
-    fi
+	local dump=true
+	# do not dump logs if $1=false
+	if [ "x$1" = "xfalse" ]; then
+		shift
+		dump=false
+	fi
 
-    log " ${TESTSUITE} ${TESTNAME}: @@@@@@ ${TYPE}: $@ "
-    log_trace_dump
 
-    mkdir -p $LOGDIR
-    # We need to dump the logs on all nodes
-    if $dump; then
-        gather_logs $(comma_list $(nodes_list))
-    fi
+	log " ${TESTSUITE} ${TESTNAME}: @@@@@@ ${TYPE}: $@ "
+	log_trace_dump
+
+	mkdir -p $LOGDIR
+	# We need to dump the logs on all nodes
+	if $dump; then
+		gather_logs $(comma_list $(nodes_list))
+	fi
 
 	debugrestore
 	[ "$TESTSUITELOG" ] &&
 		echo "$TESTSUITE: $TYPE: $TESTNAME $@" >> $TESTSUITELOG
-	echo "$@" > $LOGDIR/err
+	if [ -z "$*" ]; then
+		echo "error() without useful message, please fix" > $LOGDIR/err
+	else
+		echo "$@" > $LOGDIR/err
+	fi
 }
 
 exit_status () {
@@ -3342,21 +3347,21 @@ exit_status () {
 }
 
 error() {
-    error_noexit "$@"
-    exit 1
+	error_noexit "$@"
+	exit 1
 }
 
 error_exit() {
-    error "$@"
+	error "$@"
 }
 
 # use only if we are ignoring failures for this test, bugno required.
 # (like ALWAYS_EXCEPT, but run the test and ignore the results.)
 # e.g. error_ignore 5494 "your message"
 error_ignore() {
-    local TYPE="IGNORE (bz$1)"
-    shift
-    error_noexit "$@"
+	local TYPE="IGNORE (bz$1)"
+	shift
+	error_noexit "$@"
 }
 
 error_and_remount() {
@@ -3366,7 +3371,7 @@ error_and_remount() {
 }
 
 skip_env () {
-    $FAIL_ON_SKIP_ENV && error false $@ || skip $@
+	$FAIL_ON_SKIP_ENV && error false $@ || skip $@
 }
 
 skip() {
@@ -4014,10 +4019,11 @@ generate_machine_file() {
 }
 
 get_stripe () {
-    local file=$1/stripe
-    touch $file
-    $LFS getstripe -v $file || error
-    rm -f $file
+	local file=$1/stripe
+
+	touch $file
+	$LFS getstripe -v $file || error "getstripe $file failed"
+	rm -f $file
 }
 
 setstripe_nfsserver () {

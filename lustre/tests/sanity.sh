@@ -128,31 +128,33 @@ echo # add a newline after mke2fs.
 
 umask 077
 
-OLDDEBUG="`lctl get_param -n debug 2> /dev/null`"
+OLDDEBUG=$(lctl get_param -n debug 2> /dev/null)
 lctl set_param debug=-1 2> /dev/null || true
 test_0a() {
 	touch $DIR/$tfile
-	$CHECKSTAT -t file $DIR/$tfile || error
+	$CHECKSTAT -t file $DIR/$tfile || error "$tfile is not a file"
 	rm $DIR/$tfile
-	$CHECKSTAT -a $DIR/$tfile || error
+	$CHECKSTAT -a $DIR/$tfile || error "$tfile was not removed"
 }
 run_test 0a "touch .../file; rm .../file"
 
 test_0b() {
-	chmod 0755 $DIR || error
-	$CHECKSTAT -p 0755 $DIR || error
+	chmod 0755 $DIR || error "chmod 0755 $DIR failed"
+	$CHECKSTAT -p 0755 $DIR || error "$DIR permission is not 0755"
 }
 run_test 0b "chmod 0755 $DIR ============================="
 
 test_0c() {
-    $LCTL get_param mdc.*.import | grep  "state: FULL" || error "import not FULL"
-    $LCTL get_param mdc.*.import | grep  "target: $FSNAME-MDT" || error "bad target"
+	$LCTL get_param mdc.*.import | grep "state: FULL" ||
+		error "import not FULL"
+	$LCTL get_param mdc.*.import | grep "target: $FSNAME-MDT" ||
+		error "bad target"
 }
 run_test 0c "check import proc ============================="
 
 test_1() {
-	mkdir -p $DIR/$tdir
-	mkdir $DIR/$tdir/d2
+	mkdir -p $DIR/$tdir || error "mkdir $tdir failed"
+	mkdir -p $DIR/$tdir/d2 || error "mkdir $tdir/d2 failed"
 	mkdir $DIR/$tdir/d2 && error "re-mkdir succeeded"
 	$CHECKSTAT -t dir $DIR/$tdir/d2 || error "no dir $DIR/$tdir/d2"
 
@@ -163,10 +165,10 @@ test_1() {
 run_test 1 "mkdir .../dir .../dir/dir .../dir/dir; rmdir .../dir/dir .../dir"
 
 test_2() {
-	mkdir -p $DIR/$tdir
+	mkdir -p $DIR/$tdir || error "mkdir $tdir failed"
 	$CHECKSTAT -t dir $DIR/$tdir || error "no dir $DIR/$tdir"
 
-	touch $DIR/$tdir/$tfile
+	touch $DIR/$tdir/$tfile || error "touch $tdir/$tfile failed"
 	$CHECKSTAT -t file $DIR/$tdir/$tfile ||
 		error "no file $DIR/$tdir/$tfile"
 
@@ -176,15 +178,16 @@ test_2() {
 run_test 2 "mkdir .../dir; touch .../dir/file; rm -r .../dir"
 
 test_5() {
-	mkdir $DIR/d5
-	mkdir $DIR/d5/d2
-	chmod 0707 $DIR/d5/d2
-	$CHECKSTAT -t dir -p 0707 $DIR/d5/d2 || error
+	mkdir -p $DIR/$tdir || error "mkdir $tdir failed"
+	mkdir $DIR/$tdir/d2 || error "mkdir $tdir/d2 failed"
+	chmod 0707 $DIR/$tdir/d2 || error "chmod 0707 $tdir/d2 failed"
+	$CHECKSTAT -t dir -p 0707 $DIR/$tdir/d2 || error "$tdir/d2 not mode 707"
+	$CHECKSTAT -t dir $DIR/$tdir/d2 || error "$tdir/d2 is not a directory"
 }
 run_test 5 "mkdir .../d5 .../d5/d2; chmod .../d5/d2 ============"
 
 test_6a() {
-	touch $DIR/$tfile
+	touch $DIR/$tfile || error "touch $DIR/$tfile failed"
 	chmod 0666 $DIR/$tfile || error "chmod failed"
 	$CHECKSTAT -t file -p 0666 -u \#$UID $DIR/$tfile ||
 		error "wrong perms, owner or no file $DIR/$tfile"
@@ -199,7 +202,7 @@ run_test 6a "touch .../file; chmod .../file; runas chmod .../file"
 test_6c() {
 	[ $RUNAS_ID -eq $UID ] && skip_env "RUNAS_ID = UID = $UID -- skipping" && return
 	touch $DIR/$tfile
-	chown $RUNAS_ID $DIR/$tfile || error "chown failed"
+	chown $RUNAS_ID $DIR/$tfile || error "chown $RUNAS_ID $file failed"
 	$CHECKSTAT -t file -u \#$RUNAS_ID $DIR/$tfile ||
 		error "wrong owner or no file $DIR/$tfile"
 
@@ -212,7 +215,7 @@ run_test 6c "touch .../file; chown .../file; runas chown .../file"
 test_6e() {
 	[ $RUNAS_ID -eq $UID ] && skip_env "RUNAS_ID = UID = $UID -- skipping" && return
 	touch $DIR/$tfile
-	chgrp $RUNAS_ID $DIR/$tfile || error "chgrp failed"
+	chgrp $RUNAS_ID $DIR/$tfile || error "chgrp $RUNAS_ID $file failed"
 	$CHECKSTAT -t file -u \#$UID -g \#$RUNAS_ID $DIR/$tfile ||
 		error "wrong owner, group or no file $DIR/$tfile"
 
@@ -224,12 +227,13 @@ run_test 6e "touch .../file; chgrp .../file; runas chgrp .../file"
 
 test_6g() {
 	[ $RUNAS_ID -eq $UID ] && skip_env "RUNAS_ID = UID = $UID -- skipping" && return
-        mkdir $DIR/d6g || error
-        chmod 777 $DIR/d6g || error
-        $RUNAS mkdir $DIR/d6g/d || error
-        chmod g+s $DIR/d6g/d || error
-        mkdir $DIR/d6g/d/subdir
-	$CHECKSTAT -g \#$RUNAS_GID $DIR/d6g/d/subdir || error
+        mkdir $DIR/d6g || error "mkdir $tfile failed"
+        chmod 777 $DIR/d6g || error "chmod 0777 $tdir failed"
+        $RUNAS mkdir $DIR/d6g/d || error "mkdir $tdir/d failed"
+        chmod g+s $DIR/d6g/d || error "chmod g+s $tdir/d failed"
+        mkdir $DIR/d6g/d/subdir || error "mkdir $tdir/d/subdir failed"
+	$CHECKSTAT -g \#$RUNAS_GID $DIR/d6g/d/subdir ||
+		error "$tdir/d/subdir should be GID $RUNAS_GID"
 }
 run_test 6g "Is new dir in sgid dir inheriting group?"
 
@@ -237,8 +241,10 @@ test_6h() { # bug 7331
 	[ $RUNAS_ID -eq $UID ] && skip_env "RUNAS_ID = UID = $UID -- skipping" && return
 	touch $DIR/f6h || error "touch failed"
 	chown $RUNAS_ID:$RUNAS_GID $DIR/f6h || error "initial chown failed"
-	$RUNAS -G$RUNAS_GID chown $RUNAS_ID:0 $DIR/f6h && error "chown worked"
-	$CHECKSTAT -t file -u \#$RUNAS_ID -g \#$RUNAS_GID $DIR/f6h || error
+	$RUNAS -G$RUNAS_GID chown $RUNAS_ID:0 $DIR/f6h &&
+		error "chown $RUNAS_ID:0 $tfile worked as GID $RUNAS_GID"
+	$CHECKSTAT -t file -u \#$RUNAS_ID -g \#$RUNAS_GID $DIR/f6h ||
+		error "$tdir/$tfile should be UID $RUNAS_UID GID $RUNAS_GID"
 }
 run_test 6h "$RUNAS chown RUNAS_ID.0 .../f6h (should return error)"
 
@@ -246,7 +252,8 @@ test_7a() {
 	mkdir $DIR/d7
 	$MCREATE $DIR/d7/f
 	chmod 0666 $DIR/d7/f
-	$CHECKSTAT -t file -p 0666 $DIR/d7/f || error
+	$CHECKSTAT -t file -p 0666 $DIR/d7/f ||
+		error "$tdir/$tfile should be mode 0666"
 }
 run_test 7a "mkdir .../d7; mcreate .../d7/f; chmod .../d7/f ===="
 
@@ -256,8 +263,9 @@ test_7b() {
 	fi
 	$MCREATE $DIR/d7/f2
 	echo -n foo > $DIR/d7/f2
-	[ "`cat $DIR/d7/f2`" = "foo" ] || error
-	$CHECKSTAT -t file -s 3 $DIR/d7/f2 || error
+	[ "$(cat $DIR/d7/f2)" = "foo" ] || error "$tdir/$tfile not 'foo'"
+	$CHECKSTAT -t file -s 3 $DIR/d7/f2 ||
+		error "$tfile size not 3"
 }
 run_test 7b "mkdir .../d7; mcreate d7/f2; echo foo > d7/f2 ====="
 
@@ -265,7 +273,8 @@ test_8() {
 	mkdir $DIR/d8
 	touch $DIR/d8/f
 	chmod 0666 $DIR/d8/f
-	$CHECKSTAT -t file -p 0666 $DIR/d8/f || error
+	$CHECKSTAT -t file -p 0666 $DIR/d8/f ||
+		error "$tfile mode not 0666"
 }
 run_test 8 "mkdir .../d8; touch .../d8/f; chmod .../d8/f ======="
 
@@ -273,7 +282,8 @@ test_9() {
 	mkdir $DIR/d9
 	mkdir $DIR/d9/d2
 	mkdir $DIR/d9/d2/d3
-	$CHECKSTAT -t dir $DIR/d9/d2/d3 || error
+	$CHECKSTAT -t dir $DIR/d9/d2/d3 ||
+		error "$tdir/d2/d3 not a dir"
 }
 run_test 9 "mkdir .../d9 .../d9/d2 .../d9/d2/d3 ================"
 
@@ -281,7 +291,8 @@ test_10() {
 	mkdir $DIR/d10
 	mkdir $DIR/d10/d2
 	touch $DIR/d10/d2/f
-	$CHECKSTAT -t file $DIR/d10/d2/f || error
+	$CHECKSTAT -t file $DIR/d10/d2/f ||
+		error "$tdir/d2/$tfile not a file"
 }
 run_test 10 "mkdir .../d10 .../d10/d2; touch .../d10/d2/f ======"
 
@@ -290,7 +301,8 @@ test_11() {
 	mkdir $DIR/d11/d2
 	chmod 0666 $DIR/d11/d2
 	chmod 0705 $DIR/d11/d2
-	$CHECKSTAT -t dir -p 0705 $DIR/d11/d2 || error
+	$CHECKSTAT -t dir -p 0705 $DIR/d11/d2 ||
+		error "$tdir/d2 mode not 0705"
 }
 run_test 11 "mkdir .../d11 d11/d2; chmod .../d11/d2 ============"
 
@@ -299,7 +311,8 @@ test_12() {
 	touch $DIR/d12/f
 	chmod 0666 $DIR/d12/f
 	chmod 0654 $DIR/d12/f
-	$CHECKSTAT -t file -p 0654 $DIR/d12/f || error
+	$CHECKSTAT -t file -p 0654 $DIR/d12/f ||
+		error "$tdir/d2 mode not 0654"
 }
 run_test 12 "touch .../d12/f; chmod .../d12/f .../d12/f ========"
 
@@ -307,7 +320,8 @@ test_13() {
 	mkdir $DIR/d13
 	dd if=/dev/zero of=$DIR/d13/f count=10
 	>  $DIR/d13/f
-	$CHECKSTAT -t file -s 0 $DIR/d13/f || error
+	$CHECKSTAT -t file -s 0 $DIR/d13/f ||
+		error "$tdir/$tfile size not 0 after truncate"
 }
 run_test 13 "creat .../d13/f; dd .../d13/f; > .../d13/f ========"
 
@@ -315,7 +329,8 @@ test_14() {
 	mkdir $DIR/d14
 	touch $DIR/d14/f
 	rm $DIR/d14/f
-	$CHECKSTAT -a $DIR/d14/f || error
+	$CHECKSTAT -a $DIR/d14/f ||
+		error "$tdir/$tfile not removed"
 }
 run_test 14 "touch .../d14/f; rm .../d14/f; rm .../d14/f ======="
 
@@ -323,7 +338,8 @@ test_15() {
 	mkdir $DIR/d15
 	touch $DIR/d15/f
 	mv $DIR/d15/f $DIR/d15/f2
-	$CHECKSTAT -t file $DIR/d15/f2 || error
+	$CHECKSTAT -t file $DIR/d15/f2 ||
+		error "$tdir/${tfile_2} not a file after rename"
 }
 run_test 15 "touch .../d15/f; mv .../d15/f .../d15/f2 =========="
 
@@ -331,7 +347,8 @@ test_16() {
 	mkdir $DIR/d16
 	touch $DIR/d16/f
 	rm -rf $DIR/d16/f
-	$CHECKSTAT -a $DIR/d16/f || error
+	$CHECKSTAT -a $DIR/d16/f ||
+		error "$tdir/$tfile not removed"
 }
 run_test 16 "touch .../d16/f; rm -rf .../d16/f ================="
 
@@ -340,10 +357,13 @@ test_17a() {
 	touch $DIR/d17/f
 	ln -s $DIR/d17/f $DIR/d17/l-exist
 	ls -l $DIR/d17
-	$CHECKSTAT -l $DIR/d17/f $DIR/d17/l-exist || error
-	$CHECKSTAT -f -t f $DIR/d17/l-exist || error
+	$CHECKSTAT -l $DIR/d17/f $DIR/d17/l-exist ||
+		error "$tdir/l-exist not a symlink"
+	$CHECKSTAT -f -t f $DIR/d17/l-exist ||
+		error "$tdir/l-exist not referencing a file"
 	rm -f $DIR/d17/l-exist
-	$CHECKSTAT -a $DIR/d17/l-exist || error
+	$CHECKSTAT -a $DIR/d17/l-exist ||
+		error "$tdir/l-exist not removed"
 }
 run_test 17a "symlinks: create, remove (real) =================="
 
@@ -351,10 +371,13 @@ test_17b() {
 	mkdir -p $DIR/d17
 	ln -s no-such-file $DIR/d17/l-dangle
 	ls -l $DIR/d17
-	$CHECKSTAT -l no-such-file $DIR/d17/l-dangle || error
-	$CHECKSTAT -fa $DIR/d17/l-dangle || error
+	$CHECKSTAT -l no-such-file $DIR/d17/l-dangle ||
+		error "$tdir/l-dangle not referencing no-such-file"
+	$CHECKSTAT -fa $DIR/d17/l-dangle ||
+		error "$tdir/l-dangle not referencing non-existent file"
 	rm -f $DIR/d17/l-dangle
-	$CHECKSTAT -a $DIR/d17/l-dangle || error
+	$CHECKSTAT -a $DIR/d17/l-dangle || 
+		error "$tdir/l-dangle not removed"
 }
 run_test 17b "symlinks: create, remove (dangling) =============="
 
@@ -473,21 +496,22 @@ test_18() {
 run_test 18 "touch .../f ; ls ... =============================="
 
 test_19a() {
-	touch $DIR/f19
+	touch $DIR/$tfile
 	ls -l $DIR
-	rm $DIR/f19
-	$CHECKSTAT -a $DIR/f19 || error
+	rm $DIR/$tfile
+	$CHECKSTAT -a $DIR/$tfile || error "$tfile was not removed"
 }
 run_test 19a "touch .../f19 ; ls -l ... ; rm .../f19 ==========="
 
 test_19b() {
-	ls -l $DIR/f19 && error || true
+	ls -l $DIR/$tfile && error "ls -l $tfile failed"|| true
 }
 run_test 19b "ls -l .../f19 (should return error) =============="
 
 test_19c() {
-	[ $RUNAS_ID -eq $UID ] && skip_env "RUNAS_ID = UID = $UID -- skipping" && return
-	$RUNAS touch $DIR/f19 && error || true
+	[ $RUNAS_ID -eq $UID ] &&
+		skip_env "RUNAS_ID = UID = $UID -- skipping" && return
+	$RUNAS touch $DIR/$tfile && error "create non-root file failed" || true
 }
 run_test 19c "$RUNAS touch .../f19 (should return error) =="
 
@@ -497,16 +521,16 @@ test_19d() {
 run_test 19d "cat .../f19 (should return error) =============="
 
 test_20() {
-	touch $DIR/f
-	rm $DIR/f
+	touch $DIR/$tfile
+	rm $DIR/$tfile
 	log "1 done"
-	touch $DIR/f
-	rm $DIR/f
+	touch $DIR/$tfile
+	rm $DIR/$tfile
 	log "2 done"
-	touch $DIR/f
-	rm $DIR/f
+	touch $DIR/$tfile
+	rm $DIR/$tfile
 	log "3 done"
-	$CHECKSTAT -a $DIR/f || error
+	$CHECKSTAT -a $DIR/$tfile || error "$tfile was not removed"
 }
 run_test 20 "touch .../f ; ls -l ... ==========================="
 
@@ -516,8 +540,10 @@ test_21() {
 	ln -s dangle $DIR/d21/link
 	echo foo >> $DIR/d21/link
 	cat $DIR/d21/dangle
-	$CHECKSTAT -t link $DIR/d21/link || error
-	$CHECKSTAT -f -t file $DIR/d21/link || error
+	$CHECKSTAT -t link $DIR/d21/link ||
+		error "$tdir/link not a link"
+	$CHECKSTAT -f -t file $DIR/d21/link ||
+		error "$tdir/link not linked to a file"
 }
 run_test 21 "write to dangling link ============================"
 
@@ -557,42 +583,49 @@ test_23b() { # bug 18988
 }
 run_test 23b "O_APPEND check =========================="
 
+# rename sanity
 test_24a() {
-	echo '== rename sanity =============================================='
 	echo '-- same directory rename'
 	mkdir $DIR/R1
 	touch $DIR/R1/f
 	mv $DIR/R1/f $DIR/R1/g
-	$CHECKSTAT -t file $DIR/R1/g || error
+	$CHECKSTAT -t file $DIR/R1/g ||
+		error "$tfile.2 not a file"
 }
-run_test 24a "touch .../R1/f; rename .../R1/f .../R1/g ========="
+run_test 24a "rename file to non-existent target"
 
 test_24b() {
 	mkdir $DIR/R2
 	touch $DIR/R2/{f,g}
 	mv $DIR/R2/f $DIR/R2/g
-	$CHECKSTAT -a $DIR/R2/f || error
-	$CHECKSTAT -t file $DIR/R2/g || error
+	$CHECKSTAT -a $DIR/R2/f || 
+		error "$tfile.1 exists"
+	$CHECKSTAT -t file $DIR/R2/g || 
+		error "$tfile.2 not a file"
 }
-run_test 24b "touch .../R2/{f,g}; rename .../R2/f .../R2/g ====="
+run_test 24b "rename file to existing target"
 
 test_24c() {
 	mkdir $DIR/R3
 	mkdir $DIR/R3/f
 	mv $DIR/R3/f $DIR/R3/g
-	$CHECKSTAT -a $DIR/R3/f || error
-	$CHECKSTAT -t dir $DIR/R3/g || error
+	$CHECKSTAT -a $DIR/R3/f ||
+		error "d$testnum.1 exists"
+	$CHECKSTAT -t dir $DIR/R3/g ||
+		error "d$testnum.2 not dir"
 }
-run_test 24c "mkdir .../R3/f; rename .../R3/f .../R3/g ========="
+run_test 24c "rename directory to non-existent target"
 
 test_24d() {
 	mkdir $DIR/R4
 	mkdir $DIR/R4/{f,g}
 	mrename $DIR/R4/f $DIR/R4/g
-	$CHECKSTAT -a $DIR/R4/f || error
-	$CHECKSTAT -t dir $DIR/R4/g || error
+	$CHECKSTAT -a $DIR/R4/f ||
+		error "d$testnum.1 exists"
+	$CHECKSTAT -t dir $DIR/R4/g ||
+		error "d$testnum.2 not dir"
 }
-run_test 24d "mkdir .../R4/{f,g}; rename .../R4/f .../R4/g ====="
+run_test 24d "rename directory to existing target"
 
 test_24e() {
 	echo '-- cross directory renames --'
@@ -2608,9 +2641,11 @@ test_39m() {
 run_test 39m "test atime and mtime before 1970"
 
 test_40() {
-	dd if=/dev/zero of=$DIR/f40 bs=4096 count=1
-	$RUNAS $OPENFILE -f O_WRONLY:O_TRUNC $DIR/f40 && error
-	$CHECKSTAT -t file -s 4096 $DIR/f40 || error
+	dd if=/dev/zero of=$DIR/$tfile bs=4096 count=1
+	$RUNAS $OPENFILE -f O_WRONLY:O_TRUNC $DIR/$tfile &&
+		error "openfile O_WRONLY:O_TRUNC $tfile failed"
+	$CHECKSTAT -t file -s 4096 $DIR/$tfile ||
+		error "$tfile is not 4096 bytes in size"
 }
 run_test 40 "failed open(O_TRUNC) doesn't truncate ============="
 
@@ -3095,7 +3130,7 @@ test_50() {
 	# bug 1485
 	mkdir $DIR/d50
 	cd $DIR/d50
-	ls /proc/$$/cwd || error
+	ls /proc/$$/cwd || error "ls /proc/$$/cwd failed"
 }
 run_test 50 "special situations: /proc symlinks  ==============="
 
@@ -3107,13 +3142,13 @@ test_51a() {	# was test_51
 	rm $DIR/d51/foo
 	createmany -m $DIR/d51/longfile 201
 	FNUM=202
-	while [ `ls -sd $DIR/d51 | awk '{ print $1 }'` -eq 4 ]; do
+	while [ $(ls -sd $DIR/d51 | awk '{ print $1 }') -eq 4 ]; do
 		$MCREATE $DIR/d51/longfile$FNUM
 		FNUM=$(($FNUM + 1))
 		echo -n "+"
 	done
 	echo
-	ls -l $DIR/d51 > /dev/null || error
+	ls -l $DIR/d51 > /dev/null || error "ls -l $DIR/$tdir failed"
 }
 run_test 51a "special situations: split htree with empty entry =="
 
@@ -3252,12 +3287,12 @@ test_52b() {
 	link $DIR/d52b/foo $DIR/d52b/foo_link 2>/dev/null && error  "link worked"
 	echo foo >> $DIR/d52b/foo && error "echo worked"
 	mrename $DIR/d52b/foo $DIR/d52b/foo_ren && error "rename worked"
-	[ -f $DIR/d52b/foo ] || error
-	[ -f $DIR/d52b/foo_ren ] && error
+	[ -f $DIR/d52b/foo ] || error "$tdir/foo is not a file"
+	[ -f $DIR/d52b/foo_ren ] && error "$tdir/foo_ren is not a file"
 	lsattr $DIR/d52b/foo | egrep -q "^-+i[-e]+ $DIR/d52b/foo" || error "lsattr"
 	chattr -i $DIR/d52b/foo || error "chattr failed"
 
-	rm -fr $DIR/d52b || error
+	rm -fr $DIR/d52b || error "unable to remove $DIR/$tdir"
 }
 run_test 52b "immutable flag test (should return errors) ======="
 
@@ -3298,7 +3333,7 @@ test_54b() {
 	f="$DIR/f54b"
 	mknod $f c 1 3
 	chmod 0666 $f
-	dd if=/dev/zero of=$f bs=`page_size` count=1
+	dd if=/dev/zero of=$f bs=$(page_size) count=1
 }
 run_test 54b "char device works in lustre ======================"
 
@@ -3307,7 +3342,7 @@ find_loop_dev() {
 	[ -b /dev/loop0 ] && LOOPBASE=/dev/loop
 	[ -z "$LOOPBASE" ] && echo "/dev/loop/0 and /dev/loop0 gone?" && return
 
-	for i in `seq 3 7`; do
+	for i in $(seq 3 7); do
 		losetup $LOOPBASE$i > /dev/null 2>&1 && continue
 		LOOPDEV=$LOOPBASE$i
 		LOOPNUM=$i
@@ -3342,7 +3377,7 @@ test_54d() {
 	f="$DIR/f54d"
 	string="aaaaaa"
 	mknod $f p
-	[ "$string" = `echo $string > $f | cat $f` ] || error
+	[ "$string" = $(echo $string > $f | cat $f) ] || error "$f != $string"
 }
 run_test 54d "fifo device works in lustre ======================"
 
@@ -3351,7 +3386,7 @@ test_54e() {
 	f="$DIR/f54e"
 	string="aaaaaa"
 	cp -aL /dev/console $f
-	echo $string > $f || error
+	echo $string > $f || error "echo $string to $f failed"
 }
 run_test 54e "console/tty device works in lustre ======================"
 
@@ -4068,9 +4103,9 @@ run_test 60d "test printk console message masking"
 
 test_61() {
 	f="$DIR/f61"
-	dd if=/dev/zero of=$f bs=`page_size` count=1
+	dd if=/dev/zero of=$f bs=$(page_size) count=1 || error "dd $f failed"
 	cancel_lru_locks osc
-	$MULTIOP $f OSMWUc || error
+	$MULTIOP $f OSMWUc || error "$MULTIOP $f failed"
 	sync
 }
 run_test 61 "mmap() writes don't make sync hang ================"
@@ -4433,23 +4468,26 @@ test_72a() { # bug 5695 - Test that on 2.6 remove_suid works properly
 	check_kernel_version 43 || return 0
 	[ "$RUNAS_ID" = "$UID" ] && skip_env "RUNAS_ID = UID = $UID -- skipping" && return
 
-        # Check that testing environment is properly set up. Skip if not
-        FAIL_ON_ERROR=false check_runas_id_ret $RUNAS_ID $RUNAS_GID $RUNAS || {
-                skip_env "User $RUNAS_ID does not exist - skipping"
-                return 0
-        }
+	# Check that testing environment is properly set up. Skip if not
+	FAIL_ON_ERROR=false check_runas_id_ret $RUNAS_ID $RUNAS_GID $RUNAS || {
+		skip_env "User $RUNAS_ID does not exist - skipping"
+		return 0
+	}
 	# We had better clear the $DIR to get enough space for dd
 	rm -rf $DIR/*
-	touch $DIR/f72
-	chmod 777 $DIR/f72
-	chmod ug+s $DIR/f72
-	$RUNAS dd if=/dev/zero of=$DIR/f72 bs=512 count=1 || error
+	touch $DIR/$tfile
+	chmod 777 $DIR/$tfile
+	chmod ug+s $DIR/$tfile
+	$RUNAS dd if=/dev/zero of=$DIR/$tfile bs=512 count=1 ||
+		error "$RUNAS dd $DIR/$tfile failed"
 	# See if we are still setuid/sgid
-	test -u $DIR/f72 -o -g $DIR/f72 && error "S/gid is not dropped on write"
+	test -u $DIR/$tfile -o -g $DIR/$tfile &&
+		error "S/gid is not dropped on write"
 	# Now test that MDS is updated too
 	cancel_lru_locks mdc
-	test -u $DIR/f72 -o -g $DIR/f72 && error "S/gid is not dropped on MDS"
-	rm -f $DIR/f72
+	test -u $DIR/$tfile -o -g $DIR/$tfile &&
+		error "S/gid is not dropped on MDS"
+	rm -f $DIR/$tfile
 }
 run_test 72a "Test that remove suid works properly (bug5695) ===="
 
@@ -4908,13 +4946,14 @@ test_99a() {
 	local oldPWD=$PWD	# bug 13584, use $TMP as working dir
 	cd $TMP
 
-	$RUNAS cvs -d $DIR/d99cvsroot init || error
+	$RUNAS cvs -d $DIR/d99cvsroot init || error "cvs init failed"
 	cd $oldPWD
 }
 run_test 99a "cvs init ========================================="
 
 test_99b() {
-        [ -z "$(which cvs 2>/dev/null)" ] && skip_env "could not find cvs" && return
+	[ -z "$(which cvs 2>/dev/null)" ] &&
+		skip_env "could not find cvs" && return
 	[ ! -d $DIR/d99cvsroot ] && test_99a
 	cd /etc/init.d
 	# some versions of cvs import exit(1) when asked to import links or
@@ -5323,19 +5362,21 @@ test_102a() {
 	touch $testfile
 
 	[ "$UID" != 0 ] && skip_env "must run as root" && return
-	[ -z "`lctl get_param -n mdc.*-mdc-*.connect_flags | grep xattr`" ] &&
+	[ -z "$(lctl get_param -n mdc.*-mdc-*.connect_flags | grep xattr)" ] &&
 		skip_env "must have user_xattr" && return
 
 	[ -z "$(which setfattr 2>/dev/null)" ] &&
 		skip_env "could not find setfattr" && return
 
 	echo "set/get xattr..."
-	setfattr -n trusted.name1 -v value1 $testfile || error
+	setfattr -n trusted.name1 -v value1 $testfile ||
+		error "setfattr -n trusted.name1=value1 $testfile failed"
 	getfattr -n trusted.name1 $testfile 2> /dev/null |
 	  grep "trusted.name1=.value1" ||
 		error "$testfile missing trusted.name1=value1"
 
-	setfattr -n user.author1 -v author1 $testfile || error
+	setfattr -n user.author1 -v author1 $testfile ||
+		error "setfattr -n user.author1=author1 $testfile failed"
 	getfattr -n user.author1 $testfile 2> /dev/null |
 	  grep "user.author1=.author1" ||
 		error "$testfile missing trusted.author1=author1"
@@ -5616,47 +5657,49 @@ run_acl_subtest()
 }
 
 test_103 () {
-    [ "$UID" != 0 ] && skip_env "must run as root" && return
-    [ -z "$(lctl get_param -n mdc.*-mdc-*.connect_flags | grep acl)" ] && skip "must have acl enabled" && return
-    [ -z "$(which setfacl 2>/dev/null)" ] && skip_env "could not find setfacl" && return
-    $GSS && skip "could not run under gss" && return
+	[ "$UID" != 0 ] && skip_env "must run as root" && return
+	[ -z "$(lctl get_param -n mdc.*-mdc-*.connect_flags | grep acl)" ] &&
+		skip "must have acl enabled" && return
+	[ -z "$(which setfacl 2>/dev/null)" ] &&
+		skip_env "could not find setfacl" && return
+	$GSS && skip "could not run under gss" && return
 
-    declare -a identity_old
+	declare -a identity_old
 
     for num in `seq $MDSCOUNT`; do
         switch_identity $num true || identity_old[$num]=$?
     done
 
-    SAVE_UMASK=`umask`
-    umask 0022
-    cd $DIR
+	SAVE_UMASK=$(umask)
+	umask 0022
+	cd $DIR
 
-    echo "performing cp ..."
-    run_acl_subtest cp || error
-    echo "performing getfacl-noacl..."
-    run_acl_subtest getfacl-noacl || error "getfacl-noacl test failed"
-    echo "performing misc..."
-    run_acl_subtest misc || error  "misc test failed"
-    echo "performing permissions..."
-    run_acl_subtest permissions || error "permissions failed"
-    echo "performing setfacl..."
-    run_acl_subtest setfacl || error  "setfacl test failed"
+	echo "performing cp ..."
+	run_acl_subtest cp || error "run_acl_subtest cp failed"
+	echo "performing getfacl-noacl..."
+	run_acl_subtest getfacl-noacl || error "getfacl-noacl test failed"
+	echo "performing misc..."
+	run_acl_subtest misc || error  "misc test failed"
+	echo "performing permissions..."
+	run_acl_subtest permissions || error "permissions failed"
+	echo "performing setfacl..."
+	run_acl_subtest setfacl || error  "setfacl test failed"
 
-    # inheritance test got from HP
-    echo "performing inheritance..."
-    cp $LUSTRE/tests/acl/make-tree . || error "cannot copy make-tree"
-    chmod +x make-tree || error "chmod +x failed"
-    run_acl_subtest inheritance || error "inheritance test failed"
-    rm -f make-tree
+	# inheritance test got from HP
+	echo "performing inheritance..."
+	cp $LUSTRE/tests/acl/make-tree . || error "cannot copy make-tree"
+	chmod +x make-tree || error "chmod +x failed"
+	run_acl_subtest inheritance || error "inheritance test failed"
+	rm -f make-tree
 
     echo "LU-974 ignore umask when acl is enabled..."
     mkdir $DIR/974
     cd $DIR/974
-    run_acl_subtest 974 || error "LU-974 test failed"
+    run_acl_subtest 974 || error "LU-974 umask test failed"
     rm -rf $DIR/974
 
-    cd $SAVE_PWD
-    umask $SAVE_UMASK
+	cd $SAVE_PWD
+	umask $SAVE_UMASK
 
     for num in `seq $MDSCOUNT`; do
 	if [ "${identity_old[$num]}" = 1 ]; then
@@ -5687,10 +5730,10 @@ run_test 104a "lfs df [-ih] [path] test ========================="
 test_104b() {
 	[ $RUNAS_ID -eq $UID ] && skip_env "RUNAS_ID = UID = $UID -- skipping" && return
 	chmod 666 /dev/obd
-	denied_cnt=$((`$RUNAS $LFS check servers 2>&1 | grep "Permission denied" | wc -l`))
-	if [ $denied_cnt -ne 0 ];
-	then
-	            error "lfs check servers test failed"
+	denied_cnt=$(($($RUNAS $LFS check servers 2>&1 |
+			grep "Permission denied" | wc -l)))
+	if [ $denied_cnt -ne 0 ]; then
+		error "lfs check servers test failed"
 	fi
 }
 run_test 104b "$RUNAS lfs check servers test ===================="
@@ -5698,8 +5741,7 @@ run_test 104b "$RUNAS lfs check servers test ===================="
 test_105a() {
 	# doesn't work on 2.4 kernels
         touch $DIR/$tfile
-        if [ -n "`mount | grep \"$DIR.*flock\" | grep -v noflock`" ];
-        then
+	if [ -n "$(mount | grep "$MOUNT.*flock" | grep -v noflock)" ]; then
                 flocks_test 1 on -f $DIR/$tfile || error "fail flock on"
         else
                 flocks_test 1 off -f $DIR/$tfile || error "fail flock off"
@@ -5710,8 +5752,7 @@ run_test 105a "flock when mounted without -o flock test ========"
 
 test_105b() {
         touch $DIR/$tfile
-        if [ -n "`mount | grep \"$DIR.*flock\" | grep -v noflock`" ];
-        then
+	if [ -n "$(mount | grep "$MOUNT.*flock" | grep -v noflock)" ]; then
                 flocks_test 1 on -c $DIR/$tfile || error "fail flock on"
         else
                 flocks_test 1 off -c $DIR/$tfile || error "fail flock off"
@@ -5722,8 +5763,7 @@ run_test 105b "fcntl when mounted without -o flock test ========"
 
 test_105c() {
         touch $DIR/$tfile
-        if [ -n "`mount | grep \"$DIR.*flock\" | grep -v noflock`" ];
-        then
+	if [ -n "$(mount | grep "$MOUNT.*flock" | grep -v noflock)" ]; then
                 flocks_test 1 on -l $DIR/$tfile || error "fail flock on"
         else
                 flocks_test 1 off -l $DIR/$tfile || error "fail flock off"
@@ -5734,7 +5774,7 @@ run_test 105c "lockf when mounted without -o flock test ========"
 
 test_105d() { # bug 15924
         mkdir -p $DIR/$tdir
-        [ -z "`mount | grep \"$DIR.*flock\" | grep -v noflock`" ] && \
+	[ -z "$(mount | grep "$MOUNT.*flock" | grep -v noflock)" ] &&
                 skip "mount w/o flock enabled" && return
         #define OBD_FAIL_LDLM_CP_CB_WAIT  0x315
         $LCTL set_param fail_loc=0x80000315
@@ -5743,7 +5783,7 @@ test_105d() { # bug 15924
 run_test 105d "flock race (should not freeze) ========"
 
 test_105e() { # bug 22660 && 22040
-	[ -z "`mount | grep \"$DIR.*flock\" | grep -v noflock`" ] && \
+	[ -z "$(mount | grep "$MOUNT.*flock" | grep -v noflock)" ] &&
 		skip "mount w/o flock enabled" && return
 	touch $DIR/$tfile
 	flocks_test 3 $DIR/$tfile
@@ -7752,17 +7792,17 @@ test_151() {
 		return 0
 	fi
 
-#define OBD_FAIL_OBD_NO_LRU  0x609
+	#define OBD_FAIL_OBD_NO_LRU  0x609
 	do_nodes $list $LCTL set_param fail_loc=0x609
 
 	# pages should be in the case right after write
 	dd if=/dev/urandom of=$DIR/$tfile bs=4k count=$CPAGES ||
 		error "dd failed"
 
-	local BEFORE=`roc_hit`
+	local BEFORE=$(roc_hit)
 	cancel_lru_locks osc
 	cat $DIR/$tfile >/dev/null
-	local AFTER=`roc_hit`
+	local AFTER=$(roc_hit)
 
 	do_nodes $list $LCTL set_param fail_loc=0
 
@@ -7776,10 +7816,10 @@ test_151() {
         cat $DIR/$tfile >/dev/null
 
         # now data shouldn't be found in the cache
-        BEFORE=`roc_hit`
+	BEFORE=$(roc_hit)
         cancel_lru_locks osc
         cat $DIR/$tfile >/dev/null
-        AFTER=`roc_hit`
+	AFTER=$(roc_hit)
         if let "AFTER - BEFORE != 0"; then
                 error "IN CACHE: before: $BEFORE, after: $AFTER"
         fi
