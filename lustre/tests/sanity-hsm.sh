@@ -24,7 +24,6 @@ init_logging
 
 MULTIOP=${MULTIOP:-multiop}
 OPENFILE=${OPENFILE:-openfile}
-MCREATE=${MCREATE:-mcreate}
 MOUNT_2=${MOUNT_2:-"yes"}
 FAIL_ON_ERROR=false
 CLIENT1=${CLIENT1:-$(hostname)}
