@@ -1447,6 +1447,11 @@ int ll_setattr_raw(struct dentry *dentry, struct iattr *attr)
                        LTIME_S(attr->ia_mtime), LTIME_S(attr->ia_ctime),
                        cfs_time_current_sec());
 
+	/* If we are changing file size, file content is modified, flag it. */
+	if (attr->ia_valid & ATTR_SIZE) {
+		attr->ia_valid |= MDS_OPEN_OWNEROVERRIDE;
+	}
+
         /* NB: ATTR_SIZE will only be set after this point if the size
          * resides on the MDS, ie, this file has no objects. */
         if (lsm)
