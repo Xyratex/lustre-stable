@@ -1899,6 +1899,7 @@ static int osd_inode_xattr_set(const struct lu_env *env,
                 fs_flags |= XATTR_CREATE;
 
         dentry->d_inode = inode;
+        dentry->d_sb = inode->i_sb;
         rc = inode->i_op->setxattr(dentry, name, buf->lb_buf,
                                    buf->lb_len, fs_flags);
         return rc;
@@ -2036,6 +2037,7 @@ static int osd_inode_fid_get(const struct lu_env *env,
                 inode->i_op->getxattr != NULL);
 
         dentry->d_inode = inode;
+        dentry->d_sb = inode->i_sb;
         rc = inode->i_op->getxattr(dentry, XATTR_NAME_LMA, (void *)mdt_attrs,
                                    sizeof *mdt_attrs);
 
@@ -2288,6 +2290,7 @@ static int osd_xattr_get(const struct lu_env *env,
                 return -EACCES;
 
         dentry->d_inode = inode;
+        dentry->d_sb = inode->i_sb;
         return inode->i_op->getxattr(dentry, name, buf->lb_buf, buf->lb_len);
 }
 
@@ -2332,6 +2335,7 @@ static int osd_xattr_list(const struct lu_env *env,
                 return -EACCES;
 
         dentry->d_inode = inode;
+	dentry->d_sb = inode->i_sb;
         return inode->i_op->listxattr(dentry, buf->lb_buf, buf->lb_len);
 }
 
@@ -2359,6 +2363,7 @@ static int osd_xattr_del(const struct lu_env *env,
                 return -EACCES;
 
         dentry->d_inode = inode;
+	dentry->d_sb = inode->i_sb;
         rc = inode->i_op->removexattr(dentry, name);
         return rc;
 }
@@ -2461,6 +2466,7 @@ static int osd_object_sync(const struct lu_env *env, struct dt_object *dt)
         ENTRY;
 
         dentry->d_inode = inode;
+	dentry->d_sb = inode->i_sb;
         file->f_dentry = dentry;
         file->f_mapping = inode->i_mapping;
         file->f_op = inode->i_fop;
