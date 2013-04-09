@@ -6,6 +6,7 @@
 %bcond_with zfs
 %bcond_without lustre_tests
 %bcond_without lustre_iokit
+%bcond_without lustre_modules
 
 %if %{without servers}
     # --without servers overrides --with {ldiskfs|zfs}
@@ -111,6 +112,7 @@ AutoReqProv: no
 %description
 Userspace tools and files for the Lustre file system.
 
+%if %{with lustre_modules}
 %package modules
 Summary: Kernel Lustre modules for Linux %{kversion}
 %if %{defined cross_requires}
@@ -161,6 +163,7 @@ to code that bridges individual file systems. This specific package provides an
 implementation of the OSD API for using the ZFS filesystem as the underlying
 backing store of a Lustre server.
 %endif
+%endif # with lustre_modules
 
 %package source
 Summary: Object-Based Disk storage driver source
@@ -276,6 +279,12 @@ CONFIGURE_ARGS="$CONFIGURE_ARGS --disable-tests --disable-liblustre-tests"
 CONFIGURE_ARGS="$CONFIGURE_ARGS --disable-iokit"
 %endif
 
+%if %{with lustre_modules}
+CONFIGURE_ARGS="$CONFIGURE_ARGS --enable-modules"
+%else
+CONFIGURE_ARGS="$CONFIGURE_ARGS --disable-modules"
+%endif
+
 # if %%kdir was given, make sure it's not in the configure arguments
 if [ -n "%kdir" ]; then
 	CONFIGURE_ARGS=$(echo $CONFIGURE_ARGS | sed -e 's/"\?--with-linux=[^ ][^ ]* \?//')
@@ -339,7 +348,9 @@ fi
 echo '%{_libdir}/lustre/tests/*' >>lustre-tests.files
 echo '%{_bindir}/mcreate' >>lustre-tests.files
 echo '%{_bindir}/munlink' >>lustre-tests.files
+%if %{with lustre_modules}
 echo '%{?rootdir}/lib/modules/%{kversion}/%{kmoddir}/kernel/fs/@PACKAGE@/llog_test.ko' >>lustre-tests.files
+%endif
 if [ -d $RPM_BUILD_ROOT%{_libdir}/lustre/liblustre/tests ] ; then
   echo '%{_libdir}/lustre/liblustre/tests/*' >>lustre-tests.files
 fi
@@ -402,6 +413,7 @@ find $RPM_BUILD_ROOT%{?rootdir}/lib/modules/%{kversion}/%{kmoddir} -name "*.ko" 
 %{_sysconfdir}/ha.d/resource.d/Lustre.ha_v2
 %{_sysconfdir}/ha.d/resource.d/Lustre
 
+%if %{with lustre_modules}
 %files modules
 %defattr(-,root,root)
 %{?rootdir}/lib/modules/%{kversion}/%{kmoddir}/*
@@ -440,6 +452,7 @@ find $RPM_BUILD_ROOT%{?rootdir}/lib/modules/%{kversion}/%{kmoddir} -name "*.ko" 
 %attr(0555, root, root) %{rpm_post_base}-osd-zfs.sh
 %endif
 %endif
+%endif # with lustre_modules
 
 %files source
 %defattr(-,root,root)
@@ -490,6 +503,7 @@ if [ -x %{rpm_post_base}.sh ]; then
 fi
 %endif
 
+%if %{with lustre_modules}
 %post modules
 %if %{defined rpm_post_base}
 if [ -x %{rpm_post_base}-modules.sh ]; then
@@ -716,6 +730,7 @@ fi
 rm /var/run/%{name}-osd-zfs
 %endif
 %endif
+%endif # with lustre_modules
 
 %if %{with lustre_tests}
 %post tests
