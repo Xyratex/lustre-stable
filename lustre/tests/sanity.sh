@@ -2945,26 +2945,26 @@ test_43() {
 run_test 43 "execution of file opened for write should return -ETXTBSY"
 
 test_43a() {
-        mkdir -p $DIR/d43
-	cp -p `which $MULTIOP` $DIR/d43/multiop || cp -p multiop $DIR/d43/multiop
-        MULTIOP_PROG=$DIR/d43/multiop multiop_bg_pause $TMP/test43.junk O_c || return 1
+        mkdir -p $DIR/$tdir
+	cp -p `which $MULTIOP` $DIR/$tdir/multiop || cp -p multiop $DIR/$tdir/multiop
+        MULTIOP_PROG=$DIR/$tdir/multiop multiop_bg_pause $TMP/$tfile.junk O_c || return 1
         MULTIOP_PID=$!
-        $MULTIOP $DIR/d43/multiop Oc && error "expected error, got success"
+        $MULTIOP $DIR/$tdir/multiop Oc && error "expected error, got success"
         kill -USR1 $MULTIOP_PID || return 2
         wait $MULTIOP_PID || return 3
-        rm $TMP/test43.junk
+	rm $TMP/$tfile.junk $DIR/$tdir/multiop
 }
 run_test 43a "open(RDWR) of file being executed should return -ETXTBSY"
 
 test_43b() {
-        mkdir -p $DIR/d43
-	cp -p `which $MULTIOP` $DIR/d43/multiop || cp -p multiop $DIR/d43/multiop
-        MULTIOP_PROG=$DIR/d43/multiop multiop_bg_pause $TMP/test43.junk O_c || return 1
+        mkdir -p $DIR/$tdir
+	cp -p `which $MULTIOP` $DIR/$tdir/multiop || cp -p multiop $DIR/$tdir/multiop
+        MULTIOP_PROG=$DIR/$tdir/multiop multiop_bg_pause $TMP/$tfile.junk O_c || return 1
         MULTIOP_PID=$!
-        $TRUNCATE $DIR/d43/multiop 0 && error "expected error, got success"
+        $TRUNCATE $DIR/$tdir/multiop 0 && error "expected error, got success"
         kill -USR1 $MULTIOP_PID || return 2
         wait $MULTIOP_PID || return 3
-        rm $TMP/test43.junk
+	rm $TMP/$tfile.junk $DIR/$tdir/multiop
 }
 run_test 43b "truncate of file being executed should return -ETXTBSY"
 
