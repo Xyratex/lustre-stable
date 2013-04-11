@@ -3162,11 +3162,9 @@ test_53() {
 run_test 53 "verify that MDS and OSTs agree on pre-creation ===="
 
 test_54a() {
-        [ ! -f "$SOCKETSERVER" ] && skip_env "no socketserver, skipping" && return
-        [ ! -f "$SOCKETCLIENT" ] && skip_env "no socketclient, skipping" && return
-     	$SOCKETSERVER $DIR/socket
-     	$SOCKETCLIENT $DIR/socket || error
-      	$MUNLINK $DIR/socket
+     	$SOCKETSERVER $DIR/socket || error "$SOCKETSERVER failed: $?"
+     	$SOCKETCLIENT $DIR/socket || error "$SOCKETCLIENT failed: $?"
+      	$MUNLINK $DIR/socket || error "$MUNLINK $DIR/socket failed: $?"
 }
 run_test 54a "unix domain socket test =========================="
 
@@ -4006,8 +4004,7 @@ test_64a () {
 run_test 64a "verify filter grant calculations (in kernel) ====="
 
 test_64b () {
-	[ ! -f oos.sh ] && skip_env "missing subtest oos.sh" && return
-	sh oos.sh $MOUNT
+	sh oos.sh $MOUNT || error "oos.sh failed: $?"
 }
 run_test 64b "check out-of-space detection on client ==========="
 
