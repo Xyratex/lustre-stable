@@ -334,7 +334,7 @@ static int ptlrpc_pinger_main(void *arg)
         return 0;
 }
 
-static struct ptlrpc_thread *pinger_thread = NULL;
+static struct ptlrpc_thread pinger_thread;
 
 int ptlrpc_start_pinger(void)
 {
@@ -342,33 +342,29 @@ int ptlrpc_start_pinger(void)
         struct ptlrpc_svc_data d;
         int rc;
 #ifndef ENABLE_PINGER
-        return 0;
+	return 0;
 #endif
-        ENTRY;
+	ENTRY;
 
-        if (pinger_thread != NULL)
-                RETURN(-EALREADY);
+	if (!(pinger_thread.t_flags == 0) &&
+	    !(pinger_thread.t_flags & SVC_STOPPED))
+		RETURN(-EALREADY);
 
-        OBD_ALLOC_PTR(pinger_thread);
-        if (pinger_thread == NULL)
-                RETURN(-ENOMEM);
-        cfs_waitq_init(&pinger_thread->t_ctl_waitq);
-        cfs_waitq_init(&suspend_timeouts_waitq);
+	cfs_waitq_init(&pinger_thread.t_ctl_waitq);
+	cfs_waitq_init(&suspend_timeouts_waitq);
 
         d.name = "ll_ping";
-        d.thread = pinger_thread;
+        d.thread = &pinger_thread;
 
         /* CLONE_VM and CLONE_FILES just avoid a needless copy, because we
          * just drop the VM and FILES in cfs_daemonize_ctxt() right away. */
         rc = cfs_create_thread(ptlrpc_pinger_main, &d, CFS_DAEMON_FLAGS);
         if (rc < 0) {
                 CERROR("cannot start thread: %d\n", rc);
-                OBD_FREE(pinger_thread, sizeof(*pinger_thread));
-                pinger_thread = NULL;
                 RETURN(rc);
         }
-        l_wait_event(pinger_thread->t_ctl_waitq,
-                     pinger_thread->t_flags & SVC_RUNNING, &lwi);
+	l_wait_event(pinger_thread.t_ctl_waitq,
+                     pinger_thread.t_flags & SVC_RUNNING, &lwi);
 
         RETURN(0);
 }
@@ -377,28 +373,23 @@ int ptlrpc_pinger_remove_timeouts(void);
 
 int ptlrpc_stop_pinger(void)
 {
-        struct l_wait_info lwi = { 0 };
-        int rc = 0;
+	struct l_wait_info lwi = { 0 };
 #ifndef ENABLE_PINGER
-        return 0;
+	return 0;
 #endif
-        ENTRY;
+	ENTRY;
 
-        if (pinger_thread == NULL)
-                RETURN(-EALREADY);
+	if ((pinger_thread.t_flags == 0) ||
+	    (pinger_thread.t_flags & SVC_STOPPED))
+		RETURN(-EALREADY);
 
         ptlrpc_pinger_remove_timeouts();
-        pinger_thread->t_flags = SVC_STOPPING;
-        cfs_mutex_lock(&pinger_mutex);
-        cfs_waitq_signal(&pinger_thread->t_ctl_waitq);
-        cfs_mutex_unlock(&pinger_mutex);
+        pinger_thread.t_flags = SVC_STOPPING;
+        cfs_waitq_signal(&pinger_thread.t_ctl_waitq);
 
-        l_wait_event(pinger_thread->t_ctl_waitq,
-                     (pinger_thread->t_flags & SVC_STOPPED), &lwi);
-
-        OBD_FREE_PTR(pinger_thread);
-        pinger_thread = NULL;
-        RETURN(rc);
+	l_wait_event(pinger_thread.t_ctl_waitq,
+                     (pinger_thread.t_flags & SVC_STOPPED), &lwi);
+	RETURN(0);
 }
 
 void ptlrpc_pinger_sending_on_import(struct obd_import *imp)
@@ -573,8 +564,8 @@ int ptlrpc_pinger_remove_timeouts(void)
 void ptlrpc_pinger_wake_up()
 {
 #ifdef ENABLE_PINGER
-        pinger_thread->t_flags |= SVC_EVENT;
-        cfs_waitq_signal(&pinger_thread->t_ctl_waitq);
+        pinger_thread.t_flags |= SVC_EVENT;
+	cfs_waitq_signal(&pinger_thread.t_ctl_waitq);
 #endif
 }
 
