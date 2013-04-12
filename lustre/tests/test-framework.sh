@@ -4434,7 +4434,7 @@ _wait_osc_import_state() {
 		params=$($LCTL list_param $param || true)
 	done
 
-	if ! do_rpc_nodes "$(facet_host $facet)" \
+	if ! do_rpc_nodes "$(facet_active_host $facet)" \
 			wait_import_state $expected "$params" $maxtime; then
 		error "import is not in ${expected} state"
 		return 1
