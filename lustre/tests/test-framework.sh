@@ -3028,10 +3028,13 @@ pause_bulk() {
 
 drop_ldlm_cancel() {
 #define OBD_FAIL_LDLM_CANCEL             0x304
-    RC=0
-    do_facet client lctl set_param fail_loc=0x304
+    local RC=0 
+    local list=$(comma_list $(mdts_nodes) $(osts_nodes))
+    do_nodes $list lctl set_param fail_loc=0x304
+
     do_facet client "$@" || RC=$?
-    do_facet client lctl set_param fail_loc=0
+
+    do_nodes $list lctl set_param fail_loc=0
     return $RC
 }
 
