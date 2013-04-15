@@ -172,6 +172,17 @@ static int filter_quota_enforce(struct obd_device *obd, unsigned int ignore)
         RETURN(0);
 }
 
+static int filter_quota_state(struct obd_device *obd)
+{
+	struct obd_device_target *obt = &obd->u.obt;
+	ENTRY;
+
+	if (!sb_any_quota_loaded(obt->obt_sb))
+		RETURN(0);
+
+	RETURN(1);
+}
+
 #define GET_OA_ID(flag, oa) (flag == USRQUOTA ? oa->o_uid : oa->o_gid)
 static int filter_quota_getflag(struct obd_device *obd, struct obdo *oa)
 {
@@ -763,6 +774,7 @@ quota_interface_t filter_quota_interface = {
         .quota_chkquota = quota_chk_acq_common,
         .quota_adjust_qunit   = filter_quota_adjust_qunit,
         .quota_pending_commit = quota_pending_commit,
+	.quota_state    = filter_quota_state
 };
 
 cfs_proc_dir_entry_t *lquota_type_proc_dir = NULL;

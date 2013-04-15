@@ -536,6 +536,11 @@ typedef struct {
                                    struct lustre_quota_ctxt *qctxt,
                                    struct ptlrpc_request_set *rqset);
 
+        /**
+         * For quota slave, check whether any quotas are enabled
+         */
+        int (*quota_state) (struct obd_device *);
+
 } quota_interface_t;
 
 #define Q_COPY(out, in, member) (out)->member = (in)->member
@@ -689,6 +694,17 @@ static inline int lquota_enforce(quota_interface_t *interface,
         QUOTA_CHECK_OP(interface, enforce);
         rc = QUOTA_OP(interface, enforce)(obd, ignore);
         RETURN(rc);
+}
+
+static inline int lquota_state(quota_interface_t *interface,
+			       struct obd_device *obd)
+{
+	int rc;
+	ENTRY;
+
+	QUOTA_CHECK_OP(interface, state);
+	rc = QUOTA_OP(interface, state)(obd);
+	RETURN(rc);
 }
 
 static inline int lquota_getflag(quota_interface_t *interface,

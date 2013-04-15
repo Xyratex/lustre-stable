@@ -608,7 +608,7 @@ int filter_commitrw_write(struct obd_export *exp, struct obdo *oa,
         unsigned int qcids[MAXQUOTAS] = { oa->o_uid, oa->o_gid };
         int rec_pending[MAXQUOTAS] = { 0, 0 }, quota_pages = 0;
         int sync_journal_commit = obd->u.filter.fo_syncjournal;
-        int retries = 0;
+        int retries = 0, need_quotas;
         ENTRY;
 
         LASSERT(oti != NULL);
@@ -627,18 +627,23 @@ int filter_commitrw_write(struct obd_export *exp, struct obdo *oa,
         fso.fso_bufcnt = obj->ioo_bufcnt;
 
         iobuf->dr_ignore_quota = 0;
+	need_quotas = lquota_state(filter_quota_interface_ref, obd);
         for (i = 0, lnb = res; i < niocount; i++, lnb++) {
                 loff_t this_size;
                 __u32 flags = lnb->flags;
+		int nogrant = !(flags & OBD_BRW_GRANTED) && lnb->rc == -ENOSPC;
 
-                if (filter_range_is_mapped(inode, lnb->offset, lnb->len)) {
-                        /* If overwriting an existing block,
-                         * we don't need a grant */
-                        if (!(flags & OBD_BRW_GRANTED) && lnb->rc == -ENOSPC)
-                                lnb->rc = 0;
-                } else {
-                        quota_pages++;
-                }
+		if (nogrant || need_quotas) {
+			if (filter_range_is_mapped(inode, lnb->offset,
+						   lnb->len)) {
+				/* If overwriting an existing block,
+				 * we don't need a grant */
+				if (nogrant)
+					lnb->rc = 0;
+			} else {
+				quota_pages++;
+			}
+		}
 
                 if (lnb->rc) { /* ENOSPC, network RPC error, etc. */
                         CDEBUG(D_INODE, "Skipping [%d] == %d\n", i, lnb->rc);

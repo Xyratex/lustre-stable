@@ -811,7 +811,7 @@ retry:
 
                 lnb->page = filter_get_page(obd, dentry->d_inode, lnb->offset,
                                             localreq);
-                if (lnb->page == NULL)
+                if (unlikely(lnb->page == NULL))
                         GOTO(cleanup, rc = -ENOMEM);
 
                 /* DLM locking protects us from write and truncate competing
