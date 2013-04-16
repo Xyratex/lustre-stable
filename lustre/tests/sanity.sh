@@ -7592,7 +7592,7 @@ function roc_hit() {
     local list=$(comma_list $(osts_nodes))
 
     ACCNUM=$(do_nodes $list $LCTL get_param -n obdfilter.*.stats | \
-        awk '/'cache_hit'/ {sum+=$2} END {print sum}')
+        awk '/'cache_hit'/ {sum+=$7} END {print sum}')
     echo $ACCNUM
 }
 
