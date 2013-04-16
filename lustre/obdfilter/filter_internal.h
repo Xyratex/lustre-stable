@@ -163,10 +163,11 @@ extern struct ldlm_valblock_ops filter_lvbo;
 int filter_preprw(int cmd, struct obd_export *, struct obdo *, int objcount,
                   struct obd_ioobj *, struct niobuf_remote *,
                   int *, struct niobuf_local *, struct obd_trans_info *,
-                  struct lustre_capa *);
+		  struct lustre_capa *, void **opaque);
 int filter_commitrw(int cmd, struct obd_export *, struct obdo *, int objcount,
                     struct obd_ioobj *, struct niobuf_remote *,  int,
-                    struct niobuf_local *, struct obd_trans_info *, int rc);
+		    struct niobuf_local *, struct obd_trans_info *,
+		    void *opaque, int rc);
 void filter_release_cache(struct obd_device *, struct obd_ioobj *,
                           struct niobuf_remote *, struct inode *);
 
@@ -175,7 +176,7 @@ struct filter_iobuf;
 int filter_commitrw_write(struct obd_export *exp, struct obdo *oa, int objcount,
                           struct obd_ioobj *obj, struct niobuf_remote *, int,
                           struct niobuf_local *res, struct obd_trans_info *oti,
-                          int rc);
+			  void *opaque, int rc);
 obd_size filter_grant_space_left(struct obd_export *exp);
 long filter_grant(struct obd_export *exp, obd_size current_grant,
                   obd_size want, obd_size fs_space_left, int conservative);
@@ -185,7 +186,7 @@ void filter_grant_incoming(struct obd_export *exp, struct obdo *oa);
 struct filter_iobuf *filter_alloc_iobuf(struct filter_obd *, int rw,
                                         int num_pages);
 void filter_free_iobuf(struct filter_iobuf *iobuf);
-int filter_iobuf_add_page(struct obd_device *obd, struct filter_iobuf *iobuf,
+void filter_iobuf_add_page(struct obd_device *obd, struct filter_iobuf *iobuf,
                           struct inode *inode, struct page *page);
 void *filter_iobuf_get(struct filter_obd *filter, struct obd_trans_info *oti);
 void filter_iobuf_put(struct filter_obd *filter, struct filter_iobuf *iobuf,

@@ -2427,6 +2427,7 @@ static int echo_client_prep_commit(struct obd_export *exp, int rw,
         obd_off off;
         obd_size npages, tot_pages;
         int i, ret = 0;
+	void *opaque;
         ENTRY;
 
         if (count <= 0 || (count & (~CFS_PAGE_MASK)) != 0 ||
@@ -2462,7 +2463,7 @@ static int echo_client_prep_commit(struct obd_export *exp, int rw,
 
                 lpages = npages;
                 ret = obd_preprw(rw, exp, oa, 1, &ioo, rnb, &lpages, lnb, oti,
-                                 NULL);
+				 NULL, &opaque);
                 if (ret != 0)
                         GOTO(out, ret);
                 LASSERT(lpages == npages);
@@ -2494,7 +2495,8 @@ static int echo_client_prep_commit(struct obd_export *exp, int rw,
                                                              rnb[i].len);
                 }
 
-                ret = obd_commitrw(rw, exp, oa, 1,&ioo,rnb,npages,lnb,oti,ret);
+		ret = obd_commitrw(rw, exp, oa, 1, &ioo, rnb, npages, lnb, oti,
+				   opaque, ret);
                 if (ret != 0)
                         GOTO(out, ret);
 

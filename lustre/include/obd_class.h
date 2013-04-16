@@ -1384,7 +1384,7 @@ static inline int obd_preprw(int cmd, struct obd_export *exp, struct obdo *oa,
                              struct niobuf_remote *remote, int *pages,
                              struct niobuf_local *local,
                              struct obd_trans_info *oti,
-                             struct lustre_capa *capa)
+			     struct lustre_capa *capa, void **opaque)
 {
         int rc;
         ENTRY;
@@ -1393,7 +1393,7 @@ static inline int obd_preprw(int cmd, struct obd_export *exp, struct obdo *oa,
         EXP_COUNTER_INCREMENT(exp, preprw);
 
         rc = OBP(exp->exp_obd, preprw)(cmd, exp, oa, objcount, obj, remote,
-                                       pages, local, oti, capa);
+				       pages, local, oti, capa, opaque);
         RETURN(rc);
 }
 
@@ -1401,7 +1401,8 @@ static inline int obd_commitrw(int cmd, struct obd_export *exp, struct obdo *oa,
                                int objcount, struct obd_ioobj *obj,
                                struct niobuf_remote *rnb, int pages,
                                struct niobuf_local *local,
-                               struct obd_trans_info *oti, int rc)
+			       struct obd_trans_info *oti, void *opaque,
+			       int rc)
 {
         ENTRY;
 
@@ -1409,7 +1410,7 @@ static inline int obd_commitrw(int cmd, struct obd_export *exp, struct obdo *oa,
         EXP_COUNTER_INCREMENT(exp, commitrw);
 
         rc = OBP(exp->exp_obd, commitrw)(cmd, exp, oa, objcount, obj,
-                                         rnb, pages, local, oti, rc);
+					 rnb, pages, local, oti, opaque, rc);
         RETURN(rc);
 }
 

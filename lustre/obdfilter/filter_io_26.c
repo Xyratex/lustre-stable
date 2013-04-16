@@ -286,13 +286,11 @@ void filter_iobuf_put(struct filter_obd *filter, struct filter_iobuf *iobuf,
         filter_clear_iobuf(iobuf);
 }
 
-int filter_iobuf_add_page(struct obd_device *obd, struct filter_iobuf *iobuf,
-                          struct inode *inode, struct page *page)
+void filter_iobuf_add_page(struct obd_device *obd, struct filter_iobuf *iobuf,
+			   struct inode *inode, struct page *page)
 {
         LASSERT(iobuf->dr_npages < iobuf->dr_max_pages);
         iobuf->dr_pages[iobuf->dr_npages++] = page;
-
-        return 0;
 }
 
 int filter_do_bio(struct obd_export *exp, struct inode *inode,
@@ -591,14 +589,15 @@ int filter_commitrw_write(struct obd_export *exp, struct obdo *oa,
                           int objcount, struct obd_ioobj *obj,
                           struct niobuf_remote *nb, int niocount,
                           struct niobuf_local *res, struct obd_trans_info *oti,
-                          int rc)
+			  void *opaque, int rc)
 {
         struct niobuf_local *lnb;
         struct filter_iobuf *iobuf = NULL;
         struct lvfs_run_ctxt saved;
         struct fsfilt_objinfo fso;
         struct iattr iattr = { 0 };
-        struct inode *inode = res->dentry->d_inode;
+	struct dentry *dentry = opaque;
+        struct inode *inode = dentry->d_inode;
         unsigned long now = jiffies;
         int i, err, cleanup_phase = 0;
         struct obd_device *obd = exp->exp_obd;
@@ -623,7 +622,7 @@ int filter_commitrw_write(struct obd_export *exp, struct obdo *oa,
                 GOTO(cleanup, rc = PTR_ERR(iobuf));
         cleanup_phase = 1;
 
-        fso.fso_dentry = res->dentry;
+        fso.fso_dentry = dentry;
         fso.fso_bufcnt = obj->ioo_bufcnt;
 
         iobuf->dr_ignore_quota = 0;
@@ -660,8 +659,7 @@ int filter_commitrw_write(struct obd_export *exp, struct obdo *oa,
 
                 SetPageUptodate(lnb->page);
 
-                err = filter_iobuf_add_page(obd, iobuf, inode, lnb->page);
-                LASSERT (err == 0);
+                filter_iobuf_add_page(obd, iobuf, inode, lnb->page);
 
                 total_size += lnb->len;
 
@@ -753,15 +751,15 @@ retry:
                  * in the inode before filter_direct_io() - see bug 10357. */
                 save = iattr.ia_valid;
                 iattr.ia_valid &= (ATTR_UID | ATTR_GID);
-                rc = fsfilt_setattr(obd, res->dentry, oti->oti_handle,&iattr,0);
+		rc = fsfilt_setattr(obd, dentry, oti->oti_handle, &iattr, 0);
                 CDEBUG(D_QUOTA, "set uid(%u)/gid(%u) to ino(%lu). rc(%d)\n",
                                 iattr.ia_uid, iattr.ia_gid, inode->i_ino, rc);
                 iattr.ia_valid = save & ~(ATTR_UID | ATTR_GID);
         }
 
         /* filter_direct_io drops i_mutex */
-        rc = filter_direct_io(OBD_BRW_WRITE, res->dentry, iobuf, exp, &iattr,
-                              oti, sync_journal_commit ? &wait_handle : NULL);
+	rc = filter_direct_io(OBD_BRW_WRITE, dentry, iobuf, exp, &iattr, oti,
+			      sync_journal_commit ? &wait_handle : NULL);
         if (rc == -ENOSPC && retries++ < 3) {
                 CDEBUG(D_INODE, "retry after force commit, retries:%d\n",
                        retries);
@@ -868,7 +866,7 @@ cleanup:
                 page_cache_release(lnb->page);
                 lnb->page = NULL;
         }
-        f_dput(res->dentry);
+        f_dput(dentry);
 
         if (inode) {
                 if (fo->fo_writethrough_cache == 0 ||

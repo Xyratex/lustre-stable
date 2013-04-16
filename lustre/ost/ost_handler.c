@@ -700,6 +700,7 @@ static int ost_brw_read(struct ptlrpc_request *req, struct obd_trans_info *oti)
         int niocount, npages, nob = 0, rc, i;
         int no_reply = 0, npages_readed;
         struct ost_thread_local_cache *tls;
+	void *opaque;
         ENTRY;
 
         req->rq_bulk_read = 1;
@@ -791,7 +792,7 @@ static int ost_brw_read(struct ptlrpc_request *req, struct obd_trans_info *oti)
 
         npages = OST_THREAD_POOL_SIZE;
         rc = obd_preprw(OBD_BRW_READ, exp, &repbody->oa, 1, ioo,
-                        remote_nb, &npages, local_nb, oti, capa);
+			remote_nb, &npages, local_nb, oti, capa, &opaque);
         if (rc != 0)
                 GOTO(out_lock, rc);
 
@@ -879,7 +880,7 @@ static int ost_brw_read(struct ptlrpc_request *req, struct obd_trans_info *oti)
 out_commitrw:
         /* Must commit after prep above in all cases */
         rc = obd_commitrw(OBD_BRW_READ, exp, &repbody->oa, 1, ioo,
-                          remote_nb, npages, local_nb, oti, rc);
+                          remote_nb, npages, local_nb, oti, opaque, rc);
 
         if (rc == 0)
                 ost_drop_id(exp, &repbody->oa);
@@ -976,6 +977,7 @@ static int ost_brw_write(struct ptlrpc_request *req, struct obd_trans_info *oti)
         int                      no_reply = 0, mmap = 0;
         __u32                    o_uid = 0, o_gid = 0;
         struct ost_thread_local_cache *tls;
+	void			*opaque;
         ENTRY;
 
         req->rq_bulk_write = 1;
@@ -1088,7 +1090,7 @@ static int ost_brw_write(struct ptlrpc_request *req, struct obd_trans_info *oti)
 
         npages = OST_THREAD_POOL_SIZE;
         rc = obd_preprw(OBD_BRW_WRITE, exp, &repbody->oa, objcount,
-                        ioo, remote_nb, &npages, local_nb, oti, capa);
+                        ioo, remote_nb, &npages, local_nb, oti, capa, &opaque);
         if (rc != 0)
                 GOTO(out_lock, rc);
 
@@ -1152,7 +1154,7 @@ skip_transfer:
 
         /* Must commit after prep above in all cases */
         rc = obd_commitrw(OBD_BRW_WRITE, exp, &repbody->oa, objcount, ioo,
-                          remote_nb, npages, local_nb, oti, rc);
+			  remote_nb, npages, local_nb, oti, opaque, rc);
         if (rc == -ENOTCONN)
                 /* quota acquire process has been given up because
                  * either the client has been evicted or the client

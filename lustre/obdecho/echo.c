@@ -387,7 +387,8 @@ static int echo_finalize_lb(struct obdo *oa, struct obd_ioobj *obj,
 int echo_preprw(int cmd, struct obd_export *export, struct obdo *oa,
                 int objcount, struct obd_ioobj *obj, struct niobuf_remote *nb,
                 int *pages, struct niobuf_local *res,
-                struct obd_trans_info *oti, struct lustre_capa *unused)
+		struct obd_trans_info *oti, struct lustre_capa *unused,
+		void **opaque)
 {
         struct obd_device *obd;
         int tot_bytes = 0;
@@ -463,7 +464,8 @@ preprw_cleanup:
 int echo_commitrw(int cmd, struct obd_export *export, struct obdo *oa,
                   int objcount, struct obd_ioobj *obj,
                   struct niobuf_remote *rb, int niocount,
-                  struct niobuf_local *res, struct obd_trans_info *oti, int rc)
+		  struct niobuf_local *res, struct obd_trans_info *oti,
+		  void *opaque, int rc)
 {
         struct obd_device *obd;
         int pgs = 0;

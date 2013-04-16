@@ -358,7 +358,7 @@ static int filter_preprw_read(int cmd, struct obd_export *exp, struct obdo *oa,
                               struct niobuf_remote *nb,
                               int *npages, struct niobuf_local *res,
                               struct obd_trans_info *oti,
-                              struct lustre_capa *capa)
+			      struct lustre_capa *capa, void **opaque)
 {
         struct obd_device *obd = exp->exp_obd;
         struct timeval start, end;
@@ -405,7 +405,7 @@ static int filter_preprw_read(int cmd, struct obd_export *exp, struct obdo *oa,
                 dentry = NULL;
                 GOTO(cleanup, rc);
         }
-
+	*opaque = dentry;
         inode = dentry->d_inode;
         isize = i_size_read(inode);
 
@@ -420,9 +420,6 @@ static int filter_preprw_read(int cmd, struct obd_export *exp, struct obdo *oa,
         /* find pages for all segments, fill array with them */
         cfs_gettimeofday(&start);
         for (i = 0, lnb = res; i < *npages; i++, lnb++) {
-
-                lnb->dentry = dentry;
-
                 if (isize <= lnb->offset)
                         /* If there's no more data, abort early.  lnb->rc == 0,
                          * so it's easy to detect later. */
@@ -644,7 +641,7 @@ static int filter_preprw_write(int cmd, struct obd_export *exp, struct obdo *oa,
                                struct niobuf_remote *nb, int *npages,
                                struct niobuf_local *res,
                                struct obd_trans_info *oti,
-                               struct lustre_capa *capa)
+			       struct lustre_capa *capa, void **opaque)
 {
         struct obd_device *obd = exp->exp_obd;
         struct timeval start, end;
@@ -715,6 +712,8 @@ static int filter_preprw_write(int cmd, struct obd_export *exp, struct obdo *oa,
                         GOTO(cleanup, rc = -ENOENT);
                 }
         }
+
+	*opaque = dentry;
 
         if (oa->o_valid & (OBD_MD_FLUID | OBD_MD_FLGID) &&
             dentry->d_inode->i_mode & (S_ISUID | S_ISGID)) {
@@ -807,7 +806,6 @@ retry:
                 /* We still set up for ungranted pages so that granted pages
                  * can be written to disk as they were promised, and portals
                  * needs to keep the pages all aligned properly. */
-                lnb->dentry = dentry;
 
                 lnb->page = filter_get_page(obd, dentry->d_inode, lnb->offset,
                                             localreq);
@@ -920,14 +918,14 @@ int filter_preprw(int cmd, struct obd_export *exp, struct obdo *oa,
                   int objcount, struct obd_ioobj *obj,
                   struct niobuf_remote *nb, int *npages,
                   struct niobuf_local *res, struct obd_trans_info *oti,
-                  struct lustre_capa *capa)
+                  struct lustre_capa *capa, void **opaque)
 {
         if (cmd == OBD_BRW_WRITE)
                 return filter_preprw_write(cmd, exp, oa, objcount, obj,
-                                           nb, npages, res, oti, capa);
+					   nb, npages, res, oti, capa, opaque);
         if (cmd == OBD_BRW_READ)
                 return filter_preprw_read(cmd, exp, oa, objcount, obj,
-                                          nb, npages, res, oti, capa);
+					   nb, npages, res, oti, capa, opaque);
         LBUG();
         return -EPROTO;
 }
@@ -936,7 +934,8 @@ static int filter_commitrw_read(struct obd_export *exp, struct obdo *oa,
                                 int objcount, struct obd_ioobj *obj,
                                 struct niobuf_remote *rnb,
                                 int npages, struct niobuf_local *res,
-                                struct obd_trans_info *oti, int rc)
+				struct obd_trans_info *oti, void *opaque,
+				int rc)
 {
         struct filter_obd *fo = &exp->exp_obd->u.filter;
         struct inode *inode = NULL;
@@ -962,8 +961,8 @@ static int filter_commitrw_read(struct obd_export *exp, struct obdo *oa,
                 }
         }
 
-        if (res->dentry != NULL)
-                inode = res->dentry->d_inode;
+        if (opaque != NULL)
+                inode = ((struct dentry *)opaque)->d_inode;
 
         for (i = 0, lnb = res; i < npages; i++, lnb++) {
                 if (lnb->page != NULL) {
@@ -975,8 +974,8 @@ static int filter_commitrw_read(struct obd_export *exp, struct obdo *oa,
                       i_size_read(inode) > fo->fo_readcache_max_filesize))
                 filter_release_cache(exp->exp_obd, obj, rnb, inode);
 
-        if (res->dentry != NULL)
-                f_dput(res->dentry);
+        if (opaque != NULL)
+                f_dput((struct dentry *)opaque);
         RETURN(rc);
 }
 
@@ -1015,14 +1014,14 @@ int filter_commitrw(int cmd, struct obd_export *exp, struct obdo *oa,
                     int objcount, struct obd_ioobj *obj,
                     struct niobuf_remote *nb, int npages,
                     struct niobuf_local *res, struct obd_trans_info *oti,
-                    int rc)
+		    void *opaque, int rc)
 {
         if (cmd == OBD_BRW_WRITE)
                 return filter_commitrw_write(exp, oa, objcount, obj,
-                                             nb, npages, res, oti, rc);
+					     nb, npages, res, oti, opaque, rc);
         if (cmd == OBD_BRW_READ)
                 return filter_commitrw_read(exp, oa, objcount, obj,
-                                            nb, npages, res, oti, rc);
+					    nb, npages, res, oti, opaque, rc);
         LBUG();
         return -EPROTO;
 }

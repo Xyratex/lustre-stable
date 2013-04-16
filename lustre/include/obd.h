@@ -772,7 +772,6 @@ struct niobuf_local {
         __u32 len;
         __u32 flags;
         cfs_page_t    *page;
-        cfs_dentry_t  *dentry;
         int lnb_grant_used;
         int rc;
 };
@@ -1385,12 +1384,12 @@ struct obd_ops {
                         struct niobuf_remote *remote, int *nr_pages,
                         struct niobuf_local *local,
                         struct obd_trans_info *oti,
-                        struct lustre_capa *capa);
+                        struct lustre_capa *capa, void **opaque);
         int (*o_commitrw)(int cmd, struct obd_export *exp, struct obdo *oa,
                           int objcount, struct obd_ioobj *obj,
                           struct niobuf_remote *remote, int pages,
                           struct niobuf_local *local,
-                          struct obd_trans_info *oti, int rc);
+                          struct obd_trans_info *oti, void *opaque, int rc);
         int (*o_enqueue)(struct obd_export *, struct obd_info *oinfo,
                          struct ldlm_enqueue_info *einfo,
                          struct ptlrpc_request_set *rqset);
