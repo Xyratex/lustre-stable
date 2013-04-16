@@ -368,11 +368,14 @@ static int filter_preprw_read(int cmd, struct obd_export *exp, struct obdo *oa,
         struct inode *inode = NULL;
         void *iobuf = NULL;
         int rc = 0, i, tot_bytes = 0;
+	int cache_hits = 0, cache_misses = 0;
         unsigned long now = jiffies;
         long timediff;
         loff_t isize;
         ENTRY;
 
+	/* The caller makes sure oa != NULL */
+	LASSERT(oa != NULL);
         /* We are currently not supporting multi-obj BRW_READ RPCS at all.
          * When we do this function's dentry cleanup will need to be fixed.
          * These values are verified in ost_brw_write() from the wire. */
@@ -384,14 +387,14 @@ static int filter_preprw_read(int cmd, struct obd_export *exp, struct obdo *oa,
         if (rc)
                 RETURN(rc);
 
-        if (oa && oa->o_valid & OBD_MD_FLGRANT) {
+        if (oa->o_valid & OBD_MD_FLGRANT) {
                 cfs_spin_lock(&obd->obd_osfs_lock);
                 filter_grant_incoming(exp, oa);
+                cfs_spin_unlock(&obd->obd_osfs_lock);
 
                 if (!(oa->o_valid & OBD_MD_FLFLAGS) ||
                     !(oa->o_flags & OBD_FL_SHRINK_GRANT))
                         oa->o_grant = 0;
-                cfs_spin_unlock(&obd->obd_osfs_lock);
         }
 
         iobuf = filter_iobuf_get(&obd->u.filter, oti);
@@ -429,8 +432,6 @@ static int filter_preprw_read(int cmd, struct obd_export *exp, struct obdo *oa,
                 if (lnb->page == NULL)
                         GOTO(cleanup, rc = -ENOMEM);
 
-                lprocfs_counter_add(obd->obd_stats, LPROC_FILTER_CACHE_ACCESS, 1);
-
                 if (isize < lnb->offset + lnb->len - 1)
                         lnb->rc = isize - lnb->offset;
                 else
@@ -439,12 +440,11 @@ static int filter_preprw_read(int cmd, struct obd_export *exp, struct obdo *oa,
                 tot_bytes += lnb->rc;
 
                 if (PageUptodate(lnb->page)) {
-                        lprocfs_counter_add(obd->obd_stats,
-                                            LPROC_FILTER_CACHE_HIT, 1);
+			cache_hits++;
                         continue;
                 }
+		cache_misses++;
 
-                lprocfs_counter_add(obd->obd_stats, LPROC_FILTER_CACHE_MISS, 1);
                 filter_iobuf_add_page(obd, iobuf, inode, lnb->page);
         }
         cfs_gettimeofday(&end);
@@ -470,6 +470,13 @@ static int filter_preprw_read(int cmd, struct obd_export *exp, struct obdo *oa,
         EXIT;
 
  cleanup:
+	lprocfs_counter_add(obd->obd_stats, LPROC_FILTER_CACHE_HIT,
+			    cache_hits);
+	lprocfs_counter_add(obd->obd_stats, LPROC_FILTER_CACHE_MISS,
+			    cache_misses);
+	lprocfs_counter_add(obd->obd_stats, LPROC_FILTER_CACHE_ACCESS,
+			    cache_hits + cache_misses);
+
         /* unlock pages to allow access from concurrent OST_READ */
         for (i = 0, lnb = res; i < *npages; i++, lnb++) {
                 if (lnb->page) {
@@ -656,8 +663,10 @@ static int filter_preprw_write(int cmd, struct obd_export *exp, struct obdo *oa,
         int rc = 0, i, tot_bytes = 0, cleanup_phase = 0, localreq = 0;
 	int retries = 0;
         ENTRY;
+
         LASSERT(objcount == 1);
         LASSERT(obj->ioo_bufcnt > 0);
+	LASSERT(oa != NULL);
 
         rc = filter_auth_capa(exp, NULL, oa->o_seq, capa,
                               CAPA_OPC_OSS_WRITE);
@@ -682,26 +691,14 @@ static int filter_preprw_write(int cmd, struct obd_export *exp, struct obdo *oa,
 
         if (dentry->d_inode == NULL) {
                 if (exp->exp_obd->obd_recovering) {
-                        struct obdo *noa = oa;
-
-                        if (oa == NULL) {
-                                OBDO_ALLOC(noa);
-                                if (noa == NULL)
-                                        GOTO(recreate_out, rc = -ENOMEM);
-                                noa->o_id = obj->ioo_id;
-                                noa->o_valid = OBD_MD_FLID;
-                        }
-
-                        if (filter_create(exp, noa, NULL, oti) == 0) {
+                        if (filter_create(exp, oa, NULL, oti) == 0) {
                                 f_dput(dentry);
                                 dentry = filter_fid2dentry(exp->exp_obd, NULL,
                                                            obj->ioo_seq,
                                                            obj->ioo_id);
                         }
-                        if (oa == NULL)
-                                OBDO_FREE(noa);
                 }
-    recreate_out:
+
                 if (IS_ERR(dentry) || dentry->d_inode == NULL) {
                         CERROR("%s: BRW to missing obj "LPU64"/"LPU64":rc %d\n",
                                exp->exp_obd->obd_name,
@@ -744,7 +741,6 @@ static int filter_preprw_write(int cmd, struct obd_export *exp, struct obdo *oa,
          * already exist so we can store the reservation handle there. */
         fmd = filter_fmd_find(exp, obj->ioo_id, obj->ioo_seq);
 
-	LASSERT(oa != NULL);
 retry:
 	cfs_spin_lock(&obd->obd_osfs_lock);
 	if (retries == 0)
@@ -904,8 +900,7 @@ cleanup:
                 filter_iobuf_put(&obd->u.filter, iobuf, oti);
         case 0:
                 cfs_spin_lock(&obd->obd_osfs_lock);
-                if (oa)
-                        filter_grant_incoming(exp, oa);
+		filter_grant_incoming(exp, oa);
                 cfs_spin_unlock(&obd->obd_osfs_lock);
                 pop_ctxt(&saved, &obd->obd_lvfs_ctxt, NULL);
                 break;

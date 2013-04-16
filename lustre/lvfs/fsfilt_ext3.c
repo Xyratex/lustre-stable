@@ -1121,48 +1121,41 @@ int fsfilt_ext3_map_ext_inode_pages(struct inode *inode, struct page **page,
                                     int pages, unsigned long *blocks,
                                     int *created, int create)
 {
-        int blocks_per_page = CFS_PAGE_SIZE >> inode->i_blkbits;
-        int rc = 0, i = 0;
-        struct page *fp = NULL;
-        int clen = 0;
+	int bpp_bits = CFS_PAGE_SHIFT - inode->i_blkbits;
+	int rc, i, nblocks;
 
-        CDEBUG(D_OTHER, "inode %lu: map %d pages from %lu\n",
-                inode->i_ino, pages, (*page)->index);
+	ENTRY;
 
-        /* pages are sorted already. so, we just have to find
-         * contig. space and process them properly */
-        while (i < pages) {
-                if (fp == NULL) {
-                        /* start new extent */
-                        fp = *page++;
-                        clen = 1;
-                        i++;
-                        continue;
-                } else if (fp->index + clen == (*page)->index) {
-                        /* continue the extent */
-                        page++;
-                        clen++;
-                        i++;
-                        continue;
-                }
+	/* filter_direct_io() makes sure pages > 0 */
+	LASSERT(pages > 0);
 
-                /* process found extent */
-                rc = fsfilt_map_nblocks(inode, fp->index * blocks_per_page,
-                                        clen * blocks_per_page, blocks,
-                                        created, create);
-                if (rc)
-                        GOTO(cleanup, rc);
+	CDEBUG(D_OTHER, "inode %lu: map %d pages from %lu\n",
+		inode->i_ino, pages, (*page)->index);
 
-                /* look for next extent */
-                fp = NULL;
-                blocks += blocks_per_page * clen;
-                created += blocks_per_page * clen;
-        }
+	/* pages are sorted already. so, we just have to find
+	 * contig. space and process them properly */
+	do {
+		for(i = 1; i < pages; i++)
+			if (page[i - 1]->index + 1 != page[i]->index)
+				break;
 
-        if (fp)
-                rc = fsfilt_map_nblocks(inode, fp->index * blocks_per_page,
-                                        clen * blocks_per_page, blocks,
-                                        created, create);
+		/* number of blocks in the current extent */
+		nblocks = i << bpp_bits;
+
+		/* process found extent */
+		rc = fsfilt_map_nblocks(inode, page[0]->index << bpp_bits,
+					nblocks, blocks, created, create);
+		if (rc)
+			GOTO(cleanup, rc);
+
+		/* skip this extent and continue */
+		page += i;
+		pages -= i;
+		blocks += nblocks;
+		created += nblocks;
+	} while (pages > 0);
+
+	EXIT;
 cleanup:
         return rc;
 }
