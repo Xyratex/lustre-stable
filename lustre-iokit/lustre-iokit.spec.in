@@ -52,7 +52,6 @@ make install DESTDIR=$RPM_BUILD_ROOT
 %files
 /usr/bin/ior-survey
 /usr/bin/parse-ior
-/usr/bin/libecho
 /usr/bin/obdfilter-survey
 /usr/bin/plot-obdfilter
 /usr/bin/plot-ost
