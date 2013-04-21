@@ -1974,7 +1974,7 @@ test_33c() {
         for ostnum in $(seq $OSTCOUNT); do
                 # test-framework's OST numbering is one-based, while Lustre's
                 # is zero-based
-                ostname=$(printf "$FSNAME-OST%.4d" $((ostnum - 1)))
+                ostname=$(printf "$FSNAME-OST%.4x" $((ostnum - 1)))
                 # Parsing llobdstat's output sucks; we could grep the /proc
                 # path, but that's likely to not be as portable as using the
                 # llobdstat utility.  So we parse lctl output instead.
@@ -1998,7 +1998,7 @@ test_33c() {
 
         # Total up write_bytes after writing.  We'd better find non-zeros.
         for ostnum in $(seq $OSTCOUNT); do
-                ostname=$(printf "$FSNAME-OST%.4d" $((ostnum - 1)))
+                ostname=$(printf "$FSNAME-OST%.4x" $((ostnum - 1)))
                 write_bytes=$(do_facet ost$ostnum lctl get_param -n \
                         obdfilter/$ostname/stats |
                         awk '/^write_bytes/ {print $7}' )
@@ -2013,7 +2013,7 @@ test_33c() {
         if $all_zeros
         then
                 for ostnum in $(seq $OSTCOUNT); do
-                        ostname=$(printf "$FSNAME-OST%.4d" $((ostnum - 1)))
+                        ostname=$(printf "$FSNAME-OST%.4x" $((ostnum - 1)))
                         echo "Check that write_bytes is present in obdfilter/*/stats:"
                         do_facet ost$ostnum lctl get_param -n \
                                 obdfilter/$ostname/stats
