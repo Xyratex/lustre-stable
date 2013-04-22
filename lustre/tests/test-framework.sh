@@ -4400,7 +4400,7 @@ request_timeout () {
     echo $(( init_connect_timeout + at_min ))
 }
 
-wait_osc_import_state() {
+_wait_osc_import_state() {
     local facet=$1
     local ost_facet=$2
     local expected=$3
@@ -4441,6 +4441,21 @@ wait_osc_import_state() {
 	fi
 
     return 0
+}
+
+wait_osc_import_state() {
+	local facet=$1
+	local ost_facet=$2
+	local expected=$3
+	local num
+
+	if [[ $facet = mds ]]; then
+		for num in $(seq $MDSCOUNT); do
+			_wait_osc_import_state mds$num "$ost_facet" "$expected"
+		done
+	else
+		_wait_osc_import_state "$facet" "$ost_facet" "$expected"
+	fi
 }
 
 get_clientmdc_proc_path() {
