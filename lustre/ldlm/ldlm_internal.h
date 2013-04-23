@@ -207,6 +207,7 @@ int ldlm_process_flock_lock(struct ldlm_lock *req, __u64 *flags,
 			    cfs_list_t *work_list);
 int ldlm_init_flock_export(struct obd_export *exp);
 void ldlm_destroy_flock_export(struct obd_export *exp);
+void ldlm_flock_blocking_unlink(struct ldlm_lock *req);
 
 /* l_lock.c */
 void l_check_ns_lock(struct ldlm_namespace *ns);

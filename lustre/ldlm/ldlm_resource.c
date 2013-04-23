@@ -1341,6 +1341,8 @@ void ldlm_resource_unlink_lock(struct ldlm_lock *lock)
                 ldlm_unlink_lock_skiplist(lock);
         else if (type == LDLM_EXTENT)
                 ldlm_extent_unlink_lock(lock);
+	else if (type == LDLM_FLOCK)
+		ldlm_flock_blocking_unlink(lock);
         cfs_list_del_init(&lock->l_res_link);
 }
 EXPORT_SYMBOL(ldlm_resource_unlink_lock);

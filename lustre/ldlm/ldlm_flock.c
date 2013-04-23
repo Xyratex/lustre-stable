@@ -129,7 +129,7 @@ static inline void ldlm_flock_blocking_link(struct ldlm_lock *req,
 		     &req->l_exp_flock_hash);
 }
 
-static inline void ldlm_flock_blocking_unlink(struct ldlm_lock *req)
+void ldlm_flock_blocking_unlink(struct ldlm_lock *req)
 {
         /* For server only */
         if (req->l_export == NULL)
