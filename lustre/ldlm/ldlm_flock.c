@@ -105,7 +105,7 @@ static inline void ldlm_flock_blocking_link(struct ldlm_lock *req,
                      &req->l_exp_flock_hash);
 }
 
-static inline void ldlm_flock_blocking_unlink(struct ldlm_lock *req)
+void ldlm_flock_blocking_unlink(struct ldlm_lock *req)
 {
         /* For server only */
         if (req->l_export == NULL)
@@ -670,11 +670,8 @@ granted:
 
         lock_res_and_lock(lock);
 
-        /* take lock off the deadlock detection hash list. */
-        ldlm_flock_blocking_unlink(lock);
-
         /* ldlm_lock_enqueue() has already placed lock on the granted list. */
-        cfs_list_del_init(&lock->l_res_link);
+	ldlm_resource_unlink_lock(lock);
 
         if (flags & LDLM_FL_TEST_LOCK) {
                 /* fcntl(F_GETLK) request */
