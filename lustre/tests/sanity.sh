@@ -7937,6 +7937,24 @@ test_153() {
 }
 run_test 153 "test if fdatasync does not crash ======================="
 
+test_154A() {
+	[[ $(lustre_version_code $SINGLEMDS) -lt $(version_code 2.4.1) ]] &&
+		skip "Need MDS version at least 2.4.1" && return
+
+	touch $DIR/$tfile
+	local FID=$($LFS path2fid $DIR/$tfile)
+	[ -z "$FID" ] && error "path2fid unable to get $DIR/$tfile FID"
+
+	# check that we get the same pathname back
+	local FOUND=$($LFS fid2path $MOUNT $FID)
+	[ -z "$FOUND" ] && error "fid2path unable to get $FID path"
+	[ "$FOUND" != "$DIR/$tfile" ] &&
+		error "fid2path(path2fid($DIR/$tfile)) = $FOUND != $DIR/$tfile"
+
+	rm -rf $DIR/$tfile
+}
+run_test 154A "lfs path2fid and fid2path basic checks"
+
 test_154() {
 	cp /etc/hosts $DIR/$tfile
 
@@ -8046,6 +8064,33 @@ test_154() {
 	echo "Open-by-FID succeeded"
 }
 run_test 154 "Open-by-FID"
+
+test_154c() {
+	[[ $(lustre_version_code $SINGLEMDS) -lt $(version_code 2.4.1) ]] &&
+		skip "Need MDS version at least 2.4.1" && return
+
+	touch $DIR/$tfile.1 $DIR/$tfile.2 $DIR/$tfile.3
+	local FID1=$($LFS path2fid $DIR/$tfile.1)
+	local FID2=$($LFS path2fid $DIR/$tfile.2)
+	local FID3=$($LFS path2fid $DIR/$tfile.3)
+
+	local N=1
+	$LFS path2fid $DIR/$tfile.[123] | while read PATHNAME FID; do
+		[ "$PATHNAME" = "$DIR/$tfile.$N:" ] ||
+			error "path2fid pathname $PATHNAME != $DIR/$tfile.$N:"
+		local want=FID$N
+		[ "$FID" = "${!want}" ] ||
+			error "path2fid $PATHNAME FID $FID != FID$N ${!want}"
+		N=$((N + 1))
+	done
+
+	$LFS fid2path $MOUNT $FID1 $FID2 $FID3 | while read PATHNAME; do
+		[ "$PATHNAME" = "$DIR/$tfile.$N" ] ||
+			error "fid2path pathname $PATHNAME != $DIR/$tfile.$N:"
+		N=$((N + 1))
+	done
+}
+run_test 154c "lfs path2fid and fid2path multiple arguments"
 
 test_155_small_load() {
     local temp=$TMP/$tfile
