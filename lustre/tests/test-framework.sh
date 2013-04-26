@@ -260,7 +260,7 @@ remove_pool_from_list () {
 }
 
 module_loaded () {
-   /sbin/lsmod | grep -q $1
+   /sbin/lsmod | grep -q $1 -w
 }
 
 load_module() {
@@ -282,6 +282,14 @@ load_module() {
     fi
 }
 
+# check config files for options in decreasing order of preference
+[ -z "$MODPROBECONF" -a -f /etc/modprobe.d/lustre.conf ] &&
+    MODPROBECONF=/etc/modprobe.d/lustre.conf
+[ -z "$MODPROBECONF" -a -f /etc/modprobe.d/Lustre ] &&
+    MODPROBECONF=/etc/modprobe.d/Lustre
+[ -z "$MODPROBECONF" -a -f /etc/modprobe.conf ] &&
+    MODPROBECONF=/etc/modprobe.conf
+
 load_modules_local() {
     if [ -n "$MODPROBE" ]; then
         # use modprobe
@@ -297,9 +305,6 @@ load_modules_local() {
     load_module ../lnet/libcfs/libcfs
     [ "$PTLDEBUG" ] && lctl set_param debug="$PTLDEBUG"
     [ "$SUBSYSTEM" ] && lctl set_param subsystem_debug="${SUBSYSTEM# }"
-    local MODPROBECONF=
-    [ -f /etc/modprobe.conf ] && MODPROBECONF=/etc/modprobe.conf
-    [ ! "$MODPROBECONF" -a -d /etc/modprobe.d ] && MODPROBECONF=/etc/modprobe.d/Lustre
     [ -z "$LNETOPTS" -a "$MODPROBECONF" ] && \
         LNETOPTS=$(awk '/^options lnet/ { print $0}' $MODPROBECONF | sed 's/^options lnet //g')
     echo $LNETOPTS | grep -q "accept=all"  || LNETOPTS="$LNETOPTS accept=all";
