@@ -700,7 +700,7 @@ do {									      \
 })
 #define OBD_SLAB_ALLOC(ptr, slab, type, size)                                 \
 do {                                                                          \
-        LASSERT(ergo(type != CFS_ALLOC_ATOMIC, !cfs_in_interrupt()));         \
+        LASSERT(ergo((type) != CFS_ALLOC_ATOMIC, !cfs_in_interrupt()));         \
         (ptr) = cfs_mem_cache_alloc(slab, (type));                            \
         if (likely((ptr) != NULL &&                                           \
                    (!HAS_FAIL_ALLOC_FLAG || obd_alloc_fail_rate == 0 ||       \
