@@ -51,11 +51,11 @@
 # include <linux/mount.h>
 #endif
 
-typedef spinlock_t client_obd_lock_t;
+typedef struct semaphore client_obd_lock_t;
 
 static inline void client_obd_list_lock_init(client_obd_lock_t *lock)
 {
-        spin_lock_init(lock);
+        sema_init(lock, 1);
 }
 
 static inline void client_obd_list_lock_done(client_obd_lock_t *lock)
@@ -63,12 +63,12 @@ static inline void client_obd_list_lock_done(client_obd_lock_t *lock)
 
 static inline void client_obd_list_lock(client_obd_lock_t *lock)
 {
-        spin_lock(lock);
+        down(lock);
 }
 
 static inline void client_obd_list_unlock(client_obd_lock_t *lock)
 {
-        spin_unlock(lock);
+        up(lock);
 }
 
 #if defined(__KERNEL__) && !defined(HAVE_ADLER)

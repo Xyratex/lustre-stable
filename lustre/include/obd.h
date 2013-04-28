@@ -490,13 +490,9 @@ struct client_obd {
         /*
          * ->cl_loi_list_lock protects consistency of
          * ->cl_loi_{ready,read,write}_list. ->ap_make_ready() and
-         * ->ap_completion() call-backs are executed under this lock. As we
-         * cannot guarantee that these call-backs never block on all platforms
-         * (as a matter of fact they do block on Mac OS X), type of
-         * ->cl_loi_list_lock is platform dependent: it's a spin-lock on Linux
-         * and blocking mutex on Mac OS X. (Alternative is to make this lock
-         * blocking everywhere, but we don't want to slow down fast-path of
-         * our main platform.)
+         * ->ap_completion() call-backs are executed under this
+         * ->lock. The callbacks can block, so type of
+         * ->->cl_loi_list_lock is blocking mutex.
          *
          * Exact type of ->cl_loi_list_lock is defined in arch/obd.h together
          * with client_obd_list_{un,}lock() and

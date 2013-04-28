@@ -756,6 +756,7 @@ static void osc_update_next_shrink(struct client_obd *cli)
 /* caller must hold loi_list_lock */
 static void osc_consume_write_grant(struct client_obd *cli,struct brw_page *pga)
 {
+        LASSERT_SEM_LOCKED(&cli->cl_loi_list_lock);
         atomic_inc(&obd_dirty_pages);
         cli->cl_dirty += CFS_PAGE_SIZE;
         cli->cl_avail_grant -= CFS_PAGE_SIZE;
@@ -775,6 +776,7 @@ static void osc_release_write_grant(struct client_obd *cli,
         int blocksize = cli->cl_import->imp_obd->obd_osfs.os_bsize ? : 4096;
         ENTRY;
 
+        LASSERT_SEM_LOCKED(&cli->cl_loi_list_lock);
         if (!(pga->flag & OBD_BRW_FROM_GRANT)) {
                 EXIT;
                 return;
