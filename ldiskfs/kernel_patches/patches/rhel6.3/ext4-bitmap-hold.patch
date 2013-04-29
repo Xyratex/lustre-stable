@@ -1,5 +1,7 @@
---- linux-stage/fs/ext4/mballoc.c	2013-03-15 09:48:41.510445403 +0400
-+++ linux-stage/fs/ext4/mballoc2.c	2013-03-22 17:58:56.105502377 +0400
+Index: linux-stage/fs/ext4/mballoc.c
+===================================================================
+--- linux-stage.orig/fs/ext4/mballoc.c
++++ linux-stage/fs/ext4/mballoc.c
 @@ -26,6 +26,7 @@
  #include <linux/debugfs.h>
  #include <linux/vmalloc.h>
@@ -53,7 +55,7 @@
  				ret = ext4_mb_init_cache(page, e4b->bd_bitmap);
  				if (ret) {
  					unlock_page(page);
-@@ -2436,6 +2444,7 @@ static int ext4_mb_init_backend(struct s
+@@ -2483,6 +2491,7 @@ static int ext4_mb_init_backend(struct s
  	 * not in the inode hash, so it should never be found by iget(), but
  	 * this will avoid confusion if it ever shows up during debugging. */
  	sbi->s_buddy_cache->i_ino = EXT4_BAD_INO;
@@ -61,3 +63,11 @@
  	EXT4_I(sbi->s_buddy_cache)->i_disksize = 0;
  	for (i = 0; i < ngroups; i++) {
  		desc = ext4_get_group_desc(sb, i, NULL);
+@@ -2711,6 +2720,7 @@ int ext4_mb_release(struct super_block *
+ 	}
+ 	kfree(sbi->s_mb_offsets);
+ 	kfree(sbi->s_mb_maxs);
++	sbi->s_buddy_cache->i_state = 0;
+ 	if (sbi->s_buddy_cache)
+ 		iput(sbi->s_buddy_cache);
+ 	if (sbi->s_mb_stats) {
