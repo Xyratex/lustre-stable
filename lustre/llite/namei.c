@@ -1035,7 +1035,8 @@ static int ll_rmdir_generic(struct inode *dir, struct dentry *dparent,
         if (IS_ERR(op_data))
                 RETURN(PTR_ERR(op_data));
 
-        ll_get_child_fid(dir, name, &op_data->op_fid3);
+	if (dchild != NULL && dchild->d_inode != NULL)
+		op_data->op_fid3 = *ll_inode2fid(dchild->d_inode);
         rc = md_unlink(ll_i2sbi(dir)->ll_md_exp, op_data, &request);
         ll_finish_md_op_data(op_data);
         if (rc == 0) {
@@ -1149,7 +1150,9 @@ static int ll_unlink_generic(struct inode *dir, struct dentry *dparent,
         if (IS_ERR(op_data))
                 RETURN(PTR_ERR(op_data));
 
-        ll_get_child_fid(dir, name, &op_data->op_fid3);
+	if (dchild != NULL && dchild->d_inode != NULL)
+		op_data->op_fid3 = *ll_inode2fid(dchild->d_inode);
+
         rc = md_unlink(ll_i2sbi(dir)->ll_md_exp, op_data, &request);
         ll_finish_md_op_data(op_data);
         if (rc)
