@@ -3475,7 +3475,6 @@ int ll_inode_revalidate_it(struct dentry *dentry, struct lookup_intent *it)
                         LTIME_S(inode->i_mtime) = ll_i2info(inode)->lli_lvb.lvb_mtime;
                         LTIME_S(inode->i_ctime) = ll_i2info(inode)->lli_lvb.lvb_ctime;
                 }
-                CWARN("atime %lu\n", LTIME_S(inode->i_atime));
                 RETURN(0);
         }
 
