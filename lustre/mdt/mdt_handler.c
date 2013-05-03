@@ -564,8 +564,9 @@ static int mdt_getattr_internal(struct mdt_thread_info *info,
 
         rc = mo_attr_get(env, next, ma);
         if (unlikely(rc)) {
-                CERROR("getattr error for "DFID": %d\n",
-                        PFID(mdt_object_fid(o)), rc);
+		CERROR("%s: getattr error for "DFID": rc = %d\n",
+		       mdt_obd_name(info->mti_mdt),
+		       PFID(mdt_object_fid(o)), rc);
                 RETURN(rc);
         }
 
@@ -595,7 +596,9 @@ static int mdt_getattr_internal(struct mdt_thread_info *info,
                 buffer->lb_len = reqbody->eadatasize;
                 rc = mo_readlink(env, next, buffer);
                 if (unlikely(rc <= 0)) {
-                        CERROR("readlink failed: %d\n", rc);
+			CERROR("%s: readlink failed for "DFID": rc = %d\n",
+			       mdt_obd_name(info->mti_mdt),
+			       PFID(mdt_object_fid(o)), rc);
                         rc = -EFAULT;
                 } else {
 			int print_limit = min_t(int, CFS_PAGE_SIZE - 128, rc);
@@ -657,9 +660,12 @@ static int mdt_getattr_internal(struct mdt_thread_info *info,
                                         rc = 0;
                                 } else if (rc == -EOPNOTSUPP) {
                                         rc = 0;
-                                } else {
-                                        CERROR("got acl size: %d\n", rc);
-                                }
+				} else {
+					CERROR("%s: unable to read "DFID
+					       " ACL: rc = %d\n",
+					       mdt_obd_name(info->mti_mdt),
+					       PFID(mdt_object_fid(o)), rc);
+				}
                         } else {
                                 repbody->aclsize = rc;
                                 repbody->valid |= OBD_MD_FLACL;
