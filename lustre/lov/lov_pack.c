@@ -55,7 +55,7 @@
 
 #include "lov_internal.h"
 
-static void lov_dump_lmm_common(int level, void *lmmp)
+void lov_dump_lmm_common(int level, void *lmmp)
 {
         struct lov_mds_md *lmm = lmmp;
 
@@ -71,7 +71,13 @@ static void lov_dump_lmm_common(int level, void *lmmp)
 static void lov_dump_lmm_objects(int level, struct lov_ost_data *lod,
                                  int stripe_count)
 {
-        int i;
+	int i;
+
+	if (stripe_count > LOV_V1_INSANE_STRIPE_COUNT) {
+		CDEBUG(level, "bad stripe_count %u > max_stripe_count %u\n",
+		       stripe_count, LOV_V1_INSANE_STRIPE_COUNT);
+		return;
+	}
 
         if (stripe_count > LOV_V1_INSANE_STRIPE_COUNT) {
                 CDEBUG(level, "bad stripe_count %u > max_stripe_count %u\n",
