@@ -1048,10 +1048,11 @@ static struct echo_object *cl_echo_object_find(struct echo_device *d,
         int refcheck;
         ENTRY;
 
-        LASSERT(lsmp);
-        lsm = *lsmp;
-        LASSERT(lsm);
-        LASSERT(lsm->lsm_object_id);
+	LASSERT(lsmp);
+	lsm = *lsmp;
+	LASSERT(lsm);
+	LASSERT(lsm->lsm_object_id);
+	LASSERT(lsm->lsm_object_seq == FID_SEQ_ECHO);
 
         /* Never return an object if the obd is to be freed. */
         if (echo_dev2cl(d)->cd_lu_dev.ld_obd->obd_stopping)
@@ -1542,7 +1543,7 @@ static int echo_create_md_object(const struct lu_env *env,
         }
 
         ma->ma_attr.la_mode = mode;
-        ma->ma_attr.la_valid = LA_CTIME;
+        ma->ma_attr.la_valid = LA_CTIME | LA_MODE;
         ma->ma_attr.la_ctime = cfs_time_current_64();
 
         if (name != NULL) {
@@ -2116,6 +2117,7 @@ static int echo_create_object(struct echo_device *ed, int on_target,
                 GOTO(failed, rc);
         }
 
+        lsm->lsm_object_seq = FID_SEQ_ECHO;
         if (ulsm != NULL) {
                 int i, idx;
 
