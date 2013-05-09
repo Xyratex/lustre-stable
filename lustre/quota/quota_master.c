@@ -287,10 +287,10 @@ int dqacq_adjust_qunit_sz(struct obd_device *obd, qid_t id, int type,
         LASSERT(mds);
         cfs_down_read(&mds->mds_qonoff_sem);
         dquot = lustre_dqget(obd, info, id, type, 0);
+        cfs_up_read(&mds->mds_qonoff_sem);
         if (IS_ERR(dquot))
                 RETURN(PTR_ERR(dquot));
 
-        cfs_up_read(&mds->mds_qonoff_sem);
         OBD_ALLOC_PTR(oqaq);
         if (!oqaq)
                 GOTO(out, rc = -ENOMEM);
