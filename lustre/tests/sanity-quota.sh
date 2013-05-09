@@ -1502,7 +1502,8 @@ test_18bc_sub() {
 	testfile_size=$(stat -c %s $TESTFILE)
 	if [ $testfile_size -ne $((BLK_SZ * 1024 * 100)) ] ; then
 	     rm -f $TESTFILE
-	     quota_error u $TSTUSR "expect $((BLK_SZ * 1024 * 100)), got ${testfile_size}. Verifying file failed!"
+	     quota_error u $TSTUSR "expect $((BLK_SZ * 1024 * 100))," \
+			"got ${testfile_size}. Verifying file failed!"
 	fi
 	rm -f $TESTFILE
 
