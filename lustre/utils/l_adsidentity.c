@@ -75,11 +75,11 @@ struct adspasswd {
 typedef enum {
         FALSE = 0,
         TRUE  = 1
-} bool;
+} bool_t;
 
 struct conf_params {
         const char *desc; /* conf parameter */
-        bool  isvisited;  /* already read?  */
+        bool_t  isvisited;  /* already read?  */
 };
 
 
@@ -355,9 +355,9 @@ static int comment_line(char *line)
         return 0;
 }
 
-static bool section_start = FALSE;
+static bool_t section_start = FALSE;
 
-static bool conf_section(char *line, char *sec_name)
+static bool_t conf_section(char *line, char *sec_name)
 {
         char *start;
         char *end;
