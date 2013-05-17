@@ -35,6 +35,8 @@
 #ifndef _OBD_LOV_H__
 #define _OBD_LOV_H__
 
+#define LOV_DEFAULT_STRIPE_SIZE (1 << LNET_MTU_BITS)
+
 static inline int lov_stripe_md_size(int stripes)
 {
         return sizeof(struct lov_stripe_md) + stripes*sizeof(struct lov_oinfo*);

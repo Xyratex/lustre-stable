@@ -83,10 +83,9 @@ static int mdc_obd_update(struct obd_device *host,
                 struct obd_connect_data *conn_data =
                                   &watched->u.cli.cl_import->imp_connect_data;
                 /*
-                 * Update exp_connect_data.ocd_connect_flags.
+                 * Update exp_connect_data
                  */
-                mc->mc_desc.cl_exp->exp_connect_data.ocd_connect_flags =
-                                                conn_data->ocd_connect_flags;
+		mc->mc_desc.cl_exp->exp_connect_data = *conn_data;
                 CDEBUG(D_INFO, "Update connect_flags: "LPX64"\n",
                        conn_data->ocd_connect_flags);
         }

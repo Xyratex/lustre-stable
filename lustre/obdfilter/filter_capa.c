@@ -134,7 +134,7 @@ int filter_auth_capa(struct obd_export *exp,
         if (!filter->fo_fl_oss_capa)
                 RETURN(0);
 
-        if (!(exp->exp_connect_data.ocd_connect_flags & OBD_CONNECT_OSS_CAPA))
+        if (!(exp_connect_flags(exp) & OBD_CONNECT_OSS_CAPA))
                 RETURN(0);
 
         if (capa == NULL) {
@@ -239,7 +239,7 @@ int filter_capa_fixoa(struct obd_export *exp, struct obdo *oa, obd_seq seq,
         if (!fid_seq_is_mdt(seq))
                 RETURN(0);
 
-        if (!(exp->exp_connect_data.ocd_connect_flags & OBD_CONNECT_OSS_CAPA))
+        if (!(exp_connect_flags(exp) & OBD_CONNECT_OSS_CAPA))
                 RETURN(0);
 
 	/* capability is disabled */

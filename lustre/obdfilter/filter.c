@@ -2689,8 +2689,8 @@ static int filter_connect_internal(struct obd_export *exp,
         fed->fed_group = data->ocd_group;
 
         data->ocd_connect_flags &= OST_CONNECT_SUPPORTED;
+	exp->exp_connect_data = *data;
         data->ocd_version = LUSTRE_VERSION_CODE;
-        exp->exp_connect_data = *data;
 
         /* Kindly make sure the SKIP_ORPHAN flag is from MDS. */
         if (data->ocd_connect_flags & OBD_CONNECT_MDS)
@@ -2699,7 +2699,7 @@ static int filter_connect_internal(struct obd_export *exp,
         else if (data->ocd_connect_flags & OBD_CONNECT_SKIP_ORPHAN)
                 RETURN(-EPROTO);
 
-        if (exp->exp_connect_data.ocd_connect_flags & OBD_CONNECT_GRANT) {
+        if (exp_connect_flags(exp) & OBD_CONNECT_GRANT) {
                 struct filter_obd *filter = &exp->exp_obd->u.filter;
                 obd_size left, want;
 
@@ -2749,7 +2749,7 @@ static int filter_connect_internal(struct obd_export *exp,
                 data->ocd_brw_size = 65536;
         } else if (data->ocd_connect_flags & OBD_CONNECT_BRW_SIZE) {
                 data->ocd_brw_size = min(data->ocd_brw_size,
-                               (__u32)(PTLRPC_MAX_BRW_PAGES << CFS_PAGE_SHIFT));
+					 (__u32)DT_MAX_BRW_SIZE);
                 if (data->ocd_brw_size == 0) {
                         CERROR("%s: cli %s/%p ocd_connect_flags: "LPX64
                                " ocd_version: %x ocd_grant: %d ocd_index: %u "
@@ -3004,7 +3004,7 @@ static int filter_destroy_export(struct obd_export *exp)
         filter_grant_discard(exp);
         filter_fmd_cleanup(exp);
 
-        if (exp->exp_connect_data.ocd_connect_flags & OBD_CONNECT_GRANT_SHRINK) {
+        if (exp_connect_flags(exp) & OBD_CONNECT_GRANT_SHRINK) {
                 struct filter_obd *filter = &exp->exp_obd->u.filter;
                 if (filter->fo_tot_granted_clients > 0)
                         filter->fo_tot_granted_clients --;
@@ -3594,7 +3594,7 @@ static int filter_destroy_precreated(struct obd_export *exp, struct obdo *oa,
 
         last = filter_last_id(filter, doa.o_seq);
 
-        skip_orphan = !!(exp->exp_connect_data.ocd_connect_flags & OBD_CONNECT_SKIP_ORPHAN);
+        skip_orphan = !!(exp_connect_flags(exp) & OBD_CONNECT_SKIP_ORPHAN);
 
         CDEBUG(D_HA, "%s: deleting orphan objects from "LPU64" to "LPU64"%s\n",
                exp->exp_obd->obd_name, oa->o_id + 1, last,
@@ -4077,7 +4077,7 @@ int filter_create(struct obd_export *exp, struct obdo *oa,
 
         /* 1.8 client doesn't carry the ocd_group with connect request,
          * so the fed_group will always be zero for 1.8 client. */
-        if (!(exp->exp_connect_data.ocd_connect_flags & OBD_CONNECT_FULL20)) {
+        if (!(exp_connect_flags(exp) & OBD_CONNECT_FULL20)) {
                 if (oa->o_seq != FID_SEQ_OST_MDT0 &&
                     oa->o_seq != FID_SEQ_LLOG &&
                     oa->o_seq != FID_SEQ_ECHO) {

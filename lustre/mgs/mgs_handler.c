@@ -88,12 +88,11 @@ static int mgs_connect(const struct lu_env *env,
 
         mgs_counter_incr(lexp, LPROC_MGS_CONNECT);
 
-        if (data != NULL) {
-                data->ocd_connect_flags &= MGS_CONNECT_SUPPORTED;
-                lexp->exp_connect_data.ocd_connect_flags = data->ocd_connect_flags;
-                data->ocd_version = LUSTRE_VERSION_CODE;
-                lexp->exp_connect_data = *data;
-        }
+	if (data != NULL) {
+		data->ocd_connect_flags &= MGS_CONNECT_SUPPORTED;
+		data->ocd_version = LUSTRE_VERSION_CODE;
+		lexp->exp_connect_data = *data;
+	}
 
         rc = mgs_export_stats_init(obd, lexp, localdata);
 
@@ -107,24 +106,24 @@ static int mgs_connect(const struct lu_env *env,
 }
 
 static int mgs_reconnect(const struct lu_env *env,
-                         struct obd_export *exp, struct obd_device *obd,
-                         struct obd_uuid *cluuid, struct obd_connect_data *data,
-                         void *localdata)
+			 struct obd_export *exp, struct obd_device *obd,
+			 struct obd_uuid *cluuid, struct obd_connect_data *data,
+			 void *localdata)
 {
-        ENTRY;
+	ENTRY;
 
-        if (exp == NULL || obd == NULL || cluuid == NULL)
-                RETURN(-EINVAL);
+	if (exp == NULL || obd == NULL || cluuid == NULL)
+		RETURN(-EINVAL);
 
-        mgs_counter_incr(exp, LPROC_MGS_CONNECT);
+	mgs_counter_incr(exp, LPROC_MGS_CONNECT);
 
-        if (data != NULL) {
-                data->ocd_connect_flags &= MGS_CONNECT_SUPPORTED;
-                data->ocd_version = LUSTRE_VERSION_CODE;
-                exp->exp_connect_data = *data;
-        }
+	if (data != NULL) {
+		data->ocd_connect_flags &= MGS_CONNECT_SUPPORTED;
+		data->ocd_version = LUSTRE_VERSION_CODE;
+		exp->exp_connect_data = *data;
+	}
 
-        RETURN(mgs_export_stats_init(obd, exp, localdata));
+	RETURN(mgs_export_stats_init(obd, exp, localdata));
 }
 
 static int mgs_disconnect(struct obd_export *exp)
@@ -494,7 +493,7 @@ static int mgs_handle_target_reg(struct ptlrpc_request *req)
 
         mti = req_capsule_client_get(&req->rq_pill, &RMF_MGS_TARGET_INFO);
 
-	if (OCD_HAS_FLAG(&req->rq_export->exp_connect_data, IMP_RECOV))
+	if (exp_connect_flags(req->rq_export) & OBD_CONNECT_IMP_RECOV)
 		opc = mti->mti_flags & LDD_F_OPC_MASK;
 	else
 		opc = LDD_F_OPC_REG;

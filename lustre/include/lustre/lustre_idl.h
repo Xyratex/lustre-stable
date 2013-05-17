@@ -1146,7 +1146,6 @@ extern void lustre_swab_ptlrpc_body(struct ptlrpc_body *pb);
 #define OCD_HAS_FLAG(ocd, flg)  \
         (!!((ocd)->ocd_connect_flags & OBD_CONNECT_##flg))
 
-
 #ifdef HAVE_LRU_RESIZE_SUPPORT
 #define LRU_RESIZE_CONNECT_FLAG OBD_CONNECT_LRU_RESIZE
 #else

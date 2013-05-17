@@ -342,7 +342,7 @@ static int mdt_getstatus(struct mdt_thread_info *info)
         repbody->valid |= OBD_MD_FLID;
 
         if (mdt->mdt_opts.mo_mds_capa &&
-            info->mti_exp->exp_connect_data.ocd_connect_flags & OBD_CONNECT_MDS_CAPA) {
+	    exp_connect_flags(info->mti_exp) & OBD_CONNECT_MDS_CAPA) {
                 struct mdt_object  *root;
                 struct lustre_capa *capa;
 
@@ -642,8 +642,8 @@ static int mdt_getattr_internal(struct mdt_thread_info *info,
                 }
         }
 #ifdef CONFIG_FS_POSIX_ACL
-        else if ((req->rq_export->exp_connect_data.ocd_connect_flags & OBD_CONNECT_ACL) &&
-                 (reqbody->valid & OBD_MD_FLACL)) {
+        else if ((exp_connect_flags(req->rq_export) & OBD_CONNECT_ACL) &&
+		 (reqbody->valid & OBD_MD_FLACL)) {
                 buffer->lb_buf = req_capsule_server_get(pill, &RMF_ACL);
                 buffer->lb_len = req_capsule_get_size(pill,
                                                       &RMF_ACL, RCL_SERVER);
@@ -669,9 +669,9 @@ static int mdt_getattr_internal(struct mdt_thread_info *info,
         }
 #endif
 
-        if (reqbody->valid & OBD_MD_FLMDSCAPA &&
-            info->mti_mdt->mdt_opts.mo_mds_capa &&
-            info->mti_exp->exp_connect_data.ocd_connect_flags & OBD_CONNECT_MDS_CAPA) {
+	if (reqbody->valid & OBD_MD_FLMDSCAPA &&
+	    info->mti_mdt->mdt_opts.mo_mds_capa &&
+	    exp_connect_flags(info->mti_exp) & OBD_CONNECT_MDS_CAPA) {
                 struct lustre_capa *capa;
 
                 capa = req_capsule_server_get(pill, &RMF_CAPA1);
@@ -702,9 +702,9 @@ static int mdt_renew_capa(struct mdt_thread_info *info)
          * return directly, client will find body->valid OBD_MD_FLOSSCAPA
          * flag not set.
          */
-        if (!obj || !info->mti_mdt->mdt_opts.mo_oss_capa ||
-            !(info->mti_exp->exp_connect_data.ocd_connect_flags & OBD_CONNECT_OSS_CAPA))
-                RETURN(0);
+	if (!obj || !info->mti_mdt->mdt_opts.mo_oss_capa ||
+	    !(exp_connect_flags(info->mti_exp) & OBD_CONNECT_OSS_CAPA))
+		RETURN(0);
 
         body = req_capsule_server_get(info->mti_pill, &RMF_MDT_BODY);
         LASSERT(body != NULL);
@@ -1209,9 +1209,11 @@ static int mdt_set_info(struct mdt_thread_info *info)
 
                 cfs_spin_lock(&req->rq_export->exp_lock);
                 if (*(__u32 *)val)
-                        req->rq_export->exp_connect_data.ocd_connect_flags |= OBD_CONNECT_RDONLY;
+			*exp_connect_flags_ptr(req->rq_export) |=
+				OBD_CONNECT_RDONLY;
                 else
-                        req->rq_export->exp_connect_data.ocd_connect_flags &=~OBD_CONNECT_RDONLY;
+			*exp_connect_flags_ptr(req->rq_export) &=
+				~OBD_CONNECT_RDONLY;
                 cfs_spin_unlock(&req->rq_export->exp_lock);
 
         } else if (KEY_IS(KEY_CHANGELOG_CLEAR)) {
@@ -1286,9 +1288,9 @@ static int mdt_sendpage(struct mdt_thread_info *info,
         if (desc == NULL)
                 RETURN(-ENOMEM);
 
-	if (!(exp->exp_connect_data.ocd_connect_flags & OBD_CONNECT_BRW_SIZE))
+	if (!(exp_connect_flags(exp) & OBD_CONNECT_BRW_SIZE))
 		/* old client requires reply size in it's PAGE_SIZE,
- 		 * which is rdpg->rp_count */
+		 * which is rdpg->rp_count */
 		nob = rdpg->rp_count;
 
 	for (i = 0, tmpcount = nob; i < rdpg->rp_npages && tmpcount > 0;
@@ -1508,11 +1510,11 @@ static int mdt_readpage(struct mdt_thread_info *info)
         }
 
         rdpg->rp_attrs = reqbody->mode;
-        if (info->mti_exp->exp_connect_data.ocd_connect_flags & OBD_CONNECT_64BITHASH)
-                rdpg->rp_attrs |= LUDA_64BITHASH;
-        rdpg->rp_count  = min_t(unsigned int, reqbody->nlink,
-                                min_t(unsigned, exp_max_brw_size(info->mti_exp),
-                                      MD_MAX_BRW_SIZE));
+	if (exp_connect_flags(info->mti_exp) & OBD_CONNECT_64BITHASH)
+		rdpg->rp_attrs |= LUDA_64BITHASH;
+	rdpg->rp_count  = min_t(unsigned int, reqbody->nlink,
+				exp_brw_size(info->mti_exp));
+
         rdpg->rp_npages = (rdpg->rp_count + CFS_PAGE_SIZE - 1) >>
                           CFS_PAGE_SHIFT;
         OBD_ALLOC(rdpg->rp_pages, rdpg->rp_npages * sizeof rdpg->rp_pages[0]);
@@ -2581,10 +2583,10 @@ static int mdt_req_handle(struct mdt_thread_info *info,
                 rc = mdt_unpack_req_pack_rep(info, flags);
         }
 
-        if (rc == 0 && flags & MUTABOR &&
-            req->rq_export->exp_connect_data.ocd_connect_flags & OBD_CONNECT_RDONLY)
-                /* should it be rq_status? */
-                rc = -EROFS;
+	if (rc == 0 && flags & MUTABOR &&
+		exp_connect_flags(req->rq_export) & OBD_CONNECT_RDONLY)
+		/* should it be rq_status? */
+		rc = -EROFS;
 
         if (rc == 0 && flags & HABEO_CLAVIS) {
                 struct ldlm_request *dlm_req;
@@ -2723,7 +2725,7 @@ static void mdt_thread_info_init(struct ptlrpc_request *req,
         if (req->rq_export) {
                 if (exp_connect_rmtclient(req->rq_export))
                         ci->mc_auth = LC_ID_CONVERT;
-                else if (req->rq_export->exp_connect_data.ocd_connect_flags &
+                else if (exp_connect_flags(req->rq_export) &
                          OBD_CONNECT_MDS_CAPA)
                         ci->mc_auth = LC_ID_PLAIN;
                 else
@@ -3571,9 +3573,9 @@ static int mdt_intent_opc(long itopc, struct mdt_thread_info *info,
         rc = mdt_unpack_req_pack_rep(info, flv->it_flags);
         if (rc == 0) {
                 struct ptlrpc_request *req = mdt_info_req(info);
-                if (flv->it_flags & MUTABOR &&
-                    req->rq_export->exp_connect_data.ocd_connect_flags & OBD_CONNECT_RDONLY)
-                        RETURN(-EROFS);
+		if (flv->it_flags & MUTABOR &&
+		    exp_connect_flags(req->rq_export) & OBD_CONNECT_RDONLY)
+			RETURN(-EROFS);
         }
         if (rc == 0 && flv->it_act != NULL) {
                 /* execute policy */
@@ -5027,7 +5029,7 @@ static int mdt_connect_internal(struct obd_export *exp,
 
                 if (data->ocd_connect_flags & OBD_CONNECT_BRW_SIZE) {
                         data->ocd_brw_size = min(data->ocd_brw_size,
-                               (__u32)(PTLRPC_MAX_BRW_PAGES << CFS_PAGE_SHIFT));
+						 (__u32)MD_MAX_BRW_SIZE);
                         if (data->ocd_brw_size == 0) {
                                 CERROR("%s: cli %s/%p ocd_connect_flags: "LPX64
                                        " ocd_version: %x ocd_grant: %d "
@@ -5043,9 +5045,9 @@ static int mdt_connect_internal(struct obd_export *exp,
                         }
                 }
 
-                cfs_spin_lock(&exp->exp_lock);
                 data->ocd_version = LUSTRE_VERSION_CODE;
-                exp->exp_connect_data = *data;
+                cfs_spin_lock(&exp->exp_lock);
+		exp->exp_connect_data = *data;
                 cfs_spin_unlock(&exp->exp_lock);
                 exp->exp_mdt_data.med_ibits_known = data->ocd_ibits_known;
 		data->ocd_xattr_size = mdt->mdt_max_ea_size;
@@ -5053,21 +5055,21 @@ static int mdt_connect_internal(struct obd_export *exp,
 
 #if 0
         if (mdt->mdt_opts.mo_acl &&
-            ((exp->exp_connect_data.ocd_connect_flags & OBD_CONNECT_ACL) == 0)) {
+		((exp_connect_flags(exp) & OBD_CONNECT_ACL) == 0)) {
                 CWARN("%s: MDS requires ACL support but client does not\n",
                       mdt->mdt_md_dev.md_lu_dev.ld_obd->obd_name);
                 return -EBADE;
         }
 #endif
 
-        if ((exp->exp_connect_data.ocd_connect_flags & OBD_CONNECT_FID) == 0) {
+        if ((exp_connect_flags(exp) & OBD_CONNECT_FID) == 0) {
                 CWARN("%s: MDS requires FID support, but client not\n",
                       mdt->mdt_md_dev.md_lu_dev.ld_obd->obd_name);
                 return -EBADE;
         }
 
         if (mdt->mdt_som_conf && !exp_connect_som(exp) &&
-            !(exp->exp_connect_data.ocd_connect_flags & OBD_CONNECT_MDS_MDS)) {
+            !(exp_connect_flags(exp) & OBD_CONNECT_MDS_MDS)) {
                 CWARN("%s: MDS has SOM enabled, but client does not support "
                       "it\n", mdt->mdt_md_dev.md_lu_dev.ld_obd->obd_name);
                 return -EBADE;

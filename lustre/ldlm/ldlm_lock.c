@@ -119,14 +119,14 @@ void ldlm_convert_policy_to_local(struct obd_export *exp, ldlm_type_t type,
         ldlm_policy_wire_to_local_t convert;
 
         /** some badnes for 2.0.0 clients, but 2.0.0 isn't supported */
-	if ((exp->exp_connect_data.ocd_connect_flags & OBD_CONNECT_FULL20) != 0)
+	if ((exp_connect_flags(exp) & OBD_CONNECT_FULL20) != 0)
 		convert = ldlm_policy_wire21_to_local[type - LDLM_MIN_TYPE];
-	else if ((exp->exp_connect_data.ocd_connect_flags &
-		 OBD_CONNECT_FLOCK_OWNER) != 0 && type == LDLM_FLOCK)
+	else if ((exp_connect_flags(exp) & OBD_CONNECT_FLOCK_OWNER) != 0 &&
+		  type == LDLM_FLOCK)
 		convert = ldlm_policy_wire21_to_local[type - LDLM_MIN_TYPE];
 	else
 		convert = ldlm_policy_wire18_to_local[type - LDLM_MIN_TYPE];
-        convert(wpolicy, lpolicy);
+	convert(wpolicy, lpolicy);
 }
 
 char *ldlm_it2str(int it)
@@ -588,12 +588,12 @@ EXPORT_SYMBOL(__ldlm_handle2lock);
 
 void ldlm_lock2desc(struct ldlm_lock *lock, struct ldlm_lock_desc *desc)
 {
-        struct obd_export *exp = lock->l_export?:lock->l_conn_export;
-        /* INODEBITS_INTEROP: If the other side does not support
-         * inodebits, reply with a plain lock descriptor.
-         */
-        if ((lock->l_resource->lr_type == LDLM_IBITS) &&
-            (exp && !(exp->exp_connect_data.ocd_connect_flags & OBD_CONNECT_IBITS))) {
+	struct obd_export *exp = lock->l_export ?: lock->l_conn_export;
+
+	/* INODEBITS_INTEROP: If the other side does not support
+	 * inodebits, reply with a plain lock descriptor. */
+	if ((lock->l_resource->lr_type == LDLM_IBITS) &&
+	    (exp && !(exp_connect_flags(exp) & OBD_CONNECT_IBITS))) {
                 /* Make sure all the right bits are set in this lock we
                    are going to pass to client */
                 LASSERTF(lock->l_policy_data.l_inodebits.bits ==

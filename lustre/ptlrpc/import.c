@@ -834,9 +834,9 @@ static int ptlrpc_connect_interpret(const struct lu_env *env,
 			imp->imp_obd->obd_name);
 		GOTO(out, rc = -ENODEV);
 	}
-	old_connect_flags = exp->exp_connect_data.ocd_connect_flags;
-        exp->exp_connect_data = *ocd;
-        imp->imp_obd->obd_self_export->exp_connect_data = *ocd;
+	old_connect_flags = exp_connect_flags(exp);
+	exp->exp_connect_data = *ocd;
+	imp->imp_obd->obd_self_export->exp_connect_data = *ocd;
 	class_export_put(exp);
 
 	obd_import_event(imp->imp_obd, imp, IMP_EVENT_OCD);
@@ -1096,7 +1096,7 @@ finish:
                  * changed in while using FS and if we reset it in reconnect
                  * this leads to losing user settings done before such as
                  * disable lru_resize, etc. */
-                if (old_connect_flags != exp->exp_connect_data.ocd_connect_flags ||
+                if (old_connect_flags != exp_connect_flags(exp) ||
                     aa->pcaa_initial_connect) {
                         CDEBUG(D_HA, "%s: Resetting ns_connect_flags to server "
                                "flags: "LPX64"\n", imp->imp_obd->obd_name,

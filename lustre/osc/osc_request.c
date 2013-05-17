@@ -215,9 +215,9 @@ static int osc_getattr_interpret(const struct lu_env *env,
                 CDEBUG(D_INODE, "mode: %o\n", body->oa.o_mode);
                 lustre_get_wire_obdo(aa->aa_oi->oi_oa, &body->oa);
 
-                /* This should really be sent by the OST */
-                aa->aa_oi->oi_oa->o_blksize = OSC_MAX_BRW_SIZE;
-                aa->aa_oi->oi_oa->o_valid |= OBD_MD_FLBLKSZ;
+		/* This should really be sent by the OST */
+		aa->aa_oi->oi_oa->o_blksize = DT_MAX_BRW_SIZE;
+		aa->aa_oi->oi_oa->o_valid |= OBD_MD_FLBLKSZ;
         } else {
                 CDEBUG(D_INFO, "can't unpack ost_body\n");
                 rc = -EPROTO;
@@ -293,9 +293,9 @@ static int osc_getattr(struct obd_export *exp, struct obd_info *oinfo)
         CDEBUG(D_INODE, "mode: %o\n", body->oa.o_mode);
         lustre_get_wire_obdo(oinfo->oi_oa, &body->oa);
 
-        /* This should really be sent by the OST */
-        oinfo->oi_oa->o_blksize = OSC_MAX_BRW_SIZE;
-        oinfo->oi_oa->o_valid |= OBD_MD_FLBLKSZ;
+	/* This should really be sent by the OST */
+	oinfo->oi_oa->o_blksize = exp_brw_size(exp);
+	oinfo->oi_oa->o_valid |= OBD_MD_FLBLKSZ;
 
         EXIT;
  out:
@@ -476,9 +476,9 @@ int osc_real_create(struct obd_export *exp, struct obdo *oa,
 
         lustre_get_wire_obdo(oa, &body->oa);
 
-        /* This should really be sent by the OST */
-        oa->o_blksize = OSC_MAX_BRW_SIZE;
-        oa->o_valid |= OBD_MD_FLBLKSZ;
+	/* This should really be sent by the OST */
+	oa->o_blksize = exp_brw_size(exp);
+	oa->o_valid |= OBD_MD_FLBLKSZ;
 
         /* XXX LOV STACKING: the lsm that is passed to us from LOV does not
          * have valid lsm_oinfo data structs, so don't go touching that.
@@ -872,8 +872,8 @@ static void osc_release_write_grant(struct client_obd *cli,
                  * write, however, this is not an option for page_mkwrite()
                  * because grant has to be allocated before a page becomes
                  * dirty. */
-                if (cli->cl_avail_grant < min_t(int, OSC_MAX_BRW_SIZE,
-                                                exp_max_brw_size(cli->cl_import->imp_obd->obd_self_export)))
+                if (cli->cl_avail_grant < min_t(int, DT_MAX_BRW_SIZE,
+			exp_brw_size(cli->cl_import->imp_obd->obd_self_export)))
                         cli->cl_avail_grant += CFS_PAGE_SIZE;
                 else
                         cli->cl_lost_grant += CFS_PAGE_SIZE;
@@ -1074,14 +1074,16 @@ static int osc_should_shrink_grant(struct client_obd *client)
              OBD_CONNECT_GRANT_SHRINK) == 0)
                 return 0;
 
-        if (cfs_time_aftereq(time, next_shrink - 5 * CFS_TICK)) {
-                if (client->cl_import->imp_state == LUSTRE_IMP_FULL &&
-                    client->cl_avail_grant > min_t(int, OSC_MAX_BRW_SIZE,
-                                                exp_max_brw_size(client->cl_import->imp_obd->obd_self_export)))
-                        return 1;
-                else
-                        osc_update_next_shrink(client);
-        }
+	if (cfs_time_aftereq(time, next_shrink - 5 * CFS_TICK)) {
+		int brw_size = exp_brw_size(
+			client->cl_import->imp_obd->obd_self_export);
+
+		if (client->cl_import->imp_state == LUSTRE_IMP_FULL &&
+		    client->cl_avail_grant > brw_size)
+			return 1;
+		else
+			osc_update_next_shrink(client);
+	}
         return 0;
 }
 
@@ -2544,10 +2546,11 @@ osc_send_oap_rpc(const struct lu_env *env, struct client_obd *cli,
         obd_off starting_offset = OBD_OBJECT_EOF;
         unsigned int ending_offset;
         int starting_page_off = 0;
+	int brw_size = exp_brw_size(cli->cl_import->imp_obd->obd_self_export);
         ENTRY;
 
-        /* ASYNC_HP pages first. At present, when the lock the pages is
-         * to be canceled, the pages covered by the lock will be sent out
+	/* ASYNC_HP pages first. At present, when the lock the pages is
+	 * to be canceled, the pages covered by the lock will be sent out
          * with ASYNC_HP. We have to send out them as soon as possible. */
         cfs_list_for_each_entry_safe(oap, tmp, &lop->lop_urgent, oap_urgent_item) {
                 if (oap->oap_async_flags & ASYNC_HP)
@@ -2694,13 +2697,13 @@ osc_send_oap_rpc(const struct lu_env *env, struct client_obd *cli,
                 if (oap->oap_brw_flags & OBD_BRW_MEMALLOC)
                         mem_tight = 1;
 
-                /* End on a server-defined MAX_BRW_SIZE boundary. We want full-sized
-                 * RPCs aligned on MAX_BRW_SIZE boundaries to help reads
+		/* End on a server-defined MAX_BRW_SIZE boundary. We want full-sized
+		 * RPCs aligned on MAX_BRW_SIZE boundaries to help reads
                  * have the same alignment as the initial writes that allocated
                  * extents on the server. */
                 ending_offset = oap->oap_obj_off + oap->oap_page_off +
                                 oap->oap_count;
-                if (!(ending_offset & (exp_max_brw_size(cli->cl_import->imp_obd->obd_self_export) - 1)))
+		if (!(ending_offset & (brw_size - 1)))
                         break;
 
                 if (page_count >= cli->cl_max_pages_per_rpc)
@@ -2735,7 +2738,7 @@ osc_send_oap_rpc(const struct lu_env *env, struct client_obd *cli,
 
         aa = ptlrpc_req_async_args(req);
 
-        starting_offset &= exp_max_brw_size(cli->cl_import->imp_obd->obd_self_export) - 1;
+        starting_offset &= brw_size - 1;
         if (cmd == OBD_BRW_READ) {
                 lprocfs_oh_tally_log2(&cli->cl_read_page_hist, page_count);
                 lprocfs_oh_tally(&cli->cl_read_rpc_hist, cli->cl_r_in_flight);
