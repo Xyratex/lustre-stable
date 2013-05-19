@@ -2740,10 +2740,17 @@ is_empty_dir() {
 
 # empty lustre filesystem may have empty directories lost+found and .lustre
 is_empty_fs() {
+	# exclude .lustre & lost+found
 	[ $(find $1 -maxdepth 1 -name lost+found -o -name .lustre -prune -o \
 		-print | wc -l) = 1 ] || return 1
 	[ ! -d $1/lost+found ] || is_empty_dir $1/lost+found || return 1
-	[ ! -d $1/.lustre ] || is_empty_dir $1/.lustre || return 1
+	if [ $(lustre_version_code $SINGLEMDS) -lt $(version_code 2.4.0) ]; then
+		# exclude .lustre/fid (LU-2780)
+		[ $(find $1/.lustre -maxdepth 1 -name fid -prune -o \
+			-print | wc -l) = 1 ] || return 1
+	else
+		[ ! -d $1/.lustre ] || is_empty_dir $1/.lustre || return 1
+	fi
 	return 0
 }
 
@@ -5259,7 +5266,7 @@ remove_mdt_files() {
 
     echo "removing files from $mdtdev on $facet: $files"
     mount -t $FSTYPE $MDS_MOUNT_OPTS $mdtdev $mntpt || return $?
-    rc=0;
+    rc=0
     for f in $files; do
         rm $mntpt/ROOT/$f || { rc=$?; break; }
     done
