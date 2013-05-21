@@ -2900,7 +2900,7 @@ kiblnd_startup (lnet_ni_t *ni)
         return 0;
 
 failed:
-        if (net->ibn_dev == NULL && ibdev != NULL)
+	if (net != NULL && net->ibn_dev == NULL && ibdev != NULL)
                 kiblnd_destroy_dev(ibdev);
 
         kiblnd_shutdown(ni);
