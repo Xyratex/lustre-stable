@@ -91,6 +91,8 @@
 
 ssize_t filp_user_write(struct file *filp, const void *buf, size_t count,
 			loff_t *offset);
+ssize_t filp_user_read(struct file *filp, char *buf, size_t count,
+		       loff_t *offset);
 
 #ifndef IFSHIFT
 #define IFSHIFT			12
