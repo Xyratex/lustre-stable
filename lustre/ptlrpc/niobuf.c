@@ -474,7 +474,6 @@ int ptlrpc_send_reply(struct ptlrpc_request *req, int flags)
 	/* Remove in-process RPCs from the special list where duplicate
 	 * processing handled */
 	if (exp) {
-		CDEBUG(D_HA, "remove request from exp_rpcs_in_progress_list \n");
 		cfs_spin_lock(&exp->exp_rpcs_in_progress_lock);
 		cfs_list_del_init(&req->rq_exp_list_in_progress);
 		cfs_spin_unlock(&exp->exp_rpcs_in_progress_lock);
