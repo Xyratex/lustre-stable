@@ -108,22 +108,19 @@ AC_MSG_RESULT($RELEASE)
 AC_SUBST(RELEASE)
 
 # check is redhat/suse kernels
-AC_MSG_CHECKING([that RedHat kernel])
-LB_LINUX_TRY_COMPILE([
-		#include <linux/version.h>
-	],[
-		#ifndef RHEL_RELEASE_CODE
-		#error "not redhat kernel"
-		#endif
-	],[
+AC_MSG_CHECKING([for RedHat kernel version])
+	AS_IF([fgrep -q RHEL_RELEASE ${LINUX_OBJ}/include/linux/version.h], [
 		RHEL_KERNEL="yes"
-		AC_MSG_RESULT([yes])
-	],[
-	        AC_MSG_RESULT([no])
-])
-
-LB_LINUX_CONFIG([SUSE_KERNEL],[SUSE_KERNEL="yes"],[])
-
+		RHEL_RELEASE=$(expr 0$(awk -F \" '/ RHEL_RELEASE / { print [$]2 }' \
+		               ${LINUX_OBJ}/include/linux/version.h) + 1)
+		KERNEL_VERSION=$(sed -e 's/\(@<:@23@:>@\.@<:@0-9@:>@*\.@<:@0-9@:>@*\).*/\1/' <<< ${LINUXRELEASE})
+		RHEL_KERNEL_VERSION=${KERNEL_VERSION}-${RHEL_RELEASE}
+		AC_SUBST(RHEL_KERNEL_VERSION)
+		AC_MSG_RESULT([${RHEL_KERNEL_VERSION}])
+	], [
+		AC_MSG_RESULT([not found])
+		LB_LINUX_CONFIG([SUSE_KERNEL],[SUSE_KERNEL="yes"],[])
+	])
 ])
 
 # LB_ARG_REPLACE_PATH(PACKAGE, PATH)
