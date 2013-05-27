@@ -996,12 +996,9 @@ static int server_stop_servers(int lddflags, int lsiflags)
         }
 
         if (obd && (!type || !type->typ_refcnt)) {
-                int err;
                 obd->obd_force = 1;
                 /* obd_fail doesn't mean much on a server obd */
-                err = class_manual_cleanup(obd);
-                if (!rc)
-                        rc = err;
+                rc = class_manual_cleanup(obd);
         }
 
         cfs_mutex_unlock(&server_start_lock);
