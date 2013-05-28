@@ -453,7 +453,7 @@ struct client_obd {
         /* just a sum of the loi/lop pending numbers to be exported by /proc */
         int                      cl_pending_w_pages;
         int                      cl_pending_r_pages;
-        int                      cl_max_pages_per_rpc;
+        __u32                    cl_max_pages_per_rpc;
         int                      cl_max_rpcs_in_flight;
         struct obd_histogram     cl_read_rpc_hist;
         struct obd_histogram     cl_write_rpc_hist;
@@ -1695,6 +1695,12 @@ static inline int client_should_resend(int resend, struct client_obd *cli)
 {
         return cfs_atomic_read(&cli->cl_resends) ?
                cfs_atomic_read(&cli->cl_resends) > resend : 1;
+}
+
+static inline int cli_brw_size(struct obd_device *obd)
+{
+	LASSERT(obd != NULL);
+	return obd->u.cli.cl_max_pages_per_rpc << CFS_PAGE_SHIFT;
 }
 
 #endif /* __OBD_H */

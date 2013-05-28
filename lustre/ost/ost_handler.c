@@ -114,8 +114,18 @@ static int ost_validate_obdo(struct obd_export *exp, struct obdo *oa,
                 return -EPROTO;
         }
         obdo_from_ostid(oa, &oa->o_oi);
-        if (ioobj)
+        if (ioobj) {
+		unsigned max_brw = ioobj_max_brw_get(ioobj);
+
+		if (unlikely((max_brw & (max_brw - 1)) != 0)) {
+			CERROR("%s: client %s sent bad ioobj max %u for "POSTID
+			       ": rc = -EPROTO\n", exp->exp_obd->obd_name,
+			       obd_export_nid2str(exp), max_brw,
+			       oa->o_id, oa->o_seq);
+			return -EPROTO;
+		}
                 ioobj_from_obdo(ioobj, oa);
+	}
         return 0;
 }
 
@@ -799,7 +809,7 @@ static int ost_brw_read(struct ptlrpc_request *req, struct obd_trans_info *oti)
 	if (body->oa.o_flags & OBD_FL_SHORT_IO) {
 		desc = NULL;
 	} else {
-		desc = ptlrpc_prep_bulk_exp(req, npages,
+		desc = ptlrpc_prep_bulk_exp(req, npages, ioobj_max_brw_get(ioo),
 					    BULK_PUT_SOURCE, OST_BULK_PORTAL);
 		if (desc == NULL)
 			GOTO(out_commitrw, rc = -ENOMEM);
@@ -1110,7 +1120,7 @@ static int ost_brw_write(struct ptlrpc_request *req, struct obd_trans_info *oti)
 		rc = ost_shortio2pages(local_nb, npages, short_io_buf, short_io_size);
 		desc = NULL;
 	} else {
-		desc = ptlrpc_prep_bulk_exp(req, npages,
+		desc = ptlrpc_prep_bulk_exp(req, npages, ioobj_max_brw_get(ioo),
                                      BULK_GET_SINK, OST_BULK_PORTAL);
 		if (desc == NULL)
 			GOTO(skip_transfer, rc = -ENOMEM);

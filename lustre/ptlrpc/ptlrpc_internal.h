@@ -86,9 +86,10 @@ void ptlrpc_lprocfs_do_request_stat (struct ptlrpc_request *req,
 int ptlrpc_expire_one_request(struct ptlrpc_request *req, int async_unlink);
 
 /* pers.c */
-void ptlrpc_fill_bulk_md(lnet_md_t *md, struct ptlrpc_bulk_desc *desc);
+void ptlrpc_fill_bulk_md(lnet_md_t *md, struct ptlrpc_bulk_desc *desc,
+			 int mdcnt);
 void ptlrpc_add_bulk_page(struct ptlrpc_bulk_desc *desc, cfs_page_t *page,
-                          int pageoffset, int len);
+			  int pageoffset, int len);
 
 /* pack_generic.c */
 struct ptlrpc_reply_state *lustre_get_emerg_rs(struct ptlrpc_service *svc);

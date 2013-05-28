@@ -56,8 +56,10 @@
 #define FILTER_INCOMPAT_SUPP (OBD_INCOMPAT_GROUPS | OBD_INCOMPAT_OST | \
                               OBD_INCOMPAT_COMMON_LR)
 
-#define FILTER_GRANT_CHUNK(rexp) (2ULL * exp_brw_size((rexp)))
- #define FILTER_GRANT_SHRINK_LIMIT(rexp) (16ULL * FILTER_GRANT_CHUNK((rexp)))
+/* At least enough to send a couple of 1MB RPCs, even if not max sized */
+#define FILTER_GRANT_CHUNK		(2ULL * DT_MAX_BRW_SIZE)
+/* Clients typically hold 2x their max_rpcs_in_flight of grant space */
+#define FILTER_GRANT_SHRINK_LIMIT(exp)	(2ULL * 8 * exp_max_brw_size(exp))
 #define GRANT_FOR_LLOG(obd) 16
 
 extern struct file_operations filter_per_export_stats_fops;

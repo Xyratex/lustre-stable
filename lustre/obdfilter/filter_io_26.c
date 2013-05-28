@@ -53,8 +53,8 @@
 #include <lustre_quota.h>
 #include "filter_internal.h"
 
-/* 512byte block min */
-#define MAX_BLOCKS_PER_PAGE (CFS_PAGE_SIZE / 512)
+/* 4096byte block min */
+#define MAX_BLOCKS_PER_PAGE (CFS_PAGE_SIZE >> 12)
 struct filter_iobuf {
         cfs_atomic_t       dr_numreqs;  /* number of reqs being processed */
         cfs_waitq_t        dr_wait;
@@ -226,8 +226,8 @@ struct filter_iobuf *filter_alloc_iobuf(struct filter_obd *filter,
         if (iobuf->dr_pages == NULL)
                 goto failed_1;
 
-        OBD_ALLOC(iobuf->dr_blocks,
-                  MAX_BLOCKS_PER_PAGE * num_pages * sizeof(*iobuf->dr_blocks));
+	OBD_ALLOC(iobuf->dr_blocks,
+		  MAX_BLOCKS_PER_PAGE * num_pages * sizeof(*iobuf->dr_blocks));
         if (iobuf->dr_blocks == NULL)
                 goto failed_2;
 
@@ -256,17 +256,17 @@ static void filter_clear_iobuf(struct filter_iobuf *iobuf)
         cfs_atomic_set(&iobuf->dr_numreqs, 0);
 }
 
-void filter_free_iobuf(struct filter_iobuf *iobuf)
+void filter_free_iobuf( struct filter_iobuf *iobuf)
 {
-        int num_pages = iobuf->dr_max_pages;
+	int num_pages = iobuf->dr_max_pages;
 
-        filter_clear_iobuf(iobuf);
+	filter_clear_iobuf(iobuf);
 
-        OBD_FREE(iobuf->dr_blocks,
-                 MAX_BLOCKS_PER_PAGE * num_pages * sizeof(*iobuf->dr_blocks));
-        OBD_FREE(iobuf->dr_pages,
-                 num_pages * sizeof(*iobuf->dr_pages));
-        OBD_FREE_PTR(iobuf);
+	OBD_FREE(iobuf->dr_blocks,
+		 MAX_BLOCKS_PER_PAGE * num_pages * sizeof(*iobuf->dr_blocks));
+	OBD_FREE(iobuf->dr_pages,
+		num_pages * sizeof(*iobuf->dr_pages));
+	OBD_FREE_PTR(iobuf);
 }
 
 void filter_iobuf_put(struct filter_obd *filter, struct filter_iobuf *iobuf,

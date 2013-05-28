@@ -293,8 +293,7 @@ static int osc_getattr(struct obd_export *exp, struct obd_info *oinfo)
         CDEBUG(D_INODE, "mode: %o\n", body->oa.o_mode);
         lustre_get_wire_obdo(oinfo->oi_oa, &body->oa);
 
-	/* This should really be sent by the OST */
-	oinfo->oi_oa->o_blksize = exp_brw_size(exp);
+	oinfo->oi_oa->o_blksize = cli_brw_size(exp->exp_obd);
 	oinfo->oi_oa->o_valid |= OBD_MD_FLBLKSZ;
 
         EXIT;
@@ -476,8 +475,7 @@ int osc_real_create(struct obd_export *exp, struct obdo *oa,
 
         lustre_get_wire_obdo(oa, &body->oa);
 
-	/* This should really be sent by the OST */
-	oa->o_blksize = exp_brw_size(exp);
+	oa->o_blksize = cli_brw_size(exp->exp_obd);
 	oa->o_valid |= OBD_MD_FLBLKSZ;
 
         /* XXX LOV STACKING: the lsm that is passed to us from LOV does not
@@ -873,7 +871,7 @@ static void osc_release_write_grant(struct client_obd *cli,
                  * because grant has to be allocated before a page becomes
                  * dirty. */
                 if (cli->cl_avail_grant < min_t(int, DT_MAX_BRW_SIZE,
-			exp_brw_size(cli->cl_import->imp_obd->obd_self_export)))
+			exp_max_brw_size(cli->cl_import->imp_obd->obd_self_export)))
                         cli->cl_avail_grant += CFS_PAGE_SIZE;
                 else
                         cli->cl_lost_grant += CFS_PAGE_SIZE;
@@ -1075,8 +1073,10 @@ static int osc_should_shrink_grant(struct client_obd *client)
                 return 0;
 
 	if (cfs_time_aftereq(time, next_shrink - 5 * CFS_TICK)) {
-		int brw_size = exp_brw_size(
-			client->cl_import->imp_obd->obd_self_export);
+		/* Get the current RPC size directly, instead of going via:
+		 * cli_brw_size(obd->u.cli.cl_import->imp_obd->obd_self_export)
+		 * Keep comment here so that it can be found by searching. */
+		int brw_size = client->cl_max_pages_per_rpc << CFS_PAGE_SHIFT;
 
 		if (client->cl_import->imp_state == LUSTRE_IMP_FULL &&
 		    client->cl_avail_grant > brw_size)
@@ -1389,12 +1389,10 @@ static int osc_brw_prep_request(int cmd, struct client_obd *cli,struct obdo *oa,
 		goto no_bulk;
 	}
 
-        if (opc == OST_WRITE)
-                desc = ptlrpc_prep_bulk_imp(req, page_count,
-                                            BULK_GET_SOURCE, OST_BULK_PORTAL);
-        else
-                desc = ptlrpc_prep_bulk_imp(req, page_count,
-                                            BULK_PUT_SINK, OST_BULK_PORTAL);
+	desc = ptlrpc_prep_bulk_imp(req, page_count,
+		cli->cl_import->imp_connect_data.ocd_brw_size >> LNET_MTU_BITS,
+		opc == OST_WRITE ? BULK_GET_SOURCE : BULK_PUT_SINK,
+		OST_BULK_PORTAL);
 
         if (desc == NULL)
                 GOTO(out, rc = -ENOMEM);
@@ -1409,6 +1407,13 @@ no_bulk:
 
         obdo_to_ioobj(oa, ioobj);
         ioobj->ioo_bufcnt = niocount;
+	/* The high bits of ioo_max_brw tells server _maximum_ number of bulks
+	 * that might be send for this request.  The actual number is decided
+	 * when the RPC is finally sent in ptlrpc_register_bulk(). It sends
+	 * "max - 1" for old client compatibility sending "0", and also so the
+	 * the actual maximum is a power-of-two number, not one less. LU-1431 */
+	if (desc != NULL)
+		ioobj_max_brw_set(ioobj, desc->bd_md_max_brw);
         osc_pack_capa(req, body, ocapa);
 
 	if (short_io_size != 0) {
@@ -2546,7 +2551,7 @@ osc_send_oap_rpc(const struct lu_env *env, struct client_obd *cli,
         obd_off starting_offset = OBD_OBJECT_EOF;
         unsigned int ending_offset;
         int starting_page_off = 0;
-	int brw_size = exp_brw_size(cli->cl_import->imp_obd->obd_self_export);
+	int brw_size = exp_max_brw_size(cli->cl_import->imp_obd->obd_self_export);
         ENTRY;
 
 	/* ASYNC_HP pages first. At present, when the lock the pages is
@@ -4400,7 +4405,7 @@ static int osc_reconnect(const struct lu_env *env,
 
                 client_obd_list_lock(&cli->cl_loi_list_lock);
                 data->ocd_grant = (cli->cl_avail_grant + cli->cl_dirty) ?:
-                                2 * cli->cl_max_pages_per_rpc << CFS_PAGE_SHIFT;
+				2 * cli_brw_size(obd);
                 lost_grant = cli->cl_lost_grant;
                 cli->cl_lost_grant = 0;
                 client_obd_list_unlock(&cli->cl_loi_list_lock);

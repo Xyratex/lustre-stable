@@ -1199,11 +1199,11 @@ extern void lustre_swab_ptlrpc_body(struct ptlrpc_body *pb);
  * If we eventually have separate connect data for different types, which we
  * almost certainly will, then perhaps we stick a union in here. */
 struct obd_connect_data_v1 {
-        __u64 ocd_connect_flags; /* OBD_CONNECT_* per above */
-        __u32 ocd_version;       /* lustre release version number */
-        __u32 ocd_grant;         /* initial cache grant amount (bytes) */
-        __u32 ocd_index;         /* LOV index to connect to */
-        __u32 ocd_brw_size;      /* Maximum BRW size in bytes */
+	__u64 ocd_connect_flags; /* OBD_CONNECT_* per above */
+	__u32 ocd_version;	 /* lustre release version number */
+	__u32 ocd_grant;	 /* initial cache grant amount (bytes) */
+	__u32 ocd_index;	 /* LOV index to connect to */
+	__u32 ocd_brw_size;	 /* Maximum BRW size in bytes, must be 2^n */
         __u64 ocd_ibits_known;   /* inode bits this client understands */
         __u8  ocd_blocksize;     /* log2 of the backend filesystem blocksize */
         __u8  ocd_inodespace;    /* log2 of the per-inode space consumption */
@@ -1218,11 +1218,11 @@ struct obd_connect_data_v1 {
 };
 
 struct obd_connect_data {
-        __u64 ocd_connect_flags; /* OBD_CONNECT_* per above */
-        __u32 ocd_version;       /* lustre release version number */
-        __u32 ocd_grant;         /* initial cache grant amount (bytes) */
-        __u32 ocd_index;         /* LOV index to connect to */
-        __u32 ocd_brw_size;      /* Maximum BRW size in bytes */
+	__u64 ocd_connect_flags; /* OBD_CONNECT_* per above */
+	__u32 ocd_version;	 /* lustre release version number */
+	__u32 ocd_grant;	 /* initial cache grant amount (bytes) */
+	__u32 ocd_index;	 /* LOV index to connect to */
+	__u32 ocd_brw_size;	 /* Maximum BRW size in bytes */
         __u64 ocd_ibits_known;   /* inode bits this client understands */
         __u8  ocd_blocksize;     /* log2 of the backend filesystem blocksize */
         __u8  ocd_inodespace;    /* log2 of the per-inode space consumption */
@@ -1508,9 +1508,15 @@ extern void lustre_swab_obd_statfs (struct obd_statfs *os);
 struct obd_ioobj {
         obd_id               ioo_id;
         obd_seq              ioo_seq;
-        __u32                ioo_type;
+        __u32                ioo_max_brw;
         __u32                ioo_bufcnt;
 };
+
+#define IOOBJ_MAX_BRW_BITS	16
+#define IOOBJ_TYPE_MASK		((1U << IOOBJ_MAX_BRW_BITS) - 1)
+#define ioobj_max_brw_get(ioo)	(((ioo)->ioo_max_brw >> IOOBJ_MAX_BRW_BITS) + 1)
+#define ioobj_max_brw_set(ioo, num)					\
+do { (ioo)->ioo_max_brw = ((num) - 1) << IOOBJ_MAX_BRW_BITS; } while (0)
 
 extern void lustre_swab_obd_ioobj (struct obd_ioobj *ioo);
 
