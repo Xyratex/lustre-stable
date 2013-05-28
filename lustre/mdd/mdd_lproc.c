@@ -319,28 +319,36 @@ static int lprocfs_wr_sync_perm(struct file *file, const char *buffer,
 static int lprocfs_rd_percpu_rebuild(char *page, char **start, off_t off,
                                      int count, int *eof, void *data)
 {
-        struct mdd_device *mdd = data;
-        int i, len = 0;
+	struct mdd_device *mdd = data;
+	struct lprocfs_stats *stats = mdd->mdd_stats;
+	int i, len = 0;
+	unsigned int            num_entry;
+	unsigned long           flags = 0;
+	struct lprocfs_counter *lcf, *lcd;
+	__s64 dirs, files;
+	struct lprocfs_counter_header *lchf, *lchd;
 
         LASSERT(mdd != NULL);
         len += snprintf(page, count, "dirs / files handled per-cpu\n");
-        for (i = 0; i < cfs_num_possible_cpus(); i++) {
-                struct lprocfs_stats *stats = mdd->mdd_stats;
-                struct lprocfs_counter *lcf, *lcd;
-                struct lprocfs_counter_header *lchf, *lchd;
-                __s64 dirs, files;
+
+	num_entry = lprocfs_stats_lock(stats, LPROCFS_GET_NUM_CPU, &flags);
+
+	for (i = 0; i < num_entry; i++) {
+		if (stats->ls_percpu[i] == NULL)
+			continue;
 
                 lcf = &(stats->ls_percpu[i]->lp_cntr[LPROC_MDD_REBUILD_FILES]);
                 lcd = &(stats->ls_percpu[i]->lp_cntr[LPROC_MDD_REBUILD_DIRS]);
 		lchf = &(stats->ls_cnt_header[LPROC_MDD_REBUILD_FILES]);
 		lchd = &(stats->ls_cnt_header[LPROC_MDD_REBUILD_DIRS]);
-                files = lprocfs_read_helper(lcf, lchf, stats->ls_flags,
+		files = lprocfs_read_helper(lcf, lchf, stats->ls_flags,
 					    LPROCFS_FIELDS_FLAGS_COUNT);
-                dirs = lprocfs_read_helper(lcd, lchd, stats->ls_flags,
+		dirs = lprocfs_read_helper(lcd, lchd, stats->ls_flags,
 					   LPROCFS_FIELDS_FLAGS_COUNT);
 
                 len += snprintf(page + len, count, "%lld %lld\n", dirs, files);
         }
+	lprocfs_stats_unlock(stats, LPROCFS_GET_NUM_CPU, &flags);
         return len;
 }
 
