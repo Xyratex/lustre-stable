@@ -1101,6 +1101,32 @@ out:
         RETURN(rc);
 }
 
+/*
+ * Calculate timeout value for a target.
+ */
+static void server_calc_timeout(struct lustre_sb_info *lsi, struct obd_device *obd)
+{
+	struct lustre_mount_data *lmd;
+	int soft = 0;
+	int hard = 0;
+
+        LASSERT((lsi->lsi_flags & LSI_SERVER) != 0);
+	lmd = lsi->lsi_lmd;
+	if (lmd) {
+		soft   = lmd->lmd_recovery_time_soft;
+		hard   = lmd->lmd_recovery_time_hard;
+	}
+
+	if (soft == 0)
+		soft = OBD_RECOVERY_TIME_SOFT;
+	if (hard == 0)
+		hard = OBD_RECOVERY_TIME_HARD;
+
+	/* we're done */
+	obd->obd_recovery_timeout   = max(obd->obd_recovery_timeout, soft);
+	obd->obd_recovery_time_hard = hard;
+}
+
 /** Start server targets: MDTs and OSTs
  */
 static int server_start_targets(struct super_block *sb, struct vfsmount *mnt)
@@ -1218,6 +1244,9 @@ out_mgc:
                         obd_iocontrol(OBD_IOC_ABORT_RECOVERY,
                                       obd->obd_self_export, 0, NULL, NULL);
                 }
+
+                /* calculate recovery timeout, do it after lustre_process_log */
+                server_calc_timeout(lsi, obd);
 
                 /* log has been fully processed */
                 obd_notify(obd, NULL, OBD_NOTIFY_CONFIG, (void *)CONFIG_LOG);
@@ -1752,6 +1781,7 @@ out_mnt:
         server_put_super(sb);
         return rc;
 }
+
 
 /* Get the index from the obd name.
    rc = server type, or
