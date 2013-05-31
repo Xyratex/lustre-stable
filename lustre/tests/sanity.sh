@@ -7295,10 +7295,13 @@ test_130d() {
 
 	local fm_file=$DIR/$tfile
 	$SETSTRIPE -S 65536 -c $OSTCOUNT $fm_file||error "setstripe on $fm_file"
-	dd if=/dev/zero of=$fm_file bs=1M count=$OSTCOUNT || error "dd failed on $fm_file"
+	local actual_stripecnt=$($GETSTRIPE -c $fm_file)
+	dd if=/dev/zero of=$fm_file bs=1M count=$actual_stripecnt ||
+		error "dd failed on $fm_file"
 
 	filefrag -ves $fm_file || error "filefrag $fm_file failed"
-	filefrag_op=`filefrag -ve $fm_file | grep -A 100 "ext:" | grep -v "ext:" | grep -v "found"`
+	filefrag_op=`filefrag -ve $fm_file | grep -A 100 "ext:" |
+		grep -v "ext:" | grep -v "found"`
 
 	last_lun=`echo $filefrag_op | cut -d: -f5`
 
@@ -7322,7 +7325,7 @@ test_130d() {
 		(( tot_len += ext_len ))
 		last_lun=$frag_lun
 	done
-	if (( num_luns != OSTCOUNT || tot_len != 1024 )); then
+	if (( num_luns != actual_stripecnt || tot_len != 1024 )); then
 		cleanup_130
 		error "FIEMAP on $fm_file failed; returned wrong number of luns or wrong len for OST $last_lun"
 		return
