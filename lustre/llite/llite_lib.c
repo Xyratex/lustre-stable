@@ -1152,7 +1152,9 @@ void ll_clear_inode(struct inode *inode)
                 LASSERT(lli->lli_opendir_pid == 0);
         }
 
+	spin_lock(&lli->lli_lock);
         ll_i2info(inode)->lli_flags &= ~LLIF_MDS_SIZE_LOCK;
+	spin_unlock(&lli->lli_lock);
         md_null_data(sbi->ll_md_exp, ll_inode2fid(inode),
                          NULL, inode);
 
@@ -1770,7 +1772,9 @@ void ll_update_inode(struct inode *inode, struct lustre_md *md)
                                         /* Use old size assignment to avoid
                                          * deadlock bz14138 & bz14326 */
                                         inode->i_size = body->size;
+					spin_lock(&lli->lli_lock);
                                         lli->lli_flags |= LLIF_MDS_SIZE_LOCK;
+					spin_unlock(&lli->lli_lock);
                                 }
                                 ldlm_lock_decref(&lockh, mode);
                         }

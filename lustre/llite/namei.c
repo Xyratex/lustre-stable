@@ -264,8 +264,11 @@ int ll_md_blocking_ast(struct ldlm_lock *lock, struct ldlm_lock_desc *desc,
                 }
 
                 lli = ll_i2info(inode);
-                if (bits & MDS_INODELOCK_UPDATE)
+                if (bits & MDS_INODELOCK_UPDATE) {
+			spin_lock(&lli->lli_lock);
                         lli->lli_flags &= ~LLIF_MDS_SIZE_LOCK;
+			spin_unlock(&lli->lli_lock);
+		}
 
                 if (S_ISDIR(inode->i_mode) &&
                      (bits & MDS_INODELOCK_UPDATE)) {
