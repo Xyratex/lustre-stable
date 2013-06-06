@@ -991,12 +991,11 @@ sfw_run_test (swi_workitem_t *wi)
         cfs_list_add_tail(&rpc->crpc_list, &tsi->tsi_active_rpcs);
         cfs_spin_unlock(&tsi->tsi_lock);
 
-        rpc->crpc_timeout = rpc_timeout;
-
-        cfs_spin_lock(&rpc->crpc_lock);
-        srpc_post_rpc(rpc);
-        cfs_spin_unlock(&rpc->crpc_lock);
-        return 0;
+	cfs_spin_lock(&rpc->crpc_lock);
+	rpc->crpc_timeout = rpc_timeout;
+	srpc_post_rpc(rpc);
+	cfs_spin_unlock(&rpc->crpc_lock);
+	return 0;
 
 test_done:
         /*
