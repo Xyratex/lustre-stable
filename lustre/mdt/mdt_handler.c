@@ -1032,35 +1032,33 @@ static int mdt_getattr_name_lock(struct mdt_thread_info *info,
          */
         child = mdt_object_find(info->mti_env, info->mti_mdt, child_fid);
 
-        if (unlikely(IS_ERR(child)))
-                GOTO(out_parent, rc = PTR_ERR(child));
-        if (is_resent) {
-                /* Do not take lock for resent case. */
-                lock = ldlm_handle2lock(&lhc->mlh_reg_lh);
-                LASSERTF(lock != NULL, "Invalid lock handle "LPX64"\n",
-                         lhc->mlh_reg_lh.cookie);
+	if (unlikely(IS_ERR(child)))
+		GOTO(out_parent, rc = PTR_ERR(child));
+	if (is_resent) {
+		/* Do not take lock for resent case. */
+		lock = ldlm_handle2lock(&lhc->mlh_reg_lh);
+		LASSERTF(lock != NULL, "Invalid lock handle "LPX64"\n",
+			 lhc->mlh_reg_lh.cookie);
 
-                res_id = &lock->l_resource->lr_name;
-                if (!fid_res_name_eq(mdt_object_fid(child),
-                                    &lock->l_resource->lr_name)) {
-                         LASSERTF(fid_res_name_eq(mdt_object_fid(parent),
-                                                 &lock->l_resource->lr_name),
-                                 "Lock res_id: %lu/%lu/%lu, Fid: "DFID".\n",
-                                 (unsigned long)res_id->name[0],
-                                 (unsigned long)res_id->name[1],
-                                 (unsigned long)res_id->name[2],
-                                 PFID(mdt_object_fid(parent)));
-                          CWARN("Although resent, but still not get child lock"
-                                "parent:"DFID" child:"DFID"\n",
-                                PFID(mdt_object_fid(parent)),
-                                PFID(mdt_object_fid(child)));
-                          lustre_msg_clear_flags(req->rq_reqmsg, MSG_RESENT);
-                          LDLM_LOCK_PUT(lock);
-                          GOTO(relock, 0);
-                }
-                LDLM_LOCK_PUT(lock);
-                rc = 0;
-        } else {
+		res_id = &lock->l_resource->lr_name;
+		if (!fid_res_name_eq(mdt_object_fid(child),
+				     &lock->l_resource->lr_name)) {
+			LASSERTF(fid_res_name_eq(mdt_object_fid(parent),
+						 &lock->l_resource->lr_name),
+				 "Lock res_id: "DLDLMRES", fid: "DFID"\n",
+				 PLDLMRES(lock->l_resource),
+				 PFID(mdt_object_fid(parent)));
+			CWARN("Although resent, but still not get child lock"
+			      "parent:"DFID" child:"DFID"\n",
+			      PFID(mdt_object_fid(parent)),
+			      PFID(mdt_object_fid(child)));
+			lustre_msg_clear_flags(req->rq_reqmsg, MSG_RESENT);
+			LDLM_LOCK_PUT(lock);
+			GOTO(relock, 0);
+		}
+		LDLM_LOCK_PUT(lock);
+		rc = 0;
+	} else {
 relock:
                 OBD_FAIL_TIMEOUT(OBD_FAIL_MDS_RESEND, obd_timeout*2);
                 mdt_lock_handle_init(lhc);
@@ -1114,17 +1112,15 @@ relock:
         rc = mdt_getattr_internal(info, child, ma_need);
         if (unlikely(rc != 0)) {
                 mdt_object_unlock(info, child, lhc, 1);
-        } else if (lock) {
-                /* Debugging code. */
-                res_id = &lock->l_resource->lr_name;
-                LDLM_DEBUG(lock, "Returning lock to client");
-                LASSERTF(fid_res_name_eq(mdt_object_fid(child),
-                                         &lock->l_resource->lr_name),
-                         "Lock res_id: %lu/%lu/%lu, Fid: "DFID".\n",
-                         (unsigned long)res_id->name[0],
-                         (unsigned long)res_id->name[1],
-                         (unsigned long)res_id->name[2],
-                         PFID(mdt_object_fid(child)));
+	} else if (lock) {
+		/* Debugging code. */
+		res_id = &lock->l_resource->lr_name;
+		LDLM_DEBUG(lock, "Returning lock to client");
+		LASSERTF(fid_res_name_eq(mdt_object_fid(child),
+					 &lock->l_resource->lr_name),
+			 "Lock res_id: "DLDLMRES", fid: "DFID"\n",
+			 PLDLMRES(lock->l_resource),
+			 PFID(mdt_object_fid(child)));
                 mdt_pack_size2body(info, child);
         }
         if (lock)
