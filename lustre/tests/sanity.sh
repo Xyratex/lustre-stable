@@ -1748,15 +1748,6 @@ link_one() {
 }
 
 test_31o() { # LU-2901
-	local server_version=$(lustre_version_code $SINGLEMDS)
-
-	if [[ $server_version -lt $(version_code 2.1.6) ]] ||
-	   [[ $server_version -ge $(version_code 2.2.0) &&
-	      $server_version -lt $(version_code 2.4.1) ]]; then
-		skip "Need MDS version at least 2.1.6 or 2.4.1"
-		return 0
-	fi
-
 	mkdir -p $DIR/$tdir
 	for LOOP in $(seq 100); do
 		rm -f $DIR/$tdir/$tfile*
