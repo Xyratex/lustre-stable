@@ -1978,9 +1978,6 @@ test_71() {
 		{ skip "checkfiemap not runnable: $?" && return; }
 	# write data this way: hole - data - hole - data
 	dd if=/dev/urandom of=$DIR1/$tfile bs=40K seek=1 count=1
-	[ "$(facet_fstype ost$(($($GETSTRIPE -i $DIR1/$tfile) + 1)))" = \
-		"zfs" ] && 
-		skip "ORI-366/LU-1941: FIEMAP unimplemented on ZFS" && return 0
 	dd if=/dev/urandom of=$DIR1/$tfile bs=40K seek=3 count=1
 	GET_STAT="lctl get_param -n ldlm.services.ldlm_cbd.stats"
 	stat $DIR2/$tfile

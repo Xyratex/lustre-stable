@@ -2837,11 +2837,6 @@ test_62() {
 run_test 62 "start with disabled journal"
 
 test_63() {
-	if [ $(facet_fstype $SINGLEMDS) != ldiskfs ]; then
-		skip "Only applicable to ldiskfs-based MDTs"
-		return
-	fi
-
 	local inode_slab=$(do_facet $SINGLEMDS \
 		"awk '/ldiskfs_inode_cache/ { print \\\$5 }' /proc/slabinfo")
 	if [ -z "$inode_slab" ]; then
