@@ -39,3 +39,4 @@ ext4-journal-callback.patch
 ext4-store-tree-generation-at-find.patch
 ext4_pdirop-rhel6.patch
 ext4-fix-ext4_mb_add_n_trim.patch
+ext4-not-discard-preallocation-umount.patch
