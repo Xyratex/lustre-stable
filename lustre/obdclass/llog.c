@@ -60,7 +60,7 @@ struct llog_handle *llog_alloc_handle(void)
 
         OBD_ALLOC(loghandle, sizeof(*loghandle));
         if (loghandle == NULL)
-                RETURN(ERR_PTR(-ENOMEM));
+                RETURN(NULL);
 
         cfs_init_rwsem(&loghandle->lgh_lock);
 
