@@ -444,10 +444,12 @@ load_modules () {
     # bug 19124
     # load modules on remote nodes optionally
     # lustre-tests have to be installed on these nodes
-    if $LOAD_MODULES_REMOTE ; then
+    if $LOAD_MODULES_REMOTE; then
         local list=$(comma_list $(remote_nodes_list))
-        echo loading modules on $list
-        do_rpc_nodes $list load_modules 
+ 		if [ -n "$list" ]; then
+ 			echo "loading modules on: '$list'"
+ 			do_rpc_nodes "$list" load_modules
+ 		fi
     fi
 }
 
@@ -646,15 +648,15 @@ set_default_debug () {
 }
 
 set_default_debug_nodes () {
-    local nodes=$1
+	local nodes="$1"
 
-    if [[ ,$nodes, = *,$HOSTNAME,* ]]; then
-        nodes=$(exclude_items_from_list "$nodes" "$HOSTNAME")
-            set_default_debug
-    fi
+	if [[ ,$nodes, = *,$HOSTNAME,* ]]; then
+		nodes=$(exclude_items_from_list "$nodes" "$HOSTNAME")
+		set_default_debug
+	fi
 
-    [[ -n $nodes ]] && do_rpc_nodes $nodes set_default_debug \
-        \\\"$PTLDEBUG\\\" \\\"$SUBSYSTEM\\\" $DEBUG_SIZE || true
+	do_rpc_nodes "$nodes" set_default_debug \
+		\\\"$PTLDEBUG\\\" \\\"$SUBSYSTEM\\\" $DEBUG_SIZE || true
 }
 
 set_default_debug_facet () {
@@ -1138,10 +1140,10 @@ _check_progs_installed () {
 }
 
 check_progs_installed () {
-    local nodes=$1
-    shift
+	local nodes=$1
+	shift
 
-    do_rpc_nodes $nodes _check_progs_installed $@
+	do_rpc_nodes "$nodes" _check_progs_installed $@
 }
 
 # recovery-scale functions
@@ -1475,14 +1477,14 @@ wait_recovery_complete () {
     fi
     echo affected facets: $facets
 
-    # we can use "for" here because we are waiting the slowest
-    for facet in ${facets//,/ }; do
-        local var_svc=${facet}_svc
-        local param="*.${!var_svc}.recovery_status"
+	# we can use "for" here because we are waiting the slowest
+	for facet in ${facets//,/ }; do
+		local var_svc=${facet}_svc
+		local param="*.${!var_svc}.recovery_status"
 
-        local host=$(facet_active_host $facet)
-        do_rpc_nodes $host _wait_recovery_complete $param $MAX
-    done
+		local host=$(facet_active_host $facet)
+		do_rpc_nodes "$host" _wait_recovery_complete $param $MAX
+	done
 }
 
 wait_mds_ost_sync () {
@@ -2608,15 +2610,14 @@ check_config_client () {
 }
 
 check_config_clients () {
-    local clients=${CLIENTS:-$HOSTNAME}
-    local mntpt=$1
+	local clients=${CLIENTS:-$HOSTNAME}
+	local mntpt=$1
 
-    nfs_client_mode && return
+	nfs_client_mode && return
 
-    do_rpc_nodes $clients check_config_client $mntpt
+	do_rpc_nodes "$clients" check_config_client $mntpt
 
-    sanity_mount_check ||
-        error "environments are insane!"
+	sanity_mount_check || error "environments are insane!"
 }
 
 check_timeout () {
@@ -2799,12 +2800,12 @@ run_e2fsck() {
 
 # verify a directory is shared among nodes.
 check_shared_dir() {
-    local dir=$1
+	local dir=$1
 
-    [ -z "$dir" ] && return 1
-    do_rpc_nodes $(comma_list $(nodes_list)) check_logdir $dir
-    check_write_access $dir || return 1
-    return 0
+	[ -z "$dir" ] && return 1
+	do_rpc_nodes "$(comma_list $(nodes_list))" check_logdir $dir
+	check_write_access $dir || return 1
+	return 0
 }
 
 # Run e2fsck on MDT and OST(s) to generate databases used for lfsck.
@@ -2925,10 +2926,12 @@ no_dsh() {
     eval $@
 }
 
+# Convert a space-delimited list to a comma-delimited list.  If the input is
+# only whitespace, ensure the output is empty (i.e. "") so [ -n $list ] works
 comma_list() {
-    # the sed converts spaces to commas, but leaves the last space
-    # alone, so the line doesn't end with a comma.
-    echo "$*" | tr -s " " "\n" | sort -b -u | tr "\n" " " | sed 's/ \([^$]\)/,\1/g'
+	# echo is used to convert newlines to spaces, since it doesn't
+	# introduce a trailing space as using "tr '\n' ' '" does
+	echo $(tr -s " " "\n" <<< $* | sort -b -u) | tr ' ' ','
 }
 
 list_member () {
@@ -3791,9 +3794,7 @@ nodes_list () {
 }
 
 remote_nodes_list () {
-    local rnodes=$(nodes_list)
-    rnodes=$(echo " $rnodes " | sed -re "s/\s+$HOSTNAME\s+/ /g")
-    echo $rnodes
+	echo $(nodes_list) | sed -re "s/\<$HOSTNAME\>//g"
 }
 
 init_clients_lists () {
@@ -4112,15 +4113,15 @@ restore_lustre_params() {
 }
 
 check_catastrophe() {
-    local rnodes=${1:-$(comma_list $(remote_nodes_list))}
-    local C=$CATASTROPHE
-    [ -f $C ] && [ $(cat $C) -ne 0 ] && return 1
+	local rnodes=${1:-$(comma_list $(remote_nodes_list))}
+	local C=$CATASTROPHE
+	[ -f $C ] && [ $(cat $C) -ne 0 ] && return 1
 
-    if [ $rnodes ]; then
-        do_nodes $rnodes "rc=\\\$([ -f $C ] && echo \\\$(< $C) || echo 0);
-if [ \\\$rc -ne 0 ]; then echo \\\$(hostname): \\\$rc; fi
-exit \\\$rc;"
-    fi 
+	[ -z "$rnodes" ] && return 0
+
+	do_nodes "$rnodes" "rc=\\\$([ -f $C ] && echo \\\$(< $C) || echo 0);
+		if [ \\\$rc -ne 0 ]; then echo \\\$(hostname): \\\$rc; fi
+		exit \\\$rc;"
 }
 
 # CMD: determine mds index where directory inode presents
@@ -4366,12 +4367,14 @@ get_clientmdc_proc_path() {
 }
 
 do_rpc_nodes () {
-    local list=$1
-    shift
+	local list=$1
+	shift
 
-    # Add paths to lustre tests for 32 and 64 bit systems.
-    local RPATH="PATH=$RLUSTRE/tests:/usr/lib/lustre/tests:/usr/lib64/lustre/tests:$PATH"
-    do_nodesv $list "${RPATH} NAME=${NAME} sh rpc.sh $@ "
+	[ -z "$list" ] && return 0
+
+	# Add paths to lustre tests for 32 and 64 bit systems.
+	local RPATH="PATH=$RLUSTRE/tests:/usr/lib/lustre/tests:/usr/lib64/lustre/tests:$PATH"
+	do_nodesv $list "${RPATH} NAME=${NAME} sh rpc.sh $@ "
 }
 
 wait_clients_import_state () {
@@ -4396,10 +4399,10 @@ wait_clients_import_state () {
     local params=$(expand_list $params $proc_path)
     done
 
-    if ! do_rpc_nodes $list wait_import_state $expected $params; then
-        error "import is not in ${expected} state"
-        return 1
-    fi
+	if ! do_rpc_nodes "$list" wait_import_state $expected $params; then
+		error "import is not in ${expected} state"
+		return 1
+	fi
 }
 
 oos_full() {
