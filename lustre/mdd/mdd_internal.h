@@ -833,7 +833,24 @@ int mdo_create_obj(const struct lu_env *env, struct mdd_object *o,
                    struct thandle *handle)
 {
         struct dt_object *next = mdd_object_child(o);
-        return next->do_ops->do_create(env, next, attr, hint, dof, handle);
+	struct lu_ucred *uc = lu_ucred_check(env);
+	__u32 saved;
+	int rc;
+
+	/*
+	 *  LU-974 enforce client umask in creation.
+	 * TODO: CMD needs to handle this for remote object.
+	 */
+	if (uc)
+		saved = xchg(&current->fs->umask, uc->uc_umask & S_IRWXUGO);
+
+	rc = next->do_ops->do_create(env, next, attr, hint, dof, handle);
+
+	/* restore previous umask value */
+	if (uc)
+		current->fs->umask = saved;
+
+	return rc;
 }
 
 static inline struct obd_capa *mdo_capa_get(const struct lu_env *env,

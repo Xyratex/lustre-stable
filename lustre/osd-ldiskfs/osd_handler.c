@@ -1820,6 +1820,7 @@ static int __osd_object_create(struct osd_thread_info *info,
                 if (result == 0)
                         result = osd_create_post(info, obj, attr, th);
         }
+
         return result;
 }
 
