@@ -409,7 +409,8 @@ void ptlrpc_commit_replies(struct obd_export *exp)
                 LASSERT (rs->rs_difficult);
                 /* VBR: per-export last_committed */
                 LASSERT(rs->rs_export);
-                if (rs->rs_transno <= exp->exp_last_committed) {
+                if (rs->rs_transno <= max(exp->exp_last_committed,
+					  exp->exp_obd->obd_last_committed)) {
                         cfs_list_del_init(&rs->rs_obd_list);
                         rs_batch_add(&batch, rs);
                 }
