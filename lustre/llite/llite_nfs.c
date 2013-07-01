@@ -299,8 +299,9 @@ static struct dentry *ll_get_parent(struct dentry *dchild)
 
         sbi = ll_s2sbi(dir->i_sb);
 
-        CDEBUG(D_INFO, "getting parent for (%lu,"DFID")\n",
-                        dir->i_ino, PFID(ll_inode2fid(dir)));
+	CDEBUG(D_INFO, "%s: getting parent for ("DFID")\n",
+	       ll_get_fsname(dir->i_sb, NULL, 0),
+	       PFID(ll_inode2fid(dir)));
 
 	rc = ll_get_max_mdsize(sbi, &lmmsize);
 	if (rc != 0)
