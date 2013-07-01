@@ -2529,7 +2529,8 @@ int target_committed_to_req(struct ptlrpc_request *req)
 
         if (likely(!exp->exp_obd->obd_no_transno && req->rq_repmsg != NULL)) {
                 lustre_msg_set_last_committed(req->rq_repmsg,
-                                              exp->exp_last_committed);
+					max(exp->exp_last_committed,
+					    exp->exp_obd->obd_last_committed));
         } else {
                 DEBUG_REQ(D_IOCTL, req, "not sending last_committed update (%d/"
                           "%d)", exp->exp_obd->obd_no_transno,
@@ -2537,8 +2538,9 @@ int target_committed_to_req(struct ptlrpc_request *req)
 		ret = 0;
 	}
 
-        CDEBUG(D_INFO, "last_committed "LPU64", transno "LPU64", xid "LPU64"\n",
-               exp->exp_last_committed, req->rq_transno, req->rq_xid);
+	CDEBUG(D_INFO, "last_committed "LPU64"/"LPU64", transno "LPU64", xid "
+			LPU64"\n", exp->exp_last_committed,
+	       exp->exp_obd->obd_last_committed, req->rq_transno, req->rq_xid);
 	return ret;
 }
 EXPORT_SYMBOL(target_committed_to_req);
