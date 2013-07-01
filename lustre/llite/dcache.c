@@ -311,8 +311,8 @@ void ll_unhash_aliases(struct inode *inode)
                 return;
         }
 
-        CDEBUG(D_INODE, "marking dentries for ino %lu/%u(%p) invalid\n",
-               inode->i_ino, inode->i_generation, inode);
+	CDEBUG(D_INODE, "marking dentries for inode "DFID"(%p) invalid\n",
+	       PFID(ll_inode2fid(inode)), inode);
 
         head = &inode->i_dentry;
         cfs_spin_lock(&ll_lookup_lock);
@@ -371,8 +371,8 @@ void ll_lookup_finish_locks(struct lookup_intent *it, struct dentry *dentry)
                 struct inode *inode = dentry->d_inode;
                 struct ll_sb_info *sbi = ll_i2sbi(dentry->d_inode);
 
-                CDEBUG(D_DLMTRACE, "setting l_data to inode %p (%lu/%u)\n",
-                       inode, inode->i_ino, inode->i_generation);
+		CDEBUG(D_DLMTRACE, "setting l_data to inode "DFID"(%p)\n",
+		       PFID(ll_inode2fid(inode)), inode);
                 ll_set_lock_data(sbi->ll_md_exp, inode, it, NULL);
         }
 

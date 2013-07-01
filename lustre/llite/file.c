@@ -148,21 +148,26 @@ static int ll_close_inode_openhandle(struct obd_export *md_exp,
                  * OSTs and send setattr to back to MDS. */
                 rc = ll_som_update(inode, op_data);
                 if (rc) {
-                        CERROR("inode %lu mdc Size-on-MDS update failed: "
-                               "rc = %d\n", inode->i_ino, rc);
-                        rc = 0;
-                }
-        } else if (rc) {
-                CERROR("inode %lu mdc close failed: rc = %d\n",
-                       inode->i_ino, rc);
-        }
+			CERROR("%s: inode "DFID" mdc Size-on-MDS update"
+			       " failed: rc = %d\n",
+			       ll_i2mdexp(inode)->exp_obd->obd_name,
+			       PFID(ll_inode2fid(inode)), rc);
+			rc = 0;
+		}
+	} else if (rc) {
+		CERROR("%s: inode "DFID" mdc close failed: rc = %d\n",
+		       ll_i2mdexp(inode)->exp_obd->obd_name,
+		       PFID(ll_inode2fid(inode)), rc);
+	}
         ll_finish_md_op_data(op_data);
 
         if (rc == 0) {
                 rc = ll_objects_destroy(req, inode);
                 if (rc)
-                        CERROR("inode %lu ll_objects destroy: rc = %d\n",
-                               inode->i_ino, rc);
+			CERROR("%s: inode "DFID
+			       " ll_objects destroy: rc = %d\n",
+			       ll_i2mdexp(inode)->exp_obd->obd_name,
+			       PFID(ll_inode2fid(inode)), rc);
         }
 
         EXIT;
@@ -293,8 +298,8 @@ int ll_file_release(struct inode *inode, struct file *file)
         int rc;
         ENTRY;
 
-        CDEBUG(D_VFSTRACE, "VFS Op:inode=%lu/%u(%p)\n", inode->i_ino,
-               inode->i_generation, inode);
+	CDEBUG(D_VFSTRACE, "VFS Op:inode="DFID"(%p)\n",
+	       PFID(ll_inode2fid(inode)), inode);
 
 #ifdef CONFIG_FS_POSIX_ACL
         if (sbi->ll_flags & LL_SBI_RMT_CLIENT &&
@@ -501,8 +506,8 @@ int ll_file_open(struct inode *inode, struct file *file)
         int rc = 0, opendir_set = 0;
         ENTRY;
 
-        CDEBUG(D_VFSTRACE, "VFS Op:inode=%lu/%u(%p), flags %o\n", inode->i_ino,
-               inode->i_generation, inode, file->f_flags);
+	CDEBUG(D_VFSTRACE, "VFS Op:inode="DFID"(%p), flags %o\n",
+	       PFID(ll_inode2fid(inode)), inode, file->f_flags);
 
         it = file->private_data; /* XXX: compat macro */
         file->private_data = NULL; /* prevent ll_local_open assertion */
@@ -1201,8 +1206,8 @@ int ll_lov_setstripe_ea_info(struct inode *inode, struct file *file,
         lsm = ll_i2info(inode)->lli_smd;
         if (lsm) {
                 ll_inode_size_unlock(inode, 0);
-                CDEBUG(D_IOCTL, "stripe already exists for ino %lu\n",
-                       inode->i_ino);
+		CDEBUG(D_IOCTL, "stripe already exists for inode "DFID"\n",
+		       PFID(ll_inode2fid(inode)));
                 RETURN(-EEXIST);
         }
 
@@ -1650,8 +1655,8 @@ long ll_file_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
         ENTRY;
 
-        CDEBUG(D_VFSTRACE, "VFS Op:inode=%lu/%u(%p),cmd=%x\n", inode->i_ino,
-               inode->i_generation, inode, cmd);
+	CDEBUG(D_VFSTRACE, "VFS Op:inode="DFID"(%p), cmd=%x\n",
+	       PFID(ll_inode2fid(inode)), inode, cmd);
         ll_stats_ops_tally(ll_i2sbi(inode), LPROC_LL_IOCTL, 1);
 
         /* asm-ppc{,64} declares TCGETS, et. al. as type 't' not 'T' */
@@ -1761,8 +1766,8 @@ loff_t ll_file_seek(struct file *file, loff_t offset, int origin)
         ENTRY;
         retval = offset + ((origin == 2) ? i_size_read(inode) :
                            (origin == 1) ? file->f_pos : 0);
-        CDEBUG(D_VFSTRACE, "VFS Op:inode=%lu/%u(%p), to=%Lu=%#Lx(%s)\n",
-               inode->i_ino, inode->i_generation, inode, retval, retval,
+	CDEBUG(D_VFSTRACE, "VFS Op:inode="DFID"(%p), to=%llu=%#llx(%s)\n",
+	       PFID(ll_inode2fid(inode)), inode, retval, retval,
                origin == 2 ? "SEEK_END": origin == 1 ? "SEEK_CUR" : "SEEK_SET");
         ll_stats_ops_tally(ll_i2sbi(inode), LPROC_LL_LLSEEK, 1);
 
@@ -1841,8 +1846,9 @@ int ll_fsync(struct file *file, struct dentry *dentry, int data)
         struct obd_capa *oc;
         int rc, err;
         ENTRY;
-        CDEBUG(D_VFSTRACE, "VFS Op:inode=%lu/%u(%p)\n", inode->i_ino,
-               inode->i_generation, inode);
+
+	CDEBUG(D_VFSTRACE, "VFS Op:inode="DFID"(%p)\n",
+	       PFID(ll_inode2fid(inode)), inode);
         ll_stats_ops_tally(ll_i2sbi(inode), LPROC_LL_FSYNC, 1);
 
         /* fsync's caller has already called _fdata{sync,write}, we want
@@ -1927,8 +1933,8 @@ int ll_file_flock(struct file *file, int cmd, struct file_lock *file_lock)
 	int rc2 = 0;
         ENTRY;
 
-        CDEBUG(D_VFSTRACE, "VFS Op:inode=%lu file_lock=%p\n",
-               inode->i_ino, file_lock);
+	CDEBUG(D_VFSTRACE, "VFS Op:inode="DFID" file_lock=%p\n",
+	       PFID(ll_inode2fid(inode)), file_lock);
 
         ll_stats_ops_tally(ll_i2sbi(inode), LPROC_LL_FLOCK, 1);
 
@@ -2017,9 +2023,10 @@ int ll_file_flock(struct file *file, int cmd, struct file_lock *file_lock)
         if (IS_ERR(op_data))
                 RETURN(PTR_ERR(op_data));
 
-	CDEBUG(D_DLMTRACE, "inode=%lu, pid=%u, flags=%#llx, mode=%u, "
-	       "start="LPU64", end="LPU64"\n", inode->i_ino, flock.l_flock.pid,
-	       flags, einfo.ei_mode, flock.l_flock.start, flock.l_flock.end);
+	CDEBUG(D_DLMTRACE, "inode="DFID", pid=%u, flags="LPX64", mode=%u, "
+	       "start="LPU64", end="LPU64"\n", PFID(ll_inode2fid(inode)),
+	       flock.l_flock.pid, flags, einfo.ei_mode,
+	       flock.l_flock.start, flock.l_flock.end);
 
         rc = md_enqueue(sbi->ll_md_exp, &einfo, NULL,
                         op_data, &lockh, &flock, 0, NULL /* req */, flags);
@@ -2155,8 +2162,8 @@ int __ll_inode_revalidate_it(struct dentry *dentry, struct lookup_intent *it,
 
         LASSERT(inode != NULL);
 
-        CDEBUG(D_VFSTRACE, "VFS Op:inode=%lu/%u(%p),name=%s\n",
-               inode->i_ino, inode->i_generation, inode, dentry->d_name.name);
+	CDEBUG(D_VFSTRACE, "VFS Op:inode="DFID"(%p),name=%s\n",
+	       PFID(ll_inode2fid(inode)), inode, dentry->d_name.name);
 
         exp = ll_i2mdexp(inode);
 
@@ -2407,8 +2414,8 @@ int ll_inode_permission(struct inode *inode, int mask, struct nameidata *nd)
                         RETURN(rc);
         }
 
-        CDEBUG(D_VFSTRACE, "VFS Op:inode=%lu/%u(%p), inode mode %x mask %o\n",
-               inode->i_ino, inode->i_generation, inode, inode->i_mode, mask);
+	CDEBUG(D_VFSTRACE, "VFS Op:inode="DFID"(%p), inode mode %x mask %o\n",
+	       PFID(ll_inode2fid(inode)), inode, inode->i_mode, mask);
 
         if (ll_i2sbi(inode)->ll_flags & LL_SBI_RMT_CLIENT)
                 return lustre_check_remote_perm(inode, mask);

@@ -214,8 +214,8 @@ int ll_setxattr(struct dentry *dentry, const char *name,
         LASSERT(inode);
         LASSERT(name);
 
-        CDEBUG(D_VFSTRACE, "VFS Op:inode=%lu/%u(%p), xattr %s\n",
-               inode->i_ino, inode->i_generation, inode, name);
+	CDEBUG(D_VFSTRACE, "VFS Op:inode="DFID"(%p), xattr %s\n",
+	       PFID(ll_inode2fid(inode)), inode, name);
 
         ll_stats_ops_tally(ll_i2sbi(inode), LPROC_LL_SETXATTR, 1);
 
@@ -266,8 +266,8 @@ int ll_removexattr(struct dentry *dentry, const char *name)
         LASSERT(inode);
         LASSERT(name);
 
-        CDEBUG(D_VFSTRACE, "VFS Op:inode=%lu/%u(%p), xattr %s\n",
-               inode->i_ino, inode->i_generation, inode, name);
+	CDEBUG(D_VFSTRACE, "VFS Op:inode="DFID"(%p), xattr %s\n",
+	       PFID(ll_inode2fid(inode)), inode, name);
 
         ll_stats_ops_tally(ll_i2sbi(inode), LPROC_LL_REMOVEXATTR, 1);
         return ll_setxattr_common(inode, name, NULL, 0, 0,
@@ -288,8 +288,8 @@ int ll_getxattr_common(struct inode *inode, const char *name,
 	struct ll_inode_info *lli = ll_i2info(inode);
         ENTRY;
 
-        CDEBUG(D_VFSTRACE, "VFS Op:inode=%lu/%u(%p)\n",
-               inode->i_ino, inode->i_generation, inode);
+	CDEBUG(D_VFSTRACE, "VFS Op:inode="DFID"(%p)\n",
+	       PFID(ll_inode2fid(inode)), inode);
 
         /* listxattr have slightly different behavior from of ext3:
          * without 'user_xattr' ext3 will list all xattr names but
@@ -446,8 +446,8 @@ ssize_t ll_getxattr(struct dentry *dentry, const char *name,
         LASSERT(inode);
         LASSERT(name);
 
-        CDEBUG(D_VFSTRACE, "VFS Op:inode=%lu/%u(%p), xattr %s\n",
-               inode->i_ino, inode->i_generation, inode, name);
+	CDEBUG(D_VFSTRACE, "VFS Op:inode="DFID"(%p), xattr %s\n",
+	       PFID(ll_inode2fid(inode)), inode, name);
 
         ll_stats_ops_tally(ll_i2sbi(inode), LPROC_LL_GETXATTR, 1);
 
@@ -529,8 +529,8 @@ ssize_t ll_listxattr(struct dentry *dentry, char *buffer, size_t size)
 
         LASSERT(inode);
 
-        CDEBUG(D_VFSTRACE, "VFS Op:inode=%lu/%u(%p)\n",
-               inode->i_ino, inode->i_generation, inode);
+	CDEBUG(D_VFSTRACE, "VFS Op:inode="DFID"(%p)\n",
+	       PFID(ll_inode2fid(inode)), inode);
 
         ll_stats_ops_tally(ll_i2sbi(inode), LPROC_LL_LISTXATTR, 1);
 

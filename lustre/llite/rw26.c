@@ -399,11 +399,11 @@ static ssize_t ll_direct_IO_26(int rw, struct kiocb *iocb,
         if ((file_offset & ~CFS_PAGE_MASK) || (count & ~CFS_PAGE_MASK))
                 RETURN(-EINVAL);
 
-        CDEBUG(D_VFSTRACE, "VFS Op:inode=%lu/%u(%p), size=%lu (max %lu), "
-               "offset=%lld=%llx, pages %lu (max %lu)\n",
-               inode->i_ino, inode->i_generation, inode, count, MAX_DIO_SIZE,
-               file_offset, file_offset, count >> CFS_PAGE_SHIFT,
-               MAX_DIO_SIZE >> CFS_PAGE_SHIFT);
+	CDEBUG(D_VFSTRACE, "VFS Op:inode="DFID"(%p), size=%lu (max %lu), "
+	       "offset=%lld=%llx, pages %lu (max %lu)\n",
+	       PFID(ll_inode2fid(inode)), inode, count, MAX_DIO_SIZE,
+	       file_offset, file_offset, count >> CFS_PAGE_SHIFT,
+	       MAX_DIO_SIZE >> CFS_PAGE_SHIFT);
 
         /* Check that all user buffers are aligned as well */
         for (seg = 0; seg < nr_segs; seg++) {

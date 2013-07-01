@@ -1423,8 +1423,8 @@ static inline void ll_set_lock_data(struct obd_export *exp, struct inode *inode,
                                     struct lookup_intent *it, __u64 *bits)
 {
         if (!it->d.lustre.it_lock_set) {
-                CDEBUG(D_DLMTRACE, "setting l_data to inode %p (%lu/%u)\n",
-                       inode, inode->i_ino, inode->i_generation);
+		CDEBUG(D_DLMTRACE, "setting l_data to inode "DFID"(%p)\n",
+		       PFID(ll_inode2fid(inode)), inode);
                 md_set_lock_data(exp, &it->d.lustre.it_lock_handle,
                                  inode, &it->d.lustre.it_lock_bits);
                 it->d.lustre.it_lock_set = 1;
