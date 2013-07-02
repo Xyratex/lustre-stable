@@ -548,14 +548,6 @@ static int vvp_io_read_start(const struct lu_env *env,
         case IO_NORMAL:
                  result = lustre_generic_file_read(file, cio, &pos);
                  break;
-#ifdef HAVE_KERNEL_SENDFILE
-        case IO_SENDFILE:
-                result = generic_file_sendfile(file, &pos, cnt,
-                                vio->u.sendfile.cui_actor,
-                                vio->u.sendfile.cui_target);
-                break;
-#endif
-#ifdef HAVE_KERNEL_SPLICE_READ
         case IO_SPLICE:
                 result = generic_file_splice_read(file, &pos,
                                 vio->u.splice.cui_pipe, cnt,
@@ -565,7 +557,6 @@ static int vvp_io_read_start(const struct lu_env *env,
                  * buffers. */
                 io->ci_continue = 0;
                 break;
-#endif
         default:
                 CERROR("Wrong IO type %u\n", vio->cui_io_subtype);
                 LBUG();
@@ -628,33 +619,6 @@ static int vvp_io_write_start(const struct lu_env *env,
 	RETURN(result);
 }
 
-#ifndef HAVE_VM_OP_FAULT
-static int vvp_io_kernel_fault(struct vvp_fault_io *cfio)
-{
-        cfs_page_t *vmpage;
-
-        vmpage = filemap_nopage(cfio->ft_vma, cfio->nopage.ft_address,
-                                cfio->nopage.ft_type);
-
-        if (vmpage == NOPAGE_SIGBUS) {
-                CDEBUG(D_PAGE, "got addr %lu type %lx - SIGBUS\n",
-                       cfio->nopage.ft_address,(long)cfio->nopage.ft_type);
-                return -EFAULT;
-        } else if (vmpage == NOPAGE_OOM) {
-                CDEBUG(D_PAGE, "got addr %lu type %lx - OOM\n",
-                       cfio->nopage.ft_address, (long)cfio->nopage.ft_type);
-                return -ENOMEM;
-        }
-
-        LL_CDEBUG_PAGE(D_PAGE, vmpage, "got addr %lu type %lx\n",
-                       cfio->nopage.ft_address, (long)cfio->nopage.ft_type);
-
-        cfio->ft_vmpage = vmpage;
-        lock_page(vmpage);
-
-        return 0;
-}
-#else
 static int vvp_io_kernel_fault(struct vvp_fault_io *cfio)
 {
         struct vm_fault *vmf = cfio->fault.ft_vmf;
@@ -689,8 +653,6 @@ static int vvp_io_kernel_fault(struct vvp_fault_io *cfio)
         CERROR("unknow error in page fault %d!\n", cfio->fault.ft_flags);
         return -EINVAL;
 }
-
-#endif
 
 static int vvp_io_fault_start(const struct lu_env *env,
                               const struct cl_io_slice *ios)
@@ -833,9 +795,7 @@ static int vvp_io_fault_start(const struct lu_env *env,
 out:
         /* return unlocked vmpage to avoid deadlocking */
         unlock_page(vmpage);
-#ifdef HAVE_VM_OP_FAULT
         cfio->fault.ft_flags &= ~VM_FAULT_LOCKED;
-#endif
         return result;
 }
 

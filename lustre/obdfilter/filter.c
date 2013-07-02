@@ -1577,7 +1577,7 @@ int filter_vfs_unlink(struct inode *dir, struct dentry *dentry,
         if (/*!dentry->d_inode ||*/dentry->d_parent->d_inode != dir)
                 GOTO(out, rc = -ENOENT);
 
-        rc = ll_permission(dir, MAY_WRITE | MAY_EXEC, NULL);
+        rc = inode_permission(dir, MAY_WRITE | MAY_EXEC);
         if (rc)
                 GOTO(out, rc);
 

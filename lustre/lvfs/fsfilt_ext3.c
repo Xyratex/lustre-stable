@@ -50,9 +50,7 @@
 #include <linux/slab.h>
 #include <linux/pagemap.h>
 #include <linux/quotaops.h>
-#ifdef HAVE_LINUX_EXPORTFS_H
 #include <linux/exportfs.h>
-#endif
 #include <ext4/ext4.h>
 #include <ext4/ext4_jbd2.h>
 #include <linux/version.h>
@@ -2240,17 +2238,9 @@ static int ll_decode_fh_accept(void *context, struct dentry *de)
         return 1;
 }
 
-#ifdef HAVE_EXPORTFS_DECODE_FH
 # define ll_exportfs_decode_fh(mnt, fid, len, type, acceptable, context) \
          exportfs_decode_fh(mnt, (struct fid*)(fid), len, type,          \
                             acceptable, context)
-#else
-# define ll_exportfs_decode_fh(mnt, fid, len, type, acceptable, context) \
-         export_op_default.decode_fh((mnt)->mnt_sb, &(fid)->ino, len,    \
-                                     type, acceptable, context)
-# define FILEID_INO32_GEN 1
-extern struct export_operations export_op_default;
-#endif
 
 struct dentry *fsfilt_ext3_fid2dentry(struct vfsmount *mnt,
                                       struct fsfilt_fid *fid, int ignore_gen)

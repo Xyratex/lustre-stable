@@ -87,12 +87,4 @@ static inline wait_queue_head_t *sk_sleep(struct sock *sk)
         return sk->sk_sleep;
 }
 #endif
-
-#ifdef HAVE_INIT_NET
-#define DEFAULT_NET	(&init_net)
-#else
-/* some broken backports */
-#define DEFAULT_NET	(NULL)
-#endif
-
 #endif

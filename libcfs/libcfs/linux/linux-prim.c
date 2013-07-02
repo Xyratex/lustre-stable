@@ -267,21 +267,6 @@ void cfs_daemonize(char *str) {
         SIGNAL_MASK_UNLOCK(current, flags);
 }
 
-#ifndef HAVE_UNSHARE_FS_STRUCT
-static int unshare_fs_struct(void)
-{
-        struct task_struct *tsk = current;
-        struct fs_struct *fs = NULL;
-        fs = copy_fs_struct(tsk->fs);
-        if (fs == NULL)
-                return -ENOMEM;
-        exit_fs(tsk);
-        tsk->fs = fs;
-
-        return 0;
-}
-#endif
-
 int cfs_daemonize_ctxt(char *str)
 {
         int rc;
