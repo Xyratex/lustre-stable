@@ -1565,11 +1565,12 @@ static int mdt_reint_internal(struct mdt_thread_info *info,
         if (rc != 0)
                 GOTO(out_ucred, rc = err_serious(rc));
 
+        mq->mq_exp = info->mti_exp;
+
         if (mdt_check_resent(info, mdt_reconstruct, lhc)) {
                 rc = lustre_msg_get_status(mdt_info_req(info)->rq_repmsg);
                 GOTO(out_ucred, rc);
         }
-        mq->mq_exp = info->mti_exp;
         rc = mdt_reint_rec(info, lhc);
         EXIT;
 out_ucred:
