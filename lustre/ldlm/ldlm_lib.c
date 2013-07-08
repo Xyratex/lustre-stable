@@ -914,20 +914,6 @@ no_export:
                       libcfs_nid2str(req->rq_peer.nid),
                       export, cfs_atomic_read(&export->exp_refcount));
                 GOTO(out, rc = -EBUSY);
-        } else if (req->rq_export != NULL &&
-                   (cfs_atomic_read(&export->exp_rpc_count) > 1)) {
-                /* the current connect rpc has increased exp_rpc_count */
-                CWARN("%s: refuse reconnection from %s@%s to 0x%p/%d\n",
-                      target->obd_name, cluuid.uuid,
-                      libcfs_nid2str(req->rq_peer.nid),
-                      export, cfs_atomic_read(&export->exp_rpc_count) - 1);
-                cfs_spin_lock(&export->exp_lock);
-                if (req->rq_export->exp_conn_cnt <
-                    lustre_msg_get_conn_cnt(req->rq_reqmsg))
-                        /* try to abort active requests */
-                        req->rq_export->exp_abort_active_req = 1;
-                cfs_spin_unlock(&export->exp_lock);
-                GOTO(out, rc = -EBUSY);
         } else if (lustre_msg_get_conn_cnt(req->rq_reqmsg) == 1) {
                 CERROR("%s: NID %s (%s) reconnected with 1 conn_cnt; "
                        "cookies not random?\n", target->obd_name,
@@ -1040,7 +1026,6 @@ dont_check_exports:
         }
         LASSERT(lustre_msg_get_conn_cnt(req->rq_reqmsg) > 0);
         export->exp_conn_cnt = lustre_msg_get_conn_cnt(req->rq_reqmsg);
-        export->exp_abort_active_req = 0;
 
         /* request from liblustre?  Don't evict it for not pinging. */
         if (lustre_msg_get_op_flags(req->rq_reqmsg) & MSG_CONNECT_LIBCLIENT) {
@@ -2628,8 +2613,8 @@ int target_bulk_io(struct obd_export *exp, struct ptlrpc_bulk_desc *desc,
                                   lwi);
         }
 
-        /* Check if client was evicted or tried to reconnect already */
-        if (exp->exp_failed || exp->exp_abort_active_req) {
+        /* Check if client was evicted */
+        if (exp->exp_failed) {
                 rc = -ENOTCONN;
         } else {
                 if (desc->bd_type == BULK_PUT_SINK)
@@ -2652,8 +2637,7 @@ int target_bulk_io(struct obd_export *exp, struct ptlrpc_bulk_desc *desc,
                                                    desc);
                         rc = l_wait_event(desc->bd_waitq,
                                           !ptlrpc_server_bulk_active(desc) ||
-                                          exp->exp_failed ||
-                                          exp->exp_abort_active_req,
+                                          exp->exp_failed,
                                           lwi);
                         LASSERT(rc == 0 || rc == -ETIMEDOUT);
                         /* Wait again if we changed deadline */
@@ -2672,12 +2656,6 @@ int target_bulk_io(struct obd_export *exp, struct ptlrpc_bulk_desc *desc,
                         DEBUG_REQ(D_ERROR, req, "Eviction on bulk %s",
                                   bulk2type(desc));
                         rc = -ENOTCONN;
-                        ptlrpc_abort_bulk(desc);
-                } else if (exp->exp_abort_active_req) {
-                        DEBUG_REQ(D_ERROR, req, "Reconnect on bulk %s",
-                                  bulk2type(desc));
-                        /* we don't reply anyway */
-                        rc = -ETIMEDOUT;
                         ptlrpc_abort_bulk(desc);
                 } else if (!desc->bd_success ||
                            desc->bd_nob_transferred != desc->bd_nob) {
