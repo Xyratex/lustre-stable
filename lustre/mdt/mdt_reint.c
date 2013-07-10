@@ -508,7 +508,7 @@ static int mdt_reint_setattr(struct mdt_thread_info *info,
                 if (rc)
                         GOTO(out_put, rc);
 
-                mfd = mdt_mfd_new();
+		mfd = mdt_mfd_new(med);
                 if (mfd == NULL) {
                         mdt_write_put(mo);
                         GOTO(out_put, rc = -ENOMEM);
@@ -536,7 +536,8 @@ static int mdt_reint_setattr(struct mdt_thread_info *info,
                 LASSERT(info->mti_ioepoch);
 
                 cfs_spin_lock(&med->med_open_lock);
-                mfd = mdt_handle2mfd(info, &info->mti_ioepoch->handle);
+		mfd = mdt_handle2mfd(med, &info->mti_ioepoch->handle,
+				     req_is_replay(req));
                 if (mfd == NULL) {
                         cfs_spin_unlock(&med->med_open_lock);
                         CDEBUG(D_INODE, "no handle for file close: "
