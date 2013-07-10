@@ -2249,7 +2249,7 @@ static int ptlrpc_main(void *arg)
         thread->t_pid = cfs_curproc_pid();
         cfs_daemonize_ctxt(data->name);
 
-#if defined(HAVE_NODE_TO_CPUMASK) && defined(CONFIG_NUMA)
+#if defined(CONFIG_NUMA)
         /* we need to do this before any per-thread allocation is done so that
          * we get the per-thread allocations on local node.  bug 7342 */
         if (svc->srv_cpu_affinity) {
@@ -2264,7 +2264,7 @@ static int ptlrpc_main(void *arg)
                         num_cpu++;
                 }
                 cfs_set_cpus_allowed(cfs_current(),
-                                     node_to_cpumask(cpu_to_node(cpu)));
+                                     cpumask_of_node(cpu_to_node(cpu)));
         }
 #endif
 
@@ -2452,9 +2452,9 @@ static int ptlrpc_hr_main(void *arg)
                  "ptlrpc_hr_%d", hr_args->thread_index);
 
         cfs_daemonize_ctxt(threadname);
-#if defined(CONFIG_NUMA) && defined(HAVE_NODE_TO_CPUMASK)
+#if defined(CONFIG_NUMA)
         cfs_set_cpus_allowed(cfs_current(),
-                             node_to_cpumask(cpu_to_node(hr_args->cpu_index)));
+                             cpumask_of_node(cpu_to_node(hr_args->cpu_index)));
 #endif
         cfs_set_bit(HRT_RUNNING, &t->hrt_flags);
         cfs_waitq_signal(&t->hrt_wait);
@@ -2533,7 +2533,7 @@ static int ptlrpc_start_hr_threads(struct ptlrpc_hr_service *hr)
         LASSERT(hr->hr_n_threads > 0);
 
         for (n = 0, cpu = 0; n < hr->hr_n_threads; n++) {
-#if defined(CONFIG_SMP) && defined(HAVE_NODE_TO_CPUMASK)
+#if defined(CONFIG_SMP)
                 while (!cpu_online(cpu)) {
                         cpu++;
                         if (cpu >= cfs_num_possible_cpus())

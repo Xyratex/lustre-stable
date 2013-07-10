@@ -1210,7 +1210,7 @@ struct mdd_rebuild_thread {
         struct lu_dirent        mr_dirent;
         char                    mr_dirent_name[NAME_MAX];
 
-#if defined(CONFIG_SMP) && defined(HAVE_NODE_TO_CPUMASK)
+#if defined(CONFIG_SMP)
         /** The cpu index. */
         int                     mr_cpu;
 #endif
@@ -1680,9 +1680,9 @@ static int mdd_rebuild_main(void *arg)
         int rc;
 
         cfs_daemonize(th->mr_name);
-#if defined(CONFIG_SMP) && defined(HAVE_NODE_TO_CPUMASK)
+#if defined(CONFIG_SMP)
         cfs_set_cpus_allowed(cfs_current(),
-                             node_to_cpumask(cpu_to_node(th->mr_cpu)));
+                             cpumask_of_node(cpu_to_node(th->mr_cpu)));
 #endif
 
         CDEBUG(D_HA, "MDD recovery thread started, pid %d\n",
@@ -1895,7 +1895,7 @@ mdd_rebuild_start_threads(const struct lu_env *env,
 
                 thread->mr_info = ri;
 
-#if defined(CONFIG_SMP) && defined(HAVE_NODE_TO_CPUMASK)
+#if defined(CONFIG_SMP)
                 while (!cpu_online(cpu)) {
                         cpu++;
                         if (cpu >= cfs_num_possible_cpus())

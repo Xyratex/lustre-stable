@@ -430,11 +430,6 @@ static inline int ll_quota_off(struct super_block *sb, int off, int remount)
 #define bio_hw_segments(q, bio) 0
 #endif
 
-#if !defined(HAVE_NODE_TO_CPUMASK) && defined(HAVE_CPUMASK_OF_NODE)
-#define node_to_cpumask(i)         (*(cpumask_of_node(i)))
-#define HAVE_NODE_TO_CPUMASK
-#endif
-
 #ifndef QUOTA_OK
 # define QUOTA_OK 0
 #endif
