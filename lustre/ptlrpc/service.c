@@ -2263,7 +2263,7 @@ static int ptlrpc_main(void *arg)
                                 break;
                         num_cpu++;
                 }
-                cfs_set_cpus_allowed(cfs_current(),
+                set_cpus_allowed_ptr(cfs_current(),
                                      cpumask_of_node(cpu_to_node(cpu)));
         }
 #endif
@@ -2453,7 +2453,7 @@ static int ptlrpc_hr_main(void *arg)
 
         cfs_daemonize_ctxt(threadname);
 #if defined(CONFIG_NUMA)
-        cfs_set_cpus_allowed(cfs_current(),
+        set_cpus_allowed_ptr(cfs_current(),
                              cpumask_of_node(cpu_to_node(hr_args->cpu_index)));
 #endif
         cfs_set_bit(HRT_RUNNING, &t->hrt_flags);

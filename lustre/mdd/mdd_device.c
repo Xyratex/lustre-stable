@@ -1681,7 +1681,7 @@ static int mdd_rebuild_main(void *arg)
 
         cfs_daemonize(th->mr_name);
 #if defined(CONFIG_SMP)
-        cfs_set_cpus_allowed(cfs_current(),
+        set_cpus_allowed_ptr(cfs_current(),
                              cpumask_of_node(cpu_to_node(th->mr_cpu)));
 #endif
 

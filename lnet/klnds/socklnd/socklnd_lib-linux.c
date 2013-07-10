@@ -1262,7 +1262,7 @@ ksocknal_lib_bind_thread_to_cpu(int id)
         if (cpu_online(id)) {
                 cpumask_t m = CPU_MASK_NONE;
                 cpu_set(id, m);
-                set_cpus_allowed(current, m);
+                set_cpus_allowed_ptr(current, &m);
                 return 0;
         }
 
