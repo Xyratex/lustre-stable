@@ -2738,7 +2738,7 @@ static void mdt_thread_info_init(struct ptlrpc_request *req,
                                  struct mdt_thread_info *info)
 {
         int i;
-        struct md_capainfo *ci;
+        struct lu_capainfo *ci;
 
         req_capsule_init(&req->rq_pill, req, RCL_SERVER);
         info->mti_pill = &req->rq_pill;
@@ -2754,16 +2754,16 @@ static void mdt_thread_info_init(struct ptlrpc_request *req,
         } else
                 info->mti_mdt = NULL;
         info->mti_env = req->rq_svc_thread->t_env;
-        ci = md_capainfo(info->mti_env);
+        ci = lu_capainfo_get(info->mti_env);
         memset(ci, 0, sizeof *ci);
         if (req->rq_export) {
                 if (exp_connect_rmtclient(req->rq_export))
-                        ci->mc_auth = LC_ID_CONVERT;
+                        ci->lci_auth = LC_ID_CONVERT;
                 else if (exp_connect_flags(req->rq_export) &
                          OBD_CONNECT_MDS_CAPA)
-                        ci->mc_auth = LC_ID_PLAIN;
+                        ci->lci_auth = LC_ID_PLAIN;
                 else
-                        ci->mc_auth = LC_ID_NONE;
+                        ci->lci_auth = LC_ID_NONE;
         }
 
         info->mti_fail_id = OBD_FAIL_MDS_ALL_REPLY_NET;

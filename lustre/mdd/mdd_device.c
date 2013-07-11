@@ -2232,27 +2232,6 @@ static struct obd_ops mdd_obd_device_ops = {
 
 /*
  * context key constructor/destructor:
- * mdd_capainfo_key_init, mdd_capainfo_key_fini
- */
-LU_KEY_INIT_FINI(mdd_capainfo, struct md_capainfo);
-
-struct lu_context_key mdd_capainfo_key = {
-        .lct_tags = LCT_SERVER_SESSION,
-        .lct_init = mdd_capainfo_key_init,
-        .lct_fini = mdd_capainfo_key_fini
-};
-
-struct md_capainfo *md_capainfo(const struct lu_env *env)
-{
-        /* NB, in mdt_init0 */
-        if (env->le_ses == NULL)
-                return NULL;
-        return lu_context_key_get(env->le_ses, &mdd_capainfo_key);
-}
-EXPORT_SYMBOL(md_capainfo);
-
-/*
- * context key constructor/destructor:
  * mdd_quota_key_init, mdd_quota_key_fini
  */
 LU_KEY_INIT_FINI(mdd_quota, struct md_quota);
@@ -2533,7 +2512,7 @@ static int mdd_iocontrol(const struct lu_env *env, struct md_device *m,
 }
 
 /* type constructor/destructor: mdd_type_init, mdd_type_fini */
-LU_TYPE_INIT_FINI(mdd, &mdd_thread_key, &mdd_capainfo_key, &mdd_quota_key);
+LU_TYPE_INIT_FINI(mdd, &mdd_thread_key, &mdd_quota_key);
 
 const struct md_device_operations mdd_ops = {
         .mdo_statfs         = mdd_statfs,

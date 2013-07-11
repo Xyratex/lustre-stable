@@ -524,9 +524,13 @@ int init_obdclass(void)
                 return err;
 #endif
 
-        err = lu_global_init();
-        if (err)
-                return err;
+	err = lu_global_init();
+	if (err)
+		return err;
+
+	err = lu_capainfo_init();
+	if (err)
+		return err;
 
 #ifdef __KERNEL__
         err = lustre_register_fs();
@@ -558,7 +562,8 @@ static void cleanup_obdclass(void)
                         OBP(obd, detach)(obd);
                 }
         }
-        lu_global_fini();
+	lu_capainfo_fini();
+	lu_global_fini();
 
         obd_cleanup_caches();
         obd_sysctl_clean();
