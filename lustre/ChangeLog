@@ -1,22 +1,48 @@
 2013-01-22 Oracle, Inc.
 	* version 1.8.8
 	* Support for kernels:
-	  2.6.16.60-0.69.1 (SLES 10),
-	  2.6.32.19-0.2.1 (SLES11),
-	  2.6.18-308.24.1.el5 (RHEL 5)
-	  2.6.18-308.24.1.el5 (OEL 5)
 	  2.6.32-279.2.1.el6 (RHEL 6)
 	  2.6.32-279.2.1.el6 (OEL 6)
 	* Client support for unpatched kernels:
 	  (see http://wiki.lustre.org/index.php?title=Patchless_Client)
-	  2.6.16 - 2.6.32 vanilla (kernel.org)
-	* Recommended e2fsprogs version: 1.42.ora1
-	  NOTE: Testing has been completed on all RHEL and OEL Operating Systems
-	  but, while it should work with all SLES Operating Systems, testing is
-	  not complete yet.  SLES tested e2fsprogs version: 1.41.12-ora1.
-	  A note will be added to the Release Notes wiki page when testing has
-	  been completed, as well as removing this NOTE.
-	* The async journal commit feature (bug 19128) and the cancel
+	  2.6.32-279.2.1.el6 (RHEL 6)
+	  2.6.32-279.2.1.el6 (OEL 6)
+	* Recommended e2fsprogs version: 1.42.6.x1
+	* The async journal commit feature (bug 19128) is off by default
+
+Severity   : minor
+Bugzilla   : MRP-1086 debug CWARN removed
+
+Severity   : normal
+Bugzilla   : MRP-1053 use mutex for cl_loi_list_lock instead of spinlock
+Description: Async page operations are not guaranteed to not block, therefore
+	     spinlock is not appropriate for protecting structures accessed by
+	     them. This patch changes the spinlock with mutex.
+
+Severity   : normal
+Bugzilla   : MRP-1033 rpc.sh defect: LUSTRE is not set properly
+Description: make do_nodes(), do_node() and rpc.sh to be more accurate on
+	     setting LUSTRE
+
+Severity   : minor
+Bugzilla   : MRP-1057 check lustre.conf for modprobe
+Description: Add a check for /etc/modprobe.d/lustre.conf to get lnet module
+	     parameters during testing
+
+Severity   : minor
+Bugzilla   : MRP-1008 make lustre-iokit rpmbuildable
+
+Severity   : minor
+Bugzilla   : MRP-1007 update config files for rhel6
+
+Severity   : normal
+Bugzilla   : 24670 allow builing OFED of wider range of versions
+
+Severity   : normal
+Bugzilla   : 24668 fix broken sles10 build
+
+Severity   : normal
+Bugzilla   : 24668 fix for semaphore mess in ext4_ext_walk_space
 
 Severity   : normal
 Bugzilla   : 24554 noatime fix
