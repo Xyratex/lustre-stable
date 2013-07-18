@@ -1758,7 +1758,7 @@ static int mdt_quotactl_handle(struct mdt_thread_info *info)
 
         oqctl = req_capsule_client_get(pill, &RMF_OBD_QUOTACTL);
         if (oqctl == NULL)
-                RETURN(-EPROTO);
+		RETURN(err_serious(-EPROTO));
 
         id = oqctl->qc_id;
         if (exp_connect_rmtclient(exp)) {
@@ -1768,7 +1768,7 @@ static int mdt_quotactl_handle(struct mdt_thread_info *info)
 
                 if (unlikely(oqctl->qc_cmd != Q_GETQUOTA &&
                              oqctl->qc_cmd != Q_GETINFO))
-                        RETURN(-EPERM);
+			RETURN(err_serious(-EPERM));
 
 
                 if (oqctl->qc_type == USRQUOTA)
@@ -1778,18 +1778,18 @@ static int mdt_quotactl_handle(struct mdt_thread_info *info)
                         id = lustre_idmap_lookup_gid(NULL, idmap, 0,
                                                      oqctl->qc_id);
                 else
-                        RETURN(-EINVAL);
+			RETURN(err_serious(-EINVAL));
 
                 if (id == CFS_IDMAP_NOTFOUND) {
                         CDEBUG(D_QUOTA, "no mapping for id %u\n",
                                oqctl->qc_id);
-                        RETURN(-EACCES);
+			RETURN(err_serious(-EACCES));
                 }
         }
 
         rc = req_capsule_server_pack(pill);
         if (rc)
-                RETURN(rc);
+		RETURN(err_serious(rc));
 
         repoqc = req_capsule_server_get(pill, &RMF_OBD_QUOTACTL);
         LASSERT(repoqc != NULL);
