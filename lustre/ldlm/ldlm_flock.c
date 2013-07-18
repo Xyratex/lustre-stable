@@ -858,8 +858,10 @@ EXPORT_SYMBOL(ldlm_init_flock_export);
 void ldlm_destroy_flock_export(struct obd_export *exp)
 {
         ENTRY;
-        cfs_hash_putref(exp->exp_flock_hash);
-        exp->exp_flock_hash = NULL;
+        if (exp->exp_flock_hash) {
+                cfs_hash_putref(exp->exp_flock_hash);
+                exp->exp_flock_hash = NULL;
+        }
         EXIT;
 }
 EXPORT_SYMBOL(ldlm_destroy_flock_export);
