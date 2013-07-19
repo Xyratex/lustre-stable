@@ -56,7 +56,7 @@ endif
 endif
 
 if UTILS
-sbin_SCRIPTS += ldev lustre_routes_config lustre_routes_conversion
+sbin_SCRIPTS += ldev lustre_routes_config lustre_routes_conversion lustre_tune_prealloc
 bin_SCRIPTS   = lfs_migrate
 
 if SERVER
@@ -86,7 +86,8 @@ EXTRA_DIST = license-status lustre_rmmod ldev lc_mon lhbadm \
 	     lc_servip lustre_routes_config lustre_routes_conversion \
 	     $(addsuffix .in,$(genscripts)) lfs_migrate lustre_req_history \
 	     lustre lsvcgss lc_common haconfig Lustre.ha_v2 dkms.mkconf \
-	     zfsobj2fid ko2iblnd-probe statechange-lustre.sh
+	     zfsobj2fid ko2iblnd-probe statechange-lustre.sh \
+	     lustre_tune_prealloc
 
 CLEANFILES = $(genscripts)
 

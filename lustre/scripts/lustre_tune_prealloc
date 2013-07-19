@@ -1,0 +1,69 @@
+#!/bin/bash
+
+#
+# Copyright 2013 Xyratex Technology Ltd.
+#
+#
+# lustre_tune_prealloc - Set prealloc_table values at run time
+#
+# This script allow to set prealloc_table values at run time for particular
+# PDRAID/MDRAID device (or in simpler words allow dynamically adjust ldiskfs
+# mb allocation size). These values are set in this script using proc interface.
+# It is mainly useful for testing PDRAID/MDRAID read performance.
+#
+################################################################################
+
+PROG=$0
+DEV=$1
+SIZE=$2
+
+LDISKFS_PROC=/proc/fs/ldiskfs
+
+usage()
+{
+	echo "Usage: ${PROG} <device> <size>"
+	echo "    <device>: The MD/PD device which host ldiskfs"
+	echo "      <size>: Max preallocation size, in MiB, must be in range [1, 32]"
+}
+
+[ $# -ne 2 ] && usage && exit 1
+
+validate_params()
+{
+	local dev=$1
+	local size=$2
+	local i
+
+	if [ ! -d ${LDISKFS_PROC}/$(basename $dev) ]; then
+			echo "$dev is not an active device or not hosting ldiskfs"
+			exit 1
+	fi
+
+	for ((i = 1; i <= 32; i = i * 2)); do
+		[ $i -eq $size ] && break
+	done
+	if [ $i -gt 32 ]; then
+		echo "Size $size is not valid"
+		exit 1
+	fi
+}
+
+set_proc()
+{
+	local dev=$1
+	local size=$2
+	local tune=""
+	local alloc=256
+	local i
+
+	for ((i = 1; i <= size; i = i * 2)); do
+		tune="${tune} $alloc"
+		alloc=$((alloc * 2))
+	done
+
+	echo "tune: $tune"
+	echo "$tune" > ${LDISKFS_PROC}/$(basename $dev)/prealloc_table
+}
+
+validate_params ${DEV} ${SIZE}
+set_proc ${DEV} ${SIZE}
