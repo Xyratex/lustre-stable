@@ -3811,9 +3811,9 @@ out:
 }
 
 static int mgs_write_log_pool(struct obd_device *obd, char *logname,
-                              struct fs_db *fsdb, char *lovname,
+                              struct fs_db *fsdb, char *tgtname,
                               enum lcfg_command_type cmd,
-                              char *poolname, char *fsname,
+			      char *fsname, char *poolname,
                               char *ostname, char *comment)
 {
         struct llog_handle *llh = NULL;
@@ -3822,13 +3822,14 @@ static int mgs_write_log_pool(struct obd_device *obd, char *logname,
         rc = record_start_log(obd, &llh, logname);
         if (rc)
                 return rc;
-        rc = record_marker(obd, llh, fsdb, CM_START, lovname, comment);
+        rc = record_marker(obd, llh, fsdb, CM_START, tgtname, comment);
 	if (rc)
 		goto out;
-        rc = record_base(obd, llh, lovname, 0, cmd, poolname, fsname, ostname, 0);
+        rc = record_base(obd, llh, tgtname, 0, cmd,
+			 fsname, poolname, ostname, 0);
 	if (rc)
 		goto out;
-        rc = record_marker(obd, llh, fsdb, CM_END, lovname, comment);
+        rc = record_marker(obd, llh, fsdb, CM_END, tgtname, comment);
 out:
         record_end_log(obd, &llh);
         return rc;
