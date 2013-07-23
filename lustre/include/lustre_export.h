@@ -239,7 +239,10 @@ struct obd_export {
                                   exp_need_sync:1,
                                   exp_flvr_changed:1,
                                   exp_flvr_adapt:1,
-                                  exp_libclient:1; /* liblustre client? */
+                                  exp_libclient:1, /* liblustre client? */
+                                  /* client timed out and tried to reconnect,
+                                   * but couldn't because of active rpcs */
+                                  exp_abort_active_req:1;
 	__u64                     exp_max_xid_seen;
         /* also protected by exp_lock */
         enum lustre_sec_part      exp_sp_peer;
