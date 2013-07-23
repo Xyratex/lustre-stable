@@ -321,7 +321,7 @@ static int mds_cmd_setup(struct obd_device *obd, struct lustre_cfg *lcfg)
                 GOTO(err_putfs, rc);
 
         push_ctxt(&saved, &obd->obd_lvfs_ctxt, NULL);
-        dentry = simple_mkdir(cfs_fs_pwd(current->fs), mnt, "OBJECTS", 0777, 1);
+        dentry = simple_mkdir(current->fs->pwd.dentry, mnt, "OBJECTS", 0777, 1);
         if (IS_ERR(dentry)) {
                 rc = PTR_ERR(dentry);
                 CERROR("cannot create OBJECTS directory: rc = %d\n", rc);

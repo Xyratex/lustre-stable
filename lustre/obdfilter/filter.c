@@ -1215,7 +1215,7 @@ static int filter_prep_groups(struct obd_device *obd)
         loff_t off = 0;
         ENTRY;
 
-        O_dentry = simple_mkdir(cfs_fs_pwd(current->fs), obd->u.obt.obt_vfsmnt,
+        O_dentry = simple_mkdir(current->fs->pwd.dentry, obd->u.obt.obt_vfsmnt,
                                 "O", 0700, 1);
         CDEBUG(D_INODE, "%s: got/created O: %p\n", obd->obd_name, O_dentry);
         if (IS_ERR(O_dentry)) {

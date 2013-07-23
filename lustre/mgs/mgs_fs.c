@@ -171,7 +171,8 @@ int mgs_fs_setup(struct obd_device *obd, struct vfsmount *mnt)
         push_ctxt(&saved, &obd->obd_lvfs_ctxt, NULL);
 
         /* Setup the configs dir */
-        dentry = simple_mkdir(cfs_fs_pwd(current->fs), mnt, MOUNT_CONFIGS_DIR, 0777, 1);
+        dentry = simple_mkdir(current->fs->pwd.dentry, mnt,
+			      MOUNT_CONFIGS_DIR, 0777, 1);
         if (IS_ERR(dentry)) {
                 rc = PTR_ERR(dentry);
                 CERROR("cannot create %s directory: rc = %d\n",
@@ -181,7 +182,7 @@ int mgs_fs_setup(struct obd_device *obd, struct vfsmount *mnt)
         mgs->mgs_configs_dir = dentry;
 
         /* create directory to store nid table versions */
-        dentry = simple_mkdir(cfs_fs_pwd(current->fs), mnt, MGS_NIDTBL_DIR,
+        dentry = simple_mkdir(current->fs->pwd.dentry, mnt, MGS_NIDTBL_DIR,
                               0777, 1);
         if (IS_ERR(dentry)) {
                 rc = PTR_ERR(dentry);
