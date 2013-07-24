@@ -1414,7 +1414,9 @@ int jt_obd_md_common(int argc, char **argv, int cmd)
         while (shmem_running()) {
                 struct lu_fid fid;
 
-                data.ioc_obdo2.o_id = child_base_id;
+		if (child_base_id != -1)
+			data.ioc_obdo2.o_id = child_base_id;
+
                 data.ioc_obdo2.o_mode = mode | create_mode;
                 data.ioc_obdo2.o_valid = OBD_MD_FLID | OBD_MD_FLTYPE |
                                          OBD_MD_FLMODE | OBD_MD_FLFLAGS |
