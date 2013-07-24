@@ -3909,14 +3909,13 @@ int mgs_pool_cmd(struct obd_device *obd, enum lcfg_command_type cmd,
         }
         }
 
-        cfs_mutex_lock(&fsdb->fsdb_mutex);
-
         if (canceled_label != NULL) {
                 OBD_ALLOC_PTR(mti);
                 if (mti == NULL)
 			GOTO(out_cancel, rc = -ENOMEM);
         }
 
+	mutex_lock(&fsdb->fsdb_mutex);
         /* write pool def to all MDT logs */
         for (i = 0; i < INDEX_MAP_SIZE * 8; i++) {
                  if (cfs_test_bit(i,  fsdb->fsdb_mdt_index_map)) {
