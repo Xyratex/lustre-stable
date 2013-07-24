@@ -327,12 +327,17 @@ static int lprocfs_rd_percpu_rebuild(char *page, char **start, off_t off,
         for (i = 0; i < cfs_num_possible_cpus(); i++) {
                 struct lprocfs_stats *stats = mdd->mdd_stats;
                 struct lprocfs_counter *lcf, *lcd;
+                struct lprocfs_counter_header *lchf, *lchd;
                 __s64 dirs, files;
 
                 lcf = &(stats->ls_percpu[i]->lp_cntr[LPROC_MDD_REBUILD_FILES]);
                 lcd = &(stats->ls_percpu[i]->lp_cntr[LPROC_MDD_REBUILD_DIRS]);
-                files = lprocfs_read_helper(lcf, LPROCFS_FIELDS_FLAGS_COUNT);
-                dirs = lprocfs_read_helper(lcd, LPROCFS_FIELDS_FLAGS_COUNT);
+		lchf = &(stats->ls_cnt_header[LPROC_MDD_REBUILD_FILES]);
+		lchd = &(stats->ls_cnt_header[LPROC_MDD_REBUILD_DIRS]);
+                files = lprocfs_read_helper(lcf, lchf, stats->ls_flags,
+					    LPROCFS_FIELDS_FLAGS_COUNT);
+                dirs = lprocfs_read_helper(lcd, lchd, stats->ls_flags,
+					   LPROCFS_FIELDS_FLAGS_COUNT);
 
                 len += snprintf(page + len, count, "%lld %lld\n", dirs, files);
         }
