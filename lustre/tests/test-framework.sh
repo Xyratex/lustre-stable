@@ -5363,8 +5363,9 @@ get_block_size() {
 large_xattr_enabled() {
     local mds_dev=$(mdsdevname ${SINGLEMDS//mds/})
 
-    do_facet $SINGLEMDS "$DUMPE2FS -h $mds_dev 2>&1 | grep -q large_xattr"
-    return ${PIPESTATUS[0]}
+	do_facet $SINGLEMDS "$DUMPE2FS -h $mds_dev 2>&1 |
+		grep -E -q '(ea_inode|large_xattr)'"
+	return ${PIPESTATUS[0]}
 }
 
 # Get the maximum xattr size supported by the filesystem.
