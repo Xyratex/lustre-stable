@@ -13,9 +13,6 @@ init_test_env $@
 . ${CONFIG:=$LUSTRE/tests/cfg/$NAME.sh}
 init_logging
 
-[ $(facet_fstype $SINGLEMDS) != ldiskfs ] &&
-	skip "lfsck performance only for ldiskfs" && exit 0
-
 require_dsh_mds || exit 0
 
 [ "$SLOW" = "no" ] &&
@@ -135,8 +132,8 @@ test_0() {
 	do_rpc_nodes $(facet_active_host $SINGLEMDS) load_modules_local
 	reformat_external_journal
 	add ${SINGLEMDS} $(mkfs_opts ${SINGLEMDS} ${MDT_DEVNAME}) --backfstype \
-		ldiskfs --reformat ${MDT_DEVNAME} $(mdsvdevname 1) > /dev/null ||
-		error "Fail to reformat the MDS!"
+		$(facet_fstype ${SINGLEMDS}) --reformat ${MDT_DEVNAME} \
+		$(mdsvdevname 1) >/dev/null || error "Fail to reformat the MDS!"
 
 	for ((i=$MINCOUNT; i<=$MAXCOUNT; i=$((i * FACTOR)))); do
 		local nfiles=$((i - BCOUNT))
@@ -170,6 +167,9 @@ test_0() {
 run_test 0 "lfsck performance test (routine case) without load"
 
 test_1() {
+	[ $(facet_fstype $SINGLEMDS) != ldiskfs ] &&
+		skip "not implemented for ZFS" && return
+
 	local BCOUNT=0
 	local i
 
@@ -177,8 +177,8 @@ test_1() {
 	do_rpc_nodes $(facet_active_host $SINGLEMDS) load_modules_local
 	reformat_external_journal
 	add ${SINGLEMDS} $(mkfs_opts ${SINGLEMDS} ${MDT_DEVNAME}) --backfstype \
-		ldiskfs --reformat ${MDT_DEVNAME} $(mdsvdevname 1) > /dev/null ||
-		error "Fail to reformat the MDS!"
+		$(facet_fstype ${SINGLEMDS}) --reformat ${MDT_DEVNAME} \
+		$(mdsvdevname 1) > /dev/null || error "Fail to reformat the MDS"
 
 	for ((i=$MINCOUNT_REPAIR; i<=$MAXCOUNT_REPAIR; i=$((i * FACTOR)))); do
 		local nfiles=$((i - BCOUNT))
@@ -229,8 +229,8 @@ test_2() {
 		do_rpc_nodes $(facet_active_host $SINGLEMDS) load_modules_local
 		reformat_external_journal
 		add ${SINGLEMDS} $(mkfs_opts ${SINGLEMDS} ${MDT_DEVNAME}) \
-			--backfstype ldiskfs --reformat ${MDT_DEVNAME} \
-			$(mdsvdevname 1) > /dev/null ||
+			--backfstype $(facet_fstype ${SINGLEMDS}) --reformat \
+			${MDT_DEVNAME} $(mdsvdevname 1) > /dev/null ||
 			error "Fail to reformat the MDS!"
 
 		echo "+++ start to create for ${i} files set at: $(date) +++"
@@ -275,8 +275,8 @@ test_3() {
 	do_rpc_nodes $(facet_active_host $SINGLEMDS) load_modules_local
 	reformat_external_journal
 	add ${SINGLEMDS} $(mkfs_opts ${SINGLEMDS} ${MDT_DEVNAME}) --backfstype \
-		ldiskfs --reformat ${MDT_DEVNAME} $(mdsvdevname 1) > /dev/null ||
-		error "Fail to reformat the MDS!"
+		$(facet_fstype ${SINGLEMDS}) --reformat ${MDT_DEVNAME} \
+		$(mdsvdevname 1) > /dev/null || error "Fail to reformat the MDS"
 
 	for ((i=$inc_count; i<=$BASE_COUNT; i=$((i + inc_count)))); do
 		local nfiles=$((i - BCOUNT))
