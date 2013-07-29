@@ -410,21 +410,20 @@ getxattr_nocache:
 	}
 
 #ifdef CONFIG_FS_POSIX_ACL
-	if (rce && rce->rce_ops == RMT_LSETFACL) {
-                ext_acl_xattr_header *acl;
+	if (rce != NULL && rce->rce_ops == RMT_LSETFACL) {
+		ext_acl_xattr_header *acl;
 
-		acl = lustre_posix_acl_xattr_2ext((posix_acl_xattr_header *)buffer,
-						rc);
-                if (IS_ERR(acl))
-                        GOTO(out, rc = PTR_ERR(acl));
+		acl = lustre_posix_acl_xattr_2ext(buffer, rc);
+		if (IS_ERR(acl))
+			GOTO(out, rc = PTR_ERR(acl));
 
-                rc = ee_add(&sbi->ll_et, cfs_curproc_pid(), ll_inode2fid(inode),
-                            xattr_type, acl);
-                if (unlikely(rc < 0)) {
-                        lustre_ext_acl_xattr_free(acl);
-                        GOTO(out, rc);
-                }
-        }
+		rc = ee_add(&sbi->ll_et, cfs_curproc_pid(), ll_inode2fid(inode),
+			    xattr_type, acl);
+		if (unlikely(rc < 0)) {
+			lustre_ext_acl_xattr_free(acl);
+			GOTO(out, rc);
+		}
+	}
 #endif
 	EXIT;
 
