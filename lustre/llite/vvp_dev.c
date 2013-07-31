@@ -455,9 +455,8 @@ static int vvp_pgcache_show(struct seq_file *f, void *v)
                 if (clob != NULL) {
                         hdr = cl_object_header(clob);
 
-                        cfs_spin_lock(&hdr->coh_page_guard);
-                        page = cl_page_lookup(hdr, id.vpi_index);
-                        cfs_spin_unlock(&hdr->coh_page_guard);
+			spin_lock(&hdr->coh_page_guard);
+			page = cl_page_lookup(hdr, id.vpi_index);
 
                         seq_printf(f, "%8x@"DFID": ",
                                    id.vpi_index, PFID(&hdr->coh_lu.loh_fid));
@@ -466,6 +465,7 @@ static int vvp_pgcache_show(struct seq_file *f, void *v)
                                 cl_page_put(env, page);
                         } else
                                 seq_puts(f, "missing\n");
+			spin_unlock(&hdr->coh_page_guard);
                         lu_object_ref_del(&clob->co_lu, "dump", cfs_current());
                         cl_object_put(env, clob);
                 } else
