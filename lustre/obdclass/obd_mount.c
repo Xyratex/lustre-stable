@@ -536,21 +536,9 @@ static int server_start_mgs(struct super_block *sb)
 {
         struct lustre_sb_info    *lsi = s2lsi(sb);
         struct vfsmount          *mnt = lsi->lsi_srv_mnt;
-        struct lustre_mount_info *lmi;
         int    rc = 0;
         ENTRY;
         LASSERT(mnt);
-
-        /* It is impossible to have more than 1 MGS per node, since
-           MGC wouldn't know which to connect to */
-        lmi = server_find_mount(LUSTRE_MGS_OBDNAME);
-        if (lmi) {
-                lsi = s2lsi(lmi->lmi_sb);
-                LCONSOLE_ERROR_MSG(0x15d, "The MGS service was already started"
-                                   " from server %s\n",
-                                   lsi->lsi_ldd->ldd_svname);
-                RETURN(-EALREADY);
-        }
 
         CDEBUG(D_CONFIG, "Start MGS service %s\n", LUSTRE_MGS_OBDNAME);
 
@@ -562,12 +550,17 @@ static int server_start_mgs(struct super_block *sb)
                 /* Do NOT call server_deregister_mount() here. This leads to
                  * inability cleanup cleanly and free lsi and other stuff when
                  * mgs calls server_put_mount() in error handling case. -umka */
-        }
-
-        if (rc)
+        } else if (rc == -EEXIST) {
+	        /* It is impossible to have more than 1 MGS per node, since
+		   MGC wouldn't know which to connect to */
+                LCONSOLE_ERROR_MSG(0x15d, "The MGS service was already started"
+                                   "\n");
+                rc = -EALREADY;
+	} else {
                 LCONSOLE_ERROR_MSG(0x15e, "Failed to start MGS '%s' (%d). "
                                    "Is the 'mgs' module loaded?\n",
                                    LUSTRE_MGS_OBDNAME, rc);
+	}
         RETURN(rc);
 }
 
