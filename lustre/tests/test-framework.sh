@@ -1983,7 +1983,11 @@ facet_host() {
     varname=${facet}_HOST
     if [ -z "${!varname}" ]; then
         if [ "${facet:0:3}" == "ost" ]; then
-            eval ${facet}_HOST=${ost_HOST}
+            local facet_HOST=${facet%failover}_HOST
+            eval ${facet}_HOST=${!facet_HOST}
+            if [ -z "${!varname}" ]; then
+                eval ${facet}_HOST=${ost_HOST}
+            fi
         fi
     fi
     echo -n ${!varname}
