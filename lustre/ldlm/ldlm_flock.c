@@ -683,11 +683,6 @@ ldlm_flock_completion_ast(struct ldlm_lock *lock, __u64 flags, void *data)
 granted:
         OBD_FAIL_TIMEOUT(OBD_FAIL_LDLM_CP_CB_WAIT, 10);
 
-        if (LDLM_IS(lock, DESTROYED)) {
-                LDLM_DEBUG(lock, "client-side enqueue waking up: destroyed");
-                RETURN(0);
-        }
-
         if (lock->l_flags & LDLM_FL_FAILED) {
                 LDLM_DEBUG(lock, "client-side enqueue waking up: failed");
                 RETURN(-EIO);
@@ -695,7 +690,17 @@ granted:
 
         LDLM_DEBUG(lock, "client-side enqueue granted");
 
-        lock_res_and_lock(lock);
+	lock_res_and_lock(lock);
+
+
+	/* Protect against race where lock could have been just destroyed
+	 * due to overlap in ldlm_process_flock_lock().
+	 */
+	if (lock->l_flags & LDLM_FL_DESTROYED) {
+		unlock_res_and_lock(lock);
+		LDLM_DEBUG(lock, "client-side enqueue waking up: destroyed");
+		RETURN(0);
+	}
 
         /* ldlm_lock_enqueue() has already placed lock on the granted list. */
 	ldlm_resource_unlink_lock(lock);
