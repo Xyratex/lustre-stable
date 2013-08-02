@@ -203,17 +203,6 @@ static inline unsigned int mnt_get_count(struct vfsmount *mnt)
 #define TREE_READ_UNLOCK_IRQ(mapping) cfs_spin_unlock_irq(&(mapping)->tree_lock)
 #endif
 
-#ifdef HAVE_UNREGISTER_BLKDEV_RETURN_INT
-#define ll_unregister_blkdev(a,b)       unregister_blkdev((a),(b))
-#else
-static inline
-int ll_unregister_blkdev(unsigned int dev, const char *name)
-{
-        unregister_blkdev(dev, name);
-        return 0;
-}
-#endif
-
 #ifndef FS_HAS_FIEMAP
 #define FS_HAS_FIEMAP			(0)
 #endif
