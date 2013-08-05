@@ -167,7 +167,6 @@ int mdt_getxattr(struct mdt_thread_info *info)
         __u32                   remote = exp_connect_rmtclient(info->mti_exp);
         __u32                   perm;
         int                     easize, rc;
-	struct mdt_lock_handle *lhc = { 0 };
         ENTRY;
 
         LASSERT(info->mti_object != NULL);
@@ -182,17 +181,6 @@ int mdt_getxattr(struct mdt_thread_info *info)
 	rc = mdt_init_ucred(info, reqbody);
         if (rc)
                 RETURN(err_serious(rc));
-
-	/* Lock the object if we are not part of an intent request. */
-	if (!(info->mti_body->valid & OBD_MD_FLXATTRLOCKED)) {
-		lhc = &info->mti_lh[MDT_LH_CHILD];
-		mdt_lock_handle_init(lhc);
-		mdt_lock_reg_init(lhc, LCK_PR);
-		rc = mdt_object_lock(info, info->mti_object, lhc,
-				     MDS_INODELOCK_XATTR, MDT_LOCAL_LOCK);
-		if (rc != 0)
-			GOTO(out_no_unlock, rc);
-	}
 
         next = mdt_object_child(info->mti_object);
 
@@ -261,6 +249,18 @@ int mdt_getxattr(struct mdt_thread_info *info)
 		for (b = buf->lb_buf;
 		     b < (char *)buf->lb_buf + eadatasize;
 		     b += strlen(b) + 1, v += rc) {
+			/* Filter out ACL ACCESS since it is cached separately */
+			if (!strcmp(b, XATTR_NAME_ACL_ACCESS)) {
+				/* Remove posix_acl_access from the list, but
+				 * exit early if it's the last attribute
+				 */
+				eadatasize -= sizeof(XATTR_NAME_ACL_ACCESS);
+				if (eadatasize - (b - (char *)buf->lb_buf) == 0)
+					break;
+				memmove(b, b + sizeof(XATTR_NAME_ACL_ACCESS),
+					eadatasize - (b - (char *)buf->lb_buf));
+			}
+
 			buf2.lb_buf = v;
 			rc = mdt_getxattr_one(info, b, next, &buf2, med, uc);
 			if (rc < 0)
@@ -286,11 +286,6 @@ int mdt_getxattr(struct mdt_thread_info *info)
 
         EXIT;
 out:
-	/* Unlock the object if we are not part of an intent request. */
-	if (!(info->mti_body->valid & OBD_MD_FLXATTRLOCKED))
-		mdt_object_unlock(info, info->mti_object, lhc, rc);
-
-out_no_unlock:
         if (rc >= 0) {
                 mdt_counter_incr(req->rq_export, LPROC_MDT_GETXATTR);
                 repbody->eadatasize = rc;
@@ -372,6 +367,9 @@ int mdt_reint_setxattr(struct mdt_thread_info *info,
 
         CDEBUG(D_INODE, "setxattr for "DFID"\n", PFID(rr->rr_fid1));
 
+	if (info->mti_dlm_req)
+		ldlm_request_cancel(req, info->mti_dlm_req, 0);
+
         if (OBD_FAIL_CHECK(OBD_FAIL_MDS_SETXATTR))
                 RETURN(err_serious(-ENOMEM));
 
@@ -421,10 +419,9 @@ int mdt_reint_setxattr(struct mdt_thread_info *info,
          * by new directories/files at create time. */
         if (!strcmp(xattr_name, XATTR_NAME_ACL_ACCESS))
                 lockpart |= MDS_INODELOCK_LOOKUP;
-
-	/* We need to take the lock on behalf of old clients so that newer
-	 * clients flush their xattr caches */
-	if (!(valid & OBD_MD_FLXATTRLOCKED))
+	else
+		/* We need to take the lock on behalf of old clients so that
+		 * newer clients flush their xattr caches */
 		lockpart |= MDS_INODELOCK_XATTR;
 
         lh = &info->mti_lh[MDT_LH_PARENT];

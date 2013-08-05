@@ -9533,7 +9533,6 @@ test_226() {
         mkdir -p $DIR/$tdir
         touch $DIR/$tdir/$tfile
         $LCTL set_param fail_loc=0x1402
-        setfattr -n user.attr -v value $DIR/$tdir/$tfile && error
         # attr pre-2.4.44-7 had a bug: http://git.savannah.gnu.org/cgit/attr.git/commit/?id=93c92ed
         getfattr -n user.attr $DIR/$tdir/$tfile && error
         $LCTL set_param fail_loc=0x0

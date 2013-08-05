@@ -101,7 +101,7 @@ int mdc_enqueue(struct obd_export *exp, struct ldlm_enqueue_info *einfo,
                 struct lustre_handle *lockh, void *lmm, int lmmsize,
 		struct ptlrpc_request **req, __u64 extra_lock_flags);
 
-int mdc_resource_get_unused(struct obd_export *exp, struct lu_fid *fid,
+int mdc_resource_get_unused(struct obd_export *exp, const struct lu_fid *fid,
                             cfs_list_t *cancels, ldlm_mode_t mode,
                             __u64 bits);
 /* mdc/mdc_request.c */
@@ -169,5 +169,8 @@ ldlm_mode_t mdc_lock_match(struct obd_export *exp, __u64 flags,
                            const struct lu_fid *fid, ldlm_type_t type,
                            ldlm_policy_data_t *policy, ldlm_mode_t mode,
                            struct lustre_handle *lockh);
+
+int mdc_prep_elc_req(struct obd_export *exp, struct ptlrpc_request *req,
+		     cfs_list_t *cancels, int count);
 
 #endif

@@ -1953,19 +1953,29 @@ test_51() {
 run_test 51 "alloc_rr should be allocate on correct order"
 
 test_52() {
-        local p="$TMP/sanityN-$TESTNAME.parameters"
-        save_lustre_params $HOSTNAME "llite.*.xattr_cache" > $p
-        lctl set_param llite.*.xattr_cache 1 || { skip "xattr cache is not supported"; return 0; }
+	local tlink1
+	local tlink2
+	local p="$TMP/sanityN-$TESTNAME.parameters"
+	save_lustre_params $HOSTNAME "llite.*.xattr_cache" > $p
+	lctl set_param llite.*.xattr_cache 1 || { skip "xattr cache is not supported"; return 0; }
 
-        touch $DIR1/$tfile
-        setfattr -n user.attr1 -v value1 $DIR1/$tfile || error 1
-        getfattr -n user.attr1 $DIR2/$tfile | grep value1 || error 2
-        setfattr -n user.attr1 -v value2 $DIR2/$tfile || error 3
-        getfattr -n user.attr1 $DIR1/$tfile | grep value2 || error 4
-        rm -f $DIR2/$tfile
+	touch $DIR1/$tfile
+	setfattr -n user.attr1 -v value1 $DIR1/$tfile || error 1
+	getfattr -n user.attr1 $DIR2/$tfile | grep value1 || error 2
+	setfattr -n user.attr1 -v value2 $DIR2/$tfile || error 3
+	getfattr -n user.attr1 $DIR1/$tfile | grep value2 || error 4
 
-        restore_lustre_params < $p
-        rm -f $p
+	# check that trusted.link is consistent
+	tlink1=$(getfattr -n trusted.link $DIR1/$tfile | md5sum)
+	ln $DIR2/$tfile $DIR2/$tfile-2 || error "failed to link"
+	tlink2=$(getfattr -n trusted.link $DIR1/$tfile | md5sum)
+	echo "$tlink1 $tlink2"
+	[ "$tlink1" = "$tlink2" ] && error "trusted.link should have changed!"
+	rm -f $DIR2/$tfile
+	rm -f $DIR2/$tfile-2
+
+	restore_lustre_params < $p
+	rm -f $p
 }
 run_test 52 "getxattr/setxattr cache should be consistent between nodes"
 

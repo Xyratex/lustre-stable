@@ -281,6 +281,7 @@ static const struct req_msg_field *mds_reint_setxattr_client[] = {
         &RMF_REC_REINT,
         &RMF_CAPA1,
         &RMF_NAME,
+	&RMF_DLM_REQ,
         &RMF_EADATA
 };
 

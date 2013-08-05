@@ -354,11 +354,28 @@ static int mdc_xattr_common(struct obd_export *exp,const struct req_format *fmt,
                                      input_size);
         }
 
-        rc = ptlrpc_request_pack(req, LUSTRE_MDS_VERSION, opcode);
-        if (rc) {
-                ptlrpc_request_free(req);
-                RETURN(rc);
-        }
+	/* Finish local XATTR locks to get rid of a possible cancel RPC */
+	if (opcode == MDS_REINT && fid_is_sane(fid) &&
+	    exp->exp_connect_data.ocd_ibits_known & MDS_INODELOCK_XATTR) {
+		CFS_LIST_HEAD(cancels);
+		int count;
+
+		count = mdc_resource_get_unused(exp, fid,
+						&cancels, LCK_EX,
+						MDS_INODELOCK_XATTR);
+
+		rc = mdc_prep_elc_req(exp, req, &cancels, count);
+		if (rc) {
+			ptlrpc_request_free(req);
+			RETURN(rc);
+		}
+	} else {
+		rc = ptlrpc_request_pack(req, LUSTRE_MDS_VERSION, opcode);
+		if (rc) {
+			ptlrpc_request_free(req);
+			RETURN(rc);
+		}
+	}
 
         if (opcode == MDS_REINT) {
                 struct mdt_rec_setxattr *rec;

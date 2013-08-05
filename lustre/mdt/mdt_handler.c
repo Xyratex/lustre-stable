@@ -3209,7 +3209,7 @@ static struct mdt_it_flavor {
         },
         [MDT_IT_GETXATTR] = {
 		.it_fmt   = &RQF_LDLM_INTENT_GETXATTR,
-                .it_flags = 0,
+		.it_flags = HABEO_CORPUS,
 		.it_act   = mdt_intent_getxattr
         },
 };
@@ -3619,7 +3619,7 @@ static int mdt_intent_opc(long itopc, struct mdt_thread_info *info,
                 /* execute policy */
                 rc = flv->it_act(opc, info, lockp, flags);
         } else {
-                rc = -EOPNOTSUPP;
+		rc = -EPROTO;
         }
         RETURN(rc);
 }

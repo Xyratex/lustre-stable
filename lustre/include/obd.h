@@ -1192,7 +1192,6 @@ struct lu_context;
 #define IT_GETXATTR (1 << 7)
 #define IT_EXEC     (1 << 8)
 #define IT_PIN      (1 << 9)
-#define IT_SETXATTR (1 << 10)
 
 static inline int it_to_lock_mode(struct lookup_intent *it)
 {
@@ -1203,8 +1202,6 @@ static inline int it_to_lock_mode(struct lookup_intent *it)
                 return LCK_CR;
 	else if (it->it_op &  IT_GETXATTR)
 		return LCK_PR;
-	else if (it->it_op &  IT_SETXATTR)
-		return LCK_PW;
 
         LASSERTF(0, "Invalid it_op: %d\n", it->it_op);
         return -EINVAL;

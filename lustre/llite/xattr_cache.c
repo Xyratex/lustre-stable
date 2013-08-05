@@ -116,13 +116,13 @@ static int ll_xattr_cache_find(cfs_list_t *cache,
 }
 
 /**
- * This adds or updates an xattr.
+ * This adds an xattr.
  *
- * Add @xattr_name attr with @xattr_val value and @xattr_val_len length,
- * if the attribute already exists, then update its value.
+ * Add @xattr_name attr with @xattr_val value and @xattr_val_len length.
  *
  * \retval 0       success
  * \retval -ENOMEM if no memory could be allocated for the cached attr
+ * \retval -EPROTO if duplicate xattr is being added
  */
 static int ll_xattr_cache_add(cfs_list_t *cache,
 				const char *xattr_name,
@@ -134,22 +134,8 @@ static int ll_xattr_cache_add(cfs_list_t *cache,
 	ENTRY;
 
 	if (!ll_xattr_cache_find(cache, xattr_name, &xattr)) {
-		char *val;
-
-		OBD_ALLOC(val, xattr_val_len);
-		if (!val) {
-			CERROR("xattr update failure\n");
-			RETURN(-ENOMEM);
-		}
-		OBD_FREE(xattr->xe_value, xattr->xe_vallen);
-		memcpy(val, xattr_val, xattr_val_len);
-		xattr->xe_value = val;
-		xattr->xe_vallen = xattr_val_len;
-
-		CDEBUG(D_CACHE, "update: [%s]=%.*s\n", xattr_name,
-			xattr_val_len, xattr_val);
-
-		RETURN(0);
+		CDEBUG(D_CACHE, "duplicate xattr: [%s]\n", xattr_name);
+		RETURN(-EPROTO);
 	}
 
 	OBD_SLAB_ALLOC_PTR_GFP(xattr, xattr_kmem, CFS_ALLOC_IO);
@@ -334,7 +320,7 @@ int ll_xattr_cache_destroy(struct inode *inode)
 }
 
 /**
- * Match or enqueue a PR or PW LDLM lock.
+ * Match or enqueue a PR LDLM lock.
  *
  * Find or request an LDLM lock with xattr data.
  * Since LDLM does not provide API for atomic match_or_enqueue,
@@ -365,8 +351,7 @@ static int ll_xattr_find_get_lock(struct inode *inode,
 
 	cfs_mutex_lock(&lli->lli_xattrs_enq_lock);
 	/* Try matching first. */
-	mode = ll_take_md_lock(inode, MDS_INODELOCK_XATTR, &lockh,
-			oit->it_op == IT_SETXATTR ? LCK_PW : (LCK_PR | LCK_PW));
+	mode = ll_take_md_lock(inode, MDS_INODELOCK_XATTR, &lockh, LCK_PR);
 	if (mode != 0) {
 		/* fake oit in mdc_revalidate_lock() manner */
 		oit->d.lustre.it_lock_handle = lockh.cookie;
@@ -383,12 +368,7 @@ static int ll_xattr_find_get_lock(struct inode *inode,
 		RETURN(PTR_ERR(op_data));
 	}
 
-	op_data->op_valid = OBD_MD_FLXATTRALL | OBD_MD_FLXATTRLOCKED;
-#ifdef CONFIG_FS_POSIX_ACL
-	/* If working with ACLs, we would like to cache local ACLs */
-	if (sbi->ll_flags & LL_SBI_RMT_CLIENT)
-		op_data->op_valid |= OBD_MD_FLRMTLGETFACL;
-#endif
+	op_data->op_valid = OBD_MD_FLXATTRALL;
 
 	rc = md_enqueue(exp, &einfo, oit, op_data, &lockh, NULL, 0, NULL, 0);
 	ll_finish_md_op_data(op_data);
@@ -451,7 +431,11 @@ static int ll_xattr_cache_refill(struct inode *inode, struct lookup_intent *oit)
 
 	if (oit->d.lustre.it_status < 0) {
 		CERROR("getxattr returned %d\n", oit->d.lustre.it_status);
-		GOTO(out_destroy, rc = oit->d.lustre.it_status);
+		rc = oit->d.lustre.it_status;
+		/* xattr data is so large that we don't want to cache it */
+		if (rc == -ERANGE)
+			rc = -EAGAIN;
+		GOTO(out_destroy, rc);
 	}
 
 	body = req_capsule_server_get(&req->rq_pill, &RMF_MDT_BODY);
@@ -509,9 +493,7 @@ static int ll_xattr_cache_refill(struct inode *inode, struct lookup_intent *oit)
 
 	GOTO(out_maybe_drop, rc);
 out_maybe_drop:
-	/* drop lock on error or getxattr */
-	if (rc != 0 || oit->it_op != IT_SETXATTR)
-		ll_intent_drop_lock(oit);
+	ll_intent_drop_lock(oit);
 
 	if (rc != 0)
 		up_write(&lli->lli_xattrs_list_rwsem);
@@ -600,70 +582,6 @@ int ll_xattr_cache_get(struct inode *inode,
 	GOTO(out, rc);
 out:
 	cfs_up_read(&lli->lli_xattrs_list_rwsem);
-
-	return rc;
-}
-
-
-/**
- * Set/update an xattr value or remove xattr using the write-through cache.
- *
- * Set/update the xattr value (@valid has OBD_MD_FLXATTR set) of @name to @newval
- * or
- * remove the xattr @name (@valid has OBD_MD_FLXATTRRM set) from @inode.
- * @flags is either XATTR_CREATE or XATTR_REPLACE as defined by setxattr(2)
- *
- * \retval 0        no error occured
- * \retval -EPROTO  network protocol error
- * \retval -ENOMEM  not enough memory for the cache
- * \retval -ERANGE  the buffer is not large enough
- * \retval -ENODATA no such attr (in the removal case)
- */
-int ll_xattr_cache_update(struct inode *inode,
-			const char *name,
-			const char *newval,
-			size_t size,
-			__u64 valid,
-			int flags)
-{
-	struct lookup_intent oit = { .it_op = IT_SETXATTR };
-	struct ll_sb_info *sbi = ll_i2sbi(inode);
-	struct ptlrpc_request *req = NULL;
-	struct ll_inode_info *lli = ll_i2info(inode);
-	struct obd_capa *oc;
-	int rc;
-
-	ENTRY;
-
-	LASSERT(!!(valid & OBD_MD_FLXATTR) ^ !!(valid & OBD_MD_FLXATTRRM));
-
-	rc = ll_xattr_cache_refill(inode, &oit);
-	if (rc)
-		RETURN(rc);
-
-	oc = ll_mdscapa_get(inode);
-	rc = md_setxattr(sbi->ll_md_exp, ll_inode2fid(inode), oc,
-			valid | OBD_MD_FLXATTRLOCKED, name, newval,
-			size, 0, flags, ll_i2suppgid(inode), &req);
-	capa_put(oc);
-
-	if (rc) {
-		CERROR("md_setxattr failed with %d\n", rc);
-		ll_intent_drop_lock(&oit);
-		GOTO(out, rc);
-	}
-
-	if (valid & OBD_MD_FLXATTR) {
-		rc = ll_xattr_cache_add(&lli->lli_xattrs, name, newval, size);
-	} else if (valid & OBD_MD_FLXATTRRM) {
-		rc = ll_xattr_cache_del(&lli->lli_xattrs, name);
-	}
-
-	ll_intent_drop_lock(&oit);
-	GOTO(out, rc);
-out:
-	cfs_up_write(&lli->lli_xattrs_list_rwsem);
-	ptlrpc_req_finished(req);
 
 	return rc;
 }

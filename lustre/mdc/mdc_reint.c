@@ -68,7 +68,7 @@ static int mdc_reint(struct ptlrpc_request *request,
 /* Find and cancel locally locks matched by inode @bits & @mode in the resource
  * found by @fid. Found locks are added into @cancel list. Returns the amount of
  * locks added to @cancels list. */
-int mdc_resource_get_unused(struct obd_export *exp, struct lu_fid *fid,
+int mdc_resource_get_unused(struct obd_export *exp, const struct lu_fid *fid,
                             cfs_list_t *cancels, ldlm_mode_t mode,
                             __u64 bits)
 {
@@ -103,8 +103,8 @@ int mdc_resource_get_unused(struct obd_export *exp, struct lu_fid *fid,
         RETURN(count);
 }
 
-static int mdc_prep_elc_req(struct obd_export *exp, struct ptlrpc_request *req,
-                            cfs_list_t *cancels, int count)
+int mdc_prep_elc_req(struct obd_export *exp, struct ptlrpc_request *req,
+		     cfs_list_t *cancels, int count)
 {
         return ldlm_prep_elc_req(exp, req, LUSTRE_MDS_VERSION, MDS_REINT,
                                  0, cancels, count);

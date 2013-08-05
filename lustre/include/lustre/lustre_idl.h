@@ -1461,8 +1461,6 @@ struct lov_mds_md_v3 {            /* LOV EA mds/wire data (little-endian) */
 
 #define OBD_MD_FLDATAVERSION (0x0010000000000000ULL) /* iversion sum */
 #define OBD_MD_FLXATTRALL    (0x0020000000000000ULL) /* xattr list with values */
-#define OBD_MD_FLXATTRLOCKED (0x0040000000000000ULL) /* xattr call is performed
-                                                      * under the xattr lock */
 
 #define OBD_MD_FLGETATTR (OBD_MD_FLID    | OBD_MD_FLATIME | OBD_MD_FLMTIME | \
                           OBD_MD_FLCTIME | OBD_MD_FLSIZE  | OBD_MD_FLBLKSZ | \

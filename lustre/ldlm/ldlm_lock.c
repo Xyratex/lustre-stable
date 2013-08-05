@@ -148,8 +148,6 @@ char *ldlm_it2str(int it)
                 return "unlink";
         case IT_GETXATTR:
                 return "getxattr";
-	case IT_SETXATTR:
-		return "setxattr";
         default:
                 CERROR("Unknown intent %d\n", it);
                 return "UNKNOWN";
