@@ -1537,6 +1537,13 @@ static int mdd_attr_set_changelog(const struct lu_env *env,
                                         md2mdd_obj(obj), handle);
 }
 
+static inline bool permission_is_reduced(const struct lu_attr *old,
+					 const struct lu_attr *new)
+{
+	return ((new->la_mode & old->la_mode) & S_IRWXUGO) !=
+	       (old->la_mode & S_IRWXUGO);
+}
+
 /* set attr and LOV EA at once, return updated attr */
 int mdd_attr_set(const struct lu_env *env, struct md_object *obj,
 		 const struct md_attr *ma)
@@ -1548,6 +1555,7 @@ int mdd_attr_set(const struct lu_env *env, struct md_object *obj,
         struct llog_cookie *logcookies = NULL;
         int  rc, lmm_size = 0, cookie_size = 0, chlog_cnt;
         struct lu_attr *la_copy = &mdd_env_info(env)->mti_la_for_fix;
+	const struct lu_attr *la = &ma->ma_attr;
 #ifdef HAVE_QUOTA_SUPPORT
         struct obd_device *obd = mdd->mdd_obd_dev;
         struct mds_obd *mds = &obd->u.mds;
@@ -1557,6 +1565,7 @@ int mdd_attr_set(const struct lu_env *env, struct md_object *obj,
         int inode_pending[MAXQUOTAS] = { 0, 0 };
         int block_pending[MAXQUOTAS] = { 0, 0 };
 #endif
+	bool sync_perm = false;
         ENTRY;
 
         *la_copy = ma->ma_attr;
@@ -1566,13 +1575,13 @@ int mdd_attr_set(const struct lu_env *env, struct md_object *obj,
 
         /* setattr on "close" only change atime, or do nothing */
         if (ma->ma_valid == MA_INODE &&
-            ma->ma_attr.la_valid == LA_ATIME && la_copy->la_valid == 0)
+            la->la_valid == LA_ATIME && la_copy->la_valid == 0)
                 RETURN(0);
 
         /*TODO: add lock here*/
         /* start a log jounal handle if needed */
         if (S_ISREG(mdd_object_type(mdd_obj)) &&
-            ma->ma_attr.la_valid & (LA_UID | LA_GID)) {
+            la->la_valid & (LA_UID | LA_GID)) {
                 lmm_size = mdd_lov_mdsize(env, mdd);
                 lmm = mdd_max_lmm_get(env, mdd);
                 if (lmm == NULL)
@@ -1597,13 +1606,42 @@ int mdd_attr_set(const struct lu_env *env, struct md_object *obj,
         if (IS_ERR(handle))
                 GOTO(no_trans, rc = PTR_ERR(handle));
 
-        /* permission changes may require sync operation */
-        if (ma->ma_attr.la_valid & (LA_MODE|LA_UID|LA_GID))
-                handle->th_sync |= mdd->mdd_sync_permission;
+	/*
+	 * LU-3671
+	 *
+	 * permission changes may require sync operation, to mitigate
+	 * performance impact, only do this for dir and when permission is
+	 * reduced.
+	 *
+	 * For regular files, version is updated with permission change
+	 * (see VBR), async permission won't cause any issue, while missing
+	 * permission change on directory may affect accessibility of other
+	 * objects.
+	 */
+	if (S_ISDIR(mdd_object_type(mdd_obj))) {
+		if (la->la_valid & (LA_UID | LA_GID)) {
+			sync_perm = true;
+		} else if (la->la_valid & LA_MODE &&
+			   la->la_mode & (S_ISUID | S_ISGID | S_ISVTX)) {
+			sync_perm = true;
+		} else if (la->la_valid & LA_MODE) {
+			struct lu_attr *tmp_la = &mdd_env_info(env)->mti_la;
 
-        if (ma->ma_attr.la_valid & (LA_MTIME | LA_CTIME))
+			rc = mdd_la_get(env, mdd_obj, tmp_la, BYPASS_CAPA);
+			if (rc)
+				GOTO(cleanup, rc);
+
+			if (permission_is_reduced(tmp_la, la))
+				sync_perm = true;
+		}
+	}
+
+	if (sync_perm)
+		handle->th_sync |= !!mdd->mdd_sync_permission;
+
+        if (la->la_valid & (LA_MTIME | LA_CTIME))
                 CDEBUG(D_INODE, "setting mtime "LPU64", ctime "LPU64"\n",
-                       ma->ma_attr.la_mtime, ma->ma_attr.la_ctime);
+                       la->la_mtime, la->la_ctime);
 
 #ifdef HAVE_QUOTA_SUPPORT
         if (mds->mds_quota && la_copy->la_valid & (LA_UID | LA_GID)) {
@@ -1679,7 +1717,7 @@ int mdd_attr_set(const struct lu_env *env, struct md_object *obj,
 cleanup:
         if (rc == 0)
                 rc = mdd_attr_set_changelog(env, obj, handle,
-                                            ma->ma_attr.la_valid);
+                                            la->la_valid);
         mdd_trans_stop(env, mdd, rc, handle);
 no_trans:
         if (rc == 0 && (lmm != NULL && lmm_size > 0 )) {
