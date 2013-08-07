@@ -1477,6 +1477,24 @@ test_105()
 }
 run_test 105 "IR: NON IR clients support"
 
+# LU-793
+test_112a() {
+	remote_ost_nodsh && skip "remote OST with nodsh" && return 0
+
+	local t1=${tfile}.1
+	local t2=${tfile}.2
+	do_facet_random_file client $TMP/$tfile 100K ||
+		error_noexit "Create random file $TMP/$tfile"
+	pause_bulk_long "cp $TMP/$tfile $DIR/$tfile" ||
+		error_noexit "Can't pause_bulk copy"
+	do_facet client "cmp $TMP/$tfile $DIR/$tfile" ||
+		error_noexit "Wrong data has being written"
+	do_facet client "rm $DIR/$tfile" ||
+		error_noexit "Can't remove file"
+	do_facet client "rm $TMP/$tfile"
+}
+run_test 112a "bulk resend while orignal request is in progress"
+
 complete $(basename $0) $SECONDS
 check_and_cleanup_lustre
 exit_status

@@ -696,11 +696,11 @@ void ptlrpc_server_drop_request(struct ptlrpc_request *req)
                 LASSERT(cfs_list_empty(&req->rq_timed_list));
         cfs_spin_unlock(&svc->srv_at_lock);
 
-        /* finalize request */
-        if (req->rq_export) {
-                class_export_put(req->rq_export);
-                req->rq_export = NULL;
-        }
+	/* finalize request */
+	if (req->rq_export) {
+		class_export_put(req->rq_export);
+		req->rq_export = NULL;
+	}
 
         cfs_spin_lock(&svc->srv_lock);
 
@@ -782,9 +782,9 @@ void ptlrpc_request_change_export(struct ptlrpc_request *req,
 				  struct obd_export *export)
 {
 	if (req->rq_export != NULL) {
+		cfs_spin_lock_bh(&req->rq_export->exp_rpc_lock);
 		if (!cfs_list_empty(&req->rq_exp_list)) {
 			/* remove rq_exp_list from last export */
-			cfs_spin_lock_bh(&req->rq_export->exp_rpc_lock);
 			cfs_list_del_init(&req->rq_exp_list);
 			cfs_spin_unlock_bh(&req->rq_export->exp_rpc_lock);
 
@@ -794,7 +794,26 @@ void ptlrpc_request_change_export(struct ptlrpc_request *req,
 			cfs_spin_lock_bh(&export->exp_rpc_lock);
 			cfs_list_add(&req->rq_exp_list, &export->exp_hp_rpcs);
 			cfs_spin_unlock_bh(&export->exp_rpc_lock);
+		} else {
+			cfs_spin_unlock_bh(&export->exp_rpc_lock);
 		}
+
+		cfs_spin_lock_bh(&req->rq_export->exp_rpcs_in_progress_lock);
+		if (!cfs_list_empty(&req->rq_exp_list_in_progress)) {
+			/* remove request from  export in progress list */
+			cfs_list_del_init(&req->rq_exp_list_in_progress);
+		}
+		cfs_spin_unlock_bh(&req->rq_export->exp_rpcs_in_progress_lock);
+
+		/* add request to progress list for new export
+		 * and modify max xid for export */
+		cfs_spin_lock_bh(&export->exp_rpcs_in_progress_lock);
+		cfs_list_add(&req->rq_exp_list_in_progress,
+			     &export->exp_rpcs_in_progress);
+		if (export->exp_max_xid_seen < req->rq_xid)
+			export->exp_max_xid_seen = req->rq_xid;
+		cfs_spin_unlock_bh(&export->exp_rpcs_in_progress_lock);
+
 		class_export_rpc_dec(req->rq_export);
 		class_export_put(req->rq_export);
 	}
@@ -832,8 +851,12 @@ static void ptlrpc_server_finish_active_request(struct ptlrpc_service *svc,
 		svc->srv_n_active_hpreq--;
 	cfs_spin_unlock(&svc->srv_rq_lock);
 
-	if (req->rq_export != NULL)
+	if (req->rq_export != NULL) {
 		class_export_rpc_dec(req->rq_export);
+		cfs_spin_lock_bh(&req->rq_export->exp_rpcs_in_progress_lock);
+		cfs_list_del_init(&req->rq_exp_list_in_progress);
+		cfs_spin_unlock_bh(&req->rq_export->exp_rpcs_in_progress_lock);
+	}
 
 	ptlrpc_server_finish_request(svc, req);
 }
@@ -1133,6 +1156,7 @@ static int ptlrpc_at_send_early_reply(struct ptlrpc_request *req)
         reqcopy->rq_pack_bulk = 0;
         reqcopy->rq_pack_udesc = 0;
         reqcopy->rq_packed_final = 0;
+	CFS_INIT_LIST_HEAD(&reqcopy->rq_exp_list_in_progress);
         sptlrpc_svc_ctx_addref(reqcopy);
         /* We only need the reqmsg for the magic */
         reqcopy->rq_reqmsg = reqmsg;
@@ -1295,6 +1319,34 @@ static int ptlrpc_at_check_timed(struct ptlrpc_service *svc)
         }
 
         RETURN(0);
+}
+
+/* Check if we are already handling earlier incarnation of this request.
+ * Called under &req->rq_export->exp_rpc_lock locked */
+static int ptlrpc_server_check_resend_in_progress(struct ptlrpc_request *req)
+{
+	struct ptlrpc_request	*tmp = NULL;
+
+	if (!(lustre_msg_get_flags(req->rq_reqmsg) & MSG_RESENT) ||
+	    (cfs_atomic_read(&req->rq_export->exp_rpc_count) == 1))
+		return 0;
+
+	/* This list should not be longer than max_requests in
+	 * flights on the client, so it is not all that long.
+	 * Also we only hit this codepath in case of a resent
+	 * request which makes it even more rarely hit */
+	cfs_list_for_each_entry(tmp, &req->rq_export->exp_rpcs_in_progress,
+				rq_exp_list_in_progress) {
+		/* Found duplicate one */
+		if (tmp->rq_xid == req->rq_xid)
+			goto found;
+	}
+	return 0;
+
+found:
+	DEBUG_REQ(D_HA, req, "Found duplicate req in processing\n");
+	DEBUG_REQ(D_HA, tmp, "Request being processed\n");
+	return -EBUSY;
 }
 
 /**
@@ -1525,6 +1577,7 @@ ptlrpc_server_request_get(struct ptlrpc_service *svc, int force)
 	struct ptlrpc_request *req;
 	ENTRY;
 
+get_another:
 	cfs_spin_lock(&svc->srv_rq_lock);
 #ifndef __KERNEL__
 	/* !@%$# liblustre only has 1 thread */
@@ -1549,6 +1602,31 @@ ptlrpc_server_request_get(struct ptlrpc_service *svc, int force)
 
 	cfs_list_del_init(&req->rq_list);
 	svc->srv_n_queued_reqs--;
+	cfs_spin_unlock(&svc->srv_rq_lock);
+
+	if (likely(req->rq_export)) {
+		struct obd_export *exp = req->rq_export;
+
+		/* Let's check if we are already handling earlier incarnation
+		 * of this request */
+		cfs_spin_lock_bh(&exp->exp_rpcs_in_progress_lock);
+		if (ptlrpc_server_check_resend_in_progress(req) == 0) {
+			/* Add in-process RPCs into a special list and remember
+			 * max seen xid for duplicate xid processing detection */
+			cfs_list_add(&req->rq_exp_list_in_progress,
+				     &exp->exp_rpcs_in_progress);
+			if (exp->exp_max_xid_seen < req->rq_xid)
+				exp->exp_max_xid_seen = req->rq_xid;
+			cfs_spin_unlock_bh(&exp->exp_rpcs_in_progress_lock);
+		} else {
+			cfs_spin_unlock_bh(&exp->exp_rpcs_in_progress_lock);
+			ptlrpc_server_finish_request(svc, req);
+			goto get_another;
+		}
+	}
+
+	cfs_spin_lock(&svc->srv_rq_lock);
+
 	svc->srv_n_active_reqs++;
 	if (req->rq_hp)
 		svc->srv_n_active_hpreq++;
