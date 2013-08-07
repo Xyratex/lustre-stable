@@ -1501,6 +1501,7 @@ static int osd_attr_set(const struct lu_env *env,
                 return -EACCES;
 
         inode = obj->oo_inode;
+	ll_vfs_dq_init(inode);
 #ifdef HAVE_QUOTA_SUPPORT
         if ((attr->la_valid & LA_UID && attr->la_uid != inode->i_uid) ||
             (attr->la_valid & LA_GID && attr->la_gid != inode->i_gid)) {
@@ -1898,6 +1899,7 @@ static int osd_inode_xattr_set(const struct lu_env *env,
         if (fl & LU_XATTR_CREATE)
                 fs_flags |= XATTR_CREATE;
 
+	ll_vfs_dq_init(inode);
         dentry->d_inode = inode;
         dentry->d_sb = inode->i_sb;
         rc = inode->i_op->setxattr(dentry, name, buf->lb_buf,
@@ -2362,6 +2364,7 @@ static int osd_xattr_del(const struct lu_env *env,
         if (osd_object_auth(env, dt, capa, CAPA_OPC_META_WRITE))
                 return -EACCES;
 
+	ll_vfs_dq_init(inode);
         dentry->d_inode = inode;
 	dentry->d_sb = inode->i_sb;
         rc = inode->i_op->removexattr(dentry, name);
@@ -2956,6 +2959,8 @@ static int osd_index_iam_delete(const struct lu_env *env, struct dt_object *dt,
         LASSERT(dt_object_exists(dt));
         LASSERT(bag->ic_object == obj->oo_inode);
         LASSERT(handle != NULL);
+	LASSERT(obj->oo_inode);
+	ll_vfs_dq_init(obj->oo_inode);
 
         if (osd_object_auth(env, dt, capa, CAPA_OPC_INDEX_DELETE))
                 RETURN(-EACCES);
@@ -3026,6 +3031,7 @@ static int osd_index_ea_delete(const struct lu_env *env, struct dt_object *dt,
         if (osd_object_auth(env, dt, capa, CAPA_OPC_INDEX_DELETE))
                 RETURN(-EACCES);
 
+	ll_vfs_dq_init(dir);
         dentry = osd_child_dentry_get(env, obj,
                                       (char *)key, strlen((char *)key));
 
@@ -3150,6 +3156,9 @@ static int osd_index_iam_insert(const struct lu_env *env, struct dt_object *dt,
         if (osd_object_auth(env, dt, capa, CAPA_OPC_INDEX_INSERT))
                 return -EACCES;
 
+	LASSERT(obj->oo_inode);
+	ll_vfs_dq_init(obj->oo_inode);
+
         ipd = osd_idx_ipd_get(env, bag);
         if (unlikely(ipd == NULL))
                 RETURN(-ENOMEM);
@@ -3210,6 +3219,8 @@ static int __osd_ea_add_rec(struct osd_thread_info *info,
                 child->d_fsdata = (void*) ldp;
         } else
                 child->d_fsdata = NULL;
+	LASSERT(pobj->oo_inode);
+	ll_vfs_dq_init(pobj->oo_inode);
         rc = osd_ldiskfs_add_entry(oth->ot_handle, child, cinode, hlock);
 
         RETURN(rc);
