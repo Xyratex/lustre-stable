@@ -433,7 +433,7 @@ static int quota_chk_acq_common(struct obd_device *obd, struct obd_export *exp,
         if (!quota_is_set(obd, id, isblk ? QB_SET : QI_SET))
                 RETURN(0);
 
-        if (isblk && (exp->exp_failed || exp->exp_abort_active_req))
+        if (isblk && (exp->exp_failed))
                 /* If the client has been evicted or if it
                  * timed out and tried to reconnect already,
                  * abort the request immediately */
@@ -497,7 +497,7 @@ static int quota_chk_acq_common(struct obd_device *obd, struct obd_export *exp,
                         break;
                 }
 
-                if (isblk && (exp->exp_failed || exp->exp_abort_active_req))
+                if (isblk && (exp->exp_failed))
                         /* The client has been evicted or tried to
                          * to reconnect already, abort the request */
                         RETURN(-ENOTCONN);
