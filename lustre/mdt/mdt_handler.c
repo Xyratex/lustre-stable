@@ -229,18 +229,18 @@ void mdt_lock_reg_init(struct mdt_lock_handle *lh, ldlm_mode_t lm)
 }
 
 void mdt_lock_pdo_init(struct mdt_lock_handle *lh, ldlm_mode_t lm,
-                       const char *name, int namelen)
+			const char *name, int namelen)
 {
-        lh->mlh_reg_mode = lm;
-        lh->mlh_type = MDT_PDO_LOCK;
+	lh->mlh_reg_mode = lm;
+	lh->mlh_type = MDT_PDO_LOCK;
 
-        if (name != NULL) {
-                LASSERT(namelen > 0);
-                lh->mlh_pdo_hash = full_name_hash(name, namelen);
-        } else {
-                LASSERT(namelen == 0);
-                lh->mlh_pdo_hash = 0ull;
-        }
+	if (name != NULL && (name[0] != '\0')) {
+		LASSERT(namelen > 0);
+		lh->mlh_pdo_hash = full_name_hash(name, namelen);
+	} else {
+		LASSERT(namelen == 0);
+		lh->mlh_pdo_hash = 0ull;
+	}
 }
 
 static void mdt_lock_pdo_mode(struct mdt_thread_info *info, struct mdt_object *o,
