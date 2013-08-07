@@ -1501,6 +1501,11 @@ static int osc_brw_prep_request(int cmd, struct client_obd *cli,struct obdo *oa,
         if (ocapa && reserve)
                 aa->aa_ocapa = capa_get(ocapa);
 
+	if (OBD_FAIL_CHECK_RESET(OBD_FAIL_OST_HOLD_WRITE_RPC,
+				 OBD_FAIL_OST_HOLD_WRITE_RPC | OBD_FAIL_ONCE)) {
+		req->rq_timeout = 2;
+	}
+
         *reqp = req;
         RETURN(0);
 
