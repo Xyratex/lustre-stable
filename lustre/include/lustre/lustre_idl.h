@@ -1119,7 +1119,7 @@ extern void lustre_swab_ptlrpc_body(struct ptlrpc_body *pb);
 #define OBD_CONNECT_JOBSTATS    0x20000000000ULL /* jobid in ptlrpc_body */
 #define OBD_CONNECT_UMASK       0x40000000000ULL /* create uses client umask */
 #define OBD_CONNECT_EINPROGRESS 0x80000000000ULL /* client handles -EINPROGRESS
-                                                  * write RPC error properly */
+                                                  * RPC error properly */
 #define OBD_CONNECT_GRANT_PARAM 0x100000000000ULL/* extra grant params used for
                                                   * finer space reservation */
 #define OBD_CONNECT_FLOCK_OWNER 0x200000000000ULL /* for the fixed 1.8
@@ -1167,6 +1167,7 @@ extern void lustre_swab_ptlrpc_body(struct ptlrpc_body *pb);
                                 OBD_CONNECT_VBR | OBD_CONNECT_LOV_V3 | \
                                 OBD_CONNECT_SOM | OBD_CONNECT_FULL20 | \
 				OBD_CONNECT_64BITHASH | OBD_CONNECT_UMASK | \
+				OBD_CONNECT_EINPROGRESS | \
 				OBD_CONNECT_FLOCK_DEAD)
 #define OST_CONNECT_SUPPORTED  (OBD_CONNECT_SRVLOCK | OBD_CONNECT_GRANT | \
                                 OBD_CONNECT_REQPORTAL | OBD_CONNECT_VERSION | \
@@ -1180,7 +1181,8 @@ extern void lustre_swab_ptlrpc_body(struct ptlrpc_body *pb);
                                 OBD_CONNECT_MDS | OBD_CONNECT_SKIP_ORPHAN | \
                                 OBD_CONNECT_GRANT_SHRINK | OBD_CONNECT_FULL20 | \
                                 OBD_CONNECT_64BITHASH | OBD_CONNECT_MAXBYTES | \
-                                OBD_CONNECT_MAX_EASIZE | OBD_CONNECT_SHORTIO)
+                                OBD_CONNECT_MAX_EASIZE | OBD_CONNECT_SHORTIO | \
+                                OBD_CONNECT_EINPROGRESS)
 #define ECHO_CONNECT_SUPPORTED (0)
 #define MGS_CONNECT_SUPPORTED  (OBD_CONNECT_VERSION | OBD_CONNECT_AT | \
 				OBD_CONNECT_FULL20 | OBD_CONNECT_IMP_RECOV | \

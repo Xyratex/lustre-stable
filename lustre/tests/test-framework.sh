@@ -666,7 +666,6 @@ set_default_debug () {
     [ -n "$subsys" ] && lctl set_param subsystem_debug="${subsys# }" >/dev/null
 
     [ -n "$debug_size" ] && set_debug_size $debug_size > /dev/null
-    sync
 }
 
 set_default_debug_nodes () {

@@ -210,6 +210,7 @@ static int client_common_fill_super(struct super_block *sb, char *md, char *dt,
                                   OBD_CONNECT_AT       | OBD_CONNECT_LOV_V3   |
                                   OBD_CONNECT_RMT_CLIENT | OBD_CONNECT_VBR    |
 				  OBD_CONNECT_FULL20   | OBD_CONNECT_64BITHASH|
+				  OBD_CONNECT_EINPROGRESS |
 				  OBD_CONNECT_FLOCK_DEAD;
 
         if (sbi->ll_flags & LL_SBI_SOM_PREVIEW)
@@ -387,7 +388,8 @@ static int client_common_fill_super(struct super_block *sb, char *md, char *dt,
                                   OBD_CONNECT_AT | OBD_CONNECT_RMT_CLIENT |
                                   OBD_CONNECT_OSS_CAPA | OBD_CONNECT_VBR|
                                   OBD_CONNECT_FULL20 | OBD_CONNECT_64BITHASH |
-                                  OBD_CONNECT_MAXBYTES | OBD_CONNECT_SHORTIO;
+                                  OBD_CONNECT_MAXBYTES | OBD_CONNECT_SHORTIO |
+                                  OBD_CONNECT_EINPROGRESS;
 
         if (sbi->ll_flags & LL_SBI_SOM_PREVIEW)
                 data->ocd_connect_flags |= OBD_CONNECT_SOM;

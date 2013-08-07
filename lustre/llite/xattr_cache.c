@@ -390,7 +390,7 @@ static int ll_xattr_find_get_lock(struct inode *inode,
 		op_data->op_valid |= OBD_MD_FLRMTLGETFACL;
 #endif
 
-	rc = md_enqueue(exp, &einfo, oit, op_data, &lockh, NULL, 0, req, 0);
+	rc = md_enqueue(exp, &einfo, oit, op_data, &lockh, NULL, 0, NULL, 0);
 	ll_finish_md_op_data(op_data);
 
 	if (rc < 0) {
@@ -399,10 +399,10 @@ static int ll_xattr_find_get_lock(struct inode *inode,
 		/* req may be initialized even if md_enqueue
 		 * failed and dropped that request
 		 */
-		*req = NULL;
 		RETURN(rc);
 	}
 
+	*req = (struct ptlrpc_request *)oit->d.lustre.it_data;
 out:
 	cfs_down_write(&lli->lli_xattrs_list_rwsem);
 	cfs_mutex_unlock(&lli->lli_xattrs_enq_lock);
