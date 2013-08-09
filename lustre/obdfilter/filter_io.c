@@ -781,7 +781,7 @@ retry:
 	if (rc == -ENOSPC && retries == 0) {
 		void *handle = NULL;
 
-		CDEBUG(D_INODE, "retry after commit pending journals");
+		CDEBUG(D_INODE, "retry after commit pending journals\n");
 
 		retries = 1;
 		handle = fsfilt_start(obd, dentry->d_inode,

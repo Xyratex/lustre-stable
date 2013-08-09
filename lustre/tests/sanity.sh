@@ -8629,7 +8629,8 @@ cleanup_obdecho_osc () {
 obdecho_create_test() {
         local OBD=$1
         local node=$2
-	local pages=${3:-64}
+        local pages=${3:-64}
+        local count=${4:-10}
         local rc=0
         local id
         do_facet $node "$LCTL attach echo_client ec ec_uuid" || rc=1
@@ -8641,11 +8642,13 @@ obdecho_create_test() {
         fi
         echo "New object id is $id"
 	[ $rc -eq 0 ] && { do_facet $node "$LCTL --device ec "		       \
-			   "test_brw 10 w v $pages $id" || rc=4; }
+			   "test_brw $count w v $pages $id" || rc=4; }
+	[ $rc -eq 0 -o $rc -gt 3 ] && { do_facet $node "$LCTL --device ec "    \
+                                        "destroy $id 1" || rc=5; }
         [ $rc -eq 0 -o $rc -gt 2 ] && { do_facet $node "$LCTL --device ec "    \
-                                        "cleanup" || rc=5; }
+                                        "cleanup" || rc=6; }
         [ $rc -eq 0 -o $rc -gt 1 ] && { do_facet $node "$LCTL --device ec "    \
-                                        "detach" || rc=6; }
+                                        "detach" || rc=7; }
         [ $rc -ne 0 ] && echo "obecho_create_test failed: $rc"
         return $rc
 }
@@ -8701,7 +8704,7 @@ run_test 180b "test obdecho directly on obdfilter and correctly handle zombies"
 test_180c() { # LU-2598
 	local rc=0
 	local rmmod_remote=false
-	local pages=8192 # 32MB bulk I/O RPC size
+	local pages=16384 # 64MB bulk I/O RPC size
 	local target
 
 	do_rpc_nodes $(facet_active_host ost1) load_module obdecho/obdecho &&
@@ -8709,7 +8712,7 @@ test_180c() { # LU-2598
 
 	target=$(do_facet ost1 $LCTL dl | awk '/obdfilter/ {print $4}'|head -1)
 	if [[ -n $target ]]; then
-		obdecho_create_test "$target" ost1 "$pages" ||
+		obdecho_create_test "$target" ost1 "$pages" 1 ||
 			rc=${PIPESTATUS[0]}
 	else
 		echo "there is no obdfilter target on ost1"
