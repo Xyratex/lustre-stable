@@ -177,7 +177,7 @@ static int expired_lock_main(void *arg)
         int do_dump;
 
         ENTRY;
-        cfs_daemonize("ldlm_elt");
+	cfs_daemonize_ctxt("ldlm_elt");
 
         expired_lock_thread.elt_state = ELT_READY;
         cfs_waitq_signal(&expired_lock_thread.elt_waitq);
