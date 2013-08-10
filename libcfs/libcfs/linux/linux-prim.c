@@ -269,11 +269,9 @@ void cfs_daemonize(char *str) {
         SIGNAL_MASK_UNLOCK(current, flags);
 }
 
-int cfs_daemonize_ctxt(char *str) {
-
-        cfs_daemonize(str);
 #ifndef HAVE_UNSHARE_FS_STRUCT
-        {
+static int unshare_fs_struct(void)
+{
         struct task_struct *tsk = current;
         struct fs_struct *fs = NULL;
         fs = copy_fs_struct(tsk->fs);
@@ -281,11 +279,19 @@ int cfs_daemonize_ctxt(char *str) {
                 return -ENOMEM;
         exit_fs(tsk);
         tsk->fs = fs;
-        }
-#else
-        unshare_fs_struct();
-#endif
+
         return 0;
+}
+#endif
+
+int cfs_daemonize_ctxt(char *str)
+{
+        int rc;
+        cfs_daemonize(str);
+        rc = unshare_fs_struct();
+        /*XXX put assert until we will handle it situation */
+        LASSERT(rc == 0);
+        return rc;
 }
 
 sigset_t
