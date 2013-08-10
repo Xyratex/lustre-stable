@@ -125,6 +125,7 @@ void push_ctxt(struct lvfs_run_ctxt *save, struct lvfs_run_ctxt *new_ctx,
         OBD_SET_CTXT_MAGIC(save);
 
         save->fs = get_fs();
+        LASSERTF(current->fs->users == 1, "fs users %d\n", current->fs->users);
         LASSERT(cfs_atomic_read(&cfs_fs_pwd(current->fs)->d_count));
         LASSERT(cfs_atomic_read(&new_ctx->pwd->d_count));
         save->pwd = dget(cfs_fs_pwd(current->fs));
@@ -171,6 +172,7 @@ void pop_ctxt(struct lvfs_run_ctxt *saved, struct lvfs_run_ctxt *new_ctx,
         ASSERT_CTXT_MAGIC(saved->magic);
         ASSERT_KERNEL_CTXT("popping non-kernel context!\n");
 
+        LASSERTF(current->fs->users == 1, "fs users %d\n", current->fs->users);
         LASSERTF(cfs_fs_pwd(current->fs) == new_ctx->pwd, "%p != %p\n",
                  cfs_fs_pwd(current->fs), new_ctx->pwd);
         LASSERTF(cfs_fs_mnt(current->fs) == new_ctx->pwdmnt, "%p != %p\n",

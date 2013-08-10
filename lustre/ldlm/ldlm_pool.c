@@ -1308,7 +1308,7 @@ static int ldlm_pools_thread_main(void *arg)
         char *t_name = "ldlm_poold";
         ENTRY;
 
-        cfs_daemonize(t_name);
+	cfs_daemonize_ctxt(t_name);
         thread->t_flags = SVC_RUNNING;
         cfs_waitq_signal(&thread->t_ctl_waitq);
 
