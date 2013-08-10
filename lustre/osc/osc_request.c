@@ -3221,7 +3221,9 @@ static int osc_enter_cache(const struct lu_env *env,
                            struct osc_async_page *oap)
 {
         struct osc_cache_waiter ocw;
-        struct l_wait_info lwi = LWI_INTR(LWI_ON_SIGNAL_NOOP, NULL);
+	struct l_wait_info lwi = LWI_TIMEOUT_INTR(cfs_time_seconds(600), NULL,
+						  LWI_ON_SIGNAL_NOOP, NULL);
+
         int rc = -EDQUOT;
         ENTRY;
 
@@ -3266,8 +3268,11 @@ static int osc_enter_cache(const struct lu_env *env,
 
                 client_obd_list_lock(&cli->cl_loi_list_lock);
                 cfs_list_del_init(&ocw.ocw_entry);
-                if (rc < 0)
-                        break;
+		if (rc < 0) {
+			if (rc == -ETIMEDOUT)
+				rc = -EDQUOT;
+			break;
+		}
 
                 rc = ocw.ocw_rc;
                 if (rc != -EDQUOT)
