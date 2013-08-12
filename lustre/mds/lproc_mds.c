@@ -120,7 +120,6 @@ static int lprocfs_mds_wr_evict_client(struct file *file, const char *buffer,
         /* See the comments in function lprocfs_wr_evict_client()
          * in ptlrpc/lproc_ptlrpc.c for details. - jay */
         class_incref(obd, __FUNCTION__, cfs_current());
-        LPROCFS_EXIT();
 
         obd_export_evict_by_nid(obd, tmpbuf + 4);
 
@@ -130,7 +129,6 @@ static int lprocfs_mds_wr_evict_client(struct file *file, const char *buffer,
                 CERROR("Failed to evict nid %s from OSTs: rc %d\n", tmpbuf + 4,
                        rc);
 
-        LPROCFS_ENTRY();
         class_decref(obd,  __FUNCTION__, cfs_current());
 
         ptlrpc_set_destroy(set);
