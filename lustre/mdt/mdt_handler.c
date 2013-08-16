@@ -1282,6 +1282,8 @@ static int mdt_connect(struct mdt_thread_info *info)
 	exp = req->rq_export;
 	cfs_spin_lock(&exp->exp_lock);
 	*exp_connect_flags_ptr(exp) = reply->ocd_connect_flags;
+	exp->exp_mdt_data.med_ibits_known = reply->ocd_ibits_known;
+	exp->exp_connect_data.ocd_brw_size = reply->ocd_brw_size;
 	cfs_spin_unlock(&exp->exp_lock);
 
 	rc = mdt_init_idmap(info);
@@ -5102,10 +5104,17 @@ static int mdt_connect_internal(struct obd_export *exp,
 		}
 	}
 
+	/* NB: Disregard the rule against updating exp_connect_flags in this
+	 * case, since tgt_client_new() needs to know if this is a lightweight
+	 * connection, and it is safe to expose this flag before connection
+	 * processing completes. */
+	if (data->ocd_connect_flags & OBD_CONNECT_LIGHTWEIGHT) {
+		cfs_spin_lock(&exp->exp_lock);
+		*exp_connect_flags_ptr(exp) |=  OBD_CONNECT_LIGHTWEIGHT;
+		cfs_spin_unlock(&exp->exp_lock);
+	}
+
 	data->ocd_version = LUSTRE_VERSION_CODE;
-	exp->exp_connect_data = *data;
-	exp->exp_mdt_data.med_ibits_known = data->ocd_ibits_known;
-        data->ocd_xattr_size = mdt->mdt_max_ea_size;
 
 	if ((data->ocd_connect_flags & OBD_CONNECT_FID) == 0) {
 		CWARN("%s: MDS requires FID support, but client not\n",
@@ -5119,6 +5128,8 @@ static int mdt_connect_internal(struct obd_export *exp,
 		      "it\n", mdt->mdt_md_dev.md_lu_dev.ld_obd->obd_name);
 		return -EBADE;
 	}
+
+	data->ocd_xattr_size = mdt->mdt_max_ea_size;
 
 	return 0;
 }
