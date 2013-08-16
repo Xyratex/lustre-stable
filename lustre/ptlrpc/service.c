@@ -834,6 +834,11 @@ static void ptlrpc_server_finish_request(struct ptlrpc_service *svc,
 {
 	ptlrpc_hpreq_fini(req);
 
+	if (req->rq_session.lc_thread != NULL) {
+		lu_context_exit(&req->rq_session);
+		lu_context_fini(&req->rq_session);
+	}
+
 	ptlrpc_server_drop_request(req);
 }
 
@@ -1645,7 +1650,8 @@ get_another:
  * ptlrpc_server_handle_req later on.
  */
 static int
-ptlrpc_server_handle_req_in(struct ptlrpc_service *svc)
+ptlrpc_server_handle_req_in(struct ptlrpc_service *svc,
+			    struct ptlrpc_thread *thread)
 {
         struct ptlrpc_request *req;
         __u32                  deadline;
@@ -1768,10 +1774,25 @@ ptlrpc_server_handle_req_in(struct ptlrpc_service *svc)
 	if (OBD_FAIL_PRECHECK(OBD_FAIL_MDS_RESEND))
 		req->rq_deadline += obd_timeout;
 
-        ptlrpc_at_add_timed(req);
+	req->rq_svc_thread = thread;
+	if (thread != NULL) {
+		/* initialize request session, it is needed for request
+		 * processing by target */
+		rc = lu_context_init(&req->rq_session,
+				     LCT_SERVER_SESSION|LCT_REMEMBER|LCT_NOREF);
+		if (rc) {
+			CERROR("failure to initialize session: rc = %d\n", rc);
+			goto err_req;
+		}
+		req->rq_session.lc_thread = thread;
+		lu_context_enter(&req->rq_session);
+		thread->t_env->le_ses = &req->rq_session;
+	}
 
-        /* Move it over to the request processing queue */
-        rc = ptlrpc_server_request_add(svc, req);
+	ptlrpc_at_add_timed(req);
+
+	/* Move it over to the request processing queue */
+	rc = ptlrpc_server_request_add(svc, req);
 	if (rc)
 		GOTO(err_req, rc);
 
@@ -1792,13 +1813,13 @@ static int
 ptlrpc_server_handle_request(struct ptlrpc_service *svc,
                              struct ptlrpc_thread *thread)
 {
-        struct ptlrpc_request *request;
-        struct timeval         work_start;
-        struct timeval         work_end;
-        long                   timediff;
-        int                    rc;
-        int                    fail_opc = 0;
-        ENTRY;
+	struct ptlrpc_request *request;
+	struct timeval         work_start;
+	struct timeval         work_end;
+	long                   timediff;
+	int                    rc;
+	int                    fail_opc = 0;
+	ENTRY;
 
         LASSERT(svc);
 
@@ -1836,23 +1857,7 @@ ptlrpc_server_handle_request(struct ptlrpc_service *svc,
                                     at_get(&svc->srv_at_estimate));
         }
 
-        rc = lu_context_init(&request->rq_session,
-                             LCT_SERVER_SESSION|LCT_REMEMBER|LCT_NOREF);
-        if (rc) {
-                CERROR("Failure to initialize session: %d\n", rc);
-                goto out_req;
-        }
-        request->rq_session.lc_thread = thread;
-        request->rq_session.lc_cookie = 0x5;
-        lu_context_enter(&request->rq_session);
-
-        CDEBUG(D_NET, "got req "LPU64"\n", request->rq_xid);
-
-        request->rq_svc_thread = thread;
-        if (thread)
-                request->rq_svc_thread->t_env->le_ses = &request->rq_session;
-
-        if (likely(request->rq_export)) {
+	if (likely(request->rq_export)) {
 		if (unlikely(ptlrpc_check_req(request)))
 			goto put_conn;
 
@@ -1885,14 +1890,21 @@ ptlrpc_server_handle_request(struct ptlrpc_service *svc,
         if (lustre_msg_get_opc(request->rq_reqmsg) != OBD_PING)
                 CFS_FAIL_TIMEOUT_MS(OBD_FAIL_PTLRPC_PAUSE_REQ, cfs_fail_val);
 
+	CDEBUG(D_NET, "got req "LPU64"\n", request->rq_xid);
+
+	/* re-assign request and sesson thread to the current one */
+	request->rq_svc_thread = thread;
+	if (thread != NULL) {
+		LASSERT(request->rq_session.lc_thread != NULL);
+		request->rq_session.lc_thread = thread;
+		request->rq_session.lc_cookie = 0x55;
+		thread->t_env->le_ses = &request->rq_session;
+	}
         rc = svc->srv_handler(request);
 
-        ptlrpc_rqphase_move(request, RQ_PHASE_COMPLETE);
+	ptlrpc_rqphase_move(request, RQ_PHASE_COMPLETE);
 
 put_conn:
-        lu_context_exit(&request->rq_session);
-        lu_context_fini(&request->rq_session);
-
 	if (unlikely(cfs_time_current_sec() > request->rq_deadline)) {
 		     DEBUG_REQ(D_WARNING, request, "Request took longer "
 			       "than estimated ("CFS_DURATION_T":"CFS_DURATION_T"s);"
@@ -1944,7 +1956,6 @@ put_conn:
                           request->rq_arrival_time.tv_sec));
         }
 
-out_req:
 	ptlrpc_server_finish_active_request(svc, request);
 
         RETURN(1);
@@ -2110,7 +2121,7 @@ liblustre_check_services (void *arg)
                 svc->srv_threads_running++;
 
                 do {
-                        rc = ptlrpc_server_handle_req_in(svc);
+                        rc = ptlrpc_server_handle_req_in(svc, NULL);
                         rc |= ptlrpc_server_handle_reply(svc);
                         rc |= ptlrpc_at_check_timed(svc);
                         rc |= ptlrpc_server_handle_request(svc, NULL);
@@ -2356,7 +2367,7 @@ static int ptlrpc_main(void *arg)
 
                 /* Process all incoming reqs before handling any */
                 if (ptlrpc_server_request_waiting(svc)) {
-                        ptlrpc_server_handle_req_in(svc);
+                        ptlrpc_server_handle_req_in(svc, thread);
                         /* but limit ourselves in case of flood */
                         if (counter++ < 100)
                                 continue;
