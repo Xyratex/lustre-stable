@@ -1566,6 +1566,7 @@ test_107 () {
 
 	return $rc
 }
+run_test 107 "drop reint reply, then restart MDT"
 
 # LU-793
 test_112a() {
@@ -1585,7 +1586,6 @@ test_112a() {
 }
 run_test 112a "bulk resend while orignal request is in progress"
 
-run_test 107 "drop reint reply, then restart MDT"
 complete $SECONDS
 check_and_cleanup_lustre
 exit_status
