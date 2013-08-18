@@ -167,14 +167,6 @@ static inline unsigned int mnt_get_count(struct vfsmount *mnt)
 # define mnt_get_count(mnt)      cfs_atomic_read(&(real_mount(mnt)->mnt_count))
 #endif
 
-#ifdef HAVE_RW_TREE_LOCK
-#define TREE_READ_LOCK_IRQ(mapping)     read_lock_irq(&(mapping)->tree_lock)
-#define TREE_READ_UNLOCK_IRQ(mapping) read_unlock_irq(&(mapping)->tree_lock)
-#else
-#define TREE_READ_LOCK_IRQ(mapping) cfs_spin_lock_irq(&(mapping)->tree_lock)
-#define TREE_READ_UNLOCK_IRQ(mapping) cfs_spin_unlock_irq(&(mapping)->tree_lock)
-#endif
-
 #ifndef FS_HAS_FIEMAP
 #define FS_HAS_FIEMAP			(0)
 #endif
