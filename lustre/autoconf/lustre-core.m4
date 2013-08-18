@@ -513,6 +513,10 @@ LB_LINUX_TRY_COMPILE([
 # 2.6.27
 #
 
+# up to v2.6.27 had a 3 arg version (inode, mask, nameidata)
+# v2.6.27->v2.6.37 had a 2 arg version (inode, mask)
+# v2.6.37->v3.0 had a 3 arg version (inode, mask, nameidata)
+# v3.1 onward have a 2 arg version (inode, mask)
 AC_DEFUN([LC_INODE_PERMISION_2ARGS],
 [AC_MSG_CHECKING([inode_operations->permission has two args])
 LB_LINUX_TRY_COMPILE([
@@ -1003,7 +1007,6 @@ AC_DEFUN([LC_PROG_LINUX],
          LC_PROCFS_DELETED
 
          # 2.6.27
-         LC_INODE_PERMISION_2ARGS
          LC_QUOTA_ON_5ARGS
          LC_QUOTA_OFF_3ARGS
 
@@ -1039,12 +1042,16 @@ AC_DEFUN([LC_PROG_LINUX],
          LC_REQUEST_QUEUE_UNPLUG_FN
 	LC_HAVE_FSTYPE_MOUNT
 
+         # 3.1
+         LC_INODE_PERMISION_2ARGS
+
+	 # 3.1.1
+	 LC_BLOCKS_FOR_TRUNCATE
+
 	# 3.3
 	LC_HAVE_MIGRATE_HEADER
 	LC_MIGRATEPAGE_4ARGS
 
-	 # 3.1.1
-	 LC_BLOCKS_FOR_TRUNCATE
 
          #
          if test x$enable_server = xyes ; then
