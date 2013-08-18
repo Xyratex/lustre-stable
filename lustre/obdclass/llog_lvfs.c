@@ -726,7 +726,7 @@ static int llog_lvfs_destroy(struct llog_handle *handle)
 
 		if (rc == 0) {
 			mutex_lock_nested(&inode->i_mutex, I_MUTEX_PARENT);
-			rc = ll_vfs_unlink(inode, fdentry, mnt);
+			rc = vfs_unlink(inode, fdentry);
 			mutex_unlock(&inode->i_mutex);
 		}
 		mntput(mnt);

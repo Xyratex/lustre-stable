@@ -1593,7 +1593,7 @@ int filter_vfs_unlink(struct inode *dir, struct dentry *dentry,
         /* Locking order: i_mutex -> journal_lock -> dqptr_sem. LU-952 */
         ll_vfs_dq_init(dir);
 
-        rc = ll_security_inode_unlink(dir, dentry, mnt);
+        rc = security_inode_unlink(dir, dentry);
         if (rc)
                 GOTO(out, rc);
 

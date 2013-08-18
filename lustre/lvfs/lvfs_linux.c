@@ -278,7 +278,7 @@ struct dentry *simple_mkdir(struct dentry *dir, struct vfsmount *mnt,
                 GOTO(out_up, dchild);
         }
 
-        err = ll_vfs_mkdir(dir->d_inode, dchild, mnt, mode);
+        err = vfs_mkdir(dir->d_inode, dchild, mode);
         if (err)
                 GOTO(out_err, err);
 
@@ -315,8 +315,7 @@ int lustre_rename(struct dentry *dir, struct vfsmount *mnt,
         if (IS_ERR(dchild_new))
                 GOTO(put_old, err = PTR_ERR(dchild_new));
 
-        err = ll_vfs_rename(dir->d_inode, dchild_old, mnt,
-                            dir->d_inode, dchild_new, mnt);
+	err = vfs_rename(dir->d_inode, dchild_old, dir->d_inode, dchild_new);
 
         dput(dchild_new);
 put_old:

@@ -124,9 +124,8 @@ int mds_obd_create(struct obd_export *exp, struct obdo *oa,
         if (IS_ERR(handle))
                 GOTO(out_dput, rc = PTR_ERR(handle));
 
-        rc = ll_vfs_rename(mds->mds_objects_dir->d_inode, filp->f_dentry,
-                           filp->f_vfsmnt, mds->mds_objects_dir->d_inode,
-                           new_child, filp->f_vfsmnt);
+        rc = vfs_rename(mds->mds_objects_dir->d_inode, filp->f_dentry,
+			mds->mds_objects_dir->d_inode, new_child);
 
         if (rc)
                 CERROR("error renaming new object "LPU64":%u: rc %d\n",
@@ -202,8 +201,7 @@ int mds_obd_destroy(struct obd_export *exp, struct obdo *oa,
            vfs_unlink() context. bug 10409 */
         inode = de->d_inode;
         atomic_inc(&inode->i_count);
-        rc = ll_vfs_unlink(mds->mds_objects_dir->d_inode, de,
-                           mds->mds_obt.obt_vfsmnt);
+        rc = vfs_unlink(mds->mds_objects_dir->d_inode, de);
         if (rc)
                 CERROR("error destroying object "LPU64":%u: rc %d\n",
                        oa->o_id, oa->o_generation, rc);
