@@ -82,17 +82,18 @@ static void lmv_activate_target(struct lmv_obd *lmv,
  *  -ENOTCONN: The UUID is found, but the target connection is bad (!)
  *  -EBADF   : The UUID is found, but the OBD of the wrong type (!)
  */
-static int lmv_set_mdc_active(struct lmv_obd *lmv, struct obd_uuid *uuid,
-                              int activate)
+static int lmv_set_mdc_active(struct lmv_obd *lmv,
+			      const struct obd_uuid *uuid,
+			      int activate)
 {
-        struct lmv_tgt_desc    *tgt;
-        struct obd_device      *obd;
-        int                     i;
-        int                     rc = 0;
-        ENTRY;
+	struct lmv_tgt_desc	*tgt = NULL;
+	struct obd_device	*obd;
+	__u32			 i;
+	int			 rc = 0;
+	ENTRY;
 
-        CDEBUG(D_INFO, "Searching in lmv %p for uuid %s (activate=%d)\n",
-               lmv, uuid->uuid, activate);
+	CDEBUG(D_INFO, "Searching in lmv %p for uuid %s (activate=%d)\n",
+			lmv, uuid->uuid, activate);
 
         cfs_spin_lock(&lmv->lmv_lock);
         for (i = 0, tgt = lmv->tgts; i < lmv->desc.ld_tgt_count; i++, tgt++) {
@@ -304,7 +305,7 @@ static int lmv_connect(const struct lu_env *env,
 
 static void lmv_set_timeouts(struct obd_device *obd)
 {
-        struct lmv_tgt_desc   *tgts;
+        struct lmv_tgt_desc   *tgts = NULL;
         struct lmv_obd        *lmv;
         int                    i;
 
@@ -327,12 +328,12 @@ static void lmv_set_timeouts(struct obd_device *obd)
 static int lmv_init_ea_size(struct obd_export *exp, int easize,
                             int def_easize, int cookiesize)
 {
-        struct obd_device   *obd = exp->exp_obd;
-        struct lmv_obd      *lmv = &obd->u.lmv;
-        int                  i;
-        int                  rc = 0;
-        int                  change = 0;
-        ENTRY;
+	struct obd_device	*obd = exp->exp_obd;
+	struct lmv_obd		*lmv = &obd->u.lmv;
+	__u32			 i;
+	int			 rc = 0;
+	int			 change = 0;
+	ENTRY;
 
         if (lmv->max_easize < easize) {
                 lmv->max_easize = easize;
@@ -547,12 +548,12 @@ int lmv_add_target(struct obd_device *obd, struct obd_uuid *tgt_uuid)
 
 int lmv_check_connect(struct obd_device *obd)
 {
-        struct lmv_obd       *lmv = &obd->u.lmv;
-        struct lmv_tgt_desc  *tgt;
-        int                   i;
-        int                   rc;
-        int                   easize;
-        ENTRY;
+	struct lmv_obd		*lmv = &obd->u.lmv;
+	struct lmv_tgt_desc	*tgt;
+	__u32			 i;
+	int			 rc;
+	int			 easize;
+	ENTRY;
 
         if (lmv->connected)
                 RETURN(0);
@@ -668,14 +669,14 @@ static int lmv_disconnect_mdc(struct obd_device *obd, struct lmv_tgt_desc *tgt)
 
 static int lmv_disconnect(struct obd_export *exp)
 {
-        struct obd_device     *obd = class_exp2obd(exp);
+	struct obd_device	*obd = class_exp2obd(exp);
 #ifdef __KERNEL__
-        struct proc_dir_entry *lmv_proc_dir;
+	struct proc_dir_entry	*lmv_proc_dir;
 #endif
-        struct lmv_obd        *lmv = &obd->u.lmv;
-        int                    rc;
-        int                    i;
-        ENTRY;
+	struct lmv_obd		*lmv = &obd->u.lmv;
+	int			 rc;
+	__u32			 i;
+	ENTRY;
 
         if (!lmv->tgts)
                 goto out_local;
@@ -719,13 +720,13 @@ out_local:
 static int lmv_iocontrol(unsigned int cmd, struct obd_export *exp,
                          int len, void *karg, void *uarg)
 {
-        struct obd_device    *obddev = class_exp2obd(exp);
-        struct lmv_obd       *lmv = &obddev->u.lmv;
-        int                   i = 0;
-        int                   rc = 0;
-        int                   set = 0;
-        int                   count = lmv->desc.ld_tgt_count;
-        ENTRY;
+	struct obd_device	*obddev = class_exp2obd(exp);
+	struct lmv_obd		*lmv = &obddev->u.lmv;
+	__u32			 i = 0;
+	int			 rc = 0;
+	int			 set = 0;
+	__u32			 count = lmv->desc.ld_tgt_count;
+	ENTRY;
 
         if (count == 0)
                 RETURN(-ENOTTY);
@@ -1167,7 +1168,7 @@ static int lmv_statfs(struct obd_device *obd, struct obd_statfs *osfs,
         struct lmv_obd        *lmv = &obd->u.lmv;
         struct obd_statfs     *temp;
         int                    rc = 0;
-        int                    i;
+        __u32                  i;
         ENTRY;
 
         rc = lmv_check_connect(obd);
@@ -1354,7 +1355,7 @@ static int lmv_null_data(struct obd_export *exp, const struct lu_fid *fid,
 {
         struct obd_device   *obd = exp->exp_obd;
         struct lmv_obd      *lmv = &obd->u.lmv;
-        int                  i;
+	__u32                i;
         int                  rc;
         ENTRY;
 
@@ -1380,7 +1381,7 @@ static int lmv_find_cbdata(struct obd_export *exp, const struct lu_fid *fid,
 {
         struct obd_device   *obd = exp->exp_obd;
         struct lmv_obd      *lmv = &obd->u.lmv;
-        int                  i;
+	__u32                i;
         int                  rc;
         ENTRY;
 
@@ -2753,7 +2754,7 @@ int lmv_packmd(struct obd_export *exp, struct lov_mds_md **lmmp,
         struct lmv_stripe_md      *meap;
         struct lmv_stripe_md      *lsmp;
         int                        mea_size;
-        int                        i;
+	__u32                      i;
         ENTRY;
 
         mea_size = lmv_get_easize(lmv);
@@ -2802,7 +2803,7 @@ int lmv_unpackmd(struct obd_export *exp, struct lov_stripe_md **lsmp,
         struct lmv_stripe_md       *mea = (struct lmv_stripe_md *)lmm;
         struct lmv_obd             *lmv = &obd->u.lmv;
         int                         mea_size;
-        int                         i;
+	__u32                       i;
         __u32                       magic;
         ENTRY;
 
@@ -2857,7 +2858,7 @@ static int lmv_cancel_unused(struct obd_export *exp, const struct lu_fid *fid,
         struct lmv_obd          *lmv = &obd->u.lmv;
         int                      rc = 0;
         int                      err;
-        int                      i;
+	__u32                    i;
         ENTRY;
 
         LASSERT(fid != NULL);
@@ -2894,7 +2895,7 @@ ldlm_mode_t lmv_lock_match(struct obd_export *exp, __u64 flags,
         struct obd_device       *obd = exp->exp_obd;
         struct lmv_obd          *lmv = &obd->u.lmv;
         ldlm_mode_t              rc;
-        int                      i;
+	__u32                    i;
         ENTRY;
 
         CDEBUG(D_INODE, "Lock match for "DFID"\n", PFID(fid));
@@ -3111,7 +3112,8 @@ int lmv_quotactl(struct obd_device *unused, struct obd_export *exp,
         struct obd_device   *obd = class_exp2obd(exp);
         struct lmv_obd      *lmv = &obd->u.lmv;
         struct lmv_tgt_desc *tgt = &lmv->tgts[0];
-        int                  rc = 0, i;
+        int                  rc = 0;
+	__u32                i;
         __u64                curspace, curinodes;
         ENTRY;
 
@@ -3156,11 +3158,12 @@ int lmv_quotactl(struct obd_device *unused, struct obd_export *exp,
 int lmv_quotacheck(struct obd_device *unused, struct obd_export *exp,
                    struct obd_quotactl *oqctl)
 {
-        struct obd_device   *obd = class_exp2obd(exp);
-        struct lmv_obd      *lmv = &obd->u.lmv;
-        struct lmv_tgt_desc *tgt;
-        int                  i, rc = 0;
-        ENTRY;
+	struct obd_device	*obd = class_exp2obd(exp);
+	struct lmv_obd		*lmv = &obd->u.lmv;
+	struct lmv_tgt_desc	*tgt;
+	__u32			 i;
+	int			 rc = 0;
+	ENTRY;
 
         for (i = 0, tgt = lmv->tgts; i < lmv->desc.ld_tgt_count; i++, tgt++) {
                 int err;
