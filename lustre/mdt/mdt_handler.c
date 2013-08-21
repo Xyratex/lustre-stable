@@ -5269,6 +5269,7 @@ static int mdt_obd_reconnect(const struct lu_env *env,
 
         RETURN(rc);
 }
+
 static int mdt_export_cleanup(struct obd_export *exp)
 {
         struct mdt_export_data *med = &exp->exp_mdt_data;
@@ -5645,7 +5646,7 @@ static int mdt_ioc_child(struct lu_env *env, struct mdt_device *mdt,
         int rc;
         ENTRY;
 
-        rc = lu_context_init(&ioctl_session, LCT_SESSION);
+        rc = lu_context_init(&ioctl_session, LCT_SERVER_SESSION);
         if (rc)
                 RETURN(rc);
         ioctl_session.lc_thread = (struct ptlrpc_thread *)cfs_current();

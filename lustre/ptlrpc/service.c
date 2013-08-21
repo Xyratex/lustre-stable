@@ -1832,7 +1832,7 @@ ptlrpc_server_handle_request(struct ptlrpc_service *svc,
         }
 
         rc = lu_context_init(&request->rq_session,
-                             LCT_SESSION|LCT_REMEMBER|LCT_NOREF);
+                             LCT_SERVER_SESSION|LCT_REMEMBER|LCT_NOREF);
         if (rc) {
                 CERROR("Failure to initialize session: %d\n", rc);
                 goto out_req;
