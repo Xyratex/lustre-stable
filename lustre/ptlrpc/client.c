@@ -1799,6 +1799,7 @@ int ptlrpc_check_set(const struct lu_env *env, struct ptlrpc_request_set *set)
                                         cfs_spin_lock(&req->rq_lock);
                                         req->rq_net_err = 1;
                                         cfs_spin_unlock(&req->rq_lock);
+					continue;
                                 }
                                 /* need to reset the timeout */
                                 force_timer_recalc = 1;
