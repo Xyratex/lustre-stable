@@ -3269,8 +3269,21 @@ static int osc_enter_cache(const struct lu_env *env,
                 client_obd_list_lock(&cli->cl_loi_list_lock);
                 cfs_list_del_init(&ocw.ocw_entry);
 		if (rc < 0) {
-			if (rc == -ETIMEDOUT)
+			switch (rc) {
+			case -ETIMEDOUT:
 				rc = -EDQUOT;
+				break;
+			case -EINTR:
+				/* Ensures restartability - LU-3581 */
+				rc = -ERESTARTSYS;
+				break;
+			default:
+				CDEBUG(D_CACHE, "%s: event for cache space @"
+				       " %p never arrived due to %d\n",
+				       cli->cl_import->imp_obd->obd_name,
+				       &ocw, rc);
+				break;
+			}
 			break;
 		}
 
