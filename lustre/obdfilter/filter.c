@@ -2690,7 +2690,6 @@ static int filter_connect_internal(struct obd_export *exp,
 
         data->ocd_connect_flags &= OST_CONNECT_SUPPORTED;
         data->ocd_version = LUSTRE_VERSION_CODE;
-        exp->exp_connect_data = *data;
 
         /* Kindly make sure the SKIP_ORPHAN flag is from MDS. */
         if (data->ocd_connect_flags & OBD_CONNECT_MDS)
@@ -2699,7 +2698,7 @@ static int filter_connect_internal(struct obd_export *exp,
         else if (data->ocd_connect_flags & OBD_CONNECT_SKIP_ORPHAN)
                 RETURN(-EPROTO);
 
-        if (exp->exp_connect_data.ocd_connect_flags & OBD_CONNECT_GRANT) {
+        if (data->ocd_connect_flags & OBD_CONNECT_GRANT) {
                 struct filter_obd *filter = &exp->exp_obd->u.filter;
                 obd_size left, want;
 

@@ -1235,13 +1235,13 @@ dont_check_exports:
          * ptlrpc_handle_server_req_in->lustre_unpack_msg() */
         revimp->imp_msg_magic = req->rq_reqmsg->lm_magic;
 
-        if ((export->exp_connect_data.ocd_connect_flags & OBD_CONNECT_AT) &&
-            (revimp->imp_msg_magic != LUSTRE_MSG_MAGIC_V1))
-                revimp->imp_msghdr_flags |= MSGHDR_AT_SUPPORT;
-        else
-                revimp->imp_msghdr_flags &= ~MSGHDR_AT_SUPPORT;
+	if ((data->ocd_connect_flags & OBD_CONNECT_AT) &&
+	    (revimp->imp_msg_magic != LUSTRE_MSG_MAGIC_V1))
+		revimp->imp_msghdr_flags |= MSGHDR_AT_SUPPORT;
+	else
+		revimp->imp_msghdr_flags &= ~MSGHDR_AT_SUPPORT;
 
-        if ((export->exp_connect_data.ocd_connect_flags & OBD_CONNECT_FULL20) &&
+	if ((data->ocd_connect_flags & OBD_CONNECT_FULL20) &&
             (revimp->imp_msg_magic != LUSTRE_MSG_MAGIC_V1))
                 revimp->imp_msghdr_flags |= MSGHDR_CKSUM_INCOMPAT18;
         else
