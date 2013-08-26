@@ -93,12 +93,6 @@ static int mgs_connect(const struct lu_env *env,
 
         mgs_counter_incr(lexp, LPROC_MGS_CONNECT);
 
-        if (data != NULL) {
-                data->ocd_connect_flags &= MGS_CONNECT_SUPPORTED;
-                lexp->exp_connect_flags = data->ocd_connect_flags;
-                data->ocd_version = LUSTRE_VERSION_CODE;
-        }
-
         rc = mgs_export_stats_init(obd, lexp, localdata);
 
         if (rc) {
@@ -121,12 +115,6 @@ static int mgs_reconnect(const struct lu_env *env,
                 RETURN(-EINVAL);
 
         mgs_counter_incr(exp, LPROC_MGS_CONNECT);
-
-        if (data != NULL) {
-                data->ocd_connect_flags &= MGS_CONNECT_SUPPORTED;
-                exp->exp_connect_flags = data->ocd_connect_flags;
-                data->ocd_version = LUSTRE_VERSION_CODE;
-        }
 
         RETURN(mgs_export_stats_init(obd, exp, localdata));
 }
@@ -711,6 +699,20 @@ int mgs_handle(struct ptlrpc_request *req)
                 rc = target_handle_connect(req);
                 if (rc == 0)
                         rc = mgs_connect_check_sptlrpc(req);
+
+		if (rc == 0) {
+			struct obd_export *exp = req->rq_export;
+			struct obd_connect_data *reply;
+			/* To avoid exposing partially initialized connection flags, changes up
+			 * to this point have been staged in reply->ocd_connect_flags. Now that
+			 * connection handling has completed successfully, atomically update
+			 * the connect flags in the shared export data structure. LU-1623 */
+			reply = req_capsule_server_get(&req->rq_pill, &RMF_CONNECT_DATA);
+			reply->ocd_version = LUSTRE_VERSION_CODE;
+			spin_lock(&exp->exp_lock);
+			exp->exp_connect_flags = reply->ocd_connect_flags;
+			spin_unlock(&exp->exp_lock);
+		}
 
                 if (!rc && (lustre_msg_get_conn_cnt(req->rq_reqmsg) > 1))
                         /* Make clients trying to reconnect after a MGS restart
