@@ -348,13 +348,11 @@ static int mdc_xattr_common(struct obd_export *exp,const struct req_format *fmt,
                 req_capsule_set_size(&req->rq_pill, &RMF_NAME, RCL_CLIENT,
                                      xattr_namelen);
         }
-        if (input_size) {
-                LASSERT(input);
-                req_capsule_set_size(&req->rq_pill, &RMF_EADATA, RCL_CLIENT,
-                                     input_size);
-        }
 
-	/* Finish local XATTR locks to get rid of a possible cancel RPC */
+	req_capsule_set_size(&req->rq_pill, &RMF_EADATA, RCL_CLIENT,
+			     input_size);
+
+	/* Flush local XATTR locks to get rid of a possible cancel RPC */
 	if (opcode == MDS_REINT && fid_is_sane(fid) &&
 	    exp->exp_connect_data.ocd_ibits_known & MDS_INODELOCK_XATTR) {
 		CFS_LIST_HEAD(cancels);
