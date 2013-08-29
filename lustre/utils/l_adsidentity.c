@@ -18,7 +18,7 @@
 #include <syslog.h>
 #include <ldap.h>
 
-#include <lustre/liblustre.h>
+#include <liblustre.h>
 #include <lustre/lustre_user.h>
 #include <lustre/lustre_idl.h>
 
