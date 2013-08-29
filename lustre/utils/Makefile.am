@@ -188,7 +188,7 @@ lhsmtool_posix_SOURCES = lhsmtool_posix.c
 lhsmtool_posix_LDADD := liblustreapi.a $(PTHREAD_LIBS)
 lhsmtool_posix_DEPENDENCIES := liblustreapi.a
 
-EXTRA_DIST = $(sbin_scripts) $(bin_scripts)
+EXTRA_DIST = $(sbin_scripts) $(bin_scripts) $(CONFDIR_DATA)
 
 # NOTE: this should only be run on i386.
 newwiretest: wirehdr.c wirecheck
