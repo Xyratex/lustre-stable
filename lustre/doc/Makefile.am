@@ -120,6 +120,7 @@ MANFILES =					\
 	lst.8					\
 	lustre.7				\
 	lustreapi.7				\
+	l_adsidentity.8				\
 	lustre_routes_config.8			\
 	lustre_routes_conversion.8		\
 	lustre_rsync.8				\
