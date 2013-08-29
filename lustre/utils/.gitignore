@@ -12,6 +12,7 @@
 /llverfs
 /llverdev
 /l_getidentity
+/l_adsidentity
 /l_facl
 /mkfs_lustre
 /mount_lustre

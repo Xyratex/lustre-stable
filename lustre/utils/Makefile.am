@@ -4,6 +4,9 @@ AM_CFLAGS  := -fPIC -D_GNU_SOURCE \
 	      -D_LARGEFILE64_SOURCE=1 -D_FILE_OFFSET_BITS=64 -DLUSTRE_UTILS=1
 AM_LDFLAGS := -no-install
 
+CONFDIRdir=$(sysconfdir)/lustre
+CONFDIR_DATA =
+
 if TESTS
 EXTRA_PROGRAMS = wirecheck
 endif
@@ -40,6 +43,9 @@ sbin_PROGRAMS += mkfs.lustre tunefs.lustre llverdev lr_reader lshowmount \
 endif
 if LIBPTHREAD
 sbin_PROGRAMS += lhsmtool_posix
+endif
+if LDAP_BUILD
+sbin_PROGRAMS += l_adsidentity
 endif
 
 lib_LIBRARIES =
@@ -205,6 +211,15 @@ l_tunedisk_LDADD    := $(mount_lustre_LDADD)
 l_getidentity_SOURCES = l_getidentity.c
 l_getidentity_LDADD := $(top_builddir)/libcfs/libcfs/libcfs.la
 l_getidentity_DEPENDENCIES := $(top_builddir)/libcfs/libcfs/libcfs.la
+CONFDIR_DATA += configs/perm.conf
+
+if LDAP_BUILD
+l_adsidentity_SOURCES = l_adsidentity.c
+l_adsidentity_LDADD := liblustreapi.la $(LIBPTLCTL) $(LDAP)
+l_adsidentity_DEPENDENCIES := liblustreapi.la $(LIBPTLCTL)
+
+CONFDIR_DATA += configs/ads.conf
+endif
 
 lhsmtool_posix_SOURCES = lhsmtool_posix.c
 lhsmtool_posix_LDADD := liblustreapi.la $(PTHREAD_LIBS)
@@ -217,7 +232,7 @@ wiretest_SOURCES = wiretest.c
 
 endif # UTILS
 
-EXTRA_DIST = llstat llobdstat plot-llstat ldlm_debug_upcall liblustreapi.map
+EXTRA_DIST = llstat llobdstat plot-llstat ldlm_debug_upcall liblustreapi.map $(CONFDIR_DATA)
 
 # NOTE: this should only be run on i386.
 newwiretest: wirehdr.c wirecheck
