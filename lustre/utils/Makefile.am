@@ -29,8 +29,7 @@ rootsbin_PROGRAMS = mount.lustre
 bin_SCRIPTS   = llstat llobdstat plot-llstat
 bin_PROGRAMS  = lfs
 sbin_SCRIPTS  = ldlm_debug_upcall
-sbin_PROGRAMS = lctl l_adsidentity l_getidentity llverfs lustre_rsync \
-		ll_decode_linkea
+sbin_PROGRAMS = lctl l_getidentity llverfs lustre_rsync ll_decode_linkea
 
 if TESTS
 sbin_PROGRAMS += wiretest
@@ -42,6 +41,9 @@ sbin_PROGRAMS += mkfs.lustre tunefs.lustre llverdev lr_reader lshowmount \
 endif
 if LIBPTHREAD
 sbin_PROGRAMS += lhsmtool_posix
+endif
+if LDAP_BUILD
+sbin_PROGRAMS += l_adsidentity
 endif
 
 lib_LIBRARIES =
