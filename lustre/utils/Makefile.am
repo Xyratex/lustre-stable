@@ -3,6 +3,9 @@
 AM_CFLAGS  := -fPIC -D_GNU_SOURCE \
 	      -D_LARGEFILE64_SOURCE=1 -D_FILE_OFFSET_BITS=64 -DLUSTRE_UTILS=1
 
+CONFDIRdir=$(sysconfdir)/lustre
+CONFDIR_DATA =
+
 if TESTS
 EXTRA_PROGRAMS = wirecheck
 endif
@@ -192,10 +195,15 @@ tunefs_lustre_LDADD    := $(mkfs_lustre_LDADD)
 l_getidentity_SOURCES = l_getidentity.c
 l_getidentity_LDADD := $(top_builddir)/libcfs/libcfs/libcfs.la
 l_getidentity_DEPENDENCIES := $(top_builddir)/libcfs/libcfs/libcfs.la
+CONFDIR_DATA += configs/perm.conf
 
+if LDAP_BUILD
 l_adsidentity_SOURCES = l_adsidentity.c
-l_adsidentity_LDADD := liblustreapi.la $(LIBPTLCTL) -lldap
+l_adsidentity_LDADD := liblustreapi.la $(LIBPTLCTL) $(LDAP)
 l_adsidentity_DEPENDENCIES := liblustreapi.la $(LIBPTLCTL)
+
+CONFDIR_DATA += configs/ads.conf
+endif
 
 lhsmtool_posix_SOURCES = lhsmtool_posix.c
 lhsmtool_posix_LDADD := liblustreapi.la $(PTHREAD_LIBS)

@@ -3187,6 +3187,18 @@ No selinux package found, unable to build selinux enabled tools
 ])
 AC_SUBST(SELINUX)
 
+LDAP=""
+AC_CHECK_LIB([ldap],
+             [ldap_sasl_bind_s],
+             [AC_CHECK_HEADERS([ldap.h],
+                               [LDAP="-lldap"
+                                AC_DEFINE([HAVE_LDAP], 1,
+                                          [support alder32 checksum type])],
+                               [AC_MSG_WARN([No ldap-devel package found])])],
+             [AC_MSG_WARN([No ldap package found])]
+)
+AC_SUBST(LDAP)
+
 # Super safe df
 AC_MSG_CHECKING([whether to report minimum OST free space])
 AC_ARG_ENABLE([mindf],
@@ -3274,6 +3286,7 @@ AM_CONDITIONAL(GSS_SSK, test x$enable_ssk = xyes)
 AM_CONDITIONAL(LIBPTHREAD, test x$enable_libpthread = xyes)
 AM_CONDITIONAL(HAVE_SYSTEMD, test "x$with_systemdsystemunitdir" != "xno")
 AM_CONDITIONAL(XATTR_HANDLER, test "x$lb_cv_compile_xattr_handler_flags" = xyes)
+AM_CONDITIONAL(LDAP_BUILD, test x$LDAP != "")
 ]) # LC_CONDITIONALS
 
 #
