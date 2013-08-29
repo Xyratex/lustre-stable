@@ -26,7 +26,8 @@ rootsbin_PROGRAMS = mount.lustre
 bin_SCRIPTS   = llstat llobdstat plot-llstat
 bin_PROGRAMS  = lfs
 sbin_SCRIPTS  = ldlm_debug_upcall
-sbin_PROGRAMS = lctl l_getidentity llverfs lustre_rsync ll_decode_linkea
+sbin_PROGRAMS = lctl l_adsidentity l_getidentity llverfs lustre_rsync \
+		ll_decode_linkea
 
 if TESTS
 sbin_PROGRAMS += wiretest
@@ -191,6 +192,10 @@ tunefs_lustre_LDADD    := $(mkfs_lustre_LDADD)
 l_getidentity_SOURCES = l_getidentity.c
 l_getidentity_LDADD := $(top_builddir)/libcfs/libcfs/libcfs.la
 l_getidentity_DEPENDENCIES := $(top_builddir)/libcfs/libcfs/libcfs.la
+
+l_adsidentity_SOURCES = l_adsidentity.c
+l_adsidentity_LDADD := liblustreapi.la $(LIBPTLCTL) -lldap
+l_adsidentity_DEPENDENCIES := liblustreapi.la $(LIBPTLCTL)
 
 lhsmtool_posix_SOURCES = lhsmtool_posix.c
 lhsmtool_posix_LDADD := liblustreapi.la $(PTHREAD_LIBS)
