@@ -473,6 +473,40 @@ ldiskfs_osd_readcache_seq_write(struct file *file, const char *buffer,
 }
 LPROC_SEQ_FOPS(ldiskfs_osd_readcache);
 
+static int ldiskfs_osd_lma_self_repair_seq_show(struct seq_file *m, void *data)
+{
+	struct osd_device *dev = osd_dt_dev((struct dt_device *)m->private);
+
+	LASSERT(dev != NULL);
+	if (unlikely(dev->od_mnt == NULL))
+		return -EINPROGRESS;
+
+	return seq_printf(m, "%d\n", !!dev->od_lma_self_repair);
+}
+
+static ssize_t
+ldiskfs_osd_lma_self_repair_seq_write(struct file *file, const char *buffer,
+					size_t count, loff_t *off)
+{
+	struct seq_file	  *m = file->private_data;
+	struct dt_device  *dt = m->private;
+	struct osd_device *dev = osd_dt_dev(dt);
+	int		   val;
+	int		   rc;
+
+	LASSERT(dev != NULL);
+	if (unlikely(dev->od_mnt == NULL))
+		return -EINPROGRESS;
+
+	rc = lprocfs_write_helper(buffer, count, &val);
+	if (rc)
+		return rc;
+
+	dev->od_lma_self_repair = !!val;
+	return count;
+}
+LPROC_SEQ_FOPS(ldiskfs_osd_lma_self_repair);
+
 LPROC_SEQ_FOPS_RO_TYPE(ldiskfs, dt_blksize);
 LPROC_SEQ_FOPS_RO_TYPE(ldiskfs, dt_kbytestotal);
 LPROC_SEQ_FOPS_RO_TYPE(ldiskfs, dt_kbytesfree);
@@ -511,6 +545,8 @@ struct lprocfs_seq_vars lprocfs_osd_obd_vars[] = {
 	  .fops	=	&ldiskfs_osd_wcache_fops	},
 	{ .name	=	"readcache_max_filesize",
 	  .fops	=	&ldiskfs_osd_readcache_fops	},
+	{ .name =       "lma_self_repair",
+	  .fops =       &ldiskfs_osd_lma_self_repair_fops },
 	{ 0 }
 };
 
