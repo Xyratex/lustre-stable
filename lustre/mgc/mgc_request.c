@@ -763,15 +763,15 @@ static int mgc_setup(struct obd_device *obd, struct lustre_cfg *lcfg)
 {
 	struct lprocfs_static_vars	lvars;
 	int				rc;
-        ENTRY;
+	ENTRY;
 
 	rc = ptlrpcd_addref();
 	if (rc < 0)
 		RETURN(rc);
 
-        rc = client_obd_setup(obd, lcfg);
-        if (rc)
-                GOTO(err_decref, rc);
+	rc = client_obd_setup(obd, lcfg);
+	if (rc)
+		GOTO(err_decref, rc);
 
         rc = obd_llog_init(obd, &obd->obd_olg, obd, NULL);
         if (rc) {
@@ -779,9 +779,9 @@ static int mgc_setup(struct obd_device *obd, struct lustre_cfg *lcfg)
                 GOTO(err_cleanup, rc);
         }
 
-        lprocfs_mgc_init_vars(&lvars);
-        lprocfs_obd_setup(obd, lvars.obd_vars);
-        sptlrpc_lprocfs_cliobd_attach(obd);
+	lprocfs_mgc_init_vars(&lvars);
+	lprocfs_obd_setup(obd, lvars.obd_vars);
+	sptlrpc_lprocfs_cliobd_attach(obd);
 
         if (cfs_atomic_inc_return(&mgc_count) == 1) {
                 rq_state = 0;
@@ -800,13 +800,13 @@ static int mgc_setup(struct obd_device *obd, struct lustre_cfg *lcfg)
                 rc = 0;
         }
 
-        RETURN(rc);
+	RETURN(rc);
 
 err_cleanup:
-        client_obd_cleanup(obd);
+	client_obd_cleanup(obd);
 err_decref:
-        ptlrpcd_decref();
-        RETURN(rc);
+	ptlrpcd_decref();
+	RETURN(rc);
 }
 
 /* based on ll_mdc_blocking_ast */
