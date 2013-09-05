@@ -389,6 +389,11 @@ void ptlrpc_activate_import(struct obd_import *imp)
         struct obd_device *obd = imp->imp_obd;
 
         cfs_spin_lock(&imp->imp_lock);
+	if (imp->imp_deactive != 0) {
+		cfs_spin_unlock(&imp->imp_lock);
+		return;
+	}
+
         imp->imp_invalid = 0;
         ptlrpc_activate_timeouts(imp);
         cfs_spin_unlock(&imp->imp_lock);
