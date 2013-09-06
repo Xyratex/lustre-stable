@@ -2357,7 +2357,7 @@ int ost_handle(struct ptlrpc_request *req)
 			 * the connect flags in the shared export data structure. LU-1623 */
 			reply = req_capsule_server_get(&req->rq_pill, &RMF_CONNECT_DATA);
 			spin_lock(&exp->exp_lock);
-			*exp_connect_flags_ptr(exp) = reply->ocd_connect_flags;
+			exp->exp_connect_data = *reply;
 			spin_unlock(&exp->exp_lock);
 		}
                 break;
