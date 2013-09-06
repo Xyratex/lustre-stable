@@ -2704,7 +2704,7 @@ static int filter_connect_internal(struct obd_export *exp,
         else if (data->ocd_connect_flags & OBD_CONNECT_SKIP_ORPHAN)
                 RETURN(-EPROTO);
 
-        if (exp->exp_connect_flags & OBD_CONNECT_GRANT) {
+        if (data->ocd_connect_flags & OBD_CONNECT_GRANT) {
                 struct filter_obd *filter = &exp->exp_obd->u.filter;
                 obd_size left, want;
 
