@@ -726,6 +726,7 @@ static int lustre_start_mgc(struct super_block *sb)
         sprintf(niduuid, "%s_%x", mgcname, i);
         if (lsi->lsi_flags & LSI_SERVER) {
                 ptr = lsi->lsi_ldd->ldd_params;
+		CDEBUG(D_MOUNT, "mgs nids %s.\n", ptr);
                 if (IS_MGS(lsi->lsi_ldd)) {
                         /* Use local nids (including LO) */
                         lnet_process_id_t id;
@@ -739,19 +740,30 @@ static int lustre_start_mgc(struct super_block *sb)
                                 CERROR("No MGS nids given.\n");
                                 GOTO(out_free, rc = -EINVAL);
                         }
-                        while (class_parse_nid(ptr, &nid, &ptr) == 0) {
-                                rc = do_lcfg(mgcname, nid,
-                                             LCFG_ADD_UUID, niduuid, 0,0,0);
-                                i++;
-                        }
+			/*
+			 * LU-3829.
+			 * Here we only take the first mgsnid as its primary
+			 * serving mgs node, the rest mgsnid will be taken as
+			 * failover mgs node, otherwise they would be takens
+			 * as multiple nids of a single mgs node.
+			 */
+			while (class_parse_nid(ptr, &nid, &ptr) == 0) {
+				rc = do_lcfg(mgcname, nid, LCFG_ADD_UUID,
+					     niduuid, 0, 0, 0);
+				if (rc == 0) {
+					i = 1;
+					break;
+				}
+			}
                 }
         } else { /* client */
                 /* Use nids from mount line: uml1,1@elan:uml2,2@elan:/lustre */
                 ptr = lsi->lsi_lmd->lmd_dev;
                 while (class_parse_nid(ptr, &nid, &ptr) == 0) {
-                        rc = do_lcfg(mgcname, nid,
-                                     LCFG_ADD_UUID, niduuid, 0,0,0);
-                        i++;
+			rc = do_lcfg(mgcname, nid, LCFG_ADD_UUID,
+				     niduuid, 0, 0, 0);
+			if (rc == 0)
+				++i;
                         /* Stop at the first failover nid */
                         if (*ptr == ':')
                                 break;
@@ -784,16 +796,18 @@ static int lustre_start_mgc(struct super_block *sb)
                 sprintf(niduuid, "%s_%x", mgcname, i);
                 j = 0;
                 while (class_parse_nid(ptr, &nid, &ptr) == 0) {
-                        j++;
-                        rc = do_lcfg(mgcname, nid,
-                                     LCFG_ADD_UUID, niduuid, 0,0,0);
-                        if (*ptr == ':')
-                                break;
-                }
-                if (j > 0) {
-                        rc = do_lcfg(mgcname, 0, LCFG_ADD_CONN,
-                                     niduuid, 0, 0, 0);
-                        i++;
+			rc = do_lcfg(mgcname, nid, LCFG_ADD_UUID,
+				     niduuid, 0, 0, 0);
+			if (rc == 0)
+				++j;
+			if (*ptr == ':')
+				break;
+		}
+		if (j > 0) {
+			rc = do_lcfg(mgcname, 0, LCFG_ADD_CONN,
+				     niduuid, 0, 0, 0);
+			if (rc == 0)
+				++i;
                 } else {
                         /* at ":/fsname" */
                         break;
