@@ -3362,6 +3362,17 @@ int filter_setattr_internal(struct obd_export *exp, struct dentry *dentry,
                 fcc = NULL;
         }
 
+	/* For a partial-page truncate flush the page to disk immediately
+	 * to avoid data corruption during direct disk write. b=17397
+	 * We do it under transaction to prevent deadlock with flusher */
+	if ((iattr.ia_valid & ATTR_SIZE) &&
+	     old_size != iattr.ia_size && (iattr.ia_size & ~CFS_PAGE_MASK)) {
+		err = filemap_fdatawrite_range(inode->i_mapping, iattr.ia_size,
+					       iattr.ia_size + 1);
+		if (!rc)
+			rc = err;
+	}
+
         err = fsfilt_commit(exp->exp_obd, inode, handle, 0);
         if (err) {
                 CERROR("error on commit, err = %d\n", err);
@@ -3369,16 +3380,6 @@ int filter_setattr_internal(struct obd_export *exp, struct dentry *dentry,
                         rc = err;
         } else {
                 fcc = NULL;
-        }
-
-        /* For a partial-page truncate flush the page to disk immediately
-         * to avoid data corruption during direct disk write. b=17397 */
-        if (!sync && (iattr.ia_valid & ATTR_SIZE) &&
-            old_size != iattr.ia_size && (iattr.ia_size & ~CFS_PAGE_MASK)) {
-                err = filemap_fdatawrite_range(inode->i_mapping, iattr.ia_size,
-                                               iattr.ia_size + 1);
-                if (!rc)
-                        rc = err;
         }
 
         EXIT;
