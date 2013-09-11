@@ -381,8 +381,7 @@ int filter_do_bio(struct obd_export *exp, struct inode *inode,
                                        bio->bi_size >> 9, queue_max_sectors(q),
                                        bio_phys_segments(q, bio),
                                        queue_max_phys_segments(q),
-                                       bio_hw_segments(q, bio),
-                                       queue_max_hw_segments(q),
+                                       0, queue_max_hw_segments(q),
                                        (unsigned long long)bio->bi_sector,
                                        (unsigned long long)sector);
 
