@@ -247,6 +247,26 @@ LB_LINUX_TRY_COMPILE([
         AC_DEFINE(HAVE_SK_SLEEP, 1, [kernel has sk_sleep])
 ],[
         AC_MSG_RESULT(no)
+],[
+])
+])
+
+# 2.6.39 adds a base pointer address argument to dump_trace
+AC_DEFUN([LIBCFS_DUMP_TRACE_ADDRESS],
+[AC_MSG_CHECKING([dump_trace want address])
+LB_LINUX_TRY_COMPILE([
+	struct task_struct;
+	struct pt_regs;
+	#include <asm/stacktrace.h>
+],[
+	dump_trace(NULL, NULL, NULL, 0, NULL, NULL);
+],[
+	AC_MSG_RESULT(yes)
+	AC_DEFINE(HAVE_DUMP_TRACE_ADDRESS, 1,
+		[dump_trace want address argument])
+],[
+	AC_MSG_RESULT(no)
+],[
 ])
 ])
 
@@ -270,6 +290,24 @@ LB_LINUX_TRY_COMPILE([
 ])
 ])
 
+# 3.0 removes stacktrace_ops warning* functions
+AC_DEFUN([LIBCFS_STACKTRACE_WARNING],
+[AC_MSG_CHECKING([whether stacktrace_ops.warning is exist])
+LB_LINUX_TRY_COMPILE([
+	struct task_struct;
+	struct pt_regs;
+	#include <asm/stacktrace.h>
+],[
+	((struct stacktrace_ops *)0)->warning(NULL, NULL);
+],[
+	AC_MSG_RESULT(yes)
+	AC_DEFINE(HAVE_STACKTRACE_WARNING, 1, [stacktrace_ops.warning is exist])
+],[
+	AC_MSG_RESULT(no)
+],[
+])
+])
+
 #
 # LIBCFS_PROG_LINUX
 #
@@ -283,7 +321,6 @@ LIBCFS_U64_LONG_LONG_LINUX
 
 # 2.6.24
 LIBCFS_SYSCTL_UNNUMBERED
-LIBCFS_FUNC_DUMP_TRACE
 LIBCFS_HAVE_KEYTYPE_H
 # 2.6.32
 LIBCFS_STACKTRACE_OPS_HAVE_WALK_STACK
@@ -297,8 +334,12 @@ LIBCFS_SYSCTL_CTLNAME
 LIBCFS_ADD_WAIT_QUEUE_EXCLUSIVE
 # 2.6.35
 LC_SK_SLEEP
+# 2.6.39
+LIBCFS_DUMP_TRACE_ADDRESS
 # 2.6.40 fc15
 LC_SHRINK_CONTROL
+# 3.0
+LIBCFS_STACKTRACE_WARNING
 ])
 
 #
