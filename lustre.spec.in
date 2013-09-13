@@ -143,12 +143,6 @@ Requires: lustre-osd-mount
 Obsoletes: lustre-client < %{version}
 Provides: lustre-client = %{version}-%{release}
 %endif
-# GSS requires this: BuildRequires: pkgconfig, libgssapi-devel >= 0.10
-%if %{_vendor}=="redhat" || %{_vendor}=="fedora"
-#suse don't support selinux
-BuildRequires: libselinux-devel
-Requires: libselinux
-%endif
 %if %{with lustre_modules}
 BuildRequires: %kernel_module_package_buildreqs
 %if %{_vendor}=="redhat"
