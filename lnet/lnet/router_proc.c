@@ -150,8 +150,6 @@ int LL_PROC_PROTO(proc_lnet_routes)
         int        ver;
         int        num;
 
-        DECLARE_LL_PROC_PPOS_DECL;
-
         num = LNET_PHASH_NUM_GET(*ppos);
         ver = LNET_VERSION_GET(*ppos);
 
@@ -266,8 +264,6 @@ int LL_PROC_PROTO(proc_lnet_routers)
         int        len;
         int        ver;
         int        num;
-
-        DECLARE_LL_PROC_PPOS_DECL;
 
         num = LNET_PHASH_NUM_GET(*ppos);
         ver = LNET_VERSION_GET(*ppos);
@@ -388,8 +384,6 @@ int LL_PROC_PROTO(proc_lnet_peers)
         int        ver;
         int        idx;
         int        num;
-
-        DECLARE_LL_PROC_PPOS_DECL;
 
         idx = LNET_PHASH_IDX_GET(*ppos);
         num = LNET_PHASH_NUM_GET(*ppos);
@@ -594,8 +588,6 @@ int LL_PROC_PROTO(proc_lnet_nis)
         char      *s;
         const int  tmpsiz = 256;
         int        len;
-
-        DECLARE_LL_PROC_PPOS_DECL;
 
         LASSERT (!write);
 

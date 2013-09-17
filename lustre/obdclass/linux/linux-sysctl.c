@@ -109,7 +109,7 @@ int LL_PROC_PROTO(proc_set_timeout)
 {
         int rc;
 
-        rc = ll_proc_dointvec(table, write, filp, buffer, lenp, ppos);
+	rc = proc_dointvec(table, write, buffer, lenp, ppos);
         if (ldlm_timeout >= obd_timeout)
                 ldlm_timeout = max(obd_timeout / 3, 1U);
         return rc;
@@ -119,7 +119,6 @@ int LL_PROC_PROTO(proc_memory_alloc)
 {
         char buf[22];
         int len;
-        DECLARE_LL_PROC_PPOS_DECL;
 
         if (!*lenp || (*ppos && !write)) {
                 *lenp = 0;
@@ -143,7 +142,6 @@ int LL_PROC_PROTO(proc_pages_alloc)
 {
         char buf[22];
         int len;
-        DECLARE_LL_PROC_PPOS_DECL;
 
         if (!*lenp || (*ppos && !write)) {
                 *lenp = 0;
@@ -167,7 +165,6 @@ int LL_PROC_PROTO(proc_mem_max)
 {
         char buf[22];
         int len;
-        DECLARE_LL_PROC_PPOS_DECL;
 
         if (!*lenp || (*ppos && !write)) {
                 *lenp = 0;
@@ -191,7 +188,6 @@ int LL_PROC_PROTO(proc_pages_max)
 {
         char buf[22];
         int len;
-        DECLARE_LL_PROC_PPOS_DECL;
 
         if (!*lenp || (*ppos && !write)) {
                 *lenp = 0;
@@ -214,7 +210,6 @@ int LL_PROC_PROTO(proc_pages_max)
 int LL_PROC_PROTO(proc_max_dirty_pages_in_mb)
 {
         int rc = 0;
-        DECLARE_LL_PROC_PPOS_DECL;
 
         if (!table->data || !table->maxlen || !*lenp || (*ppos && !write)) {
                 *lenp = 0;
@@ -254,10 +249,10 @@ int LL_PROC_PROTO(proc_max_dirty_pages_in_mb)
 }
 
 #ifdef RANDOM_FAIL_ALLOC
-int LL_PROC_PROTO(proc_alloc_fail_rate)
+int proc_alloc_fail_rate(struct ctl_table *table, int write,
+			 void __user *buffer, size_t *lenp, loff_t *ppos)
 {
         int rc          = 0;
-        DECLARE_LL_PROC_PPOS_DECL;
 
         if (!table->data || !table->maxlen || !*lenp || (*ppos && !write)) {
                 *lenp = 0;
@@ -288,23 +283,23 @@ int LL_PROC_PROTO(proc_alloc_fail_rate)
 
 int LL_PROC_PROTO(proc_at_min)
 {
-        return ll_proc_dointvec(table, write, filp, buffer, lenp, ppos);
+	return proc_dointvec(table, write, buffer, lenp, ppos);
 }
 int LL_PROC_PROTO(proc_at_max)
 {
-        return ll_proc_dointvec(table, write, filp, buffer, lenp, ppos);
+	return proc_dointvec(table, write, buffer, lenp, ppos);
 }
 int LL_PROC_PROTO(proc_at_extra)
 {
-        return ll_proc_dointvec(table, write, filp, buffer, lenp, ppos);
+	return proc_dointvec(table, write, buffer, lenp, ppos);
 }
 int LL_PROC_PROTO(proc_at_early_margin)
 {
-        return ll_proc_dointvec(table, write, filp, buffer, lenp, ppos);
+	return proc_dointvec(table, write, buffer, lenp, ppos);
 }
 int LL_PROC_PROTO(proc_at_history)
 {
-        return ll_proc_dointvec(table, write, filp, buffer, lenp, ppos);
+	return proc_dointvec(table, write, buffer, lenp, ppos);
 }
 
 #ifdef CONFIG_SYSCTL
