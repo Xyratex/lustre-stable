@@ -1755,6 +1755,7 @@ osd_ios_general_scan(struct osd_thread_info *info, struct osd_device *dev,
 	filp->f_mapping = inode->i_mapping;
 	filp->f_op = fops;
 	filp->private_data = NULL;
+	set_file_inode(filp, inode);
 
 	rc = fops->readdir(filp, &buf, filldir);
 	fops->release(inode, filp);
