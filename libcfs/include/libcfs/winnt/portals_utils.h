@@ -295,8 +295,8 @@ clear_user(void __user *to, unsigned long n)
     0                           \
 )
 
-#define cfs_num_physpages               (64 * 1024)
-#define CFS_NUM_CACHEPAGES              cfs_num_physpages
+#define totalram_pages               (64 * 1024)
+#define NUM_CACHEPAGES              totalram_pages
 
 #else
 

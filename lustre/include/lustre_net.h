@@ -1576,7 +1576,7 @@ __u64 ptlrpc_req_xid(struct ptlrpc_request *request);
     Hopefully we won't use this much memory, but we must accept all waiting
     reqs, in case some of them are e.g. lock cancels.   On the other hand,
     we don't want to OOM.  */
-#define PTLRPC_NBUFS_MEM_MAX_DEFAULT ((cfs_num_physpages / 2) << CFS_PAGE_SHIFT)
+#define PTLRPC_NBUFS_MEM_MAX_DEFAULT ((totalram_pages / 2) << CFS_PAGE_SHIFT)
 
 /* ptlrpc/service.c */
 /**

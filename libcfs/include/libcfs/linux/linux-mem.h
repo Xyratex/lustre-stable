@@ -60,8 +60,6 @@ typedef struct page                     cfs_page_t;
 #define CFS_PAGE_SHIFT                  PAGE_CACHE_SHIFT
 #define CFS_PAGE_MASK                   (~((__u64)CFS_PAGE_SIZE-1))
 
-#define cfs_num_physpages               num_physpages
-
 #define cfs_copy_from_user(to, from, n) copy_from_user(to, from, n)
 #define cfs_copy_to_user(to, from, n)   copy_to_user(to, from, n)
 
@@ -134,10 +132,10 @@ extern void cfs_free_page(cfs_page_t *page);
 
 #if BITS_PER_LONG == 32
 /* limit to lowmem on 32-bit systems */
-#define CFS_NUM_CACHEPAGES \
-        min(cfs_num_physpages, 1UL << (30 - CFS_PAGE_SHIFT) * 3 / 4)
+#define NUM_CACHEPAGES \
+	min(totalram_pages, 1UL << (30 - PAGE_CACHE_SHIFT) * 3 / 4)
 #else
-#define CFS_NUM_CACHEPAGES cfs_num_physpages
+#define NUM_CACHEPAGES totalram_pages
 #endif
 
 /*
