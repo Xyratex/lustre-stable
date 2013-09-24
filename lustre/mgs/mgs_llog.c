@@ -1494,7 +1494,8 @@ int mgs_write_log_direct_all(struct obd_device *obd, struct fs_db *fsdb,
         if (mgs_log_is_empty(obd, logname)) {
                 struct llog_handle *llh = NULL;
                 rc = record_start_log(obd, &llh, logname);
-                record_end_log(obd, &llh);
+		if (rc == 0)
+			record_end_log(obd, &llh);
         }
         name_destroy(&logname);
         if (rc)
