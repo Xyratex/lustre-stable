@@ -1621,12 +1621,15 @@ extern void lustre_swab_generic_32s (__u32 *val);
 #define MDS_INODELOCK_LOOKUP 0x000001       /* dentry, mode, owner, group */
 #define MDS_INODELOCK_UPDATE 0x000002       /* size, links, timestamps */
 #define MDS_INODELOCK_OPEN   0x000004       /* For opened files */
-#define MDS_INODELOCK_XATTR  0x000008       /* extended attributes */
+#define MDS_INODELOCK_XATTR  0x000020       /* extended attributes */
 
 /* Do not forget to increase MDS_INODELOCK_MAXSHIFT when adding new bits */
-#define MDS_INODELOCK_MAXSHIFT 3
+#define MDS_INODELOCK_MAXSHIFT 5
 /* This FULL lock is useful to take on unlink sort of operations */
-#define MDS_INODELOCK_FULL ((1<<(MDS_INODELOCK_MAXSHIFT+1))-1)
+#define MDS_INODELOCK_FULL (MDS_INODELOCK_LOOKUP | \
+			    MDS_INODELOCK_UPDATE | \
+			    MDS_INODELOCK_OPEN   | \
+			    MDS_INODELOCK_XATTR)
 
 extern void lustre_swab_ll_fid (struct ll_fid *fid);
 
