@@ -4968,9 +4968,11 @@ run_test 101a "check read-ahead for random reads ================"
 
 setup_test101bc() {
 	mkdir -p $DIR/$tdir
-	STRIPE_SIZE=1048576
-	STRIPE_COUNT=$OSTCOUNT
+	local STRIPE_SIZE=$1
+	local FILE_LENGTH=$2
 	STRIPE_OFFSET=0
+
+	local FILE_SIZE_MB=$((FILE_LENGTH / STRIPE_SIZE))
 
 	local list=$(comma_list $(osts_nodes))
 	do_nodes $list $LCTL set_param -n obdfilter.*.read_cache_enable=0
@@ -4980,7 +4982,7 @@ setup_test101bc() {
 	# prepare the read-ahead file
 	$SETSTRIPE -S $STRIPE_SIZE -i $STRIPE_OFFSET -c $OSTCOUNT $DIR/$tfile
 
-	dd if=/dev/zero of=$DIR/$tfile bs=1024k count=100 2> /dev/null
+	dd if=/dev/zero of=$DIR/$tfile bs=$STRIPE_SIZE count=$FILE_SIZE_MB 2> /dev/null
 }
 
 cleanup_test101bc() {
@@ -4999,10 +5001,11 @@ calc_total() {
 
 ra_check_101() {
 	local READ_SIZE=$1
-	local STRIPE_SIZE=1048576
+	local STRIPE_SIZE=$2
+	local FILE_LENGTH=$3
 	local RA_INC=1048576
 	local STRIDE_LENGTH=$((STRIPE_SIZE/READ_SIZE))
-	local FILE_LENGTH=$((64*100))
+
 	local discard_limit=$((((STRIDE_LENGTH - 1)*3/(STRIDE_LENGTH*OSTCOUNT))* \
 			     (STRIDE_LENGTH*OSTCOUNT - STRIDE_LENGTH)))
 	DISCARD=`$LCTL get_param -n llite.*.read_ahead_stats | \
@@ -5020,10 +5023,16 @@ test_101b() {
 	[ "$OSTCOUNT" -lt "2" ] && skip_env "skipping stride IO stride-ahead test" && return
 	local STRIPE_SIZE=1048576
 	local STRIDE_SIZE=$((STRIPE_SIZE*OSTCOUNT))
-	local FILE_LENGTH=$((STRIPE_SIZE*100))
-	local ITERATION=$((FILE_LENGTH/STRIDE_SIZE))
+	if [ $SLOW == "yes" ]; then
+		local FILE_LENGTH=$((STRIDE_SIZE * 64))
+	else
+		local FILE_LENGTH=$((STRIDE_SIZE * 8))
+	fi
+
+	local ITERATION=$((FILE_LENGTH / STRIDE_SIZE))
+
 	# prepare the read-ahead file
-	setup_test101bc
+	setup_test101bc $STRIPE_SIZE $FILE_LENGTH
 	cancel_lru_locks osc
 	for BIDX in 2 4 8 16 32 64 128 256
 	do
@@ -5035,7 +5044,7 @@ test_101b() {
 		$READS -f $DIR/$tfile  -l $STRIDE_LENGTH -o $OFFSET \
 			      -s $FILE_LENGTH -b $STRIPE_SIZE -a $READ_COUNT -n $ITERATION
 		cancel_lru_locks osc
-		ra_check_101 $BSIZE
+		ra_check_101 $BSIZE $STRIPE_SIZE $FILE_LENGTH
 	done
 	cleanup_test101bc
 	true
@@ -5048,7 +5057,7 @@ test_101c() {
     local nreads=10000
     local osc
 
-    setup_test101bc
+    setup_test101bc $STRIPE_SIZE $FILE_LENGTH
 
     cancel_lru_locks osc
     $LCTL set_param osc.*.rpc_stats 0
