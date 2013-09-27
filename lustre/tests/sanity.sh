@@ -6804,7 +6804,7 @@ test_116a() { # was previously test_116()
 		echo "ok"
 	else
 		echo "failed - QOS mode won't be used"
-		error_ignore 0000 "QOS imbalance criteria not met"
+		skip "QOS imbalance criteria not met"
 		simple_cleanup_common
 		return
 	fi
@@ -6858,8 +6858,7 @@ test_116a() { # was previously test_116()
 	[ $MINC -gt 0 ] &&
 		echo "Wrote ${FILL}% more files to larger OST $MAXI1"
 	[ $MAXC -gt $MINC ] ||
-		error_ignore 0000 "stripe QOS didn't balance free space"
-
+		error_ignore LU-9 "stripe QOS didn't balance free space"
 	simple_cleanup_common
 }
 run_test 116a "stripe QOS: free space balance ==================="
@@ -9461,11 +9460,10 @@ test_156() {
 	cat $file >/dev/null
 	AFTER=`roc_hit`
 	if ! let "AFTER - BEFORE == 0"; then
-		error_ignore 20762 "IN CACHE: before: $BEFORE, after: $AFTER"
+		error_ignore bz20762 "IN CACHE: before: $BEFORE, after: $AFTER"
 	else
 		log "cache hits:: before: $BEFORE, after: $AFTER"
 	fi
-
 
 	log "Turn on the read cache and turn off the write cache"
 	set_cache read on
@@ -9480,7 +9478,7 @@ test_156() {
 	cat $file >/dev/null
 	AFTER=`roc_hit`
 	if ! let "AFTER - BEFORE == 0"; then
-		error_ignore 20762 "IN CACHE: before: $BEFORE, after: $AFTER"
+		error_ignore bz20762 "IN CACHE: before: $BEFORE, after: $AFTER"
 	else
 		log "cache hits:: before: $BEFORE, after: $AFTER"
 	fi
@@ -9503,7 +9501,7 @@ run_test 156 "Verification of tunables ============================"
 #Changelogs
 err17935 () {
 	if [ $MDSCOUNT -gt 1 ]; then
-		error_ignore 17935 $*
+		error_ignore bz17935 $*
 	else
 		error $*
 	fi
