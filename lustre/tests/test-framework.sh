@@ -4574,20 +4574,17 @@ stop_full_debug_logging() {
 
 # prints bash call stack
 print_stack_trace() {
+	local skip=${1:-1}
 	echo "  Trace dump:"
-	for (( i=1; i < ${#BASH_LINENO[*]} ; i++ )) ; do
-		local s=${BASH_SOURCE[$i]}
-		local l=${BASH_LINENO[$i-1]}
-		local f=${FUNCNAME[$i]}
-		echo "  = $s:$l:$f()"
+	for (( i=$skip; i < ${#BASH_LINENO[*]} ; i++ )) ; do
+		local src=${BASH_SOURCE[$i]}
+		local lineno=${BASH_LINENO[$i-1]}
+		local funcname=${FUNCNAME[$i]}
+		echo "  = $src:$lineno:$funcname()"
 	done
 }
 
-##################################
-# Test interface
-##################################
-
-error_noexit() {
+report_error() {
 	local TYPE=${TYPE:-"FAIL"}
 
 	local dump=true
@@ -4597,10 +4594,8 @@ error_noexit() {
 		dump=false
 	fi
 
-
 	log " ${TESTSUITE} ${TESTNAME}: @@@@@@ ${TYPE}: $@ "
-	print_stack_trace >&2
-
+	(print_stack_trace 2) >&2
 	mkdir -p $LOGDIR
 	# We need to dump the logs on all nodes
 	if $dump; then
@@ -4624,6 +4619,14 @@ error_noexit() {
 	reset_fail_loc
 }
 
+##################################
+# Test interface
+##################################
+
+error_noexit() {
+	report_error "$@"
+}
+
 exit_status () {
 	local status=0
 	local log=$TESTSUITELOG
@@ -4633,12 +4636,13 @@ exit_status () {
 }
 
 error() {
-	error_noexit "$@"
+	report_error "$@"
 	exit 1
 }
 
 error_exit() {
-	error "$@"
+	report_error "$@"
+	exit 1
 }
 
 # use only if we are ignoring failures for this test, bugno required.
@@ -4648,11 +4652,11 @@ error_exit() {
 error_ignore() {
 	local TYPE="IGNORE ($1)"
 	shift
-	error_noexit "$@"
+	report_error "$@"
 }
 
 error_and_remount() {
-	error_noexit "$@"
+	report_error "$@"
 	remount_client $MOUNT
 	exit 1
 }
