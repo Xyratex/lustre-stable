@@ -45,6 +45,7 @@
 
 #include <obd_class.h>
 #include <obd_lov.h>
+#include <obd_ost.h>
 #include <lustre/lustre_idl.h>
 
 #include "lov_internal.h"
@@ -147,13 +148,9 @@ void lov_set_add_req(struct lov_request *req, struct lov_request_set *set)
         req->rq_rqset = set;
 }
 
-extern void osc_update_enqueue(struct lustre_handle *lov_lockhp,
-                               struct lov_oinfo *loi, int flags,
-                               struct ost_lvb *lvb, __u32 mode, int rc);
-
 static int lov_update_enqueue_lov(struct obd_export *exp,
                                   struct lustre_handle *lov_lockhp,
-                                  struct lov_oinfo *loi, int flags, int idx,
+                                  struct lov_oinfo *loi, __u64 flags, int idx,
                                   __u64 oid, int rc)
 {
         struct lov_obd *lov = &exp->exp_obd->u.lov;
@@ -412,7 +409,7 @@ int lov_update_match_set(struct lov_request_set *set, struct lov_request *req,
         RETURN(rc);
 }
 
-int lov_fini_match_set(struct lov_request_set *set, __u32 mode, int flags)
+int lov_fini_match_set(struct lov_request_set *set, __u32 mode, __u64 flags)
 {
         int rc = 0;
         ENTRY;

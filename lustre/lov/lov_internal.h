@@ -222,7 +222,7 @@ int lov_prep_match_set(struct obd_export *exp, struct obd_info *oinfo,
                        struct lov_request_set **reqset);
 int lov_update_match_set(struct lov_request_set *set, struct lov_request *req,
                          int rc);
-int lov_fini_match_set(struct lov_request_set *set, __u32 mode, int flags);
+int lov_fini_match_set(struct lov_request_set *set, __u32 mode, __u64 flags);
 int lov_prep_cancel_set(struct obd_export *exp, struct obd_info *oinfo,
                         struct lov_stripe_md *lsm,
                         __u32 mode, struct lustre_handle *lockh,

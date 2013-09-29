@@ -77,6 +77,10 @@ struct osc_enqueue_args {
         struct ldlm_enqueue_info *oa_ei;
 };
 
+extern void osc_update_enqueue(struct lustre_handle *lov_lockhp,
+			       struct lov_oinfo *loi, __u64 flags,
+			       struct ost_lvb *lvb, __u32 mode, int rc);
+
 #if 0
 int osc_extent_blocking_cb(struct ldlm_lock *lock,
                            struct ldlm_lock_desc *new, void *data,
