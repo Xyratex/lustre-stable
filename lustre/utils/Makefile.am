@@ -17,9 +17,10 @@ LIBPTLCTL := $(top_builddir)/lnet/utils/libptlctl.a \
 sbin_scripts = lrun
 bin_scripts = llstat llobdstat plot-llstat llbackup
 
+EXTRA_PROGRAMS = wirecheck
+
 if UTILS
 noinst_PROGRAMS = obdio obdbarrier
-EXTRA_PROGRAMS = wirecheck
 
 # mount only finds helpers in /sbin
 rootsbin_PROGRAMS = mount.lustre
@@ -192,14 +193,14 @@ endif
 
 ltrack_stats_SOURCES = ltrack_stats.c
 
+lhsmtool_posix_SOURCES = lhsmtool_posix.c
+lhsmtool_posix_LDADD := liblustreapi.a $(PTHREAD_LIBS)
+lhsmtool_posix_DEPENDENCIES := liblustreapi.a
+
 wirecheck_SOURCES = wirecheck.c
 wirecheck_CPPFLAGS = -DCC="\"$(CC)\""
 
 wiretest_SOURCES = wiretest.c
-
-lhsmtool_posix_SOURCES = lhsmtool_posix.c
-lhsmtool_posix_LDADD := liblustreapi.a $(PTHREAD_LIBS)
-lhsmtool_posix_DEPENDENCIES := liblustreapi.a
 
 EXTRA_DIST = $(sbin_scripts) $(bin_scripts) $(CONFDIR_DATA)
 
