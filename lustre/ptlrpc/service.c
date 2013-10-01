@@ -1328,7 +1328,7 @@ static int ptlrpc_server_check_resend_in_progress(struct ptlrpc_request *req)
 	struct ptlrpc_request	*tmp = NULL;
 
 	if (!(lustre_msg_get_flags(req->rq_reqmsg) & MSG_RESENT) ||
-	    (cfs_atomic_read(&req->rq_export->exp_rpc_count) == 1))
+	    (cfs_atomic_read(&req->rq_export->exp_rpc_count) == 0))
 		return 0;
 
 	/* This list should not be longer than max_requests in
@@ -1615,6 +1615,7 @@ get_another:
 			 * max seen xid for duplicate xid processing detection */
 			cfs_list_add(&req->rq_exp_list_in_progress,
 				     &exp->exp_rpcs_in_progress);
+			DEBUG_REQ(D_RPCTRACE, req, "Added in progress list\n");
 			if (exp->exp_max_xid_seen < req->rq_xid)
 				exp->exp_max_xid_seen = req->rq_xid;
 			cfs_spin_unlock_bh(&exp->exp_rpcs_in_progress_lock);
