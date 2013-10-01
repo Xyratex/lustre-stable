@@ -2771,6 +2771,13 @@ static inline char *bulk2type(struct ptlrpc_bulk_desc *desc)
         return desc->bd_type == BULK_GET_SINK ? "GET" : "PUT";
 }
 
+/* Check reconnection after request was received */
+static inline int export_reconnected(struct obd_export *exp,
+				     struct ptlrpc_request *req)
+{
+	return (exp->exp_conn_cnt > lustre_msg_get_conn_cnt(req->rq_reqmsg));
+}
+
 int target_bulk_io(struct obd_export *exp, struct ptlrpc_bulk_desc *desc,
                    struct l_wait_info *lwi)
 {
@@ -2789,7 +2796,8 @@ int target_bulk_io(struct obd_export *exp, struct ptlrpc_bulk_desc *desc,
         }
 
         /* Check if client was evicted */
-        if (exp->exp_failed) {
+	if (exp->exp_failed ||
+	    export_reconnected(exp, req)) {
                 rc = -ENOTCONN;
         } else {
                 if (desc->bd_type == BULK_PUT_SINK)
@@ -2810,10 +2818,11 @@ int target_bulk_io(struct obd_export *exp, struct ptlrpc_bulk_desc *desc,
                                                     cfs_time_seconds(1),
                                                    target_bulk_timeout,
                                                    desc);
-                        rc = l_wait_event(desc->bd_waitq,
-                                          !ptlrpc_server_bulk_active(desc) ||
-                                          exp->exp_failed,
-                                          lwi);
+			rc = l_wait_event(desc->bd_waitq,
+					  !ptlrpc_server_bulk_active(desc) ||
+					  exp->exp_failed ||
+					  export_reconnected(exp, req),
+					  lwi);
                         LASSERT(rc == 0 || rc == -ETIMEDOUT);
                         /* Wait again if we changed deadline */
                 } while ((rc == -ETIMEDOUT) &&
@@ -2832,6 +2841,12 @@ int target_bulk_io(struct obd_export *exp, struct ptlrpc_bulk_desc *desc,
                                   bulk2type(desc));
                         rc = -ENOTCONN;
                         ptlrpc_abort_bulk(desc);
+		} else if (export_reconnected(exp, req)) {
+			DEBUG_REQ(D_ERROR, req, "Reconnect on bulk %s",
+				  bulk2type(desc));
+			/* we don't reply anyway */
+			rc = -ETIMEDOUT;
+			ptlrpc_abort_bulk(desc);
                 } else if (!desc->bd_success ||
                            desc->bd_nob_transferred != desc->bd_nob) {
                         DEBUG_REQ(D_ERROR, req, "%s bulk %s %d(%d)",
