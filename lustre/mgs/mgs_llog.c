@@ -712,8 +712,14 @@ static int mgs_modify(struct obd_device *obd, struct fs_db *fsdb,
         OBD_ALLOC_PTR(mml);
         if (!mml)
                 GOTO(out_close, rc = -ENOMEM);
-        strcpy(mml->mml_marker.cm_comment, comment);
-        strcpy(mml->mml_marker.cm_tgtname, devname);
+	if (strlcpy(mml->mml_marker.cm_comment, comment,
+		    sizeof(mml->mml_marker.cm_comment)) >=
+	    sizeof(mml->mml_marker.cm_comment))
+		GOTO(out_free, rc = -E2BIG);
+	if (strlcpy(mml->mml_marker.cm_tgtname, devname,
+		    sizeof(mml->mml_marker.cm_tgtname)) >=
+	    sizeof(mml->mml_marker.cm_tgtname))
+		GOTO(out_free, rc = -E2BIG);
         /* Modify mostly means cancel */
         mml->mml_marker.cm_flags = flags;
         mml->mml_marker.cm_canceltime = flags ? cfs_time_current_sec() : 0;
@@ -721,6 +727,8 @@ static int mgs_modify(struct obd_device *obd, struct fs_db *fsdb,
         rc = llog_process(loghandle, mgs_modify_handler, (void *)mml, NULL);
         if (!rc && !mml->mml_modified)
 		rc = 1;
+
+out_free:
         OBD_FREE_PTR(mml);
 
 out_close:
