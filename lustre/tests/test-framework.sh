@@ -321,7 +321,7 @@ init_test_env() {
 	    export CLIENTMODSONLY=yes
 	fi
 
-    export SHUTDOWN_ATTEMPTS=${SHUTDOWN_ATTEMPTS:-3}
+	export SHUTDOWN_ATTEMPTS=${SHUTDOWN_ATTEMPTS:-3}
 	export OSD_TRACK_DECLARES_LBUG=${OSD_TRACK_DECLARES_LBUG:-"yes"}
 
     # command line
