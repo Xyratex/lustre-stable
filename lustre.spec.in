@@ -359,6 +359,8 @@ fi
 
 %if %{build_lustre_tests}
 echo '%attr(-, root, root) %{_libdir}/lustre/tests/*' >lustre-tests.files
+echo '%attr(-, root, root) %{_bindir}/mcreate' >>lustre-tests.files
+echo '%attr(-, root, root) %{_bindir}/munlink' >>lustre-tests.files
 echo '%attr(-, root, root) /lib/modules/%{kversion}/updates/kernel/fs/lustre/llog_test.*' >>lustre-tests.files
 modules_excludes="|llog_test"
 if [ -d $RPM_BUILD_ROOT%{_libdir}/lustre/liblustre/tests ] ; then
