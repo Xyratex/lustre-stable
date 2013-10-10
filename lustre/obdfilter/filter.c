@@ -2613,8 +2613,6 @@ static int filter_precleanup(struct obd_device *obd,
                 /* Stop recovery before namespace cleanup. */
                 target_recovery_fini(obd);
 
-                ldlm_namespace_free_prior(obd->obd_namespace, NULL,
-                                          obd->obd_force);
                 obd_exports_barrier(obd);
                 obd_zombie_barrier();
 
@@ -2638,7 +2636,7 @@ static int filter_cleanup(struct obd_device *obd)
                 LCONSOLE_WARN("%s: shutting down for failover; client state "
                               "will be preserved.\n", obd->obd_name);
 
-        ldlm_namespace_free_post(obd->obd_namespace);
+        ldlm_namespace_free(obd->obd_namespace, NULL, obd->obd_force);
         obd->obd_namespace = NULL;
 
         sptlrpc_rule_set_free(&filter->fo_sptlrpc_rset);
