@@ -118,10 +118,12 @@ MGS_MOUNT_OPTS=${MGS_MOUNT_OPTS:-$MDS_MOUNT_OPTS}
 MOUNT=${MOUNT:-/mnt/${FSNAME}}
 MOUNT1=${MOUNT1:-$MOUNT}
 MOUNT2=${MOUNT2:-${MOUNT}2}
+MOUNT3=${MOUNT3:-${MOUNT}3}
 MOUNTOPT=${MOUNTOPT:-"-o user_xattr,flock"}
 DIR=${DIR:-$MOUNT}
 DIR1=${DIR:-$MOUNT1}
 DIR2=${DIR2:-$MOUNT2}
+DIR3=${DIR3:-$MOUNT3}
 
 if [ $UID -ne 0 ]; then
         log "running as non-root uid $UID"
