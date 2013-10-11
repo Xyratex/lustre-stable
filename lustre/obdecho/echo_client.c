@@ -1373,7 +1373,7 @@ echo_copyout_lsm (struct lov_stripe_md *lsm, void *_ulsm, int ulsm_nob)
         if (nob > ulsm_nob)
                 return (-EINVAL);
 
-        if (cfs_copy_to_user (ulsm, lsm, sizeof(ulsm)))
+	if (cfs_copy_to_user (ulsm, lsm, sizeof(*ulsm)))
                 return (-EFAULT);
 
         for (i = 0; i < lsm->lsm_stripe_count; i++) {
