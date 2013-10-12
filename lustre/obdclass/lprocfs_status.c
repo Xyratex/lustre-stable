@@ -1525,8 +1525,6 @@ void lprocfs_init_ops_stats(int num_private_stats, struct lprocfs_stats *stats)
         LPROCFS_OBD_OP_INIT(num_private_stats, stats, iocontrol);
         LPROCFS_OBD_OP_INIT(num_private_stats, stats, get_info);
         LPROCFS_OBD_OP_INIT(num_private_stats, stats, set_info_async);
-        LPROCFS_OBD_OP_INIT(num_private_stats, stats, attach);
-        LPROCFS_OBD_OP_INIT(num_private_stats, stats, detach);
         LPROCFS_OBD_OP_INIT(num_private_stats, stats, setup);
         LPROCFS_OBD_OP_INIT(num_private_stats, stats, precleanup);
         LPROCFS_OBD_OP_INIT(num_private_stats, stats, cleanup);

@@ -79,6 +79,7 @@
 #ifdef __KERNEL__
 #include <linux/lustre_version.h>
 
+extern cfs_rwlock_t obd_dev_lock;
 int proc_version;
 
 /* buffer MUST be at least the size of obd_ioctl_hdr */

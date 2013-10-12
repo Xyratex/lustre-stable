@@ -53,11 +53,6 @@
 cfs_atomic_t libcfs_kmemory = {0};
 #endif
 
-struct obd_device *obd_devs[MAX_OBD_DEVICES];
-EXPORT_SYMBOL(obd_devs);
-cfs_list_t obd_types;
-DEFINE_RWLOCK(obd_dev_lock);
-
 #ifndef __KERNEL__
 __u64 obd_max_pages = 0;
 __u64 obd_max_alloc = 0;
@@ -98,6 +93,8 @@ EXPORT_SYMBOL(at_extra);
 
 cfs_atomic_t obd_dirty_transit_pages;
 EXPORT_SYMBOL(obd_dirty_transit_pages);
+
+extern cfs_rwlock_t obd_dev_lock;
 
 static inline void obd_data2conn(struct lustre_handle *conn,
                                  struct obd_ioctl_data *data)
@@ -451,6 +448,7 @@ int obd_init_checks(void)
 extern cfs_list_t	obd_stale_exports;
 extern cfs_spinlock_t	obd_stale_export_lock;
 extern cfs_atomic_t	obd_stale_export_num;
+extern cfs_list_t obd_types;
 extern cfs_spinlock_t obd_types_lock;
 extern int class_procfs_init(void);
 extern int class_procfs_clean(void);
@@ -461,8 +459,9 @@ static int __init init_obdclass(void)
 int init_obdclass(void)
 #endif
 {
-        int i, err;
+	int err;
 #ifdef __KERNEL__
+	int i;
         int lustre_register_fs(void);
 
         for (i = CAPA_SITE_CLIENT; i < CAPA_SITE_MAX; i++)
@@ -509,10 +508,6 @@ int init_obdclass(void)
                 return err;
         }
 
-        /* This struct is already zeroed for us (static global) */
-        for (i = 0; i < class_devno_max(); i++)
-                obd_devs[i] = NULL;
-
         /* Default the dirty page cache cap to 1/2 of system memory.
          * For clients with less memory, a larger fraction is needed
          * for other purposes (mostly for BGL). */
@@ -550,7 +545,6 @@ int init_obdclass(void)
 #ifdef __KERNEL__
 static void cleanup_obdclass(void)
 {
-        int i;
         int lustre_unregister_fs(void);
         __u64 memory_leaked, pages_leaked;
         __u64 memory_max, pages_max;
@@ -559,15 +553,6 @@ static void cleanup_obdclass(void)
         lustre_unregister_fs();
 
         cfs_psdev_deregister(&obd_psdev);
-        for (i = 0; i < class_devno_max(); i++) {
-                struct obd_device *obd = class_num2obd(i);
-                if (obd && obd->obd_set_up &&
-                    OBT(obd) && OBP(obd, detach)) {
-                        /* XXX should this call generic detach otherwise? */
-                        LASSERT(obd->obd_magic == OBD_DEVICE_MAGIC);
-                        OBP(obd, detach)(obd);
-                }
-        }
 	lu_capainfo_fini();
 	lu_global_fini();
 

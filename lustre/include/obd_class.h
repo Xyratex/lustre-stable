@@ -59,10 +59,6 @@
 #error Unsupported operating system.
 #endif
 
-/* OBD Device Declarations */
-extern struct obd_device *obd_devs[MAX_OBD_DEVICES];
-extern cfs_rwlock_t obd_dev_lock;
-
 /* OBD Operations Declarations */
 extern struct obd_device *class_conn2obd(struct lustre_handle *);
 extern struct obd_device *class_exp2obd(struct obd_export *);
@@ -77,13 +73,18 @@ int class_register_type(struct obd_ops *, struct md_ops *,
                         struct lu_device_type *ldt);
 int class_unregister_type(const char *nm);
 
-struct obd_device *class_newdev(const char *type_name, const char *name);
-void class_release_dev(struct obd_device *obd);
+struct obd_device *class_newdev(const char *type_name, const char *name,
+				const char *uuid);
+int class_register_device(struct obd_device *obd);
+void class_unregister_device(struct obd_device *obd);
+void class_free_dev(struct obd_device *obd);
 
 int class_name2dev(const char *name);
+int class_name2dev_nolock(const char *name);
 struct obd_device *class_name2obd(const char *name);
 int class_uuid2dev(struct obd_uuid *uuid);
 struct obd_device *class_uuid2obd(struct obd_uuid *uuid);
+struct obd_device *class_dev_bystr(const char *str);
 void class_obd_list(void);
 struct obd_device * class_find_client_obd(struct obd_uuid *tgt_uuid,
                                           const char * typ_name,
@@ -267,7 +268,7 @@ extern void (*class_export_dump_hook)(struct obd_export *);
 struct obd_export *class_export_get(struct obd_export *exp);
 void class_export_put(struct obd_export *exp);
 struct obd_export *class_new_export(struct obd_device *obddev,
-                                    struct obd_uuid *cluuid);
+				    struct obd_uuid *cluuid, int is_self);
 void class_unlink_export(struct obd_export *exp);
 
 struct obd_import *class_import_get(struct obd_import *);

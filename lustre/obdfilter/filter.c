@@ -877,7 +877,7 @@ static int filter_init_server_data(struct obd_device *obd, struct file * filp)
                 /* These exports are cleaned up by filter_disconnect(), so they
                  * need to be set up like real exports as filter_connect() does.
                  */
-                exp = class_new_export(obd, (struct obd_uuid *)lcd->lcd_uuid);
+		exp = class_new_export(obd, (struct obd_uuid *)lcd->lcd_uuid, 0);
                 if (IS_ERR(exp)) {
                         if (PTR_ERR(exp) == -EALREADY) {
                                 /* export already exists, zero out this one */

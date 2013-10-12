@@ -293,7 +293,7 @@ static int mdt_clients_data_init(const struct lu_env *env,
                        last_transno, lsd->lsd_last_transno,
                        lcd_last_xid(lcd));
 
-                exp = class_new_export(obd, (struct obd_uuid *)lcd->lcd_uuid);
+		exp = class_new_export(obd, (struct obd_uuid *)lcd->lcd_uuid, 0);
                 if (IS_ERR(exp)) {
                         if (PTR_ERR(exp) == -EALREADY) {
                                 /* export already exists, zero out this one */

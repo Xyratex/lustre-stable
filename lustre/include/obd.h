@@ -1296,8 +1296,6 @@ struct obd_ops {
         int (*o_set_info_async)(struct obd_export *, __u32 keylen, void *key,
                                 __u32 vallen, void *val,
                                 struct ptlrpc_request_set *set);
-        int (*o_attach)(struct obd_device *dev, obd_count len, void *data);
-        int (*o_detach)(struct obd_device *dev);
         int (*o_setup) (struct obd_device *dev, struct lustre_cfg *cfg);
         int (*o_precleanup)(struct obd_device *dev,
                             enum obd_cleanup_stage cleanup_stage);

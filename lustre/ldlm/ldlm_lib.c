@@ -748,13 +748,12 @@ check_and_start_recovery_timer(struct obd_device *obd,
 
 int target_handle_connect(struct ptlrpc_request *req)
 {
-	struct obd_device *target = NULL, *targref = NULL;
+	struct obd_device *target = NULL;
         struct obd_export *export = NULL;
         struct obd_import *revimp;
 	struct obd_import *tmp_imp = NULL;
         struct lustre_handle conn;
         struct lustre_handle *tmp;
-        struct obd_uuid tgtuuid;
         struct obd_uuid cluuid;
         struct obd_uuid remote_uuid;
         char *str;
@@ -775,11 +774,7 @@ int target_handle_connect(struct ptlrpc_request *req)
                 GOTO(out, rc = -EINVAL);
         }
 
-        obd_str2uuid(&tgtuuid, str);
-        target = class_uuid2obd(&tgtuuid);
-        if (!target)
-                target = class_name2obd(str);
-
+	target = class_dev_bystr(str);
 	if (!target) {
 		deuuidify(str, NULL, &target_start, &target_len);
 		LCONSOLE_ERROR_MSG(0x137, "%s: not available for connect "
@@ -812,10 +807,6 @@ int target_handle_connect(struct ptlrpc_request *req)
 		GOTO(out, rc = -EAGAIN);
 	}
 
-        /* Make sure the target isn't cleaned up while we're here. Yes,
-           there's still a race between the above check and our incref here.
-           Really, class_uuid2obd should take the ref. */
-        targref = class_incref(target, __FUNCTION__, cfs_current());
 
 	target->obd_conn_inprogress++;
 	cfs_spin_unlock(&target->obd_dev_lock);
@@ -1270,12 +1261,12 @@ out:
 		cfs_up_read(&export->exp_mutex);
                 class_export_put(export);
         }
-        if (targref) {
+	if (target) {
 		cfs_spin_lock(&target->obd_dev_lock);
 		target->obd_conn_inprogress--;
 		cfs_spin_unlock(&target->obd_dev_lock);
 
-                class_decref(targref, __FUNCTION__, cfs_current());
+		class_decref(target, __func__, cfs_current());
 	}
         if (rc)
                 req->rq_status = rc;
