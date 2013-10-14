@@ -306,7 +306,7 @@ int mdd_lsm_sanity_check(const struct lu_env *env,  struct mdd_object *obj)
                 RETURN(rc);
 
         if ((uc->uc_fsuid != tmp_la->la_uid) &&
-            !mdd_capable(uc, CFS_CAP_FOWNER))
+            !md_capable(uc, CFS_CAP_FOWNER))
                 rc = mdd_permission_internal_locked(env, obj, tmp_la,
                                                     MAY_WRITE, MOR_TGT_CHILD);
 

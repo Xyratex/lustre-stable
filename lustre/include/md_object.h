@@ -918,5 +918,19 @@ int llo_local_objects_setup(const struct lu_env *env,
                              struct md_device * md,
                              struct dt_device * dt);
 
+#define md_cap_t(x) (x)
+
+#define MD_CAP_TO_MASK(x) (1 << (x))
+
+#define md_cap_raised(c, flag) (md_cap_t(c) & MD_CAP_TO_MASK(flag))
+
+/* capable() is copied from linux kernel! */
+static inline int md_capable(struct lu_ucred *uc, cfs_cap_t cap)
+{
+       if (md_cap_raised(uc->uc_cap, cap))
+               return 1;
+       return 0;
+}
+
 /** @} md */
 #endif /* _LINUX_MD_OBJECT_H */

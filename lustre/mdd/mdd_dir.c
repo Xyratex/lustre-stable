@@ -371,7 +371,7 @@ static inline int mdd_is_sticky(const struct lu_env *env,
 	if (tmp_la->la_uid == uc->uc_fsuid)
 		return 0;
 
-        return !mdd_capable(uc, CFS_CAP_FOWNER);
+        return !md_capable(uc, CFS_CAP_FOWNER);
 }
 
 /*

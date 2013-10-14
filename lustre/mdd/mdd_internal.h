@@ -522,20 +522,6 @@ static inline struct lu_name *mdd_name(const struct lu_env *env,
 }
 
 /* mdd_permission.c */
-#define mdd_cap_t(x) (x)
-
-#define MDD_CAP_TO_MASK(x) (1 << (x))
-
-#define mdd_cap_raised(c, flag) (mdd_cap_t(c) & MDD_CAP_TO_MASK(flag))
-
-/* capable() is copied from linux kernel! */
-static inline int mdd_capable(struct lu_ucred *uc, cfs_cap_t cap)
-{
-	if (mdd_cap_raised(uc->uc_cap, cap))
-		return 1;
-	return 0;
-}
-
 int mdd_def_acl_get(const struct lu_env *env, struct mdd_object *mdd_obj,
                     struct md_attr *ma);
 int mdd_acl_chmod(const struct lu_env *env, struct mdd_object *o, __u32 mode,
