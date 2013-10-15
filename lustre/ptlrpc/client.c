@@ -237,8 +237,13 @@ void ptlrpc_free_bulk(struct ptlrpc_bulk_desc *desc)
 
         if (desc->bd_export)
                 class_export_put(desc->bd_export);
-        else
-                class_import_put(desc->bd_import);
+	else {
+		struct client_obd *cli;
+
+		cli = &desc->bd_import->imp_obd->u.cli;
+		cfs_atomic_add(desc->bd_iov_count, &cli->cl_bulk_pages_freed);
+		class_import_put(desc->bd_import);
+	}
 
         for (i = 0; i < desc->bd_iov_count ; i++)
                 cfs_page_unpin(desc->bd_iov[i].kiov_page);

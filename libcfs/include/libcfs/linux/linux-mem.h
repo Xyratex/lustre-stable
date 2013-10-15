@@ -99,8 +99,21 @@ static inline int cfs_page_count(cfs_page_t *page)
 
 #define cfs_page_index(p)       ((p)->index)
 
-#define cfs_page_pin(page) page_cache_get(page)
-#define cfs_page_unpin(page) page_cache_release(page)
+static inline void cfs_page_pin(struct page *page)
+{
+	page_cache_get(page);
+	/* count pinned page as "unstable nfs" (pages which have not
+	 * been flushed to permanent storage on server side yet), so
+	 * that writeback system is aware of those reclaimable
+	 * pages */
+	inc_zone_page_state(page, NR_UNSTABLE_NFS);
+}
+
+static inline void cfs_page_unpin(struct page *page)
+{
+	dec_zone_page_state(page, NR_UNSTABLE_NFS);
+	page_cache_release(page);
+}
 
 /*
  * Memory allocator

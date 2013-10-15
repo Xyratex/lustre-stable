@@ -1363,6 +1363,97 @@ out_set:
         RETURN(rc);
 }
 
+int lov_fini_writepages_set(struct lov_request_set *set)
+{
+	int rc = 0;
+	ENTRY;
+
+	LASSERT(set);
+
+	/* let last callback to complete */
+	cfs_spin_lock(&set->set_lock);
+	cfs_spin_unlock(&set->set_lock);
+
+	if (set->set_completes != set->set_success)
+		rc = -EIO;
+	lov_put_reqset(set);
+	RETURN(rc);
+}
+
+/* callback for osc_writepages */
+static int cb_writepages_update(void *cookie, int rc)
+{
+	struct obd_info *oinfo = cookie;
+	struct lov_request *lovreq;
+	ENTRY;
+
+	lovreq = container_of(oinfo, struct lov_request, rq_oi);
+
+	cfs_spin_lock(&lovreq->rq_rqset->set_lock);
+	lov_update_set(lovreq->rq_rqset, lovreq, rc);
+	cfs_spin_unlock(&lovreq->rq_rqset->set_lock);
+
+	RETURN(rc);
+}
+
+int lov_prep_writepages_set(struct obd_export *exp, struct obd_info *oinfo,
+			    struct lov_request_set **reqset)
+{
+	struct lov_request_set *set;
+	struct lov_obd *lov = &exp->exp_obd->u.lov;
+	int rc;
+	int i;
+	ENTRY;
+
+	OBD_ALLOC(set, sizeof(*set));
+	if (set == NULL)
+		RETURN(-ENOMEM);
+	lov_init_set(set);
+
+	for (i = 0; i < oinfo->oi_md->lsm_stripe_count; i++) {
+		struct lov_oinfo *loi = oinfo->oi_md->lsm_oinfo[i];
+		struct lov_request *req;
+		struct obd_import *imp;
+		struct lov_tgt_desc *desc;
+
+		if (loi == NULL)
+			continue;
+		desc = lov->lov_tgts[loi->loi_ost_idx];
+		if (!desc || !desc->ltd_active)
+			continue;
+		imp = desc->ltd_obd->u.cli.cl_import;
+		/* requests which may keep pinned bulk pages are on
+		 * imp_replay_list */
+		if (!imp || cfs_list_empty(&imp->imp_replay_list))
+			continue;
+
+		OBD_ALLOC(req, sizeof(*req));
+		if (req == NULL)
+			GOTO(out, rc = -ENOMEM);
+
+		req->rq_stripe = i;
+		req->rq_idx = loi->loi_ost_idx;
+
+		req->rq_oi.oi_cb_up = cb_writepages_update;
+		OBDO_ALLOC(req->rq_oi.oi_oa);
+		if (req->rq_oi.oi_oa == NULL) {
+			OBD_FREE(req, sizeof(*req));
+			GOTO(out, rc = -ENOMEM);
+		}
+		req->rq_oi.oi_oa->o_id = loi->loi_id;
+		req->rq_oi.oi_oa->o_seq = loi->loi_seq;
+		req->rq_oi.oi_oa->o_stripe_idx = i;
+
+		lov_set_add_req(req, set);
+	}
+
+	*reqset = set;
+	RETURN(0);
+out:
+	lov_fini_writepages_set(set);
+	RETURN(-ENOMEM);
+}
+
 #define LOV_U64_MAX ((__u64)~0ULL)
 #define LOV_SUM_MAX(tot, add)                                           \
         do {                                                            \

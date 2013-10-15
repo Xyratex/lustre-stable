@@ -1320,6 +1320,34 @@ static inline int obd_sync(struct obd_export *exp, struct obd_info *oinfo,
         RETURN(rc);
 }
 
+#ifdef __KERNEL__
+
+static inline int obd_writepages(struct obd_export *exp,
+				 struct obd_info *oinfo,
+				 long *written, cfs_waitq_t *waitq)
+{
+	int rc = 0;
+	ENTRY;
+	if (OBT(exp->exp_obd) && OBP(exp->exp_obd, writepages)) {
+		OBD_COUNTER_INCREMENT(exp->exp_obd, writepages);
+		rc = OBP(exp->exp_obd, writepages)(exp, oinfo, written, waitq);
+	}
+	RETURN(rc);
+}
+static inline int obd_writepages_async(struct obd_export *exp,
+				       struct obd_info *oinfo)
+{
+	int rc = 0;
+	ENTRY;
+	if (OBT(exp->exp_obd) && OBP(exp->exp_obd, writepages_async)) {
+		OBD_COUNTER_INCREMENT(exp->exp_obd, writepages_async);
+		rc = OBP(exp->exp_obd, writepages_async)(exp, oinfo);
+	}
+	RETURN(rc);
+}
+
+#endif
+
 static inline int obd_punch_rqset(struct obd_export *exp,
                                   struct obd_info *oinfo,
                                   struct obd_trans_info *oti)

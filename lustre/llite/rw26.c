@@ -540,6 +540,51 @@ static int ll_write_end(struct file *file, struct address_space *mapping,
 }
 #endif
 
+/* return true in case of background writeback */
+static int is_background_writepages(struct writeback_control *wbc)
+{
+#ifdef HAVE_PF_FLUSHER
+	return !!(current->flags & PF_FLUSHER);
+#else
+	return !!wbc->for_background;
+#endif
+}
+
+static int ll_writepages(struct address_space *mapping,
+			 struct writeback_control *wbc)
+{
+	int rc;
+	long nr_to_write = wbc->nr_to_write;
+	long written = 0;
+	struct obd_info oinfo = { { { 0 } } };
+	ENTRY;
+
+	rc = generic_writepages(mapping, wbc);
+	if (rc)
+		RETURN(rc);
+	if (wbc->for_kupdate)
+		/* nothing special is required for "old" data flushing */
+		RETURN(0);
+
+	oinfo.oi_md = ll_i2info(mapping->host)->lli_smd;
+
+	if (is_background_writepages(wbc)) {
+		rc = obd_writepages_async(
+			ll_s2sbi(mapping->host->i_sb)->ll_dt_exp, &oinfo);
+		if (!rc)
+			wbc->nr_to_write = 0;
+	} else {
+		rc = obd_writepages(ll_s2sbi(mapping->host->i_sb)->ll_dt_exp,
+				    &oinfo, &written, NULL);
+		/* @written holds number of released bulk pages */
+		if (written < nr_to_write)
+			wbc->nr_to_write = nr_to_write - written;
+		else
+			wbc->nr_to_write = 0;
+	}
+	RETURN(rc);
+}
+
 #ifdef CONFIG_MIGRATION
 #ifdef HAVE_MIGRATEPAGE_3_ARGS
 int ll_migratepage(struct address_space *mapping,
@@ -563,7 +608,7 @@ struct address_space_operations ll_aops = {
 //        .readpages      = ll_readpages,
         .direct_IO      = ll_direct_IO_26,
         .writepage      = ll_writepage,
-        .writepages     = generic_writepages,
+	.writepages     = ll_writepages,
         .set_page_dirty = ll_set_page_dirty,
 #ifdef HAVE_KERNEL_WRITE_BEGIN_END
         .write_begin    = ll_write_begin,
@@ -585,7 +630,7 @@ struct address_space_operations_ext ll_aops = {
 //        .orig_aops.readpages      = ll_readpages,
         .orig_aops.direct_IO      = ll_direct_IO_26,
         .orig_aops.writepage      = ll_writepage,
-        .orig_aops.writepages     = generic_writepages,
+	.orig_aops.writepages     = ll_writepages,
         .orig_aops.set_page_dirty = ll_set_page_dirty,
         .orig_aops.prepare_write  = ll_prepare_write,
         .orig_aops.commit_write   = ll_commit_write,

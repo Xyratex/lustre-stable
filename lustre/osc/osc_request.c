@@ -631,6 +631,184 @@ static int osc_sync(struct obd_export *exp, struct obd_info *oinfo,
         RETURN (0);
 }
 
+#ifdef __KERNEL__
+
+struct osc_writepages_waiter {
+	cfs_list_t	 oww_entry;
+	cfs_waitq_t	*oww_waitq;
+	struct obd_info *oww_oinfo;
+};
+
+struct osc_writepages_args {
+	long *wa_written;
+};
+
+/* completion handler for OST_SYNC rpc sent from osc_writepages():
+ * - clear "cl_writepages_in_progress" flag
+ * - increment number of written pages with number of released bulk pages
+ * - calls lov callbacks for all waiters and wakeup them
+*/
+static void do_writepages_interpret(struct client_obd *cli,
+				    struct osc_writepages_args *wa,
+				    int rc)
+{
+	struct osc_writepages_waiter *oww, *n;
+	ENTRY;
+
+	client_obd_list_lock(&cli->cl_loi_list_lock);
+	LASSERT(cli->cl_writepages_in_progress == 1);
+	cli->cl_writepages_in_progress = 0;
+	if (wa)
+		(*wa->wa_written) += cfs_atomic_read(&cli->cl_bulk_pages_freed);
+
+	cfs_list_for_each_entry_safe(oww, n, &cli->cl_writepages_waiters,
+				     oww_entry) {
+		cfs_list_del_init(&oww->oww_entry);
+
+		oww->oww_oinfo->oi_cb_up(oww->oww_oinfo, rc);
+		cfs_waitq_signal(oww->oww_waitq);
+
+		OBD_FREE(oww, sizeof(*oww));
+	}
+	client_obd_list_unlock(&cli->cl_loi_list_lock);
+	EXIT;
+}
+
+static int osc_writepages_interpret(const struct lu_env *env,
+				    struct ptlrpc_request *req,
+				    struct osc_writepages_args *wa,
+				    int rc)
+{
+	ENTRY;
+	do_writepages_interpret(&req->rq_import->imp_obd->u.cli, wa, rc);
+	RETURN(0);
+}
+
+static struct ptlrpc_request *prep_rpc_request(struct obd_import *imp,
+					       struct obd_info *oinfo)
+{
+	struct ptlrpc_request *req;
+	struct ost_body	      *body;
+	int		       rc;
+	ENTRY;
+
+	req = ptlrpc_request_alloc(imp, &RQF_OST_SYNC);
+	if (req == NULL)
+		RETURN(ERR_PTR(-ENOMEM));
+
+	osc_set_capa_size(req, &RMF_CAPA1, NULL);
+	rc = ptlrpc_request_pack(req, LUSTRE_OST_VERSION, OST_SYNC);
+	if (rc) {
+		ptlrpc_request_free(req);
+		RETURN(ERR_PTR(rc));
+	}
+
+	body = req_capsule_client_get(&req->rq_pill, &RMF_OST_BODY);
+	LASSERT(body);
+	body->oa.o_seq = oinfo->oi_oa->o_seq;
+	body->oa.o_valid = OBD_MD_FLGROUP;
+	ptlrpc_request_set_replen(req);
+	RETURN(req);
+}
+
+static int osc_writepages(struct obd_export *exp,
+			  struct obd_info *oinfo,
+			  long *written, cfs_waitq_t *waitq)
+{
+	struct obd_import *imp;
+	struct ptlrpc_request *req;
+	struct client_obd     *cli;
+	struct osc_writepages_waiter *oww;
+	struct osc_writepages_args *wa;
+	ENTRY;
+
+	OBD_ALLOC(oww, sizeof(*oww));
+	if (oww == NULL) {
+		oinfo->oi_cb_up(oinfo, -ENOMEM);
+		RETURN(-ENOMEM);
+	}
+	oww->oww_oinfo = oinfo;
+	oww->oww_waitq = waitq;
+
+	imp = class_exp2cliimp(exp);
+	cli = &imp->imp_obd->u.cli;
+
+	client_obd_list_lock(&cli->cl_loi_list_lock);
+	cfs_list_add_tail(&oww->oww_entry, &cli->cl_writepages_waiters);
+	if (!cli->cl_writepages_in_progress) {
+		cli->cl_writepages_in_progress = 1;
+		cfs_atomic_set(&cli->cl_bulk_pages_freed, 0);
+		client_obd_list_unlock(&cli->cl_loi_list_lock);
+
+		req = prep_rpc_request(imp, oinfo);
+		if (IS_ERR(req)) {
+			do_writepages_interpret(cli, NULL, PTR_ERR(req));
+			RETURN(PTR_ERR(req));
+		}
+		req->rq_interpret_reply =
+			(ptlrpc_interpterer_t)osc_writepages_interpret;
+		CLASSERT(sizeof(*wa) <= sizeof(req->rq_async_args));
+		wa = ptlrpc_req_async_args(req);
+		wa->wa_written = written;
+		ptlrpcd_add_req(req, PSCOPE_OTHER);
+	} else {
+		client_obd_list_unlock(&cli->cl_loi_list_lock);
+	}
+
+	RETURN(0);
+}
+
+/* completion handler for OST_SYNC rpc sent from osc_writepages_async() */
+static int osc_writepages_async_interpret(const struct lu_env *env,
+					  struct ptlrpc_request *req,
+					  struct osc_writepages_args *wa,
+					  int rc)
+{
+	struct client_obd *cli = &req->rq_import->imp_obd->u.cli;
+	ENTRY;
+
+	client_obd_list_lock(&cli->cl_loi_list_lock);
+	LASSERT(cli->cl_writepages_async_in_progress == 1);
+	cli->cl_writepages_async_in_progress = 0;
+	client_obd_list_unlock(&cli->cl_loi_list_lock);
+
+	RETURN(0);
+}
+
+static int osc_writepages_async(struct obd_export *exp,
+				struct obd_info *oinfo)
+{
+	struct obd_import *imp;
+	struct ptlrpc_request *req;
+	struct client_obd     *cli;
+	ENTRY;
+
+	imp = class_exp2cliimp(exp);
+	cli = &imp->imp_obd->u.cli;
+
+	client_obd_list_lock(&cli->cl_loi_list_lock);
+	if (!cli->cl_writepages_async_in_progress &&
+	    !cli->cl_writepages_in_progress) {
+		cli->cl_writepages_async_in_progress = 1;
+		client_obd_list_unlock(&cli->cl_loi_list_lock);
+
+		req = prep_rpc_request(imp, oinfo);
+		if (IS_ERR(req)) {
+			cli->cl_writepages_async_in_progress = 0;
+			RETURN(PTR_ERR(req));
+		}
+		req->rq_interpret_reply =
+			(ptlrpc_interpterer_t)osc_writepages_async_interpret;
+		ptlrpcd_add_req(req, PSCOPE_OTHER);
+	} else {
+		client_obd_list_unlock(&cli->cl_loi_list_lock);
+	}
+
+	RETURN(0);
+}
+
+#endif
+
 /* Find and cancel locally locks matched by @mode in the resource found by
  * @objid. Found locks are added into @cancel list. Returns the amount of
  * locks added to @cancels list. */
@@ -4819,6 +4997,10 @@ struct obd_ops osc_obd_ops = {
         .o_quotactl             = osc_quotactl,
         .o_quotacheck           = osc_quotacheck,
         .o_quota_adjust_qunit   = osc_quota_adjust_qunit,
+#ifdef __KERNEL__
+	.o_writepages           = osc_writepages,
+	.o_writepages_async     = osc_writepages_async,
+#endif
 };
 
 extern struct lu_kmem_descr osc_caches[];

@@ -347,6 +347,7 @@ int client_obd_setup(struct obd_device *obddev, struct lustre_cfg *lcfg)
         if (cli->cl_dirty_max >> CFS_PAGE_SHIFT > cfs_num_physpages / 8)
                 cli->cl_dirty_max = cfs_num_physpages << (CFS_PAGE_SHIFT - 3);
         CFS_INIT_LIST_HEAD(&cli->cl_cache_waiters);
+	CFS_INIT_LIST_HEAD(&cli->cl_writepages_waiters);
         CFS_INIT_LIST_HEAD(&cli->cl_loi_ready_list);
         CFS_INIT_LIST_HEAD(&cli->cl_loi_hp_ready_list);
         CFS_INIT_LIST_HEAD(&cli->cl_loi_write_list);

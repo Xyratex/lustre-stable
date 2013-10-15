@@ -206,6 +206,10 @@ int lov_prep_sync_set(struct obd_export *exp, struct obd_info *obd_info,
                       obd_off start, obd_off end,
                       struct lov_request_set **reqset);
 int lov_fini_sync_set(struct lov_request_set *set);
+int lov_prep_writepages_set(struct obd_export *exp,
+			    struct obd_info *oinfo,
+			    struct lov_request_set **reqset);
+int lov_fini_writepages_set(struct lov_request_set *set);
 int lov_prep_enqueue_set(struct obd_export *exp, struct obd_info *oinfo,
                          struct ldlm_enqueue_info *einfo,
                          struct lov_request_set **reqset);

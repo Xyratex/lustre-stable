@@ -1573,6 +1573,8 @@ void lprocfs_init_ops_stats(int num_private_stats, struct lprocfs_stats *stats)
         LPROCFS_OBD_OP_INIT(num_private_stats, stats, pool_del);
         LPROCFS_OBD_OP_INIT(num_private_stats, stats, getref);
         LPROCFS_OBD_OP_INIT(num_private_stats, stats, putref);
+	LPROCFS_OBD_OP_INIT(num_private_stats, stats, writepages);
+	LPROCFS_OBD_OP_INIT(num_private_stats, stats, writepages_async);
 }
 EXPORT_SYMBOL(lprocfs_init_ops_stats);
 

@@ -421,6 +421,9 @@ struct client_obd {
         long                     cl_avail_grant;   /* bytes of credit for ost */
         long                     cl_lost_grant;    /* lost credits (trunc) */
         cfs_list_t               cl_cache_waiters; /* waiting for cache/grant */
+	cfs_list_t               cl_writepages_waiters;/* waiting for
+							* osc_writepages
+							* to complete */
         cfs_time_t               cl_next_shrink_grant;   /* jiffies */
         cfs_list_t               cl_grant_shrink_list;  /* Timeout event list */
         int                      cl_grant_shrink_interval; /* seconds */
@@ -479,6 +482,8 @@ struct client_obd {
 
         /* checksumming for data sent over the network */
         unsigned int             cl_checksum:1; /* 0 = disabled, 1 = enabled */
+	unsigned int             cl_writepages_in_progress:1;
+	unsigned int             cl_writepages_async_in_progress:1;
         /* supported checksum types that are worked out at connect time */
         __u32                    cl_supp_cksum_types;
         /* checksum algorithm to be used */
@@ -494,6 +499,10 @@ struct client_obd {
         struct lu_client_seq    *cl_seq;
 
         cfs_atomic_t             cl_resends; /* resend count */
+	cfs_atomic_t             cl_bulk_pages_freed; /* number of
+						       * bulk pages
+						       * osc_writepages
+						       * released */
 };
 #define obd2cli_tgt(obd) ((char *)(obd)->u.cli.cl_target_uuid.uuid)
 
@@ -1446,6 +1455,12 @@ struct obd_ops {
                           char *ostname);
         void (*o_getref)(struct obd_device *obd);
         void (*o_putref)(struct obd_device *obd);
+#ifdef __KERNEL__
+	int (*o_writepages)(struct obd_export *obd, struct obd_info *oinfo,
+			    long *written, cfs_waitq_t *waitq);
+	int (*o_writepages_async)(struct obd_export *obd,
+				  struct obd_info *oinfo);
+#endif
         /*
          * NOTE: If adding ops, add another LPROCFS_OBD_OP_INIT() line
          * to lprocfs_alloc_obd_stats() in obdclass/lprocfs_status.c.

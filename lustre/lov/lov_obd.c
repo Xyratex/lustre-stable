@@ -1659,6 +1659,71 @@ static int lov_sync(struct obd_export *exp, struct obd_info *oinfo,
         RETURN(0);
 }
 
+#ifdef __KERNEL__
+
+static int lov_writepages(struct obd_export *exp,
+			  struct obd_info *oinfo,
+			  long *written, cfs_waitq_t *waitq)
+{
+	struct lov_obd *lov;
+	struct lov_request *req;
+	struct lov_request_set *set;
+	struct l_wait_info  lwi = { 0 };
+	int err, rc;
+	ENTRY;
+
+	rc = lov_prep_writepages_set(exp, oinfo, &set);
+	if (rc)
+		RETURN(rc);
+
+	lov = &exp->exp_obd->u.lov;
+	cfs_list_for_each_entry(req, &set->set_list, rq_link) {
+		err = obd_writepages(lov->lov_tgts[req->rq_idx]->ltd_exp,
+				     &req->rq_oi, written, &set->set_waitq);
+		if (err) {
+			if (!rc)
+				rc = err;
+			continue;
+		}
+	}
+	l_wait_event(set->set_waitq, lov_set_finished(set, 1), &lwi);
+
+	err = lov_fini_writepages_set(set);
+	if (!rc)
+		rc = err;
+
+	RETURN(rc);
+}
+
+static int lov_writepages_async(struct obd_export *exp,
+				struct obd_info *oinfo)
+{
+	struct lov_obd *lov;
+	struct lov_request *req;
+	struct lov_request_set *set;
+	int err, rc;
+	ENTRY;
+
+	rc = lov_prep_writepages_set(exp, oinfo, &set);
+	if (rc)
+		RETURN(rc);
+
+	lov = &exp->exp_obd->u.lov;
+	cfs_list_for_each_entry(req, &set->set_list, rq_link) {
+		err = obd_writepages_async(lov->lov_tgts[req->rq_idx]->ltd_exp,
+					   &req->rq_oi);
+		if (err) {
+			if (!rc)
+				rc = err;
+			continue;
+		}
+	}
+	lov_put_reqset(set);
+	RETURN(rc);
+}
+
+#endif /* __KERNEL__ */
+
 static int lov_enqueue_interpret(struct ptlrpc_request_set *rqset,
                                  void *data, int rc)
 {
@@ -2982,6 +3047,10 @@ struct obd_ops lov_obd_ops = {
         .o_quotactl            = lov_quotactl,
         .o_quotacheck          = lov_quotacheck,
         .o_quota_adjust_qunit  = lov_quota_adjust_qunit,
+#ifdef __KERNEL__
+	.o_writepages          = lov_writepages,
+	.o_writepages_async    = lov_writepages_async,
+#endif
 };
 
 static quota_interface_t *quota_interface;

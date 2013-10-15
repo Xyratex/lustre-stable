@@ -557,6 +557,24 @@ LB_LINUX_TRY_COMPILE([
 ])
 
 #
+# find out how background writeback can be detected
+#
+AC_DEFUN([LC_BACKGROUND_WRITEBACK],
+[AC_MSG_CHECKING([if PF_FLUSHER defined])
+LB_LINUX_TRY_COMPILE([
+        #include <linux/sched.h>
+],[
+        unsigned int flag = PF_FLUSHER;
+],[
+        AC_MSG_RESULT(yes)
+        AC_DEFINE(HAVE_PF_FLUSHER, 1,
+                  [PF_FLUSHER is defined])
+],[
+        AC_MSG_RESULT(no)
+])
+])
+
+#
 # 2.6.33 no longer has ctl_name & strategy field in struct ctl_table.
 #
 AC_DEFUN([LIBCFS_SYSCTL_CTLNAME],
@@ -681,6 +699,7 @@ LIBCFS_STACKTRACE_OPS_HAVE_WALK_STACK
 LC_SHRINKER_WANT_SHRINK_PTR
 LIBCFS_HAVE_OOM_H
 LIBCFS_OOMADJ_IN_SIG
+LC_BACKGROUND_WRITEBACK
 # 2.6.33
 LIBCFS_SYSCTL_CTLNAME
 # 2.6.34
