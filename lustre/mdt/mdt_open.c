@@ -1290,7 +1290,6 @@ int mdt_reint_open(struct mdt_thread_info *info, struct mdt_lock_handle *lhc)
         struct md_attr          *ma = &info->mti_attr;
         __u64                    create_flags = info->mti_spec.sp_cr_flags;
         struct mdt_reint_record *rr = &info->mti_rr;
-        struct lu_name          *lname;
         int                      result, rc;
         int                      created = 0;
         __u32                    msg_flags;
@@ -1324,11 +1323,11 @@ int mdt_reint_open(struct mdt_thread_info *info, struct mdt_lock_handle *lhc)
             info->mti_spec.u.sp_ea.eadata == NULL)
                 GOTO(out, result = err_serious(-EINVAL));
 
-        CDEBUG(D_INODE, "I am going to open "DFID"/(%s->"DFID") "
-               "cr_flag="LPO64" mode=0%06o msg_flag=0x%x\n",
-               PFID(rr->rr_fid1), rr->rr_name,
-               PFID(rr->rr_fid2), create_flags,
-               ma->ma_attr.la_mode, msg_flags);
+	CDEBUG(D_INODE, "I am going to open "DFID"/("DNAME"->"DFID") "
+	       "cr_flag="LPO64" mode=0%06o msg_flag=0x%x\n",
+	       PFID(rr->rr_fid1), PNAME(&rr->rr_name),
+	       PFID(rr->rr_fid2), create_flags,
+	       ma->ma_attr.la_mode, msg_flags);
 
 	if (req_is_replay(req) ||
 	    (req->rq_export->exp_libclient && create_flags & MDS_OPEN_HAS_EA)) {
@@ -1349,8 +1348,9 @@ int mdt_reint_open(struct mdt_thread_info *info, struct mdt_lock_handle *lhc)
 			GOTO(out, result = -EFAULT);
 		}
 		CDEBUG(D_INFO, "No object(1), continue as regular open.\n");
-	} else if ((rr->rr_namelen == 0 && !info->mti_cross_ref &&
-		    create_flags & MDS_OPEN_LOCK) ||
+	} else if ((!lu_name_is_valid(&rr->rr_name) &&
+		    !info->mti_cross_ref &&
+		    (create_flags & MDS_OPEN_LOCK)) ||
 		   (create_flags & MDS_OPEN_BY_FID)) {
 		result = mdt_open_by_fid_lock(info, ldlm_rep, lhc);
 		/* If result is 0 then open by FID has found the file
@@ -1364,9 +1364,6 @@ int mdt_reint_open(struct mdt_thread_info *info, struct mdt_lock_handle *lhc)
 		if (!(result == -ENOENT && (create_flags & MDS_OPEN_CREAT)) &&
 		    result != -EREMOTE)
 			GOTO(out, result);
-
-		if (unlikely(rr->rr_namelen == 0))
-			GOTO(out, result = -EINVAL);
 
 		CDEBUG(D_INFO, "No object(2), continue as regular open.\n");
 	}
@@ -1385,9 +1382,13 @@ int mdt_reint_open(struct mdt_thread_info *info, struct mdt_lock_handle *lhc)
                 GOTO(out, result);
         }
 
+	if (!lu_name_is_valid(&rr->rr_name))
+		GOTO(out, result = -EPROTO);
+
         lh = &info->mti_lh[MDT_LH_PARENT];
-        mdt_lock_pdo_init(lh, (create_flags & MDS_OPEN_CREAT) ?
-                          LCK_PW : LCK_PR, rr->rr_name, rr->rr_namelen);
+	mdt_lock_pdo_init(lh,
+			  (create_flags & MDS_OPEN_CREAT) ? LCK_PW : LCK_PR,
+			  &rr->rr_name);
 
         parent = mdt_object_find_lock(info, rr->rr_fid1, lh,
                                       MDS_INODELOCK_UPDATE);
@@ -1401,12 +1402,13 @@ int mdt_reint_open(struct mdt_thread_info *info, struct mdt_lock_handle *lhc)
 
         fid_zero(child_fid);
 
-        lname = mdt_name(info->mti_env, (char *)rr->rr_name, rr->rr_namelen);
-        result = mdo_lookup(info->mti_env, mdt_object_child(parent),
-                            lname, child_fid, &info->mti_spec);
-        LASSERTF(ergo(result == 0, fid_is_sane(child_fid)),
-                 "looking for "DFID"/%s, result fid="DFID"\n",
-                 PFID(mdt_object_fid(parent)), rr->rr_name, PFID(child_fid));
+	result = mdo_lookup(info->mti_env, mdt_object_child(parent),
+			    &rr->rr_name, child_fid, &info->mti_spec);
+
+	LASSERTF(ergo(result == 0, fid_is_sane(child_fid)),
+		 "looking for "DFID"/"DNAME", found FID = "DFID"\n",
+		 PFID(mdt_object_fid(parent)), PNAME(&rr->rr_name),
+		 PFID(child_fid));
 
         if (result != 0 && result != -ENOENT && result != -ESTALE)
                 GOTO(out_parent, result);
@@ -1471,12 +1473,12 @@ int mdt_reint_open(struct mdt_thread_info *info, struct mdt_lock_handle *lhc)
                 info->mti_spec.sp_cr_lookup = 0;
                 info->mti_spec.sp_feat = &dt_directory_features;
 
-                result = mdo_create(info->mti_env,
-                                    mdt_object_child(parent),
-                                    lname,
-                                    mdt_object_child(child),
-                                    &info->mti_spec,
-                                    &info->mti_attr);
+		result = mdo_create(info->mti_env,
+				    mdt_object_child(parent),
+				    &rr->rr_name,
+				    mdt_object_child(child),
+				    &info->mti_spec,
+				    &info->mti_attr);
                 if (result == -ERESTART) {
                         mdt_clear_disposition(info, ldlm_rep, DISP_OPEN_CREATE);
                         GOTO(out_child, result);
@@ -1575,7 +1577,7 @@ int mdt_reint_open(struct mdt_thread_info *info, struct mdt_lock_handle *lhc)
                         rc = mdo_unlink(info->mti_env,
                                         mdt_object_child(parent),
                                         mdt_object_child(child),
-                                        lname,
+                                        &rr->rr_name,
                                         &info->mti_attr);
                         if (rc != 0)
                                 CERROR("Error in cleanup of open\n");

@@ -231,8 +231,8 @@ int mdt_version_get_check_save(struct mdt_thread_info *info,
  * FID, therefore we need to get object by name and check its version.
  */
 int mdt_lookup_version_check(struct mdt_thread_info *info,
-                             struct mdt_object *p, struct lu_name *lname,
-                             struct lu_fid *fid, int idx)
+			     struct mdt_object *p, const struct lu_name *lname,
+			     struct lu_fid *fid, int idx)
 {
         int rc, vbrc;
 
@@ -273,17 +273,17 @@ static int mdt_md_create(struct mdt_thread_info *info)
         struct mdt_body         *repbody;
         struct md_attr          *ma = &info->mti_attr;
         struct mdt_reint_record *rr = &info->mti_rr;
-        struct lu_name          *lname;
         int rc;
         ENTRY;
 
-        DEBUG_REQ(D_INODE, mdt_info_req(info), "Create  (%s->"DFID") in "DFID,
-                  rr->rr_name, PFID(rr->rr_fid2), PFID(rr->rr_fid1));
+	DEBUG_REQ(D_INODE, mdt_info_req(info), "Create  ("DNAME"->"DFID") "
+		  "in "DFID,
+		  PNAME(&rr->rr_name), PFID(rr->rr_fid2), PFID(rr->rr_fid1));
 
         repbody = req_capsule_server_get(info->mti_pill, &RMF_MDT_BODY);
 
-        lh = &info->mti_lh[MDT_LH_PARENT];
-        mdt_lock_pdo_init(lh, LCK_PW, rr->rr_name, rr->rr_namelen);
+	lh = &info->mti_lh[MDT_LH_PARENT];
+	mdt_lock_pdo_init(lh, LCK_PW, &rr->rr_name);
 
         parent = mdt_object_find_lock(info, rr->rr_fid1, lh,
                                       MDS_INODELOCK_UPDATE);
@@ -301,9 +301,8 @@ static int mdt_md_create(struct mdt_thread_info *info)
          * Check child name version during replay.
          * During create replay a file may exist with same name.
          */
-        lname = mdt_name(info->mti_env, (char *)rr->rr_name, rr->rr_namelen);
-        rc = mdt_lookup_version_check(info, parent, lname,
-                                      &info->mti_tmp_fid1, 1);
+	rc = mdt_lookup_version_check(info, parent, &rr->rr_name,
+				      &info->mti_tmp_fid1, 1);
         /* -ENOENT is expected here */
         if (rc != 0 && rc != -ENOENT)
                 GOTO(out_put_parent, rc);
@@ -342,9 +341,9 @@ static int mdt_md_create(struct mdt_thread_info *info)
                 info->mti_spec.sp_cr_lookup = 1;
                 info->mti_spec.sp_feat = &dt_directory_features;
 
-                rc = mdo_create(info->mti_env, next, lname,
-                                mdt_object_child(child),
-                                &info->mti_spec, ma);
+		rc = mdo_create(info->mti_env, next, &rr->rr_name,
+				mdt_object_child(child), &info->mti_spec, ma);
+
                 if (rc == 0) {
                         /* Return fid & attr to client. */
                         if (ma->ma_valid & MA_INODE)
@@ -619,6 +618,9 @@ static int mdt_reint_create(struct mdt_thread_info *info,
                 ldlm_request_cancel(mdt_info_req(info),
 				    info->mti_dlm_req, 0, 0);
 
+	if (!lu_name_is_valid(&info->mti_rr.rr_name))
+		RETURN(-EPROTO);
+
         switch (info->mti_attr.ma_attr.la_mode & S_IFMT) {
         case S_IFDIR:{
                 /* Cross-ref case. */
@@ -626,7 +628,6 @@ static int mdt_reint_create(struct mdt_thread_info *info,
                 if (info->mti_cross_ref) {
                         rc = mdt_md_mkobj(info);
                 } else {
-                        LASSERT(info->mti_rr.rr_namelen > 0);
                         mdt_counter_incr(req->rq_export, LPROC_MDT_MKDIR);
                         rc = mdt_md_create(info);
                 }
@@ -639,7 +640,6 @@ static int mdt_reint_create(struct mdt_thread_info *info,
         case S_IFIFO:
         case S_IFSOCK:{
                 /* Special file should stay on the same node as parent. */
-                LASSERT(info->mti_rr.rr_namelen > 0);
                 mdt_counter_incr(req->rq_export, LPROC_MDT_MKNOD);
                 rc = mdt_md_create(info);
                 break;
@@ -665,12 +665,11 @@ static int mdt_reint_unlink(struct mdt_thread_info *info,
         struct mdt_object       *mc;
         struct mdt_lock_handle  *parent_lh;
         struct mdt_lock_handle  *child_lh;
-        struct lu_name          *lname;
         int                      rc;
         ENTRY;
 
-        DEBUG_REQ(D_INODE, req, "unlink "DFID"/%s", PFID(rr->rr_fid1),
-                  rr->rr_name);
+	DEBUG_REQ(D_INODE, req, "unlink "DFID"/"DNAME"", PFID(rr->rr_fid1),
+		  PNAME(&rr->rr_name));
 
         if (info->mti_dlm_req)
                 ldlm_request_cancel(req, info->mti_dlm_req, 0, 0);
@@ -690,8 +689,7 @@ static int mdt_reint_unlink(struct mdt_thread_info *info,
                  */
                 mdt_lock_reg_init(parent_lh, LCK_PW);
         } else {
-                mdt_lock_pdo_init(parent_lh, LCK_PW, rr->rr_name,
-                                  rr->rr_namelen);
+                mdt_lock_pdo_init(parent_lh, LCK_PW, &rr->rr_name);
         }
         mp = mdt_object_find_lock(info, rr->rr_fid1, parent_lh,
                                   MDS_INODELOCK_UPDATE);
@@ -733,10 +731,9 @@ static int mdt_reint_unlink(struct mdt_thread_info *info,
         }
 
         /* step 2: find & lock the child */
-        lname = mdt_name(info->mti_env, (char *)rr->rr_name, rr->rr_namelen);
         /* lookup child object along with version checking */
         fid_zero(child_fid);
-        rc = mdt_lookup_version_check(info, mp, lname, child_fid, 1);
+	rc = mdt_lookup_version_check(info, mp, &rr->rr_name, child_fid, 1);
         if (rc != 0)
                  GOTO(out_unlock_parent, rc);
 
@@ -764,8 +761,8 @@ static int mdt_reint_unlink(struct mdt_thread_info *info,
         ma->ma_need = MA_INODE;
         ma->ma_valid = 0;
         mdt_set_capainfo(info, 1, child_fid, BYPASS_CAPA);
-        rc = mdo_unlink(info->mti_env, mdt_object_child(mp),
-                        mdt_object_child(mc), lname, ma);
+	rc = mdo_unlink(info->mti_env, mdt_object_child(mp),
+			mdt_object_child(mc), &rr->rr_name, ma);
         if (rc == 0)
                 mdt_handle_last_unlink(info, mc, ma);
 
@@ -811,12 +808,11 @@ static int mdt_reint_link(struct mdt_thread_info *info,
         struct mdt_object       *mp;
         struct mdt_lock_handle  *lhs;
         struct mdt_lock_handle  *lhp;
-        struct lu_name          *lname;
         int rc;
         ENTRY;
 
-        DEBUG_REQ(D_INODE, req, "link "DFID" to "DFID"/%s",
-                  PFID(rr->rr_fid1), PFID(rr->rr_fid2), rr->rr_name);
+	DEBUG_REQ(D_INODE, req, "link "DFID" to "DFID"/"DNAME,
+		  PFID(rr->rr_fid1), PFID(rr->rr_fid2), PNAME(&rr->rr_name));
 
         if (OBD_FAIL_CHECK(OBD_FAIL_MDS_REINT_LINK))
                 RETURN(err_serious(-ENOENT));
@@ -846,8 +842,7 @@ static int mdt_reint_link(struct mdt_thread_info *info,
 
         /* step 1: find & lock the target parent dir */
         lhp = &info->mti_lh[MDT_LH_PARENT];
-        mdt_lock_pdo_init(lhp, LCK_PW, rr->rr_name,
-                          rr->rr_namelen);
+	mdt_lock_pdo_init(lhp, LCK_PW, &rr->rr_name);
         mp = mdt_object_find_lock(info, rr->rr_fid2, lhp,
                                   MDS_INODELOCK_UPDATE);
         if (IS_ERR(mp))
@@ -884,24 +879,24 @@ static int mdt_reint_link(struct mdt_thread_info *info,
         if (rc)
                 GOTO(out_unlock_child, rc);
 
-        lname = mdt_name(info->mti_env, (char *)rr->rr_name, rr->rr_namelen);
         /** check target version by name during replay */
-        rc = mdt_lookup_version_check(info, mp, lname, &info->mti_tmp_fid1, 2);
+	rc = mdt_lookup_version_check(info, mp, &rr->rr_name,
+				      &info->mti_tmp_fid1, 2);
         if (rc != 0 && rc != -ENOENT)
                 GOTO(out_unlock_child, rc);
         /* save version of file name for replay, it must be ENOENT here */
         if (!req_is_replay(mdt_info_req(info))) {
 		if (rc != -ENOENT) {
-			CDEBUG(D_INFO, "link target %.*s existed!\n",
-			       rr->rr_namelen, (char *)rr->rr_name);
+			CDEBUG(D_INFO, "link target "DNAME" existed!\n",
+			       PNAME(&rr->rr_name));
 			GOTO(out_unlock_child, rc = -EEXIST);
 		}
                 info->mti_ver[2] = ENOENT_VERSION;
                 mdt_version_save(mdt_info_req(info), info->mti_ver[2], 2);
         }
 
-        rc = mdo_link(info->mti_env, mdt_object_child(mp),
-                      mdt_object_child(ms), lname, ma);
+	rc = mdo_link(info->mti_env, mdt_object_child(mp),
+	      mdt_object_child(ms), &rr->rr_name, ma);
 
         if (rc == 0)
                 mdt_counter_incr(req->rq_export, LPROC_MDT_LINK);
@@ -956,17 +951,16 @@ static int mdt_reint_rename_tgt(struct mdt_thread_info *info)
         struct mdt_lock_handle  *lh_tgtdir;
         struct mdt_lock_handle  *lh_tgt = NULL;
         struct lu_fid           *tgt_fid = &info->mti_tmp_fid1;
-        struct lu_name          *lname;
         int                      rc;
         ENTRY;
 
-        DEBUG_REQ(D_INODE, req, "rename_tgt: insert (%s->"DFID") in "DFID,
-                  rr->rr_tgt, PFID(rr->rr_fid2), PFID(rr->rr_fid1));
+        DEBUG_REQ(D_INODE, req, "rename_tgt: insert "DFID"/"DNAME" in "DFID,
+                  PFID(rr->rr_fid2), PNAME(&rr->rr_tgt_name),
+		  PFID(rr->rr_fid1));
 
         /* step 1: lookup & lock the tgt dir. */
         lh_tgtdir = &info->mti_lh[MDT_LH_PARENT];
-        mdt_lock_pdo_init(lh_tgtdir, LCK_PW, rr->rr_tgt,
-                          rr->rr_tgtlen);
+        mdt_lock_pdo_init(lh_tgtdir, LCK_PW, &rr->rr_tgt_name);
         mtgtdir = mdt_object_find_lock(info, rr->rr_fid1, lh_tgtdir,
                                        MDS_INODELOCK_UPDATE);
         if (IS_ERR(mtgtdir))
@@ -974,9 +968,8 @@ static int mdt_reint_rename_tgt(struct mdt_thread_info *info)
 
         /* step 2: find & lock the target object if exists. */
         mdt_set_capainfo(info, 0, rr->rr_fid1, BYPASS_CAPA);
-        lname = mdt_name(info->mti_env, (char *)rr->rr_tgt, rr->rr_tgtlen);
         rc = mdo_lookup(info->mti_env, mdt_object_child(mtgtdir),
-                        lname, tgt_fid, &info->mti_spec);
+                        &rr->rr_tgt_name, tgt_fid, &info->mti_spec);
         if (rc != 0 && rc != -ENOENT) {
                 GOTO(out_unlock_tgtdir, rc);
         } else if (rc == 0) {
@@ -1001,10 +994,10 @@ static int mdt_reint_rename_tgt(struct mdt_thread_info *info)
 
                 rc = mdo_rename_tgt(info->mti_env, mdt_object_child(mtgtdir),
                                     mdt_object_child(mtgt), rr->rr_fid2,
-                                    lname, ma);
+                                    &rr->rr_tgt_name, ma);
         } else /* -ENOENT */ {
                 rc = mdo_name_insert(info->mti_env, mdt_object_child(mtgtdir),
-                                     lname, rr->rr_fid2, ma);
+                                     &rr->rr_tgt_name, rr->rr_fid2, ma);
         }
 
         /* handle last link of tgt object */
@@ -1259,8 +1252,6 @@ static int mdt_reint_rename(struct mdt_thread_info *info,
         struct lu_fid           *old_fid = &info->mti_tmp_fid1;
         struct lu_fid           *new_fid = &info->mti_tmp_fid2;
         struct lustre_handle     rename_lh = { 0 };
-        struct lu_name           slname = { 0 };
-        struct lu_name          *lname;
         int                      rc;
         ENTRY;
 
@@ -1272,9 +1263,9 @@ static int mdt_reint_rename(struct mdt_thread_info *info,
                 RETURN(rc);
         }
 
-        DEBUG_REQ(D_INODE, req, "rename "DFID"/%s to "DFID"/%s",
-                  PFID(rr->rr_fid1), rr->rr_name,
-                  PFID(rr->rr_fid2), rr->rr_tgt);
+	DEBUG_REQ(D_INODE, req, "rename "DFID"/"DNAME" to "DFID"/"DNAME,
+		  PFID(rr->rr_fid1), PNAME(&rr->rr_name),
+		  PFID(rr->rr_fid2), PNAME(&rr->rr_tgt_name));
 
         rc = mdt_rename_lock(info, &rename_lh);
         if (rc) {
@@ -1285,11 +1276,9 @@ static int mdt_reint_rename(struct mdt_thread_info *info,
         lh_newp = &info->mti_lh[MDT_LH_NEW];
 
         lh_srcdirp = &info->mti_lh[MDT_LH_PARENT];
-        mdt_lock_pdo_init(lh_srcdirp, LCK_PW, rr->rr_name,
-                          rr->rr_namelen);
+        mdt_lock_pdo_init(lh_srcdirp, LCK_PW, &rr->rr_name);
         lh_tgtdirp = &info->mti_lh[MDT_LH_CHILD];
-        mdt_lock_pdo_init(lh_tgtdirp, LCK_PW, rr->rr_tgt,
-                          rr->rr_tgtlen);
+        mdt_lock_pdo_init(lh_tgtdirp, LCK_PW, &rr->rr_tgt_name);
 
 	/* step 1&2: lock the source and target dirs. */
 	rc = mdt_rename_parents_lock(info, &msrcdir, &mtgtdir);
@@ -1299,10 +1288,8 @@ static int mdt_reint_rename(struct mdt_thread_info *info,
 	OBD_FAIL_TIMEOUT(OBD_FAIL_MDS_RENAME2, 5);
 
         /* step 3: find & lock the old object. */
-        lname = mdt_name(info->mti_env, (char *)rr->rr_name, rr->rr_namelen);
-        mdt_name_copy(&slname, lname);
         fid_zero(old_fid);
-        rc = mdt_lookup_version_check(info, msrcdir, &slname, old_fid, 2);
+        rc = mdt_lookup_version_check(info, msrcdir, &rr->rr_name, old_fid, 2);
         if (rc != 0)
 		GOTO(out_unlock_parents, rc);
 
@@ -1336,10 +1323,10 @@ static int mdt_reint_rename(struct mdt_thread_info *info,
 
         /* step 4: find & lock the new object. */
         /* new target object may not exist now */
-        lname = mdt_name(info->mti_env, (char *)rr->rr_tgt, rr->rr_tgtlen);
         /* lookup with version checking */
         fid_zero(new_fid);
-        rc = mdt_lookup_version_check(info, mtgtdir, lname, new_fid, 3);
+	rc = mdt_lookup_version_check(info, mtgtdir, &rr->rr_tgt_name, new_fid,
+				      3);
         if (rc == 0) {
                 /* the new_fid should have been filled at this moment */
                 if (lu_fid_eq(old_fid, new_fid))
@@ -1386,9 +1373,9 @@ static int mdt_reint_rename(struct mdt_thread_info *info,
                        OBD_FAIL_MDS_REINT_RENAME_WRITE);
 
         rc = mdo_rename(info->mti_env, mdt_object_child(msrcdir),
-                        mdt_object_child(mtgtdir), old_fid, &slname,
-                        (mnew ? mdt_object_child(mnew) : NULL),
-                        lname, ma);
+                        mdt_object_child(mtgtdir), old_fid, &rr->rr_name,
+			mnew != NULL ? mdt_object_child(mnew) : NULL,
+                        &rr->rr_tgt_name, ma);
 
         /* handle last link of tgt object */
         if (rc == 0) {

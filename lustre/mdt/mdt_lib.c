@@ -810,6 +810,33 @@ void mdt_dump_capainfo(struct mdt_thread_info *info)
 
 /* unpacking */
 
+int mdt_name_unpack(struct req_capsule *pill,
+		    const struct req_msg_field *field,
+		    struct lu_name *ln,
+		    enum mdt_name_flags flags)
+{
+	ln->ln_name = req_capsule_client_get(pill, field);
+	ln->ln_namelen = req_capsule_get_size(pill, field, RCL_CLIENT) - 1;
+
+	if (!lu_name_is_valid(ln)) {
+		ln->ln_name = NULL;
+		ln->ln_namelen = 0;
+
+		return -EPROTO;
+	}
+
+	if ((flags & MNF_FIX_ANON) &&
+	    ln->ln_namelen == 1 && ln->ln_name[0] == '/') {
+		/* Newer (3.x) kernels use a name of "/" for the
+		 * "anonymous" disconnected dentries from NFS
+		 * filehandle conversion. See d_obtain_alias(). */
+		ln->ln_name = NULL;
+		ln->ln_namelen = 0;
+	}
+
+	return 0;
+}
+
 static int mdt_setattr_unpack_rec(struct mdt_thread_info *info)
 {
 	struct lu_ucred         *uc  = mdt_ucred(info);
@@ -989,13 +1016,12 @@ static int mdt_create_unpack(struct mdt_thread_info *info)
         mdt_set_capainfo(info, 1, rr->rr_fid2, BYPASS_CAPA);
 
         if (!info->mti_cross_ref) {
-                rr->rr_name = req_capsule_client_get(pill, &RMF_NAME);
-                rr->rr_namelen = req_capsule_get_size(pill, &RMF_NAME,
-                                                      RCL_CLIENT) - 1;
-                LASSERT(rr->rr_name && rr->rr_namelen > 0);
+		rc = mdt_name_unpack(pill, &RMF_NAME, &rr->rr_name, 0);
+		if (rc < 0)
+			RETURN(rc);
         } else {
-                rr->rr_name = NULL;
-                rr->rr_namelen = 0;
+                rr->rr_name.ln_name = NULL;
+                rr->rr_name.ln_namelen = 0;
         }
 
 #ifdef CONFIG_FS_POSIX_ACL
@@ -1091,15 +1117,12 @@ static int mdt_link_unpack(struct mdt_thread_info *info)
 
         info->mti_spec.sp_ck_split = !!(rec->lk_bias & MDS_CHECK_SPLIT);
         info->mti_cross_ref = !!(rec->lk_bias & MDS_CROSS_REF);
-        rr->rr_name = req_capsule_client_get(pill, &RMF_NAME);
-        if (rr->rr_name == NULL)
-                RETURN(-EFAULT);
-        rr->rr_namelen = req_capsule_get_size(pill, &RMF_NAME, RCL_CLIENT) - 1;
-        if (!info->mti_cross_ref)
-                LASSERT(rr->rr_namelen > 0);
+	rc = mdt_name_unpack(pill, &RMF_NAME, &rr->rr_name, 0);
+	if (rc < 0)
+		RETURN(rc);
 
-        rc = mdt_dlmreq_unpack(info);
-        RETURN(rc);
+	rc = mdt_dlmreq_unpack(info);
+	RETURN(rc);
 }
 
 static int mdt_unlink_unpack(struct mdt_thread_info *info)
@@ -1140,13 +1163,12 @@ static int mdt_unlink_unpack(struct mdt_thread_info *info)
 
         info->mti_cross_ref = !!(rec->ul_bias & MDS_CROSS_REF);
         if (!info->mti_cross_ref) {
-                rr->rr_name = req_capsule_client_get(pill, &RMF_NAME);
-                rr->rr_namelen = req_capsule_get_size(pill, &RMF_NAME, RCL_CLIENT) - 1;
-                if (rr->rr_name == NULL || rr->rr_namelen == 0)
-                        RETURN(-EFAULT);
+		rc = mdt_name_unpack(pill, &RMF_NAME, &rr->rr_name, 0);
+		if (rc < 0)
+			RETURN(rc);
         } else {
-                rr->rr_name = NULL;
-                rr->rr_namelen = 0;
+                rr->rr_name.ln_name = NULL;
+                rr->rr_name.ln_namelen = 0;
         }
         info->mti_spec.sp_ck_split = !!(rec->ul_bias & MDS_CHECK_SPLIT);
         if (rec->ul_bias & MDS_VTX_BYPASS)
@@ -1204,14 +1226,14 @@ static int mdt_rename_unpack(struct mdt_thread_info *info)
 
         info->mti_spec.sp_ck_split = !!(rec->rn_bias & MDS_CHECK_SPLIT);
         info->mti_cross_ref = !!(rec->rn_bias & MDS_CROSS_REF);
-        rr->rr_name = req_capsule_client_get(pill, &RMF_NAME);
-        rr->rr_tgt = req_capsule_client_get(pill, &RMF_SYMTGT);
-        if (rr->rr_name == NULL || rr->rr_tgt == NULL)
-                RETURN(-EFAULT);
-        rr->rr_namelen = req_capsule_get_size(pill, &RMF_NAME, RCL_CLIENT) - 1;
-        rr->rr_tgtlen = req_capsule_get_size(pill, &RMF_SYMTGT, RCL_CLIENT) - 1;
-        if (!info->mti_cross_ref)
-                LASSERT(rr->rr_namelen > 0 && rr->rr_tgtlen > 0);
+	rc = mdt_name_unpack(pill, &RMF_NAME, &rr->rr_name, 0);
+	if (rc < 0)
+		RETURN(rc);
+
+	rc = mdt_name_unpack(pill, &RMF_SYMTGT, &rr->rr_tgt_name, 0);
+	if (rc < 0)
+		RETURN(rc);
+
         if (rec->rn_bias & MDS_VTX_BYPASS)
                 ma->ma_attr_flags |= MDS_VTX_BYPASS;
         else
@@ -1289,10 +1311,7 @@ static int mdt_open_unpack(struct mdt_thread_info *info)
 #endif
         }
 
-        rr->rr_name = req_capsule_client_get(pill, &RMF_NAME);
-        if (rr->rr_name == NULL)
-                RETURN(-EFAULT);
-        rr->rr_namelen = req_capsule_get_size(pill, &RMF_NAME, RCL_CLIENT) - 1;
+	mdt_name_unpack(pill, &RMF_NAME, &rr->rr_name, MNF_FIX_ANON);
 
         if (req_capsule_field_present(pill, &RMF_EADATA, RCL_CLIENT)) {
                 rr->rr_eadatalen = req_capsule_get_size(pill, &RMF_EADATA,
@@ -1319,12 +1338,13 @@ static int mdt_open_unpack(struct mdt_thread_info *info)
 
 static int mdt_setxattr_unpack(struct mdt_thread_info *info)
 {
-        struct mdt_reint_record   *rr   = &info->mti_rr;
-	struct lu_ucred           *uc   = mdt_ucred(info);
-        struct lu_attr            *attr = &info->mti_attr.ma_attr;
-        struct req_capsule        *pill = info->mti_pill;
-        struct mdt_rec_setxattr   *rec;
-        ENTRY;
+	struct mdt_reint_record	*rr	= &info->mti_rr;
+	struct lu_ucred		*uc	= mdt_ucred(info);
+	struct lu_attr		*attr	= &info->mti_attr.ma_attr;
+	struct req_capsule	*pill	= info->mti_pill;
+	struct mdt_rec_setxattr	*rec;
+	int			 rc;
+	ENTRY;
 
 
         CLASSERT(sizeof(struct mdt_rec_setxattr) ==
@@ -1354,11 +1374,9 @@ static int mdt_setxattr_unpack(struct mdt_thread_info *info)
         else
                 mdt_set_capainfo(info, 0, rr->rr_fid1, BYPASS_CAPA);
 
-        rr->rr_name = req_capsule_client_get(pill, &RMF_NAME);
-        if (rr->rr_name == NULL)
-                RETURN(-EFAULT);
-        rr->rr_namelen = req_capsule_get_size(pill, &RMF_NAME, RCL_CLIENT) - 1;
-        LASSERT(rr->rr_namelen > 0);
+	rc = mdt_name_unpack(pill, &RMF_NAME, &rr->rr_name, 0);
+	if (rc < 0)
+		RETURN(rc);
 
         if (req_capsule_field_present(pill, &RMF_EADATA, RCL_CLIENT)) {
                 rr->rr_eadatalen = req_capsule_get_size(pill, &RMF_EADATA,

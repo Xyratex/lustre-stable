@@ -248,19 +248,15 @@ enum {
 };
 
 struct mdt_reint_record {
-        mdt_reint_t             rr_opcode;
-        const struct lustre_handle *rr_handle;
-        const struct lu_fid    *rr_fid1;
-        const struct lu_fid    *rr_fid2;
-        const char             *rr_name;
-        int                     rr_namelen;
-        const char             *rr_tgt;
-        int                     rr_tgtlen;
-        const void             *rr_eadata;
-        int                     rr_eadatalen;
-        int                     rr_logcookielen;
-        const struct llog_cookie  *rr_logcookies;
-        __u32                   rr_flags;
+	mdt_reint_t			 rr_opcode;
+	const struct lustre_handle	*rr_handle;
+	const struct lu_fid		*rr_fid1;
+	const struct lu_fid		*rr_fid2;
+	struct lu_name			 rr_name;
+	struct lu_name			 rr_tgt_name;
+	const void			*rr_eadata;
+	int				 rr_eadatalen;
+	__u32				 rr_flags;
 };
 
 enum mdt_reint_flag {
@@ -501,8 +497,8 @@ void mdt_clear_disposition(struct mdt_thread_info *info,
                         struct ldlm_reply *rep, int flag);
 
 void mdt_lock_pdo_init(struct mdt_lock_handle *lh,
-                       ldlm_mode_t lm, const char *name,
-                       int namelen);
+		       ldlm_mode_t lock_mode,
+		       const struct lu_name *lname);
 
 void mdt_lock_reg_init(struct mdt_lock_handle *lh,
                        ldlm_mode_t lm);
@@ -537,6 +533,14 @@ void mdt_object_unlock_put(struct mdt_thread_info *,
                            struct mdt_lock_handle *,
                            int decref);
 
+enum mdt_name_flags {
+	MNF_FIX_ANON = 1,
+};
+
+int mdt_name_unpack(struct req_capsule *pill,
+		    const struct req_msg_field *field,
+		    struct lu_name *ln,
+		    enum mdt_name_flags flags);
 int mdt_close_unpack(struct mdt_thread_info *info);
 int mdt_reint_unpack(struct mdt_thread_info *info, __u32 op);
 int mdt_reint_rec(struct mdt_thread_info *, struct mdt_lock_handle *);
@@ -767,34 +771,6 @@ static inline ldlm_mode_t mdt_mdl_mode2dlm_mode(mdl_mode_t mode)
 {
         LASSERT(IS_PO2(mode));
         return mdt_dlm_lock_modes[mode];
-}
-
-static inline struct lu_name *mdt_name(const struct lu_env *env,
-                                       char *name, int namelen)
-{
-        struct lu_name *lname;
-        struct mdt_thread_info *mti;
-
-        LASSERT(namelen > 0);
-        /* trailing '\0' in buffer */
-        LASSERT(name[namelen] == '\0');
-
-        mti = lu_context_key_get(&env->le_ctx, &mdt_thread_key);
-        lname = &mti->mti_name;
-        lname->ln_name = name;
-        lname->ln_namelen = namelen;
-        return lname;
-}
-
-static inline struct lu_name *mdt_name_copy(struct lu_name *tlname,
-                                            struct lu_name *slname)
-{
-        LASSERT(tlname);
-        LASSERT(slname);
-
-        tlname->ln_name = slname->ln_name;
-        tlname->ln_namelen = slname->ln_namelen;
-        return tlname;
 }
 
 void mdt_enable_cos(struct mdt_device *, int);
