@@ -414,7 +414,7 @@ fi
 echo '%{_libdir}/lustre/tests/*' >lustre-tests.files
 echo '%{_bindir}/mcreate' >>lustre-tests.files
 echo '%{_bindir}/munlink' >>lustre-tests.files
-echo '%{?rootdir}/lib/modules/%{kversion}/updates/kernel/fs/lustre/llog_test.ko' >>lustre-tests.files
+echo '%{?rootdir}/lib/modules/%{kversion}/%{kmoddir}/kernel/fs/@PACKAGE@/llog_test.ko' >>lustre-tests.files
 if [ -d $RPM_BUILD_ROOT%{_libdir}/lustre/liblustre/tests ] ; then
   echo '%{_libdir}/lustre/liblustre/tests/*' >>lustre-tests.files
 fi
@@ -450,7 +450,7 @@ find $RPM_BUILD_ROOT%{?rootdir}/lib/modules/%{kversion}/%{kmoddir} -name "*.ko" 
 
 %files modules
 %defattr(-,root,root)
-%{?rootdir}/lib/modules/%{kversion}/updates/*
+%{?rootdir}/lib/modules/%{kversion}/%{kmoddir}/*
 %if %{with lustre_tests}
 %exclude %{?rootdir}/lib/modules/%{kversion}/%{kmoddir}/kernel/fs/@PACKAGE@/llog_test.ko
 %endif
@@ -471,8 +471,8 @@ find $RPM_BUILD_ROOT%{?rootdir}/lib/modules/%{kversion}/%{kmoddir} -name "*.ko" 
 %if %{with ldiskfs}
 %files osd-ldiskfs
 %defattr(-,root,root)
-%{?rootdir}/lib/modules/%{kversion}/updates/kernel/fs/lustre/ldiskfs.ko
-%{?rootdir}/lib/modules/%{kversion}/updates/kernel/fs/lustre/osd_ldiskfs.ko
+%{?rootdir}/lib/modules/%{kversion}/%{kmoddir}/kernel/fs/@PACKAGE@/ldiskfs.ko
+%{?rootdir}/lib/modules/%{kversion}/%{kmoddir}/kernel/fs/@PACKAGE@/osd_ldiskfs.ko
 %if %{defined rpm_post_base}
 %attr(0555, root, root) %{rpm_post_base}-osd-ldiskfs.sh
 %endif
@@ -481,7 +481,7 @@ find $RPM_BUILD_ROOT%{?rootdir}/lib/modules/%{kversion}/%{kmoddir} -name "*.ko" 
 %if %{with zfs}
 %files osd-zfs
 %defattr(-,root,root)
-%{?rootdir}/lib/modules/%{kversion}/updates/kernel/fs/lustre/osd_zfs.ko
+%{?rootdir}/lib/modules/%{kversion}/%{kmoddir}/kernel/fs/@PACKAGE@/osd_zfs.ko
 %if %{defined rpm_post_base}
 %attr(0555, root, root) %{rpm_post_base}-osd-zfs.sh
 %endif
