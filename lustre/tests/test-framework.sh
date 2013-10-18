@@ -184,6 +184,15 @@ init_test_env() {
         fi
     fi
 
+	export RESIZE2FS=$RESIZE2FS
+	if [ -z "$RESIZE2FS" ]; then
+		if which resizefs.ldiskfs >/dev/null 2>&1; then
+			export RESIZE2FS=resizefs.ldiskfs
+		else
+			export RESIZE2FS=resize2fs
+		fi
+	fi
+
     export LFSCK_BIN=${LFSCK_BIN:-lfsck}
     export LFSCK_ALWAYS=${LFSCK_ALWAYS:-"no"} # check fs after each test suite
     export FSCK_MAX_ERR=4   # File system errors left uncorrected
@@ -3848,6 +3857,19 @@ run_e2fsck() {
 	return 0
 }
 
+#
+# Run resize2fs on MDT or OST device.
+#
+run_resize2fs() {
+	local facet=$1
+	local device=$2
+	local size=$3
+	shift 3
+	local opts="$@"
+
+	do_facet $facet "$RESIZE2FS $opts $device $size"
+}
+
 # verify a directory is shared among nodes.
 check_shared_dir() {
 	local dir=$1
@@ -6396,6 +6418,19 @@ get_page_size() {
 	size=$(do_facet $facet getconf PAGE_SIZE)
 	[[ ${PIPESTATUS[0]} = 0 && -n "$size" ]] || size=4096
 	echo -n $size
+}
+
+#
+# Get the block count of the filesystem.
+#
+get_block_count() {
+	local facet=$1
+	local device=$2
+	local count
+
+	count=$(do_facet $facet "$DUMPE2FS -h $device 2>&1" |
+		awk '/^Block count:/ {print $3}')
+	echo -n $count
 }
 
 # Get the block size of the filesystem.
