@@ -1018,13 +1018,20 @@ lnet_peer_alive_locked (lnet_peer_t *lp)
         return 0;
 }
 
-int
+/**
+ * \param msg The message to be sent.
+ * \param do_send True if lnet_ni_send() should be called in this function.
+ *	  lnet_send() is going to lnet_net_unlock immediately after this, so
+ *	  it sets do_send FALSE and I don't do the unlock/send/lock bit.
+ *
+ * \retval 0 If \a msg sent or OK to send.
+ * \retval EAGAIN If \a msg blocked for credit.
+ * \retval EHOSTUNREACH If the next hop of the message appears dead.
+ * \retval ECANCELED If the MD of the message has been unlinked.
+ */
+static int
 lnet_post_send_locked (lnet_msg_t *msg, int do_send)
 {
-        /* lnet_send is going to LNET_UNLOCK immediately after this, so it sets
-         * do_send FALSE and I don't do the unlock/send/lock bit.  I return
-         * EAGAIN if msg blocked, EHOSTUNREACH if msg_txpeer appears dead, and
-         * 0 if sent or OK to send */
         lnet_peer_t *lp = msg->msg_txpeer;
         lnet_ni_t   *ni = lp->lp_ni;
 
@@ -1047,6 +1054,20 @@ lnet_post_send_locked (lnet_msg_t *msg, int do_send)
                 LNET_LOCK();
                 return EHOSTUNREACH;
         }
+
+	if (msg->msg_md != NULL &&
+	    (msg->msg_md->md_flags & LNET_MD_FLAG_ABORTED) != 0) {
+		LNET_UNLOCK();
+
+		CNETERR("Aborting message for %s: LNetM[DE]Unlink() already "
+			"called on the MD/ME.\n",
+			libcfs_id2str(msg->msg_target));
+		if (do_send)
+			lnet_finalize(ni, msg, -ECANCELED);
+
+		LNET_LOCK();
+		return ECANCELED;
+	}
 
         if (!msg->msg_peertxcredit) {
                 LASSERT ((lp->lp_txcredits < 0) ==
@@ -1496,13 +1517,13 @@ lnet_send(lnet_nid_t src_nid, lnet_msg_t *msg)
         rc = lnet_post_send_locked(msg, 0);
         LNET_UNLOCK();
 
-        if (rc == EHOSTUNREACH)
-                return -EHOSTUNREACH;
+	if (rc == EHOSTUNREACH || rc == ECANCELED)
+		return -rc;
 
-        if (rc == 0)
+	if (rc == 0)
                 lnet_ni_send(src_ni, msg);
 
-        return 0;
+	return 0; /* rc == 0 or EAGAIN */
 }
 
 static void
@@ -2750,12 +2771,12 @@ LNetGet(lnet_nid_t self, lnet_handle_md_t mdh,
 
         LNET_UNLOCK();
 
-        rc = lnet_send(self, msg);
-        if (rc < 0) {
-                CNETERR( "Error sending GET to %s: %d\n",
-                       libcfs_id2str(target), rc);
-                lnet_finalize (NULL, msg, rc);
-        }
+	rc = lnet_send(self, msg);
+	if (rc < 0) {
+		CNETERR( "Error sending GET to %s: %d\n",
+			 libcfs_id2str(target), rc);
+		lnet_finalize(NULL, msg, rc);
+	}
 
         /* completion will be signalled by an event */
         return 0;
