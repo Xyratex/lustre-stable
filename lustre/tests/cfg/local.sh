@@ -1,10 +1,10 @@
 FSNAME=${FSNAME:-lustre}
 
 # facet hosts
-mds_HOST=${mds_HOST:-`hostname`}
+mds_HOST=${mds_HOST:-$(hostname)}
 mdsfailover_HOST=${mdsfailover_HOST}
 mgs_HOST=${mgs_HOST:-$mds_HOST}
-ost_HOST=${ost_HOST:-`hostname`}
+ost_HOST=${ost_HOST:-$(hostname)}
 ostfailover_HOST=${ostfailover_HOST}
 CLIENTS=""
 
@@ -49,7 +49,7 @@ OST_MOUNT_OPTS=${OST_MOUNT_OPTS:-}
 # ost1_HOST="uml2"
 
 NETTYPE=${NETTYPE:-tcp}
-MGSNID=${MGSNID:-`h2$NETTYPE $mgs_HOST`}
+MGSNID=${MGSNID:-$(h2$NETTYPE $mgs_HOST)}
 
 #
 # Back end file system type(s) of facets can be specified with these
@@ -87,6 +87,8 @@ DEBUG_SIZE=${DEBUG_SIZE:-$_debug_mb}
 ENABLE_QUOTA=${ENABLE_QUOTA:-""}
 QUOTA_TYPE="ug3"
 QUOTA_USERS=${QUOTA_USERS:-"quota_usr quota_2usr sanityusr sanityusr1"}
+# "error: conf_param: No such device" issue in every test suite logs
+# sanity-quota test_32 hash_lqs_cur_bits is not set properly
 LQUOTAOPTS=${LQUOTAOPTS:-"hash_lqs_cur_bits=3"}
 
 #client
