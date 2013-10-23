@@ -1,14 +1,14 @@
 FSNAME=${FSNAME:-lustre}
 
 # facet hosts
-mds_HOST=${mds_HOST:-`hostname`}
+mds_HOST=${mds_HOST:-$(hostname)}
 mdsfailover_HOST=${mdsfailover_HOST}
 mds1_HOST=${mds1_HOST:-$mds_HOST}
 mds1failover_HOST=${mds1failover_HOST:-$mdsfailover_HOST}
 mgs_HOST=${mgs_HOST:-$mds1_HOST}
-ost_HOST=${ost_HOST:-`hostname`}
+ost_HOST=${ost_HOST:-$(hostname)}
 ostfailover_HOST=${ostfailover_HOST}
-CLIENT1=${CLIENT1:-`hostname`}
+CLIENT1=${CLIENT1:-$(hostname)}
 SINGLECLIENT=$CLIENT1
 CLIENTS=""
 
@@ -39,7 +39,7 @@ OSTOPT=""
 # ost1_HOST="uml2"
 
 NETTYPE=${NETTYPE:-tcp}
-MGSNID=${MGSNID:-`h2$NETTYPE $mgs_HOST`}
+MGSNID=${MGSNID:-$(h2$NETTYPE $mgs_HOST)}
 FSTYPE=${FSTYPE:-ldiskfs}
 STRIPE_BYTES=${STRIPE_BYTES:-1048576}
 STRIPES_PER_OBJ=${STRIPES_PER_OBJ:-0}
@@ -60,6 +60,8 @@ DEBUG_SIZE=${DEBUG_SIZE:-$_debug_mb}
 ENABLE_QUOTA=${ENABLE_QUOTA:-""}
 QUOTA_TYPE="ug3"
 QUOTA_USERS=${QUOTA_USERS:-"quota_usr quota_2usr sanityusr sanityusr1"}
+# "error: conf_param: No such device" issue in every test suite logs
+# sanity-quota test_32 hash_lqs_cur_bits is not set properly
 LQUOTAOPTS=${LQUOTAOPTS:-"hash_lqs_cur_bits=3"}
 
 MKFSOPT=""
