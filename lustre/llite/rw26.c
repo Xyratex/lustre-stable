@@ -503,7 +503,7 @@ out:
 	}
 
 	cl_env_put(env, &refcheck);
-	RETURN(tot_bytes ? : result);
+	RETURN(tot_bytes ? tot_bytes : result);
 }
 
 /**
