@@ -186,7 +186,7 @@ seq_server_proc_write_width(struct file *file, const char *buffer,
 	rc = lprocfs_write_helper(buffer, count, &val);
 	if (rc != 0) {
 		CERROR("%s: invalid width.\n", seq->lss_name);
-		GOTO(out_unlock, rc);
+		GOTO(out_unlock, count = rc);
 	}
 
 	seq->lss_width = val;

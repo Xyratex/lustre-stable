@@ -657,6 +657,7 @@ void obd_cleanup_caches(void)
 
 int obd_init_caches(void)
 {
+	int rc;
         ENTRY;
 
         LASSERT(obd_device_cachep == NULL);
@@ -664,31 +665,31 @@ int obd_init_caches(void)
                                                  sizeof(struct obd_device),
                                                  0, 0);
         if (!obd_device_cachep)
-                GOTO(out, -ENOMEM);
+                GOTO(out, rc = -ENOMEM);
 
         LASSERT(obdo_cachep == NULL);
         obdo_cachep = cfs_mem_cache_create("ll_obdo_cache", sizeof(struct obdo),
                                            0, 0);
         if (!obdo_cachep)
-                GOTO(out, -ENOMEM);
+                GOTO(out, rc = -ENOMEM);
 
         LASSERT(import_cachep == NULL);
         import_cachep = cfs_mem_cache_create("ll_import_cache",
                                              sizeof(struct obd_import),
                                              0, 0);
         if (!import_cachep)
-                GOTO(out, -ENOMEM);
+                GOTO(out, rc = -ENOMEM);
 
         LASSERT(capa_cachep == NULL);
         capa_cachep = cfs_mem_cache_create("capa_cache",
                                            sizeof(struct obd_capa), 0, 0);
         if (!capa_cachep)
-                GOTO(out, -ENOMEM);
+                GOTO(out, rc = -ENOMEM);
 
         RETURN(0);
  out:
         obd_cleanup_caches();
-        RETURN(-ENOMEM);
+        return rc;
 
 }
 

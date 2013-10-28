@@ -1463,7 +1463,7 @@ int ptlrpc_disconnect_import(struct obd_import *imp, int noclose)
 
         cfs_spin_lock(&imp->imp_lock);
         if (imp->imp_state != LUSTRE_IMP_FULL)
-                GOTO(out, 0);
+                GOTO(out, rc);
 
         cfs_spin_unlock(&imp->imp_lock);
 

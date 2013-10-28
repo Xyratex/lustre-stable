@@ -745,7 +745,7 @@ int ldlm_process_extent_lock(struct ldlm_lock *lock, __u64 *flags,
                                 GOTO(out, rc = 0);
                         }
 
-                        GOTO(restart, -ERESTART);
+                        GOTO(restart, rc);
                 }
 
                 *flags |= LDLM_FL_BLOCK_GRANTED;
