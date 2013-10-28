@@ -128,15 +128,6 @@ AC_DEFUN([LIBCFS_HAVE_OOM_H],
 ])
 ])
 
-AC_DEFUN([LIBCFS_HAVE_KEYTYPE_H],
-[LB_CHECK_FILE([$LINUX/include/linux/key-type.h], [
-        AC_DEFINE(HAVE_LINUX_KEYTYPE_H, 1,
-                [kernel has include/key-type.h])
-],[
-        AC_MSG_RESULT([no])
-])
-])
-
 #
 # RHEL6/2.6.32 want to have pointer to shrinker self pointer in handler function
 #
@@ -321,7 +312,6 @@ LIBCFS_U64_LONG_LONG_LINUX
 
 # 2.6.24
 LIBCFS_SYSCTL_UNNUMBERED
-LIBCFS_HAVE_KEYTYPE_H
 # 2.6.32
 LIBCFS_STACKTRACE_OPS_HAVE_WALK_STACK
 LC_SHRINKER_WANT_SHRINK_PTR
