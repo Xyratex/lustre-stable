@@ -5266,19 +5266,19 @@ check_logdir() {
 }
 
 check_write_access() {
-    local dir=$1
-    local node
-    local file
+	local dir=$1
+	local node
+	local file
 
-    for node in $(nodes_list); do
-        file=$dir/check_file.$(short_hostname $node)
-        if [[ ! -f "$file" ]]; then
-            # Logdir not accessible/writable from this node.
-            return 1
-        fi
-        rm -f $file || return 1
-    done
-    return 0
+	for node in $(nodes_list); do
+		file=$dir/check_file.$(short_nodename $node)
+		if [[ ! -f "$file" ]]; then
+			# Logdir not accessible/writable from this node.
+			return 1
+		fi
+		rm -f $file || return 1
+	done
+	return 0
 }
 
 init_logging() {
