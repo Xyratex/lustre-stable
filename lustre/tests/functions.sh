@@ -276,7 +276,7 @@ print_opts () {
         var=$i
         echo "${var}=${!var}"
     done
-    [ -e $MACHINEFILE ] && cat $MACHINEFILE
+    [ -e "$MACHINEFILE" ] && cat $MACHINEFILE
 }
 
 run_compilebench() {

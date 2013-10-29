@@ -5135,6 +5135,9 @@ mixed_mdt_devs () {
 generate_machine_file() {
     local nodes=${1//,/ }
     local machinefile=$2
+
+    [[ -z $(echo $machinefile | tr -d " ") ]] && return 0
+
     rm -f $machinefile
     for node in $nodes; do
         echo $node >>$machinefile || \
