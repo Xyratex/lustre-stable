@@ -353,7 +353,7 @@ run_metabench() {
     # -S             Run the file stat tests.
     # -c nfile       Number of files to be used in each test.
     # -k             Cleanup.  Remove the test directories.
-    local cmd="$METABENCH -w $testdir -c $mbench_NFILES -C -S -k"
+    local cmd="$METABENCH -w $testdir -c $mbench_NFILES -C -S -k $mbench_OPTIONS"
     echo "+ $cmd"
 
 	# find out if we need to use srun by checking $SRUN_PARTITION
