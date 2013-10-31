@@ -102,7 +102,7 @@ struct mkfs_opts {
         char  mo_device[128];           /* disk device name */
         char  mo_loopdev[128];          /* in case a loop dev is needed */
         char  mo_mkfsopts[512];         /* options to the backing-store mkfs */
-        __u64 mo_device_sz;             /* in KB */
+        __u64 mo_device_kb;             /* in KB */
         int   mo_stripe_count;
         int   mo_flags;
         int   mo_mgs_failnodes;
@@ -413,7 +413,7 @@ int loop_format(struct mkfs_opts *mop)
 {
         int fd;
 
-        if (mop->mo_device_sz == 0) {
+        if (mop->mo_device_kb == 0) {
                 fatal();
                 fprintf(stderr, "loop device requires a --device-size= "
                         "param\n");
@@ -428,7 +428,7 @@ int loop_format(struct mkfs_opts *mop)
                 return errno;
         }
 
-        if (ftruncate(fd, mop->mo_device_sz * 1024) != 0) {
+        if (ftruncate(fd, mop->mo_device_kb * 1024) != 0) {
                 close(fd);
                 fatal();
                 fprintf(stderr, "%s: Unable to truncate backing store: %s\n",
@@ -649,7 +649,7 @@ static void enable_default_ext4_features(struct mkfs_opts *mop, char *anchor,
                 append_unique(anchor, ",", "huge_file", NULL, maxbuflen);
 
         /* Enable large block addresses if the LUN is over 2^32 blocks. */
-        if (mop->mo_device_sz / (L_BLOCK_SIZE >> 10) >= 0x100002000ULL &&
+        if (mop->mo_device_kb / (L_BLOCK_SIZE >> 10) >= 0x100002000ULL &&
                     is_e2fsprogs_feature_supp("-O 64bit") == 0)
                 append_unique(anchor, ",", "64bit", NULL, maxbuflen);
 
@@ -712,7 +712,7 @@ static char *moveopts_to_end(char *start)
 /* Build fs according to type */
 int make_lustre_backfs(struct mkfs_opts *mop)
 {
-        __u64 device_sz = mop->mo_device_sz, block_count = 0;
+        __u64 device_kb = mop->mo_device_kb, block_count = 0;
         char mkfs_cmd[PATH_MAX];
         char buf[64];
         char *start;
@@ -721,26 +721,26 @@ int make_lustre_backfs(struct mkfs_opts *mop)
         size_t maxbuflen;
 
         if (!(mop->mo_flags & MO_IS_LOOP)) {
-                mop->mo_device_sz = get_device_size(mop->mo_device);
+                mop->mo_device_kb = get_device_size(mop->mo_device);
 
-                if (mop->mo_device_sz == 0)
+                if (mop->mo_device_kb == 0)
                         return ENODEV;
 
                 /* Compare to real size */
-                if (device_sz == 0 || device_sz > mop->mo_device_sz)
-                        device_sz = mop->mo_device_sz;
+                if (device_kb == 0 || device_kb > mop->mo_device_kb)
+                        device_kb = mop->mo_device_kb;
                 else
-                        mop->mo_device_sz = device_sz;
+                        mop->mo_device_kb = device_kb;
         }
 
-        if (mop->mo_device_sz != 0) {
-                if (mop->mo_device_sz < 8096){
+        if (mop->mo_device_kb != 0) {
+                if (mop->mo_device_kb < 8096){
                         fprintf(stderr, "%s: size of filesystem must be larger "
                                 "than 8MB, but is set to %lldKB\n",
-                                progname, (long long)mop->mo_device_sz);
+                                progname, (long long)mop->mo_device_kb);
                         return EINVAL;
                 }
-                block_count = mop->mo_device_sz / (L_BLOCK_SIZE >> 10);
+                block_count = mop->mo_device_kb / (L_BLOCK_SIZE >> 10);
                 /* If the LUN size is just over 2^32 blocks, limit the
                  * filesystem size to 2^32-1 blocks to avoid problems with
                  * ldiskfs/mkfs not handling this size.  Bug 22906 */
@@ -754,22 +754,29 @@ int make_lustre_backfs(struct mkfs_opts *mop)
                 long inode_size = 0;
 
                 /* Journal size in MB */
-                if (strstr(mop->mo_mkfsopts, "-J") == NULL) {
-                        /* Choose our own default journal size */
-                        long journal_sz = 0, max_sz;
-                        if (device_sz > 1024 * 1024) /* 1GB */
-                                journal_sz = (device_sz / 102400) * 4;
-                        /* cap journal size at 1GB */
-                        if (journal_sz > 1024L)
-                                journal_sz = 1024L;
-                        /* man mkfs.ext3 */
-                        max_sz = (102400 * L_BLOCK_SIZE) >> 20; /* 400MB */
-                        if (journal_sz > max_sz)
-                                journal_sz = max_sz;
-                        if (journal_sz) {
-                                sprintf(buf, " -J size=%ld", journal_sz);
-                                strscat(mop->mo_mkfsopts, buf,
-                                        sizeof(mop->mo_mkfsopts));
+		if (strstr(mop->mo_mkfsopts, "-J") == NULL &&
+		    device_kb > 1024 * 1024) {
+			/* Choose our own default journal size */
+			long journal_mb = 0, max_mb;
+
+			/* cap journal size at 4GB for MDT,
+			 * leave it at 400MB for OSTs. */
+			if (IS_MDT(&mop->mo_ldd))
+				max_mb = 4096;
+			else if (IS_OST(&mop->mo_ldd))
+				max_mb = 400;
+			else /* Use mke2fs default size for MGS */
+				max_mb = 0;
+
+			/* Use at most 4% of device for journal */
+			journal_mb = device_kb * 4 / (1024 * 100);
+			if (journal_mb > max_mb)
+				journal_mb = max_mb;
+
+			if (journal_mb) {
+				sprintf(buf, " -J size=%ld", journal_mb);
+				strscat(mop->mo_mkfsopts, buf,
+					sizeof(mop->mo_mkfsopts));
                         }
                 }
 
@@ -825,18 +832,18 @@ int make_lustre_backfs(struct mkfs_opts *mop)
                          * this, but it is impossible to know in advance. */
                         if (IS_OST(&mop->mo_ldd)) {
                                 /* OST > 16TB assume average file size 1MB */
-                                if (device_sz > (16ULL << 30))
+                                if (device_kb > (16ULL << 30))
                                         bytes_per_inode = 1024 * 1024;
                                 /* OST > 4TB assume average file size 512kB */
-                                else if (device_sz > (4ULL << 30))
+                                else if (device_kb > (4ULL << 30))
                                         bytes_per_inode = 512 * 1024;
                                 /* OST > 1TB assume average file size 256kB */
-                                else if (device_sz > (1ULL << 30))
+                                else if (device_kb > (1ULL << 30))
                                         bytes_per_inode = 256 * 1024;
                                 /* OST > 10GB assume average file size 64kB,
                                  * plus a bit so that inodes will fit into a
                                  * 256x flex_bg without overflowing */
-                                else if (device_sz > (10ULL << 20))
+                                else if (device_kb > (10ULL << 20))
                                         bytes_per_inode = 69905;
                         }
 
@@ -895,8 +902,8 @@ int make_lustre_backfs(struct mkfs_opts *mop)
                  * descriptor blocks, but leave one block for the superblock.
                  * Only useful for filesystems with < 2^32 blocks due to resize
                  * limitations. */
-                if (IS_OST(&mop->mo_ldd) && mop->mo_device_sz > 100 * 1024 &&
-                    mop->mo_device_sz * 1024 / L_BLOCK_SIZE <= 0xffffffffULL) {
+                if (IS_OST(&mop->mo_ldd) && mop->mo_device_kb > 100 * 1024 &&
+                    mop->mo_device_kb * 1024 / L_BLOCK_SIZE <= 0xffffffffULL) {
                         unsigned group_blocks = L_BLOCK_SIZE * 8;
                         unsigned desc_per_block = L_BLOCK_SIZE / 32;
                         unsigned resize_blks;
@@ -1679,7 +1686,8 @@ int parse_opts(int argc, char *const argv[], struct mkfs_opts *mop,
                         printf("Configdev not implemented\n");
                         return 1;
                 case 'd':
-                        mop->mo_device_sz = atol(optarg);
+                        mop->mo_device_kb = atol(optarg);
+			mop->mo_device_kb = atol(optarg);
                         break;
                 case 'E':
                         rc = erase_param(mop->mo_ldd.ldd_params, optarg,
