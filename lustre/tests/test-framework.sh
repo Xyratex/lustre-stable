@@ -5529,3 +5529,15 @@ check_clients_evicted() {
 
         [ $rc -eq 0 ] || error "client not evicted from OST"
 }
+
+# find the smallest and not in use file descriptor
+free_fd()
+{
+        local max_fd=$(ulimit -n)
+        local fd=3
+        while [[ $fd -le $max_fd && -e /proc/self/fd/$fd ]]; do
+                ((++fd))
+        done
+        [ $fd -lt $max_fd ] || error "finding free file descriptor failed"
+        echo $fd
+}

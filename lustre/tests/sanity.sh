@@ -1729,14 +1729,17 @@ test_31n() {
 	touch $DIR/$tfile || error "cannot create '$DIR/$tfile'"
 	nlink=$(stat --format=%h $DIR/$tfile)
 	[ ${nlink:--1} -eq 1 ] || error "nlink is $nlink, expected 1"
-	exec 173<$DIR/$tfile
-	trap "exec 173<&-" EXIT
-	nlink=$(stat --dereference --format=%h /proc/self/fd/173)
+	local fd=$(free_fd)
+	local cmd="exec $fd<$DIR/$tfile"
+	eval $cmd
+	cmd="exec $fd<&-"
+	trap "eval $cmd" EXIT
+	nlink=$(stat --dereference --format=%h /proc/self/fd/$fd)
 	[ ${nlink:--1} -eq 1 ] || error "nlink is $nlink, expected 1"
 	rm $DIR/$tfile || error "cannot remove '$DIR/$tfile'"
-	nlink=$(stat --dereference --format=%h /proc/self/fd/173)
+	nlink=$(stat --dereference --format=%h /proc/self/fd/$fd)
 	[ ${nlink:--1} -eq 0 ] || error "nlink is $nlink, expected 0"
-	exec 173<&-
+	eval $cmd
 }
 run_test 31n "check link count of unlinked file"
 
