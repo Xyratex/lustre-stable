@@ -1071,6 +1071,7 @@ dont_check_exports:
 		 * export may be already in the eviction process */
 		if (export->exp_failed) {
 			cfs_spin_unlock(&export->exp_lock);
+			cfs_spin_unlock(&target->obd_recovery_task_lock);
 			GOTO(out, rc = -ENODEV);
 		}
                 export->exp_in_recovery = 1;
