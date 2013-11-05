@@ -125,8 +125,8 @@ ll_iget_for_nfs(struct super_block *sb, struct lu_fid *fid, struct lu_fid *paren
         struct dentry *result;
         ENTRY;
 
-        if (!fid_is_sane(fid))
-                RETURN(ERR_PTR(-ESTALE));
+	if (!fid_is_sane(fid))
+		RETURN(ERR_PTR(-ESTALE));
 
 	CDEBUG(D_INFO, "Get dentry for fid: "DFID"\n", PFID(fid));
 
