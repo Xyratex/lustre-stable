@@ -102,6 +102,9 @@ static inline void ll_set_fs_pwd(struct fs_struct *fs, struct vfsmount *mnt,
 #define current_ngroups current_cred()->group_info->ngroups
 #define current_groups current_cred()->group_info->small_block
 
+#define lock_dentry(___dentry)          cfs_spin_lock(&(___dentry)->d_lock)
+#define unlock_dentry(___dentry)        cfs_spin_unlock(&(___dentry)->d_lock)
+
 /*
  * OBD need working random driver, thus all our
  * initialization routines must be called after device
@@ -149,6 +152,11 @@ static inline void ll_set_fs_pwd(struct fs_struct *fs, struct vfsmount *mnt,
 
 #include <linux/proc_fs.h>
 
+#if !defined(HAVE_D_REHASH_COND) && defined(HAVE___D_REHASH)
+#define d_rehash_cond(dentry, lock) __d_rehash(dentry, lock)
+extern void __d_rehash(struct dentry *dentry, int lock);
+#endif
+
 #ifdef HAVE_SECURITY_PLUG
 #define ll_vfs_symlink(dir, dentry, mnt, path, mode) \
                 vfs_symlink(dir, dentry, mnt, path, mode)
@@ -160,6 +168,12 @@ static inline void ll_set_fs_pwd(struct fs_struct *fs, struct vfsmount *mnt,
 #define ll_vfs_symlink(dir, dentry, mnt, path, mode) \
                        vfs_symlink(dir, dentry, path)
 #endif
+
+#define ll_set_dflags(dentry, flags) do { \
+                cfs_spin_lock(&dentry->d_lock); \
+                dentry->d_flags |= flags; \
+                cfs_spin_unlock(&dentry->d_lock); \
+        } while(0)
 #endif
 
 #define UP_WRITE_I_ALLOC_SEM(i)   up_write(&(i)->i_alloc_sem)
@@ -606,6 +620,7 @@ static inline int ll_quota_off(struct super_block *sb, int off, int remount)
 #define queue_max_phys_segments(rq)       queue_max_segments(rq)
 #define queue_max_hw_segments(rq)         queue_max_segments(rq)
 #endif
+
 
 #ifndef HAVE_BI_HW_SEGMENTS
 #define bio_hw_segments(q, bio) 0
