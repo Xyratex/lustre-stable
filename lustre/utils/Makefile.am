@@ -38,6 +38,7 @@ endif
 bin_PROGRAMS = lfs req_layout
 bin_SCRIPTS = $(bin_scripts)
 sbin_SCRIPTS = $(sbin_scripts)
+endif # UTILS
 
 lib_LIBRARIES = liblustreapi.a
 if LDISKFS_ENABLED
@@ -180,7 +181,6 @@ CONFDIR_DATA += configs/ads.conf
 endif
 
 ltrack_stats_SOURCES = ltrack_stats.c
-endif # UTILS
 
 wirecheck_SOURCES = wirecheck.c
 wirecheck_CPPFLAGS = -DCC="\"$(CC)\""
