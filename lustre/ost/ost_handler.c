@@ -698,6 +698,13 @@ static int ost_pages2shortio(struct niobuf_local *local, int npages,
 	return copied - size;
 }
 
+/* We use OBD_FL_FLUSH here cause OBD_FL_SHORT_IO value was changed
+ * from 0x00200000 to 0x00400000. OBD_FL_FLUSH was added to master
+ * It safe to use OBD_FL_FLUSH here because originaly it used in
+ * different request getattr. So old clients can use shortio.
+ * And there is no problem for new clients with OBD_FL_FLUSH cause
+ * they set this flag only for getattr request */
+#define is_short_io_request(f) ((f) & (OBD_FL_SHORT_IO | OBD_FL_FLUSH))
 
 static int ost_brw_read(struct ptlrpc_request *req, struct obd_trans_info *oti)
 {
@@ -766,7 +773,7 @@ static int ost_brw_read(struct ptlrpc_request *req, struct obd_trans_info *oti)
                 }
         }
 
-	if (body->oa.o_flags & OBD_FL_SHORT_IO) {
+	if (is_short_io_request(body->oa.o_flags)) {
 		req_capsule_extend(&req->rq_pill, &RQF_OST_BRW_READ_SHORTIO);
 		req_capsule_set_size(&req->rq_pill, &RMF_SHORT_IO, RCL_SERVER,
 				     remote_nb[0].len);
@@ -809,7 +816,7 @@ static int ost_brw_read(struct ptlrpc_request *req, struct obd_trans_info *oti)
         if (rc != 0)
                 GOTO(out_lock, rc);
 
-	if (body->oa.o_flags & OBD_FL_SHORT_IO) {
+	if (is_short_io_request(body->oa.o_flags)) {
 		desc = NULL;
 	} else {
 		desc = ptlrpc_prep_bulk_exp(req, npages, ioobj_max_brw_get(ioo),
@@ -866,7 +873,7 @@ static int ost_brw_read(struct ptlrpc_request *req, struct obd_trans_info *oti)
         /* Check if client was evicted while we were doing i/o before touching
            network */
         if (rc == 0) {
-		if (body->oa.o_flags & OBD_FL_SHORT_IO) {
+		if (is_short_io_request(body->oa.o_flags)) {
 			unsigned char *short_io_buf;
 			int short_io_size;
 
@@ -886,7 +893,7 @@ static int ost_brw_read(struct ptlrpc_request *req, struct obd_trans_info *oti)
                         rc = target_bulk_io(exp, desc, &lwi);
                 no_reply = rc != 0;
         } else {
-		if (body->oa.o_flags & OBD_FL_SHORT_IO)
+		if (is_short_io_request(body->oa.o_flags))
 			req_capsule_shrink(&req->rq_pill, &RMF_SHORT_IO, 0,
 					   RCL_SERVER);
 	}
@@ -1113,7 +1120,7 @@ static int ost_brw_write(struct ptlrpc_request *req, struct obd_trans_info *oti)
         if (rc != 0)
                 GOTO(out_lock, rc);
 
-	if (body->oa.o_flags & OBD_FL_SHORT_IO) {
+	if (is_short_io_request(body->oa.o_flags)) {
 		int short_io_size;
 		unsigned char *short_io_buf;
 
