@@ -1430,6 +1430,7 @@ wait_update () {
 
 wait_update_facet () {
     local facet=$1
+    shift
     wait_update  $(facet_active_host $facet) "$@"
 }
 
