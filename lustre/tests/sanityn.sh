@@ -1955,8 +1955,8 @@ run_test 51 "alloc_rr should be allocate on correct order"
 test_52() {
 	local tlink1
 	local tlink2
-	local p="$TMP/sanityN-$TESTNAME.parameters"
-	save_lustre_params $HOSTNAME "llite.*.xattr_cache" > $p
+	local p="$TMP/$TESTSUITE-$TESTNAME.parameters"
+	save_lustre_params client "llite.*.xattr_cache" > $p
 	lctl set_param llite.*.xattr_cache 1 || { skip "xattr cache is not supported"; return 0; }
 
 	touch $DIR1/$tfile
@@ -1980,8 +1980,8 @@ test_52() {
 run_test 52 "getxattr/setxattr cache should be consistent between nodes"
 
 test_53() {
-        local p="$TMP/sanityN-$TESTNAME.parameters"
-        save_lustre_params $HOSTNAME "llite.*.xattr_cache" > $p
+	local p="$TMP/$TESTSUITE-$TESTNAME.parameters"
+        save_lustre_params client "llite.*.xattr_cache" > $p
         lctl set_param llite.*.xattr_cache 1 || { skip "xattr cache is not supported"; return 0; }
 
         touch $DIR1/$tfile

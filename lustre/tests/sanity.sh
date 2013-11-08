@@ -9536,8 +9536,8 @@ test_225b () {
 run_test 225b "Metadata survey sanity with stripe_count = 1"
 
 test_226() {
-        local p="$TMP/sanityN-$TESTNAME.parameters"
-        save_lustre_params $HOSTNAME "llite.*.xattr_cache" > $p
+	local p="$TMP/$TESTSUITE-$TESTNAME.parameters"
+        save_lustre_params client "llite.*.xattr_cache" > $p
         lctl set_param llite.*.xattr_cache 1 || { skip "xattr cache is not supported"; return 0; }
 
         mkdir -p $DIR/$tdir

@@ -1524,8 +1524,8 @@ run_test 105 "IR: NON IR clients support"
 
 test_106()
 {
-        local p="$TMP/sanityN-$TESTNAME.parameters"
-        save_lustre_params $HOSTNAME "llite.*.xattr_cache" > $p
+	local p="$TMP/$TESTSUITE-$TESTNAME.parameters"
+        save_lustre_params client "llite.*.xattr_cache" > $p
         lctl set_param llite.*.xattr_cache 1 ||
                 { skip "xattr cache is not supported"; return 0; }
 
