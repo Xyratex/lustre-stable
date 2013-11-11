@@ -1788,6 +1788,59 @@ test_111 ()
 }
 run_test 111 "mdd setup fail should not cause umount oops"
 
+# LU-793
+test_112a() {
+	remote_ost_nodsh && skip "remote OST with nodsh" && return 0
+
+	[[ $(lustre_version_code ost1) -ge $(version_code 2.5.92) ]] ||
+		{ skip "Need OST version at least 2.5.92"; return 0; }
+
+	do_facet_random_file client $TMP/$tfile 100K ||
+		error_noexit "Create random file $TMP/$tfile"
+
+	pause_bulk "cp $TMP/$tfile $DIR/$tfile" $TIMEOUT ||
+		error_noexit "Can't pause_bulk copy"
+
+	df $DIR
+	# expect cmp to succeed, client resent bulk
+	cmp $TMP/$tfile $DIR/$tfile ||
+		error_noexit "Wrong data has been written"
+	rm $DIR/$tfile ||
+		error_noexit "Can't remove file"
+	rm $TMP/$tfile
+}
+run_test 112a "bulk resend while orignal request is in progress"
+
+test_113() {
+	local BEFORE=$(date +%s)
+	local EVICT
+
+	# modify dir so that next revalidate would not obtain UPDATE lock
+	touch $DIR
+
+	# drop 1 reply with UPDATE lock,
+	# resend should not create 2nd lock on server
+	mcreate $DIR/$tfile || error "mcreate failed: $?"
+	drop_ldlm_reply_once "stat $DIR/$tfile" || error "stat failed: $?"
+
+	# 2 BL AST will be sent to client, both must find the same lock,
+	# race them to not get EINVAL for 2nd BL AST
+	#define OBD_FAIL_LDLM_PAUSE_CANCEL2      0x31f
+	$LCTL set_param fail_loc=0x8000031f
+
+	$LCTL set_param ldlm.namespaces.*.early_lock_cancel=0 > /dev/null
+	chmod 0777 $DIR/$tfile || error "chmod failed: $?"
+	$LCTL set_param ldlm.namespaces.*.early_lock_cancel=1 > /dev/null
+
+	# let the client reconnect
+	client_reconnect
+	EVICT=$($LCTL get_param mdc.$FSNAME-MDT*.state |
+	   awk -F"[ [,]" '/EVICTED]$/ { if (mx<$4) {mx=$4;} } END { print mx }')
+
+	[ -z "$EVICT" ] || [[ $EVICT -le $BEFORE ]] || error "eviction happened"
+}
+run_test 113 "ldlm enqueue dropped reply should not cause deadlocks"
+
 # parameters: fail_loc CMD RC
 test_120_reply() {
 	local PID
@@ -1891,36 +1944,6 @@ test_120() {
 	test_120_destroy 0x320 || error "unlock-cleanup race failed"
 }
 run_test 120 "flock race: completion vs. evict"
-
-test_113() {
-	local BEFORE=$(date +%s)
-	local EVICT
-
-	# modify dir so that next revalidate would not obtain UPDATE lock
-	touch $DIR
-
-	# drop 1 reply with UPDATE lock,
-	# resend should not create 2nd lock on server
-	mcreate $DIR/$tfile || error "mcreate failed: $?"
-	drop_ldlm_reply_once "stat $DIR/$tfile" || error "stat failed: $?"
-
-	# 2 BL AST will be sent to client, both must find the same lock,
-	# race them to not get EINVAL for 2nd BL AST
-	#define OBD_FAIL_LDLM_PAUSE_CANCEL2      0x31f
-	$LCTL set_param fail_loc=0x8000031f
-
-	$LCTL set_param ldlm.namespaces.*.early_lock_cancel=0 > /dev/null
-	chmod 0777 $DIR/$tfile || error "chmod failed: $?"
-	$LCTL set_param ldlm.namespaces.*.early_lock_cancel=1 > /dev/null
-
-	# let the client reconnect
-	client_reconnect
-	EVICT=$($LCTL get_param mdc.$FSNAME-MDT*.state |
-	   awk -F"[ [,]" '/EVICTED]$/ { if (mx<$4) {mx=$4;} } END { print mx }')
-
-	[ -z "$EVICT" ] || [[ $EVICT -le $BEFORE ]] || error "eviction happened"
-}
-run_test 113 "ldlm enqueue dropped reply should not cause deadlocks"
 
 complete $SECONDS
 check_and_cleanup_lustre
