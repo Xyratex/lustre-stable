@@ -769,16 +769,17 @@ int ll_fid2path(struct inode *inode, void *arg);
 
 /* llite/dcache.c */
 int ll_dops_init(struct dentry *de, int block, int init_sa);
+extern cfs_spinlock_t ll_lookup_lock;
 extern struct dentry_operations ll_d_ops;
 void ll_intent_drop_lock(struct lookup_intent *);
 void ll_intent_release(struct lookup_intent *);
-void ll_invalidate_aliases(struct inode *);
+int ll_drop_dentry(struct dentry *dentry);
+void ll_unhash_aliases(struct inode *);
 void ll_frob_intent(struct lookup_intent **itp, struct lookup_intent *deft);
 void ll_lookup_finish_locks(struct lookup_intent *it, struct dentry *dentry);
 int ll_dcompare(struct dentry *parent, struct qstr *d_name, struct qstr *name);
 int ll_revalidate_it_finish(struct ptlrpc_request *request,
                             struct lookup_intent *it, struct dentry *de);
-struct dentry *ll_splice_alias(struct inode *inode, struct dentry *de);
 
 /* llite/llite_lib.c */
 extern struct super_operations lustre_super_operations;
@@ -1443,42 +1444,6 @@ static inline void ll_set_lock_data(struct obd_export *exp, struct inode *inode,
 
         if (bits != NULL)
                 *bits = it->d.lustre.it_lock_bits;
-}
-
-static inline int d_lustre_invalid(struct dentry* dentry)
-{
-        return dentry->d_flags & DCACHE_LUSTRE_INVALID;
-}
-
-static inline void __d_lustre_invalidate(struct dentry *dentry)
-{
-        dentry->d_flags |= DCACHE_LUSTRE_INVALID;
-}
-
-/*
- * Mark dentry INVALID, if dentry refcount is zero (this is normally case for
- * ll_md_blocking_ast), unhash this dentry, and let dcache to reclaim it later;
- * else dput() of the last refcount will unhash this dentry and kill it.
- */
-static inline void d_lustre_invalidate(struct dentry *dentry)
-{
-        CDEBUG(D_DENTRY, "invalidate dentry %.*s (%p) parent %p inode %p "
-               "refc %d\n", dentry->d_name.len, dentry->d_name.name, dentry,
-               dentry->d_parent, dentry->d_inode,
-               atomic_read(&dentry->d_count));
-
-        spin_lock(&dentry->d_lock);
-        __d_lustre_invalidate(dentry);
-        if (atomic_read(&dentry->d_count) == 0)
-                __d_drop(dentry);
-        spin_unlock(&dentry->d_lock);
-}
-
-static inline void d_lustre_revalidate(struct dentry *dentry)
-{
-        spin_lock(&dentry->d_lock);
-        dentry->d_flags &= ~DCACHE_LUSTRE_INVALID;
-        spin_unlock(&dentry->d_lock);
 }
 
 #if LUSTRE_VERSION_CODE < OBD_OCD_VERSION(2,7,50,0)
