@@ -510,6 +510,22 @@ LB_LINUX_TRY_COMPILE([
 ])
 ])
 
+# 2.6.32 replaces 2 functions blk_queue_max_phys_segments and blk_queue_max_hw_segments by blk_queue_max_segments
+AC_DEFUN([LC_BLK_QUEUE_MAX_SEGMENTS],
+[AC_MSG_CHECKING([if blk_queue_max_segments is defined])
+LB_LINUX_TRY_COMPILE([
+	#include <linux/blkdev.h>
+],[
+	blk_queue_max_segments(NULL, 0);
+],[
+	AC_MSG_RESULT(yes)
+	AC_DEFINE(HAVE_BLK_QUEUE_MAX_SEGMENTS, 1,
+		  [blk_queue_max_segments is defined])
+],[
+	AC_MSG_RESULT(no)
+])
+])
+
 # 2.6.34 has renamed dquot options to dquot_*, check for dquot_suspend
 AC_DEFUN([LC_HAVE_DQUOT_SUSPEND],
 [AC_MSG_CHECKING([if dquot_suspend is defined])
@@ -522,24 +538,6 @@ LB_LINUX_TRY_COMPILE([
 	AC_MSG_RESULT([yes])
 ],[
 	AC_MSG_RESULT([no])
-])
-])
-
-# 2.6.32
-
-# 2.6.32 replaces 2 functions blk_queue_max_phys_segments and blk_queue_max_hw_segments by blk_queue_max_segments
-AC_DEFUN([LC_BLK_QUEUE_MAX_SEGMENTS],
-[AC_MSG_CHECKING([if blk_queue_max_segments is defined])
-LB_LINUX_TRY_COMPILE([
-        #include <linux/blkdev.h>
-],[
-        blk_queue_max_segments(NULL, 0);
-],[
-        AC_MSG_RESULT(yes)
-        AC_DEFINE(HAVE_BLK_QUEUE_MAX_SEGMENTS, 1,
-                  [blk_queue_max_segments is defined])
-],[
-        AC_MSG_RESULT(no)
 ])
 ])
 
@@ -903,8 +901,8 @@ AC_DEFUN([LC_PROG_LINUX],
          LC_QUOTA_ON_5ARGS
          LC_QUOTA_OFF_3ARGS
 
-         # 2.6.32
-         LC_BLK_QUEUE_MAX_SEGMENTS
+	 # 2.6.32
+	 LC_BLK_QUEUE_MAX_SEGMENTS
 
 	 # 2.6.34
 	 LC_HAVE_DQUOT_SUSPEND
