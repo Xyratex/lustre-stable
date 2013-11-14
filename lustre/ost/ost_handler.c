@@ -71,12 +71,20 @@ CFS_MODULE_PARM(oss_io_cpts, "s", charp, 0444,
 
 static struct cfs_cpt_table	*ost_io_cptable;
 
+#ifdef LPROCFS
+LPROC_SEQ_FOPS_RO_TYPE(ost, uuid);
+
+static struct lprocfs_seq_vars lprocfs_ost_obd_vars[] = {
+	{ "uuid",	&ost_uuid_fops	},
+	{ 0 }
+};
+#endif /* LPROCFS */
+
 /* Sigh - really, this is an OSS, the _server_, not the _target_ */
 static int ost_setup(struct obd_device *obd, struct lustre_cfg* lcfg)
 {
 	static struct ptlrpc_service_conf	svc_conf;
 	struct ost_obd *ost = &obd->u.ost;
-	struct lprocfs_static_vars lvars;
 	nodemask_t		*mask;
 	int rc;
 	ENTRY;
@@ -85,9 +93,10 @@ static int ost_setup(struct obd_device *obd, struct lustre_cfg* lcfg)
         if (rc)
                 RETURN(rc);
 
-        lprocfs_ost_init_vars(&lvars);
-        lprocfs_obd_setup(obd, lvars.obd_vars);
-
+#ifdef LPROCFS
+	obd->obd_vars = lprocfs_ost_obd_vars;
+	lprocfs_seq_obd_setup(obd);
+#endif
 	mutex_init(&ost->ost_health_mutex);
 
 	svc_conf = (typeof(svc_conf)) {
@@ -410,15 +419,13 @@ static struct obd_ops ost_obd_ops = {
 
 static int __init ost_init(void)
 {
-	struct lprocfs_static_vars lvars;
 	int rc;
 
 	ENTRY;
 
-        lprocfs_ost_init_vars(&lvars);
 	rc = class_register_type(&ost_obd_ops, NULL, NULL,
 #ifndef HAVE_ONLY_PROCFS_SEQ
-				lvars.module_vars,
+				NULL,
 #endif
 				LUSTRE_OSS_NAME, NULL);
 
