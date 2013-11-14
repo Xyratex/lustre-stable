@@ -678,7 +678,7 @@ static int vvp_io_kernel_fault(struct vvp_fault_io *cfio)
                 return -EFAULT;
         }
 
-        if (cfio->fault.ft_flags & (VM_FAULT_NOPAGE|VM_FAULT_OOM)) {
+        if (cfio->fault.ft_flags & VM_FAULT_OOM) {
                 CDEBUG(D_PAGE, "got addr %p - OOM\n", vmf->virtual_address);
                 return -ENOMEM;
         }

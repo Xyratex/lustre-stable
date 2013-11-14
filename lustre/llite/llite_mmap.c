@@ -330,8 +330,8 @@ out_err:
  * \param vmf - structure which describe type and address where hit fault
  *
  * \return allocated and filled _locked_ page for address
- * \retval VM_FAULT_SIGBUS on general error
- * \retval VM_FAULT_OOM not have memory for allocate new page
+ * \retval VM_FAULT_ERROR on general error
+ * \retval NOPAGE_OOM not have memory for allocate new page
  */
 static int ll_fault0(struct vm_area_struct *vma, struct vm_fault *vmf)
 {
@@ -347,7 +347,7 @@ static int ll_fault0(struct vm_area_struct *vma, struct vm_fault *vmf)
 
         io = ll_fault_io_init(vma, &env,  &nest, vmf->pgoff, &ra_flags);
         if (IS_ERR(io))
-                RETURN(VM_FAULT_SIGBUS);
+                RETURN(VM_FAULT_ERROR);
 
         result = io->ci_result;
         if (result < 0)
@@ -369,17 +369,8 @@ static int ll_fault0(struct vm_area_struct *vma, struct vm_fault *vmf)
         fault_ret = vio->u.fault.fault.ft_flags;
 
 out_err:
-        if (!(fault_ret & VM_FAULT_RETRY)) {
-                switch (result) {
-                        case 0:
-                                break;
-                        case -ENOMEM:
-                                fault_ret |= VM_FAULT_OOM;
-                                break;
-                        default:
-                                fault_ret |= VM_FAULT_SIGBUS;
-                }
-        }
+        if ((result != 0) && !(fault_ret & VM_FAULT_RETRY))
+                fault_ret |= VM_FAULT_ERROR;
 
         vma->vm_flags |= ra_flags;
 
