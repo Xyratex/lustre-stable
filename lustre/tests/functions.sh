@@ -209,10 +209,10 @@ lst_end_session () {
     export LST_SESSION=`$LST show_session 2>/dev/null | awk -F " " '{print $5}'`
     [ "$LST_SESSION" == "" ] && return
 
+    $LST stop b
     if $verbose; then
         $LST show_error c s
     fi
-    $LST stop b
     $LST end_session
 }
 
