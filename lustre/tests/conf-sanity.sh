@@ -2776,7 +2776,7 @@ test_58() { # bug 22658
 	# remove all files from the OBJECTS dir
 	do_facet mds "mount -t ldiskfs $MDSDEV $MNTDIR"
 	do_facet mds "find $MNTDIR/OBJECTS -type f -delete"
-	do_facet mds "umount $MNTDIR"
+	do_facet mds "umount -d $MNTDIR"
 	# restart MDS with missing llog files
 	start_mds
 	do_facet mds "lctl set_param fail_loc=0"
@@ -2958,7 +2958,7 @@ test_65() { # LU-2237
 	do_facet $SINGLEMDS \
 		"mount -t $(facet_fstype $SINGLEMDS) $opts $devname $brpt"
 	do_facet $SINGLEMDS "rm -f ${brpt}/last_rcvd"
-	do_facet $SINGLEMDS "umount $brpt"
+	do_facet $SINGLEMDS "umount -d $brpt"
 
 	# restart MDS, the "last_rcvd" file should be recreated.
 	start_mds || error "fail to restart the MDS"
