@@ -129,13 +129,7 @@ static void record_finish_io(struct filter_iobuf *iobuf, int rw, int rc)
 #define __REQ_WRITE BIO_RW
 #endif
 
-#ifdef HAVE_BIO_ENDIO_2ARG
-#define DIO_RETURN(a)
 static void dio_complete_routine(struct bio *bio, int error)
-#else
-#define DIO_RETURN(a)   return(a)
-static int dio_complete_routine(struct bio *bio, unsigned int done, int error)
-#endif
 {
         struct filter_iobuf *iobuf = bio->bi_private;
         struct bio_vec *bvl;
@@ -143,17 +137,6 @@ static int dio_complete_routine(struct bio *bio, unsigned int done, int error)
 
         /* CAVEAT EMPTOR: possibly in IRQ context
          * DO NOT record procfs stats here!!! */
-
-#ifdef HAVE_BIO_ENDIO_2ARG
-       /* The "bi_size" check was needed for kernels < 2.6.24 in order to
-        * handle the case where a SCSI request error caused this callback
-        * to be called before all of the biovecs had been processed.
-        * Without this check the server thread will hang.  In newer kernels
-        * the bio_end_io routine is never called for partial completions,
-        * so this check is no longer needed. */
-        if (bio->bi_size)                      /* Not complete */
-                DIO_RETURN(1);
-#endif
 
         if (unlikely(iobuf == NULL)) {
                 CERROR("***** bio->bi_private is NULL!  This should never "
@@ -170,7 +153,7 @@ static int dio_complete_routine(struct bio *bio, unsigned int done, int error)
                        bio->bi_rw, bio->bi_vcnt, bio->bi_idx, bio->bi_size,
                        bio->bi_end_io, cfs_atomic_read(&bio->bi_cnt),
                        bio->bi_private);
-                DIO_RETURN(0);
+		return;
         }
 
         /* the check is outside of the cycle for performance reason -bzzz */
@@ -201,7 +184,6 @@ static int dio_complete_routine(struct bio *bio, unsigned int done, int error)
          * deadlocking the OST.  The bios are now released as soon as complete
          * so the pool cannot be exhausted while IOs are competing. bug 10076 */
         bio_put(bio);
-        DIO_RETURN(0);
 }
 
 static int can_be_merged(struct bio *bio, sector_t sector)
