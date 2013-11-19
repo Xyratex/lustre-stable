@@ -215,6 +215,8 @@ esac
 
 AC_DEFINE(CONFIG_LDISKFS_FS_XATTR, 1,
 	[enable extended attributes for ldiskfs])
+AC_DEFINE(CONFIG_LDISKFS_FS_RW, 1,
+       [enable rw access for ldiskfs])
 AC_DEFINE(CONFIG_LDISKFS_FS_POSIX_ACL, 1,
 	[enable posix acls for ldiskfs])
 AC_DEFINE(CONFIG_LDISKFS_FS_SECURITY, 1,
