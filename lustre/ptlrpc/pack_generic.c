@@ -300,6 +300,7 @@ struct ptlrpc_reply_state *lustre_get_emerg_rs(struct ptlrpc_service *svc)
         cfs_spin_unlock(&svc->srv_rs_lock);
         LASSERT(rs);
         memset(rs, 0, svc->srv_max_reply_size);
+	rs->rs_size = svc->srv_max_reply_size;
         rs->rs_service = svc;
         rs->rs_prealloc = 1;
 out:
