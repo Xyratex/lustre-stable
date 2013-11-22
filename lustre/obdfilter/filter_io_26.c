@@ -672,14 +672,16 @@ int filter_commitrw_write(struct obd_export *exp, struct obdo *oa,
                         iattr.ia_size = this_size;
 
                 /* if one page is a write-back page from client cache and
-                 * not from direct_io, or it's written by root, then mark
-                 * the whole io request as ignore quota request, remote
-                 * client can not break through quota. */
+		 * not from direct_io, or it's written by root, or we are
+		 * replaying a write request, then mark the whole io request as
+		 * ignore quota request, remote client can not break through
+		 * quota. */
                 if (exp_connect_rmtclient(exp))
                         flags &= ~OBD_BRW_NOQUOTA;
                 if ((flags & OBD_BRW_NOQUOTA) ||
-                    (flags & (OBD_BRW_FROM_GRANT | OBD_BRW_SYNC)) ==
-                     OBD_BRW_FROM_GRANT)
+                    ((flags & (OBD_BRW_FROM_GRANT | OBD_BRW_SYNC)) ==
+                     OBD_BRW_FROM_GRANT) ||
+		    (exp->exp_in_recovery))
                         iobuf->dr_ignore_quota = 1;
 
                 if (!(lnb->flags & OBD_BRW_ASYNC)) {
