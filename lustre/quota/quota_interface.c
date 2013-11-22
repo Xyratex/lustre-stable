@@ -453,6 +453,15 @@ static int quota_chk_acq_common(struct obd_device *obd, struct obd_export *exp,
                  * abort the request immediately */
                 RETURN(-ENOTCONN);
 
+	/* Since we are doing req replay, we must have done the quota check 
+	 * already the first time we handled this req. Also, quota master is
+	 * not ready yet at this stage of recovery. So skip it. */
+	if (exp->exp_in_recovery) {
+		CDEBUG(D_QUOTA, "skip quota check during %s recovery\n",
+			obd->obd_name);
+		RETURN(0);
+	}
+
         CDEBUG(D_QUOTA, "check quota for %s\n", obd->obd_name);
         pending[USRQUOTA] = pending[GRPQUOTA] = 0;
         /* Unfortunately, if quota master is too busy to handle the
