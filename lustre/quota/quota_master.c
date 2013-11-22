@@ -571,6 +571,15 @@ int filter_quota_adjust(struct obd_device *obd, const unsigned int qcids[],
         if (rc && rc != -EDQUOT)
                 RETURN(0);
 
+	/* Since we are doing req replay, we must have done the quota adjust
+	 * already the first time we handled this req. Also, quota master is
+	 * not ready yet at this stage of recovery. So skip it. */
+	if (obd->obd_recovering) {
+		CDEBUG(D_QUOTA, "skip quota adjust during %s recovery\n",
+			obd->obd_name);
+		RETURN(0);
+	}
+
         switch (opc) {
         case FSFILT_OP_SETATTR:
                 /* acquire/release block quota on original & current owner */
