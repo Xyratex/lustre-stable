@@ -637,17 +637,23 @@ facet_fstype() {
     echo -n $FSTYPE
 }
 
-mdsdevlabel() {
-    local num=$1
-    local device=`mdsdevname $num`
-    local label=`do_facet mds$num "e2label ${device}" | grep -v "CMD: "`
-    echo -n $label
-}
 
-ostdevlabel() {
-    local num=$1
-    local device=`ostdevname $num`
-    local label=`do_facet ost$num "e2label ${device}" | grep -v "CMD: "`
+facetlabel() {
+    local name=$1
+    local device=$2
+    local label
+    local i
+
+    # 2*timeout is enough to have reconnect until target is registered
+    for (( i = 0; $i <= $(($TIMEOUT * 2)); i++ )); do
+	label=$(do_facet $name "$E2LABEL ${device}")
+        # ffff means that index is not assigned
+	if [[ "$label" != *ffff ]]; then
+	    break;
+	fi
+	label=""
+	sleep 1
+    done
     echo -n $label
 }
 
@@ -758,7 +764,7 @@ mount_facet() {
     else
         set_default_debug_facet $facet
 
-        label=$(do_facet ${facet} "$E2LABEL ${!dev}")
+        label=$(facetlabel ${facet} ${!dev})
         [ -z "$label" ] && echo no label for ${!dev} && exit 1
         eval export ${facet}_svc=${label}
         echo Started ${label}
@@ -2594,7 +2600,7 @@ init_facet_vars () {
     eval export ${facet}_opt=\"$@\"
 
     local dev=${facet}_dev
-    local label=$(do_facet ${facet} "$E2LABEL ${!dev}")
+    local label=$(facetlabel ${facet} ${!dev})
     [ -z "$label" ] && echo no label for ${!dev} && exit 1
 
     eval export ${facet}_svc=${label}
