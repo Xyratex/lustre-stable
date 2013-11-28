@@ -117,6 +117,12 @@ static inline void lu_local_obj_fid(struct lu_fid *fid, __u32 oid)
         fid->f_ver = 0;
 }
 
+static inline int fid_is_root(const struct lu_fid *fid)
+{
+       return unlikely(fid_seq(fid) == FID_SEQ_LOCAL_FILE &&
+                       fid_oid(fid) == MDD_ROOT_INDEX_OID);
+}
+
 enum lu_mgr_type {
         LUSTRE_SEQ_SERVER,
         LUSTRE_SEQ_CONTROLLER
