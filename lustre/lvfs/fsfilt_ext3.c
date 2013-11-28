@@ -1552,6 +1552,7 @@ static int fsfilt_ext3_quotactl(struct super_block *sb,
         if (!sb->s_qcop)
                 RETURN(-ENOSYS);
 
+	LASSERT(journal_current_handle() ==  NULL);
         OBD_ALLOC_PTR(info);
         if (!info)
                 RETURN(-ENOMEM);
