@@ -1569,6 +1569,33 @@ int mdd_attr_set(const struct lu_env *env, struct md_object *obj,
             ma->ma_attr.la_valid == LA_ATIME && la_copy->la_valid == 0)
                 RETURN(0);
 
+#ifdef HAVE_QUOTA_SUPPORT
+	if (mds->mds_quota && la_copy->la_valid & (LA_UID | LA_GID)) {
+		struct obd_export *exp = md_quota(env)->mq_exp;
+		struct lu_attr *la_tmp = &mdd_env_info(env)->mti_la;
+
+		rc = mdd_la_get(env, mdd_obj, la_tmp, BYPASS_CAPA);
+		if (!rc) {
+			quota_opc = FSFILT_OP_SETATTR;
+			mdd_quota_wrapper(la_copy, qnids);
+			mdd_quota_wrapper(la_tmp, qoids);
+			/* get file quota for new owner */
+			lquota_chkquota(mds_quota_interface_ref, obd, exp,
+					qnids, inode_pending, 1, NULL, 0,
+					NULL, 0);
+			block_count = (la_tmp->la_blocks + 7) >> 3;
+			if (block_count) {
+				void *data = NULL;
+				mdd_data_get(env, mdd_obj, &data);
+				/* get block quota for new owner */
+				lquota_chkquota(mds_quota_interface_ref, obd,
+						exp, qnids, block_pending,
+						block_count, NULL,
+						LQUOTA_FLAGS_BLK, data, 1);
+			}
+		}
+	}
+#endif
         /*TODO: add lock here*/
         /* start a log jounal handle if needed */
         if (S_ISREG(mdd_object_type(mdd_obj)) &&
@@ -1604,34 +1631,6 @@ int mdd_attr_set(const struct lu_env *env, struct md_object *obj,
         if (ma->ma_attr.la_valid & (LA_MTIME | LA_CTIME))
                 CDEBUG(D_INODE, "setting mtime "LPU64", ctime "LPU64"\n",
                        ma->ma_attr.la_mtime, ma->ma_attr.la_ctime);
-
-#ifdef HAVE_QUOTA_SUPPORT
-        if (mds->mds_quota && la_copy->la_valid & (LA_UID | LA_GID)) {
-                struct obd_export *exp = md_quota(env)->mq_exp;
-                struct lu_attr *la_tmp = &mdd_env_info(env)->mti_la;
-
-                rc = mdd_la_get(env, mdd_obj, la_tmp, BYPASS_CAPA);
-                if (!rc) {
-                        quota_opc = FSFILT_OP_SETATTR;
-                        mdd_quota_wrapper(la_copy, qnids);
-                        mdd_quota_wrapper(la_tmp, qoids);
-                        /* get file quota for new owner */
-                        lquota_chkquota(mds_quota_interface_ref, obd, exp,
-                                        qnids, inode_pending, 1, NULL, 0,
-                                        NULL, 0);
-                        block_count = (la_tmp->la_blocks + 7) >> 3;
-                        if (block_count) {
-                                void *data = NULL;
-                                mdd_data_get(env, mdd_obj, &data);
-                                /* get block quota for new owner */
-                                lquota_chkquota(mds_quota_interface_ref, obd,
-                                                exp, qnids, block_pending,
-                                                block_count, NULL,
-                                                LQUOTA_FLAGS_BLK, data, 1);
-                        }
-                }
-        }
-#endif
 
         if (la_copy->la_valid & LA_FLAGS) {
                 rc = mdd_attr_set_internal_locked(env, mdd_obj, la_copy,
