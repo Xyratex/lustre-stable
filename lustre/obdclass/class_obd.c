@@ -485,6 +485,9 @@ int obd_init_checks(void)
 #define obd_init_checks() do {} while(0)
 #endif
 
+extern cfs_list_t	obd_stale_exports;
+extern cfs_spinlock_t	obd_stale_export_lock;
+extern cfs_atomic_t	obd_stale_export_num;
 extern cfs_spinlock_t obd_types_lock;
 extern int class_procfs_init(void);
 extern int class_procfs_clean(void);
@@ -505,6 +508,9 @@ int init_obdclass(void)
 
         LCONSOLE_INFO("Lustre: Build Version: "BUILD_VERSION"\n");
 
+	cfs_spin_lock_init(&obd_stale_export_lock);
+	CFS_INIT_LIST_HEAD(&obd_stale_exports);
+	cfs_atomic_set(&obd_stale_export_num, 0);
         cfs_spin_lock_init(&obd_types_lock);
         obd_zombie_impexp_init();
 #ifdef LPROCFS
@@ -604,6 +610,7 @@ static void cleanup_obdclass(void)
         class_handle_cleanup();
         class_exit_uuidlist();
         obd_zombie_impexp_stop();
+	LASSERT(cfs_list_empty(&obd_stale_exports));
 
         memory_leaked = obd_memory_sum();
         pages_leaked = obd_pages_sum();

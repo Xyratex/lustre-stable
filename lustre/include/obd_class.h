@@ -113,6 +113,12 @@ int kuc_ispayload(void *p);
 void *kuc_alloc(int payload_len, int transport, int type);
 void kuc_free(void *p, int payload_len);
 
+#ifdef __KERNEL__
+struct obd_export *obd_stale_export_get(void);
+void obd_stale_export_put(struct obd_export *exp);
+void obd_stale_export_adjust(struct obd_export *exp);
+#endif
+
 /* obd_config.c */
 int class_process_config(struct lustre_cfg *lcfg);
 int class_process_proc_param(char *prefix, struct lprocfs_vars *lvars,
