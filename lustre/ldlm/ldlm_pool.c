@@ -1295,6 +1295,9 @@ void ldlm_pools_recalc(ldlm_side_t client)
                         ldlm_namespace_put(ns);
                 }
         }
+
+	/* Wake up the blocking threads from time to time. */
+	ldlm_bl_thread_wakeup();
 }
 EXPORT_SYMBOL(ldlm_pools_recalc);
 

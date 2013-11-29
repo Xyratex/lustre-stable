@@ -212,6 +212,7 @@ void ldlm_lock_put(struct ldlm_lock *lock)
 
                 res = lock->l_resource;
                 LASSERT(lock->l_destroyed);
+                LASSERT(cfs_list_empty(&lock->l_exp_list));
                 LASSERT(cfs_list_empty(&lock->l_res_link));
                 LASSERT(cfs_list_empty(&lock->l_pending_chain));
 
@@ -1723,43 +1724,83 @@ int ldlm_lock_set_data(struct lustre_handle *lockh, void *data)
 }
 EXPORT_SYMBOL(ldlm_lock_set_data);
 
+#ifdef __KERNEL__
 struct export_cl_data {
 	struct obd_export	*ecl_exp;
 	int			ecl_loop;
 };
 
-int ldlm_cancel_locks_for_export_cb(cfs_hash_t *hs, cfs_hash_bd_t *bd,
-                                    cfs_hlist_node_t *hnode, void *data)
+static void ldlm_cancel_lock_for_export(struct obd_export *exp,
+					struct ldlm_lock *lock,
+					struct export_cl_data *ecl)
+{
+	struct ldlm_resource *res;
+
+	res = ldlm_resource_getref(lock->l_resource);
+
+	ldlm_res_lvbo_update(res, NULL, 1);
+	ldlm_lock_cancel(lock);
+	if (!exp->exp_obd->obd_stopping)
+		ldlm_reprocess_all(res);
+	ldlm_resource_putref(res);
+
+	ecl->ecl_loop++;
+	if ((ecl->ecl_loop & -ecl->ecl_loop) == ecl->ecl_loop) {
+		CDEBUG(D_INFO, "Export %p, %d locks cancelled.\n",
+		       exp, ecl->ecl_loop);
+	}
+}
+
+static int ldlm_cancel_locks_for_export_cb(cfs_hash_t *hs, cfs_hash_bd_t *bd,
+                                           cfs_hlist_node_t *hnode, void *data)
 
 {
 	struct export_cl_data	*ecl = (struct export_cl_data *)data;
 	struct obd_export	*exp  = ecl->ecl_exp;
-        struct ldlm_lock     *lock = cfs_hash_object(hs, hnode);
-        struct ldlm_resource *res;
+	struct ldlm_lock        *lock = cfs_hash_object(hs, hnode);
 
-        res = ldlm_resource_getref(lock->l_resource);
-        LDLM_LOCK_GET(lock);
-
-        LDLM_DEBUG(lock, "export %p", exp);
-        ldlm_res_lvbo_update(res, NULL, 1);
-        ldlm_lock_cancel(lock);
-        ldlm_reprocess_all(res);
-        ldlm_resource_putref(res);
-        LDLM_LOCK_RELEASE(lock);
-
-	ecl->ecl_loop++;
-	if ((ecl->ecl_loop & -ecl->ecl_loop) == ecl->ecl_loop) {
-		CDEBUG(D_INFO,
-		       "Cancel lock %p for export %p (loop %d), still have "
-		       "%d locks left on hash table.\n",
-		       lock, exp, ecl->ecl_loop,
-		       cfs_atomic_read(&hs->hs_count));
-	}
+	LDLM_LOCK_GET(lock);
+	ldlm_cancel_lock_for_export(exp, lock, ecl);
+	LDLM_LOCK_RELEASE(lock);
 
 	return 0;
 }
 
-void ldlm_cancel_locks_for_export(struct obd_export *exp)
+int ldlm_export_cancel_blocked_locks(struct obd_export *exp) {
+	struct export_cl_data	ecl = {
+		.ecl_exp	= exp,
+		.ecl_loop	= 0,
+	};
+
+	while (!cfs_list_empty(&exp->exp_bl_list)) {
+		struct ldlm_lock *lock;
+
+		cfs_spin_lock_bh(&exp->exp_bl_list_lock);
+		if (!cfs_list_empty(&exp->exp_bl_list)) {
+			lock = cfs_list_entry(exp->exp_bl_list.next,
+					      struct ldlm_lock, l_exp_list);
+			LDLM_LOCK_GET(lock);
+			cfs_list_del_init(&exp->exp_bl_list);
+		} else {
+			lock = NULL;
+		}
+		cfs_spin_unlock_bh(&exp->exp_bl_list_lock);
+
+		if (lock == NULL)
+			break;
+
+		ldlm_cancel_lock_for_export(exp, lock, &ecl);
+		LDLM_LOCK_RELEASE(lock);
+	}
+
+	CDEBUG(D_DLMTRACE, "Export %p, canceled %d locks, "
+	       "left on hash table %d.\n", exp, ecl.ecl_loop,
+	       cfs_atomic_read(&exp->exp_lock_hash->hs_count));
+
+	return ecl.ecl_loop;
+}
+
+int ldlm_export_cancel_locks(struct obd_export *exp)
 {
 	struct export_cl_data	ecl = {
 		.ecl_exp	= exp,
@@ -1768,7 +1809,14 @@ void ldlm_cancel_locks_for_export(struct obd_export *exp)
 
 	cfs_hash_for_each_empty(exp->exp_lock_hash,
 				ldlm_cancel_locks_for_export_cb, &ecl);
+
+	CDEBUG(D_DLMTRACE, "Export %p, canceled %d locks, "
+	       "left on hash table %d.\n", exp, ecl.ecl_loop,
+	       cfs_atomic_read(&exp->exp_lock_hash->hs_count));
+
+	return ecl.ecl_loop;
 }
+#endif
 
 /**
  * Downgrade an exclusive lock.
