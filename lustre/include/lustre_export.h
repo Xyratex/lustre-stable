@@ -191,6 +191,8 @@ struct obd_export {
         cfs_list_t                exp_obd_chain;
         cfs_hlist_node_t          exp_uuid_hash; /** uuid-export hash*/
         cfs_hlist_node_t          exp_nid_hash; /** nid-export hash */
+	/* Unlinked export list */
+	cfs_list_t                exp_stale_list;
         /**
          * All exports eligible for ping evictor are linked into a list
          * through this field in "most time since last request on this export"
