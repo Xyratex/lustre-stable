@@ -1857,6 +1857,10 @@ static void ost_prolong_locks(struct ost_prolong_data *data)
                 LASSERT(lock->l_flags & LDLM_FL_AST_SENT);
                 LASSERT(lock->l_resource->lr_type == LDLM_EXTENT);
 
+		/* ignore waiting locks, no more granted locks in the list */
+		if (lock->l_granted_mode != lock->l_req_mode)
+			break;
+
                 if (!ldlm_res_eq(&data->opd_resid, &lock->l_resource->lr_name))
                         continue;
 

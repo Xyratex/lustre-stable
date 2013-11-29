@@ -431,6 +431,28 @@ static int __ldlm_add_waiting_lock(struct ldlm_lock *lock, int seconds)
         return 1;
 }
 
+static void ldlm_add_blocked_lock(struct ldlm_lock *lock)
+{
+	cfs_spin_lock_bh(&lock->l_export->exp_bl_list_lock);
+	if (cfs_list_empty(&lock->l_exp_list)) {
+		if (lock->l_granted_mode != lock->l_req_mode)
+			cfs_list_add_tail(&lock->l_exp_list,
+					  &lock->l_export->exp_bl_list);
+		else
+			cfs_list_add(&lock->l_exp_list,
+				     &lock->l_export->exp_bl_list);
+	}
+	cfs_spin_unlock_bh(&lock->l_export->exp_bl_list_lock);
+
+	/* A blocked lock is added. Adjust the position in
+	 * the stale list if the export is in the list.
+	 * If export is stale and not in the list - it is being
+	 * processed and will be placed on the right position
+	 * on obd_stale_expot_put(). */
+	if (!cfs_list_empty(&lock->l_export->exp_stale_list))
+		obd_stale_export_adjust(lock->l_export);
+}
+
 static int ldlm_add_waiting_lock(struct ldlm_lock *lock)
 {
         int ret;
@@ -458,13 +480,8 @@ static int ldlm_add_waiting_lock(struct ldlm_lock *lock)
         }
         cfs_spin_unlock_bh(&waiting_locks_spinlock);
 
-        if (ret) {
-                cfs_spin_lock_bh(&lock->l_export->exp_bl_list_lock);
-                if (cfs_list_empty(&lock->l_exp_list))
-                        cfs_list_add(&lock->l_exp_list,
-                                     &lock->l_export->exp_bl_list);
-                cfs_spin_unlock_bh(&lock->l_export->exp_bl_list_lock);
-        }
+        if (ret)
+		ldlm_add_blocked_lock(lock);
 
         LDLM_DEBUG(lock, "%sadding to wait list(timeout: %d, AT: %s)",
                    ret == 0 ? "not re-" : "", timeout,
@@ -569,6 +586,8 @@ int ldlm_refresh_waiting_lock(struct ldlm_lock *lock, int timeout)
 }
 EXPORT_SYMBOL(ldlm_refresh_waiting_lock);
 #else /* !__KERNEL__ */
+
+static void ldlm_add_blocked_lock(struct ldlm_lock *lock) {}
 
 static int ldlm_add_waiting_lock(struct ldlm_lock *lock)
 {
@@ -790,19 +809,20 @@ int ldlm_server_blocking_ast(struct ldlm_lock *lock,
         req->rq_no_resend = 1;
 
         lock_res(lock->l_resource);
-        if (lock->l_granted_mode != lock->l_req_mode) {
-                /* this blocking AST will be communicated as part of the
-                 * completion AST instead */
-                unlock_res(lock->l_resource);
-                ptlrpc_req_finished(req);
-                LDLM_DEBUG(lock, "lock not granted, not sending blocking AST");
-                RETURN(0);
-        }
-
         if (LDLM_IS(lock, DESTROYED)) {
                 /* What's the point? */
                 unlock_res(lock->l_resource);
                 ptlrpc_req_finished(req);
+                RETURN(0);
+        }
+
+        if (lock->l_granted_mode != lock->l_req_mode) {
+                /* this blocking AST will be communicated as part of the
+                 * completion AST instead */
+		ldlm_add_blocked_lock(lock);
+                unlock_res(lock->l_resource);
+                ptlrpc_req_finished(req);
+                LDLM_DEBUG(lock, "lock not granted, not sending blocking AST");
                 RETURN(0);
         }
 
@@ -1803,6 +1823,14 @@ int ldlm_bl_to_thread_list(struct ldlm_namespace *ns, struct ldlm_lock_desc *ld,
 #endif
 }
 
+int ldlm_bl_thread_wakeup(void)
+{
+#ifdef __KERNEL__
+	cfs_waitq_signal(&ldlm_state->ldlm_bl_pool->blp_waitq);
+#endif
+	return 0;
+}
+
 /* Setinfo coming from Server (eg MDT) to Client (eg MDC)! */
 static int ldlm_handle_setinfo(struct ptlrpc_request *req)
 {
@@ -2283,12 +2311,27 @@ void ldlm_revoke_export_locks(struct obd_export *exp)
 EXPORT_SYMBOL(ldlm_revoke_export_locks);
 
 #ifdef __KERNEL__
-static struct ldlm_bl_work_item *ldlm_bl_get_work(struct ldlm_bl_pool *blp)
+static int ldlm_bl_get_work(struct ldlm_bl_pool *blp,
+			    struct ldlm_bl_work_item **p_blwi,
+			    struct obd_export **p_exp)
 {
-        struct ldlm_bl_work_item *blwi = NULL;
-        static unsigned int num_bl = 0;
+	struct ldlm_bl_work_item *blwi = NULL;
+	static unsigned int num_bl = 0;
+	static unsigned int num_stale = 0;
+	int num_th = cfs_atomic_read(&blp->blp_num_threads);
 
-        cfs_spin_lock(&blp->blp_lock);
+	*p_exp = obd_stale_export_get();
+
+	cfs_spin_lock(&blp->blp_lock);
+	if (*p_exp != NULL) {
+		if (num_th == 1 || ++num_stale < num_th) {
+			cfs_spin_unlock(&blp->blp_lock);
+			return 1;
+		} else {
+			num_stale = 0;
+		}
+	}
+
         /* process a request from the blp_list at least every blp_num_threads */
         if (!cfs_list_empty(&blp->blp_list) &&
             (cfs_list_empty(&blp->blp_prio_list) || num_bl == 0))
@@ -2301,13 +2344,19 @@ static struct ldlm_bl_work_item *ldlm_bl_get_work(struct ldlm_bl_pool *blp)
                                               blwi_entry);
 
         if (blwi) {
-                if (++num_bl >= cfs_atomic_read(&blp->blp_num_threads))
+                if (++num_bl >= num_th)
                         num_bl = 0;
                 cfs_list_del(&blwi->blwi_entry);
         }
         cfs_spin_unlock(&blp->blp_lock);
+	*p_blwi = blwi;
 
-        return blwi;
+	if (*p_exp != NULL && *p_blwi != NULL) {
+		obd_stale_export_put(*p_exp);
+		*p_exp = NULL;
+	}
+
+	return (*p_blwi != NULL || *p_exp != NULL) ? 1 : 0;
 }
 
 /* This only contains temporary data until the thread starts */
@@ -2337,6 +2386,83 @@ static int ldlm_bl_thread_start(struct ldlm_bl_pool *blp)
         return 0;
 }
 
+/* Not fatal if racy and have a few too many threads */
+static int ldlm_bl_thread_need_create(struct ldlm_bl_pool *blp,
+				      struct ldlm_bl_work_item *blwi)
+{
+	int busy = cfs_atomic_read(&blp->blp_busy_threads);
+
+	if (busy >= blp->blp_max_threads)
+		return 0;
+
+	if (busy < cfs_atomic_read(&blp->blp_num_threads))
+		return 0;
+
+	if (blwi != NULL && (blwi->blwi_ns == NULL ||
+			     blwi->blwi_mem_pressure))
+		return 0;
+
+	return 1;
+}
+
+static int ldlm_bl_thread_blwi(struct ldlm_bl_pool *blp,
+			       struct ldlm_bl_work_item *blwi)
+{
+	ENTRY;
+
+	if (blwi && blwi->blwi_ns == NULL)
+		/* added by ldlm_cleanup() */
+		RETURN(LDLM_ITER_STOP);
+
+	if (blwi->blwi_mem_pressure)
+		cfs_memory_pressure_set();
+
+	if (blwi->blwi_count) {
+		int count;
+		/* The special case when we cancel locks in lru
+		 * asynchronously, we pass the list of locks here.
+		 * Thus locks are marked LDLM_FL_CANCELING, but NOT
+		 * canceled locally yet. */
+		count = ldlm_cli_cancel_list_local(&blwi->blwi_head,
+						   blwi->blwi_count,
+						   LCF_BL_AST);
+		ldlm_cli_cancel_list(&blwi->blwi_head, count, NULL, 0);
+	} else {
+		ldlm_handle_bl_callback(blwi->blwi_ns, &blwi->blwi_ld,
+					blwi->blwi_lock);
+	}
+	if (blwi->blwi_mem_pressure)
+		cfs_memory_pressure_clr();
+
+	if (blwi->blwi_mode == LDLM_ASYNC)
+		OBD_FREE(blwi, sizeof(*blwi));
+	else
+		cfs_complete(&blwi->blwi_comp);
+
+	RETURN(0);
+}
+
+/**
+ * Cancel stale locks on export. Cancel blocked locks first.
+ * If the given export has blocked locks, the next in the list may have
+ * them too, thus cancel not blocked locks only if the current export has
+ * no blocked locks.
+ **/
+static int ldlm_bl_thread_exports(struct ldlm_bl_pool *blp,
+				  struct obd_export *exp)
+{
+	int num;
+	ENTRY;
+
+	num = ldlm_export_cancel_blocked_locks(exp);
+	if (num == 0)
+		ldlm_export_cancel_locks(exp);
+
+	obd_stale_export_put(exp);
+
+	RETURN(0);
+}
+
 static int ldlm_bl_thread_main(void *arg)
 {
         struct ldlm_bl_pool *blp;
@@ -2353,65 +2479,41 @@ static int ldlm_bl_thread_main(void *arg)
 
                 snprintf(bltd->bltd_name, sizeof(bltd->bltd_name) - 1,
                         "ldlm_bl_%02d", bltd->bltd_num);
-                cfs_daemonize(bltd->bltd_name);
+		cfs_daemonize_ctxt(bltd->bltd_name);
 
                 cfs_complete(&bltd->bltd_comp);
                 /* cannot use bltd after this, it is only on caller's stack */
         }
 
-        while (1) {
-                struct l_wait_info lwi = { 0 };
-                struct ldlm_bl_work_item *blwi = NULL;
-                int busy;
+	while (1) {
+		struct l_wait_info lwi = { 0 };
+		struct ldlm_bl_work_item *blwi = NULL;
+		struct obd_export *exp = NULL;
+		int rc;
 
-                blwi = ldlm_bl_get_work(blp);
+		rc = ldlm_bl_get_work(blp, &blwi, &exp);
 
-                if (blwi == NULL) {
-                        cfs_atomic_dec(&blp->blp_busy_threads);
-                        l_wait_event_exclusive(blp->blp_waitq,
-                                         (blwi = ldlm_bl_get_work(blp)) != NULL,
-                                         &lwi);
-                        busy = cfs_atomic_inc_return(&blp->blp_busy_threads);
-                } else {
-                        busy = cfs_atomic_read(&blp->blp_busy_threads);
-                }
+		if (rc == 0) {
+			cfs_atomic_dec(&blp->blp_busy_threads);
+			l_wait_event_exclusive(blp->blp_waitq,
+					       ldlm_bl_get_work(blp, &blwi,
+								&exp),
+					       &lwi);
+			cfs_atomic_inc(&blp->blp_busy_threads);
+		}
 
-                if (blwi->blwi_ns == NULL)
-                        /* added by ldlm_cleanup() */
-                        break;
+		if (ldlm_bl_thread_need_create(blp, blwi))
+			/* discard the return value, we tried */
+			ldlm_bl_thread_start(blp);
 
-                /* Not fatal if racy and have a few too many threads */
-                if (unlikely(busy < blp->blp_max_threads &&
-                             busy >= cfs_atomic_read(&blp->blp_num_threads) &&
-                             !blwi->blwi_mem_pressure))
-                        /* discard the return value, we tried */
-                        ldlm_bl_thread_start(blp);
+		if (exp)
+			rc = ldlm_bl_thread_exports(blp, exp);
+		else if (blwi)
+			rc = ldlm_bl_thread_blwi(blp, blwi);
 
-                if (blwi->blwi_mem_pressure)
-                        cfs_memory_pressure_set();
-
-                if (blwi->blwi_count) {
-                        int count;
-                        /* The special case when we cancel locks in lru
-                         * asynchronously, we pass the list of locks here.
-                         * Thus locks are marked LDLM_FL_CANCELING, but NOT
-                         * canceled locally yet. */
-                        count = ldlm_cli_cancel_list_local(&blwi->blwi_head,
-                                                           blwi->blwi_count,
-                                                           LCF_BL_AST);
-                        ldlm_cli_cancel_list(&blwi->blwi_head, count, NULL, 0);
-                } else {
-                        ldlm_handle_bl_callback(blwi->blwi_ns, &blwi->blwi_ld,
-                                                blwi->blwi_lock);
-                }
-                if (blwi->blwi_mem_pressure)
-                        cfs_memory_pressure_clr();
-
-                if (blwi->blwi_mode == LDLM_ASYNC)
-                        OBD_FREE(blwi, sizeof(*blwi));
-                else
-                        cfs_complete(&blwi->blwi_comp);
-        }
+		if (rc == LDLM_ITER_STOP)
+			break;
+	}
 
         cfs_atomic_dec(&blp->blp_busy_threads);
         cfs_atomic_dec(&blp->blp_num_threads);
@@ -2661,6 +2763,7 @@ static int ldlm_setup(void)
         cfs_waitq_init(&blp->blp_waitq);
         cfs_atomic_set(&blp->blp_num_threads, 0);
         cfs_atomic_set(&blp->blp_busy_threads, 0);
+
         blp->blp_min_threads = ldlm_min_threads;
         blp->blp_max_threads = ldlm_max_threads;
 
