@@ -67,6 +67,10 @@ static void obd_zombie_import_add(struct obd_import *imp);
 static void print_export_data(struct obd_export *exp,
                               const char *status, int locks);
 
+cfs_list_t	obd_stale_exports;
+cfs_spinlock_t	obd_stale_export_lock;
+cfs_atomic_t	obd_stale_export_num;
+
 int (*ptlrpc_put_connection_superhack)(struct ptlrpc_connection *c);
 
 /*
@@ -805,6 +809,7 @@ void class_export_put(struct obd_export *exp)
 
         if (cfs_atomic_dec_and_test(&exp->exp_refcount)) {
                 LASSERT(!cfs_list_empty(&exp->exp_obd_chain));
+		LASSERT(cfs_list_empty(&exp->exp_stale_list));
                 CDEBUG(D_IOCTL, "final put %p/%s\n",
                        exp, exp->exp_client_uuid.uuid);
 
@@ -860,6 +865,7 @@ struct obd_export *class_new_export(struct obd_device *obd,
         CFS_INIT_HLIST_NODE(&export->exp_nid_hash);
         cfs_spin_lock_init(&export->exp_bl_list_lock);
         CFS_INIT_LIST_HEAD(&export->exp_bl_list);
+	CFS_INIT_LIST_HEAD(&export->exp_stale_list);
 	cfs_init_rwsem(&export->exp_mutex);
 
         export->exp_sp_peer = LUSTRE_SP_ANY;
@@ -929,7 +935,14 @@ void class_unlink_export(struct obd_export *exp)
         cfs_list_del_init(&exp->exp_obd_chain_timed);
         exp->exp_obd->obd_num_exports--;
         cfs_spin_unlock(&exp->exp_obd->obd_dev_lock);
+	cfs_atomic_inc(&obd_stale_export_num);
+
+#ifdef __KERNEL__
+	/* A reference is kept by obd_stale_exports list */
+	obd_stale_export_put(exp);
+#else
         class_export_put(exp);
+#endif
 }
 EXPORT_SYMBOL(class_unlink_export);
 
@@ -1580,6 +1593,7 @@ static int obd_zombie_impexp_check(void *arg)
  * Add export to the obd_zombe thread and notify it.
  */
 static void obd_zombie_export_add(struct obd_export *exp) {
+	cfs_atomic_dec(&obd_stale_export_num);
         cfs_spin_lock(&exp->exp_obd->obd_dev_lock);
         LASSERT(!cfs_list_empty(&exp->exp_obd_chain));
         cfs_list_del_init(&exp->exp_obd_chain);
@@ -1649,6 +1663,76 @@ void obd_zombie_barrier(void)
 EXPORT_SYMBOL(obd_zombie_barrier);
 
 #ifdef __KERNEL__
+
+struct obd_export *obd_stale_export_get(void)
+{
+	struct obd_export *exp = NULL;
+	ENTRY;
+
+	cfs_spin_lock(&obd_stale_export_lock);
+	if (!cfs_list_empty(&obd_stale_exports)) {
+		exp = cfs_list_entry(obd_stale_exports.next,
+				     struct obd_export, exp_stale_list);
+		cfs_list_del_init(&exp->exp_stale_list);
+	}
+	cfs_spin_unlock(&obd_stale_export_lock);
+
+	if (exp) {
+		CDEBUG(D_DLMTRACE, "Get export %p: total %d\n", exp,
+		       cfs_atomic_read(&obd_stale_export_num));
+	}
+	RETURN(exp);
+}
+EXPORT_SYMBOL(obd_stale_export_get);
+
+void obd_stale_export_put(struct obd_export *exp)
+{
+	ENTRY;
+
+	LASSERT(cfs_list_empty(&exp->exp_stale_list));
+	if (exp->exp_lock_hash &&
+	    cfs_atomic_read(&exp->exp_lock_hash->hs_count)) {
+		CDEBUG(D_DLMTRACE, "Put export %p: total %d\n", exp,
+		       cfs_atomic_read(&obd_stale_export_num));
+
+		cfs_spin_lock_bh(&exp->exp_bl_list_lock);
+		cfs_spin_lock(&obd_stale_export_lock);
+		/* Add to the tail if there is no blocked locks,
+		 * to the head otherwise. */
+		if (cfs_list_empty(&exp->exp_bl_list))
+			cfs_list_add_tail(&exp->exp_stale_list,
+					  &obd_stale_exports);
+		else
+			cfs_list_add(&exp->exp_stale_list,
+				     &obd_stale_exports);
+
+		cfs_spin_unlock(&obd_stale_export_lock);
+		cfs_spin_unlock_bh(&exp->exp_bl_list_lock);
+	} else {
+		class_export_put(exp);
+	}
+	EXIT;
+}
+EXPORT_SYMBOL(obd_stale_export_put);
+
+/**
+ * Adjust the position of the export in the stale list,
+ * i.e. move to the head of the list if is needed.
+ **/
+void obd_stale_export_adjust(struct obd_export *exp)
+{
+	LASSERT(exp != NULL);
+	cfs_spin_lock_bh(&exp->exp_bl_list_lock);
+	cfs_spin_lock(&obd_stale_export_lock);
+
+	if (!cfs_list_empty(&exp->exp_stale_list) &&
+	    !cfs_list_empty(&exp->exp_bl_list))
+		cfs_list_move(&exp->exp_stale_list, &obd_stale_exports);
+
+	cfs_spin_unlock(&obd_stale_export_lock);
+	cfs_spin_unlock_bh(&exp->exp_bl_list_lock);
+}
+EXPORT_SYMBOL(obd_stale_export_adjust);
 
 /**
  * destroy zombie export/import thread.
