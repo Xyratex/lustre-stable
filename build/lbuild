@@ -1419,10 +1419,13 @@ build_ofed() {
     cd ${kib_rpm}-devel
     # the actual ofed RPMs don't have the -rc$n or -$date string appened that
     # might be present on the file
-    local linuxrelease=$(find_linux_release "$linux")
-    ofed_version=$(echo $ofed_version |
-                   sed -re 's/-(20[0-9]{6,6}-[0-9]{4,4}|rc[0-9]*)$//')
-    local rpm=$(ls $TOPDIR/RPMS/*/${kib_rpm}-devel-${ofed_version}-${linuxrelease//-/_}.*.rpm)
+    #local linuxrelease=$(find_linux_release "$linux")
+    #ofed_version=$(echo $ofed_version |
+    #               sed -re 's/-(20[0-9]{6,6}-[0-9]{4,4}|rc[0-9]*)$//')
+    #local rpm=$(ls $TOPDIR/RPMS/*/${kib_rpm}-devel-${ofed_version}-${linuxrelease//-/_}.*.rpm)
+    # I dont' know why we have gone through the trouble to filter out the name
+    # of the rpm there should only be one ${kib_rpm}-devel built
+    local rpm=$(ls $TOPDIR/RPMS/*/${kib_rpm}-devel-*.rpm)
     if ! rpm2cpio < $rpm | cpio -id; then
         fatal 1 "could not unpack the ${kib_rpm}-devel rpm."
     fi

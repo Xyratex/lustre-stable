@@ -347,7 +347,7 @@ $2
 AC_DEFUN([LB_LINUX_COMPILE_IFELSE],
 [m4_ifvaln([$1], [AC_LANG_CONFTEST([$1])])dnl
 rm -f build/conftest.o build/conftest.mod.c build/conftest.ko
-AS_IF([AC_TRY_COMMAND(cp conftest.c build && make -d [$2] ${LD:+"LD=$LD"} CC="$CC" -f $PWD/build/Makefile LUSTRE_LINUX_CONFIG=$LINUX_CONFIG LINUXINCLUDE="$EXTRA_LNET_INCLUDE -I$LINUX/arch/`echo $target_cpu|sed -e 's/powerpc64/powerpc/' -e 's/x86_64/x86/' -e 's/i.86/x86/'`/include -I$LINUX/arch/`echo $target_cpu|sed -e 's/ppc.*/powerpc/' -e 's/x86_64/x86/' -e 's/i.86/x86/'`/include/generated -I$LINUX_OBJ/include -I$LINUX/include -I$LINUX_OBJ/include2 -include $CONFIG_INCLUDE" -o tmp_include_depends -o scripts -o include/config/MARKER -C $LINUX_OBJ EXTRA_CFLAGS="-Werror-implicit-function-declaration $EXTRA_KCFLAGS" $MODULE_TARGET=$PWD/build) >/dev/null && AC_TRY_COMMAND([$3])],
+AS_IF([AC_TRY_COMMAND(cp conftest.c build && make -d [$2] ${LD:+"LD=$LD"} CC="$CC" -f $PWD/build/Makefile LUSTRE_LINUX_CONFIG=$LINUX_CONFIG LINUXINCLUDE="$EXTRA_OFED_INCLUDE -I$LINUX/arch/`echo $target_cpu|sed -e 's/powerpc64/powerpc/' -e 's/x86_64/x86/' -e 's/i.86/x86/'`/include -I$LINUX/arch/`echo $target_cpu|sed -e 's/ppc.*/powerpc/' -e 's/x86_64/x86/' -e 's/i.86/x86/'`/include/generated -I$LINUX_OBJ/include -I$LINUX/include -I$LINUX_OBJ/include2 -include $CONFIG_INCLUDE" -o tmp_include_depends -o scripts -o include/config/MARKER -C $LINUX_OBJ EXTRA_CFLAGS="-Werror-implicit-function-declaration $EXTRA_KCFLAGS" $MODULE_TARGET=$PWD/build) >/dev/null && AC_TRY_COMMAND([$3])],
 	[$4],
 	[_AC_MSG_LOG_CONFTEST
 m4_ifvaln([$5],[$5])dnl])
@@ -433,104 +433,6 @@ $3
 AC_DEFUN([LB_LINUX_TRY_MAKE],
 [LB_LINUX_COMPILE_IFELSE([AC_LANG_SOURCE([LB_LANG_PROGRAM([[$1]], [[$2]])])], [$3], [$4], [$5], [$6])])
 
-#
-# LB_CONFIG_COMPAT_RDMA
-#
-AC_DEFUN([LB_CONFIG_COMPAT_RDMA],
-[AC_MSG_CHECKING([whether to use Compat RDMA])
-# set default
-AC_ARG_WITH([o2ib],
-	AC_HELP_STRING([--with-o2ib=path],
-		       [build o2iblnd against path]),
-	[
-		case $with_o2ib in
-		yes)    O2IBPATHS="$LINUX $LINUX/drivers/infiniband"
-			ENABLEO2IB=2
-			;;
-		no)     ENABLEO2IB=0
-			;;
-		*)      O2IBPATHS=$with_o2ib
-			ENABLEO2IB=3
-			;;
-		esac
-	],[
-		O2IBPATHS="$LINUX $LINUX/drivers/infiniband"
-		ENABLEO2IB=1
-	])
-if test $ENABLEO2IB -eq 0; then
-	AC_MSG_RESULT([no])
-else
-	o2ib_found=false
-	for O2IBPATH in $O2IBPATHS; do
-		if test \( -f ${O2IBPATH}/include/rdma/rdma_cm.h -a \
-			   -f ${O2IBPATH}/include/rdma/ib_cm.h -a \
-			   -f ${O2IBPATH}/include/rdma/ib_verbs.h -a \
-			   -f ${O2IBPATH}/include/rdma/ib_fmr_pool.h \); then
-			o2ib_found=true
-			break
-		fi
-	done
-	compatrdma_found=false
-	if $o2ib_found; then
-		if test \( -f ${O2IBPATH}/include/linux/compat-2.6.h \); then
-			compatrdma_found=true
-			AC_MSG_RESULT([yes])
-			AC_DEFINE(HAVE_COMPAT_RDMA, 1, [compat rdma found])
-		else
-			AC_MSG_RESULT([no])
-		fi
-	fi
-fi
-])
-
-#
-# LB_CONFIG_OFED_BACKPORTS
-#
-# include any OFED backport headers in all compile commands
-# NOTE: this does only include the backport paths, not the OFED headers
-#       adding the OFED headers is done in the lnet portion
-AC_DEFUN([LB_CONFIG_OFED_BACKPORTS],
-[AC_MSG_CHECKING([whether to use any OFED backport headers])
-if test $ENABLEO2IB -eq 0; then
-	AC_MSG_RESULT([no])
-else
-	if ! $o2ib_found; then
-		AC_MSG_RESULT([no])
-		case $ENABLEO2IB in
-			1) ;;
-			2) AC_MSG_ERROR([kernel OpenIB gen2 headers not present]);;
-			3) AC_MSG_ERROR([bad --with-o2ib path]);;
-			*) AC_MSG_ERROR([internal error]);;
-		esac
-	else
-		if ! $compatrdma_found; then
-                	if test -f $O2IBPATH/config.mk; then
-				. $O2IBPATH/config.mk
-			elif test -f $O2IBPATH/ofed_patch.mk; then
-				. $O2IBPATH/ofed_patch.mk
-			fi
-		else
-			if test x$RHEL_KERNEL = xyes; then
-				case $RHEL_KERNEL_VERSION in
-					2.6.32-358*)
-						EXTRA_LNET_INCLUDE="$EXTRA_LNET_INCLUDE -DCONFIG_COMPAT_RHEL_6_4";;
-				esac
-			elif test x$SUSE_KERNEL = xyes; then
-				SP=$(grep PATCHLEVEL /etc/SuSE-release | sed -e 's/.*= *//')
-				EXTRA_LNET_INCLUDE="$EXTRA_LNET_INCLUDE -DCONFIG_COMPAT_SLES_11_$SP"
-			fi
-		fi
-		if test -n "$BACKPORT_INCLUDES"; then
-			OFED_BACKPORT_PATH="$O2IBPATH/${BACKPORT_INCLUDES/*\/kernel_addons/kernel_addons}/"
-			EXTRA_LNET_INCLUDE="-I$OFED_BACKPORT_PATH $EXTRA_LNET_INCLUDE"
-			AC_MSG_RESULT([yes])
-		else
-			AC_MSG_RESULT([no])
-		fi
-	fi
-fi
-])
-
 # LC_MODULE_LOADING
 # after 2.6.28 CONFIG_KMOD is removed, and only CONFIG_MODULES remains
 # so we test if request_module is implemented or not
@@ -580,13 +482,6 @@ LB_LINUX_CONFIG([KALLSYMS],[],[
 
 # 2.6.28
 LC_MODULE_LOADING
-
-LB_CONFIG_COMPAT_RDMA
-
-# it's ugly to be doing anything with OFED outside of the lnet module, but
-# this has to be done here so that the backports path is set before all of
-# the LN_PROG_LINUX checks are done
-LB_CONFIG_OFED_BACKPORTS
 ])
 
 #
