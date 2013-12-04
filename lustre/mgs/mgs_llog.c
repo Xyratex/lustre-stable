@@ -1938,11 +1938,13 @@ static int mgs_write_log_failnids(struct obd_device *obd,
                                failnodeuuid, cliname);
                         rc = record_add_uuid(obd, llh, nid, failnodeuuid);
                 }
-                if (failnodeuuid)
+		if (failnodeuuid) {
                         rc = record_add_conn(obd, llh, cliname, failnodeuuid);
+			name_destroy(&failnodeuuid);
+			failnodeuuid = NULL;
+		}
         }
 
-	name_destroy(&failnodeuuid);
         return rc;
 }
 
