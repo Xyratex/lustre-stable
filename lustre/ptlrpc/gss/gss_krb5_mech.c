@@ -1780,7 +1780,7 @@ int __init init_kerberos_module(void)
         return status;
 }
 
-void __exit cleanup_kerberos_module(void)
+void cleanup_kerberos_module(void)
 {
         lgss_mech_unregister(&gss_kerberos_mech);
 }
