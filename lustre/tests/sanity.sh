@@ -8189,6 +8189,32 @@ test_160() {
 }
 run_test 160 "changelog sanity"
 
+test_160c() {
+	[ "$SLOW" = "no" ] && skip "Skipping slow test" && return
+
+	local USER=$(do_facet $SINGLEMDS $LCTL --device $MDT0 \
+	    changelog_register -n)
+
+	mkdir -p $DIR/$tdir
+
+	echo "Generating changelogs.."
+	for i in $(seq 1 65000)
+	do
+		touch $DIR/$tdir/$i || { echo "failed to create needed \
+changelogs, the test may be incomplete"; break; }
+	done
+
+	#define OBD_FAIL_LLOG                               0x1300
+	do_facet $SINGLEMDS $LCTL set_param fail_loc=0x80001300
+	$LFS changelog_clear $MDT0 $USER 0 &
+	$LFS changelog_clear $MDT0 $USER 0
+	echo "Waiting for lfs changelog completion"
+	wait
+
+	do_facet $SINGLEMDS $LCTL --device $MDT0 changelog_deregister $USER
+}
+run_test 160c "changelog clear race"
+
 test_161() {
     mkdir -p $DIR/$tdir
     cp /etc/hosts $DIR/$tdir/$tfile
