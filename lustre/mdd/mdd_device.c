@@ -357,6 +357,7 @@ int mdd_changelog_llog_cancel(const struct lu_env *env,
         if (ctxt == NULL)
                 return -ENXIO;
 
+        cfs_mutex_lock(&ctxt->loc_mutex);
         cfs_spin_lock(&mdd->mdd_cl.mc_lock);
         cur = (long long)mdd->mdd_cl.mc_index;
         cfs_spin_unlock(&mdd->mdd_cl.mc_lock);
@@ -384,6 +385,7 @@ int mdd_changelog_llog_cancel(const struct lu_env *env,
 
         rc = llog_cancel(ctxt, NULL, 1, (struct llog_cookie *)&endrec, 0);
 out:
+        cfs_mutex_unlock(&ctxt->loc_mutex);
         llog_ctxt_put(ctxt);
         return rc;
 }
