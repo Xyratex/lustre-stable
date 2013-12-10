@@ -313,7 +313,7 @@ static int fld_insert_special_entries(const struct lu_env *env,
 }
 
 int fld_index_init(const struct lu_env *env, struct lu_server_fld *fld,
-		   struct dt_device *dt)
+		   struct dt_device *dt, int type)
 {
 	struct dt_object	*dt_obj = NULL;
 	struct lu_fid		fid;

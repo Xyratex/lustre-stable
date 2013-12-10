@@ -337,7 +337,7 @@ int fld_server_init(const struct lu_env *env, struct lu_server_fld *fld,
 	}
 
 	if (!mds_node_id && type == LU_SEQ_RANGE_MDT) {
-		rc = fld_index_init(env, fld, dt);
+		rc = fld_index_init(env, fld, dt, type);
 		if (rc)
 			GOTO(out_cache, rc);
 	} else {
