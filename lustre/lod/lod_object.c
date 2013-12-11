@@ -42,7 +42,6 @@
 #include <lustre_fid.h>
 #include <lustre_param.h>
 #include <lustre_fid.h>
-#include <obd_lov.h>
 
 #include "lod_internal.h"
 
