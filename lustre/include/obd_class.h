@@ -1330,13 +1330,13 @@ static inline int obd_sync(struct obd_export *exp, struct obd_info *oinfo,
 
 static inline int obd_writepages(struct obd_export *exp,
 				 struct obd_info *oinfo,
-				 long *written, cfs_waitq_t *waitq)
+				 long *written)
 {
 	int rc = 0;
 	ENTRY;
 	if (OBT(exp->exp_obd) && OBP(exp->exp_obd, writepages)) {
 		OBD_COUNTER_INCREMENT(exp->exp_obd, writepages);
-		rc = OBP(exp->exp_obd, writepages)(exp, oinfo, written, waitq);
+		rc = OBP(exp->exp_obd, writepages)(exp, oinfo, written);
 	}
 	RETURN(rc);
 }

@@ -635,7 +635,6 @@ static int osc_sync(struct obd_export *exp, struct obd_info *oinfo,
 
 struct osc_writepages_waiter {
 	cfs_list_t	 oww_entry;
-	cfs_waitq_t	*oww_waitq;
 	struct obd_info *oww_oinfo;
 };
 
@@ -664,10 +663,7 @@ static void do_writepages_interpret(struct client_obd *cli,
 	cfs_list_for_each_entry_safe(oww, n, &cli->cl_writepages_waiters,
 				     oww_entry) {
 		cfs_list_del_init(&oww->oww_entry);
-
 		oww->oww_oinfo->oi_cb_up(oww->oww_oinfo, rc);
-		cfs_waitq_signal(oww->oww_waitq);
-
 		OBD_FREE(oww, sizeof(*oww));
 	}
 	client_obd_list_unlock(&cli->cl_loi_list_lock);
@@ -713,7 +709,7 @@ static struct ptlrpc_request *prep_rpc_request(struct obd_import *imp,
 
 static int osc_writepages(struct obd_export *exp,
 			  struct obd_info *oinfo,
-			  long *written, cfs_waitq_t *waitq)
+			  long *written)
 {
 	struct obd_import *imp;
 	struct ptlrpc_request *req;
@@ -728,7 +724,6 @@ static int osc_writepages(struct obd_export *exp,
 		RETURN(-ENOMEM);
 	}
 	oww->oww_oinfo = oinfo;
-	oww->oww_waitq = waitq;
 
 	imp = class_exp2cliimp(exp);
 	cli = &imp->imp_obd->u.cli;

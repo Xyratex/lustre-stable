@@ -573,7 +573,7 @@ static int ll_writepages(struct address_space *mapping,
 			wbc->nr_to_write = 0;
 	} else {
 		rc = obd_writepages(ll_s2sbi(mapping->host->i_sb)->ll_dt_exp,
-				    &oinfo, &written, NULL);
+				    &oinfo, &written);
 		/* @written holds number of released bulk pages */
 		if (written < nr_to_write)
 			wbc->nr_to_write = nr_to_write - written;

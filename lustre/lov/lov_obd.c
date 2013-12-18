@@ -1663,7 +1663,7 @@ static int lov_sync(struct obd_export *exp, struct obd_info *oinfo,
 
 static int lov_writepages(struct obd_export *exp,
 			  struct obd_info *oinfo,
-			  long *written, cfs_waitq_t *waitq)
+			  long *written)
 {
 	struct lov_obd *lov;
 	struct lov_request *req;
@@ -1679,7 +1679,7 @@ static int lov_writepages(struct obd_export *exp,
 	lov = &exp->exp_obd->u.lov;
 	cfs_list_for_each_entry(req, &set->set_list, rq_link) {
 		err = obd_writepages(lov->lov_tgts[req->rq_idx]->ltd_exp,
-				     &req->rq_oi, written, &set->set_waitq);
+				     &req->rq_oi, written);
 		if (err) {
 			if (!rc)
 				rc = err;

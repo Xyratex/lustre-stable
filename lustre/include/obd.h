@@ -1456,7 +1456,7 @@ struct obd_ops {
         void (*o_putref)(struct obd_device *obd);
 #ifdef __KERNEL__
 	int (*o_writepages)(struct obd_export *obd, struct obd_info *oinfo,
-			    long *written, cfs_waitq_t *waitq);
+			    long *written);
 	int (*o_writepages_async)(struct obd_export *obd,
 				  struct obd_info *oinfo);
 #endif
