@@ -1111,9 +1111,10 @@ static struct obd_capa *lod_capa_get(const struct lu_env *env,
 	return dt_capa_get(env, dt_object_child(dt), old, opc);
 }
 
-static int lod_object_sync(const struct lu_env *env, struct dt_object *dt)
+static int lod_object_sync(const struct lu_env *env, struct dt_object *dt,
+			   __u64 start, __u64 end)
 {
-	return dt_object_sync(env, dt_object_child(dt));
+	return dt_object_sync(env, dt_object_child(dt), start, end);
 }
 
 static int lod_object_lock(const struct lu_env *env,

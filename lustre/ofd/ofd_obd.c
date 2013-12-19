@@ -1420,7 +1420,7 @@ static int ofd_sync(const struct lu_env *env, struct obd_export *exp,
 
 	if (dt_version_get(env, ofd_object_child(fo)) >
 	    ofd_obd(ofd)->obd_last_committed) {
-		rc = dt_object_sync(env, ofd_object_child(fo));
+		rc = dt_object_sync(env, ofd_object_child(fo), start, end);
 		if (rc)
 			GOTO(put, rc);
 	}
