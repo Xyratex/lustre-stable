@@ -795,7 +795,7 @@ void ptlrpc_request_change_export(struct ptlrpc_request *req,
 			cfs_list_add(&req->rq_exp_list, &export->exp_hp_rpcs);
 			cfs_spin_unlock_bh(&export->exp_rpc_lock);
 		} else {
-			cfs_spin_unlock_bh(&export->exp_rpc_lock);
+			cfs_spin_unlock_bh(&req->rq_export->exp_rpc_lock);
 		}
 
 		cfs_spin_lock_bh(&req->rq_export->exp_rpcs_in_progress_lock);
