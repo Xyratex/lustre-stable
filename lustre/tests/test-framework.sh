@@ -626,6 +626,10 @@ facet_number() {
        echo -n $facet | sed -e 's/^fs[0-9]\+//' | sed -e 's/^[a-z]\+//'
 }
 
+facet_fstype() {
+    echo -n $FSTYPE
+}
+
 mdsdevlabel() {
     local num=$1
     local device=`mdsdevname $num`

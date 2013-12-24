@@ -744,19 +744,21 @@ test_32b() { # bug 11270
 run_test 32b "lockless i/o"
 
 print_jbd_stat () {
+    [ $(facet_fstype $SINGLEMDS) = ldiskfs ] || { echo 0; return 0; }
+
     local dev
     local mdts=$(get_facets MDS)
     local varcvs
     local mds
-
     local stat=0
+
     for mds in ${mdts//,/ }; do
         varsvc=${mds}_svc
-        dev=$(basename $(do_facet $mds lctl get_param -n osd*.${!varsvc}.mntdev))
-        val=$(do_facet $mds "procfile=/proc/fs/jbd/$dev/info;
-[ -f \\\$procfile ] || procfile=/proc/fs/jbd2/$dev/info;
-[ -f \\\$procfile ] || procfile=/proc/fs/jbd2/${dev}\:\\\*/info;
-cat \\\$procfile | head -1;")
+        dev=$(basename $(do_facet $mds "lctl get_param -n osd*.${!varsvc}.mntdev|\
+		xargs readlink -f" ))
+        val=$(do_facet $mds "cat /proc/fs/jbd*/${dev}{,:*,-*}/info 2>/dev/null|\
+		head -1")
+        [ -n "$val" ] || return 1
         val=${val%% *};
         stat=$(( stat + val))
     done
@@ -767,19 +769,20 @@ cat \\\$procfile | head -1;")
 test_33a() {
     remote_mds_nodsh && skip "remote MDS with nodsh" && return
 
-    [ -n "$CLIENTS" ] || { skip "Need two or more clients" && return 0; }
-    [ $CLIENTCOUNT -ge 2 ] || \
-        { skip "Need two or more clients, have $CLIENTCOUNT" && return 0; }
+    [ -z "$CLIENTS" ] &&
+	skip "Need two or more clients" && return 0
+    [ $CLIENTCOUNT -lt 2 ] &&
+	skip "Need two or more clients, have $CLIENTCOUNT" && return 0
 
     local nfiles=${TEST33_NFILES:-10000}
     local param_file=$TMP/$tfile-params
 
-	save_lustre_params $(get_facets MDS) \
-		"mdt.*.commit_on_sharing" > $param_file
+    save_lustre_params $(get_facets MDS) \
+	"mdt.*.commit_on_sharing" > $param_file
 
     local COS
-    local jbdold
-    local jbdnew
+    local jbdold=0
+    local jbdnew=0
     local jbd
 
     for COS in 0 1; do
@@ -790,9 +793,11 @@ test_33a() {
             do_nodes $CLIENT1,$CLIENT2 "mkdir -p $DIR1/$tdir-\\\$(hostname)-$i"
 
             jbdold=$(print_jbd_stat)
+            [ ${PIPESTATUS[0]} -eq 0 ] || error "failed to get jbd stat"
             echo "=== START createmany old: $jbdold transaction"
             local elapsed=$(do_and_time "do_nodes $CLIENT1,$CLIENT2 createmany -o $DIR1/$tdir-\\\$(hostname)-$i/f- -r $DIR2/$tdir-\\\$(hostname)-$i/f- $nfiles > /dev/null 2>&1")
             jbdnew=$(print_jbd_stat)
+            [ ${PIPESTATUS[0]} -eq 0 ] || error "failed to get jbd stat"
             jbd=$(( jbdnew - jbdold ))
             echo "=== END   createmany new: $jbdnew transaction :  $jbd transactions  nfiles $nfiles time $elapsed COS=$COS"
             avgjbd=$(( avgjbd + jbd ))
