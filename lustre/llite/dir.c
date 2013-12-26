@@ -606,9 +606,6 @@ static int ll_readdir(struct file *filp, void *cookie, filldir_t filldir)
 	int			hash64	= sbi->ll_flags & LL_SBI_64BIT_HASH;
 	int			api32	= ll_need_32bit_api(sbi);
 	int			rc;
-#ifdef HAVE_TOUCH_ATIME_1ARG
-	struct path		path;
-#endif
 	ENTRY;
 
 	if (lfd != NULL)
@@ -641,17 +638,6 @@ static int ll_readdir(struct file *filp, void *cookie, filldir_t filldir)
                         filp->f_pos = pos;
         }
 	filp->f_version = inode->i_version;
-#ifdef HAVE_TOUCH_ATIME_1ARG
-#ifdef HAVE_F_PATH_MNT
-	path.mnt = filp->f_path.mnt;
-#else
-	path.mnt = filp->f_vfsmnt;
-#endif
-	path.dentry = filp->f_dentry;
-	touch_atime(&path);
-#else
-	touch_atime(filp->f_vfsmnt, filp->f_dentry);
-#endif
 
 out:
 	if (!rc)

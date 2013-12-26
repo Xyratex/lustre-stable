@@ -1059,25 +1059,6 @@ LB_LINUX_TRY_COMPILE([
 ])
 
 #
-# 3.4 switchs touch_atime to struct path
-# see kernel commit 68ac1234fb949b66941d94dce4157742799fc581
-#
-AC_DEFUN([LC_TOUCH_ATIME_1ARG],
-[AC_MSG_CHECKING([if touch_atime use one argument])
-LB_LINUX_TRY_COMPILE([
-	#include <linux/fs.h>
-],[
-	touch_atime((struct path *)NULL);
-],[
-	AC_DEFINE(HAVE_TOUCH_ATIME_1ARG, 1,
-		  [touch_atime use one argument])
-	AC_MSG_RESULT([yes])
-],[
-	AC_MSG_RESULT([no])
-])
-])
-
-#
 # 3.4 converts d_alloc_root to d_make_root
 # see kernel commit 32991ab305ace7017c62f8eecbe5eb36dc32e13b
 #
@@ -1329,27 +1310,6 @@ LB_LINUX_TRY_COMPILE([
 ])
 
 #
-# 3.9 killed f_vfsmnt by
-# 182be684784334598eee1d90274e7f7aa0063616
-# replacement is f_path.mnt
-#
-AC_DEFUN([LC_HAVE_F_PATH_MNT],
-[AC_MSG_CHECKING([if struct file has f_path.mnt])
-LB_LINUX_TRY_COMPILE([
-	#include <linux/fs.h>
-],[
-	struct file *fp = NULL;
-	struct path  path;
-
-	path.mnt = fp->f_path.mnt;
-],[
-	AC_DEFINE(HAVE_F_PATH_MNT,1,[yes])
-	AC_MSG_RESULT([yes])
-],[
-	AC_MSG_RESULT([no])
-])
-])
-
 # 3.10 release for block device doesn't return int
 AC_DEFUN([LC_BLKDEV_RELEASE_RETURN_INT],
 [AC_MSG_CHECKING([if block_device_operations release returns int])
@@ -1551,7 +1511,6 @@ AC_DEFUN([LC_PROG_LINUX],
 	 LC_HAVE_CACHE_REGISTER
 
 	 # 3.4
-	 LC_TOUCH_ATIME_1ARG
 	 LC_HAVE_D_MAKE_ROOT
 	 LC_KMAP_ATOMIC_HAS_1ARG
 
@@ -1574,7 +1533,6 @@ AC_DEFUN([LC_PROG_LINUX],
 
 	 # 3.9
 	 LC_HAVE_HLIST_FOR_EACH_3ARG
-	 LC_HAVE_F_PATH_MNT
 
 	 # 3.10
 	 LC_HAVE_ONLY_PROCFS_SEQ
