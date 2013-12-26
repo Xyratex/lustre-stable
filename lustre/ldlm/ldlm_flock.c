@@ -131,8 +131,7 @@ ldlm_flock_destroy(struct ldlm_lock *lock, ldlm_mode_t mode, __u64 flags)
 	LASSERT(cfs_hlist_unhashed(&lock->l_exp_flock_hash));
 
         cfs_list_del_init(&lock->l_res_link);
-        if (flags == LDLM_FL_WAIT_NOREPROC &&
-            !(lock->l_flags & LDLM_FL_FAILED)) {
+        if (flags == LDLM_FL_WAIT_NOREPROC) {
                 /* client side - set a flag to prevent sending a CANCEL */
                 lock->l_flags |= LDLM_FL_LOCAL_ONLY | LDLM_FL_CBPENDING;
 
@@ -633,23 +632,10 @@ ldlm_flock_completion_ast(struct ldlm_lock *lock, __u64 flags, void *data)
 	CDEBUG(D_DLMTRACE, "flags: 0x%llx data: %p getlk: %p\n",
                flags, data, getlk);
 
-        /* Import invalidation. We need to actually release the lock
-         * references being held, so that it can go away. No point in
-         * holding the lock even if app still believes it has it, since
-         * server already dropped it anyway. Only for granted locks too. */
-        if ((lock->l_flags & (LDLM_FL_FAILED|LDLM_FL_LOCAL_ONLY)) ==
-            (LDLM_FL_FAILED|LDLM_FL_LOCAL_ONLY)) {
-                if (lock->l_req_mode == lock->l_granted_mode &&
-                    lock->l_granted_mode != LCK_NL &&
-                    NULL == data)
-                        ldlm_lock_decref_internal(lock, lock->l_req_mode);
-
-                /* Need to wake up the waiter if we were evicted */
-                cfs_waitq_signal(&lock->l_waitq);
-                RETURN(0);
-        }
-
         LASSERT(flags != LDLM_FL_WAIT_NOREPROC);
+
+	if (flags & LDLM_FL_FAILED)
+		goto granted;
 
         if (!(flags & (LDLM_FL_BLOCK_WAIT | LDLM_FL_BLOCK_GRANTED |
                        LDLM_FL_BLOCK_CONV))) {
@@ -690,13 +676,6 @@ ldlm_flock_completion_ast(struct ldlm_lock *lock, __u64 flags, void *data)
 granted:
         OBD_FAIL_TIMEOUT(OBD_FAIL_LDLM_CP_CB_WAIT, 10);
 
-        if (lock->l_flags & LDLM_FL_FAILED) {
-                LDLM_DEBUG(lock, "client-side enqueue waking up: failed");
-                RETURN(-EIO);
-        }
-
-        LDLM_DEBUG(lock, "client-side enqueue granted");
-
 	if (OBD_FAIL_PRECHECK(OBD_FAIL_LDLM_CP_CB_WAIT4)) {
 		lock_res_and_lock(lock);
 		/* DEADLOCK is always set with CBPENDING */
@@ -722,19 +701,55 @@ granted:
 	if (lock->l_flags & LDLM_FL_DESTROYED) {
 		unlock_res_and_lock(lock);
 		LDLM_DEBUG(lock, "client-side enqueue waking up: destroyed");
-		RETURN(0);
+		/* An error is still to be returned, to propagate it up to
+		 * ldlm_cli_enqueue_fini() caller. */
+		RETURN(-EIO);
 	}
 
         /* ldlm_lock_enqueue() has already placed lock on the granted list. */
 	ldlm_resource_unlink_lock(lock);
 
-	if (lock->l_flags & LDLM_FL_FLOCK_DEADLOCK) {
-		LDLM_DEBUG(lock, "client-side enqueue deadlock received");
-		rc = -EDEADLK;
-        } else if (flags & LDLM_FL_TEST_LOCK) {
+	/* Import invalidation. We need to actually release the lock
+	 * references being held, so that it can go away. No point in
+	 * holding the lock even if app still believes it has it, since
+	 * server already dropped it anyway. Only for granted locks too. */
+	/* Do the same for DEADLOCK'ed locks. */
+	if (lock->l_flags & LDLM_FL_FAILED ||
+	    lock->l_flags & LDLM_FL_FLOCK_DEADLOCK) {
+		int mode;
+
+		if (flags & LDLM_FL_TEST_LOCK)
+			LASSERT(lock->l_flags & LDLM_FL_TEST_LOCK);
+
+		if (lock->l_flags & LDLM_FL_TEST_LOCK ||
+		    lock->l_flags & LDLM_FL_FLOCK_DEADLOCK)
+			mode = cfs_flock_type(getlk);
+		else
+			mode = lock->l_granted_mode;
+
+		if (lock->l_flags & LDLM_FL_FLOCK_DEADLOCK) {
+			LDLM_DEBUG(lock, "client-side enqueue deadlock "
+				   "received");
+			rc = -EDEADLK;
+		}
+		ldlm_flock_destroy(lock, mode, LDLM_FL_WAIT_NOREPROC);
+		unlock_res_and_lock(lock);
+
+		/* Need to wake up the waiter if we were evicted */
+		cfs_waitq_signal(&lock->l_waitq);
+
+		/* An error is still to be returned, to propagate it up to
+		 * ldlm_cli_enqueue_fini() caller. */
+		RETURN(rc ? : -EIO);
+	}
+
+         LDLM_DEBUG(lock, "client-side enqueue granted");
+
+	if (flags & LDLM_FL_TEST_LOCK) {
                 /* fcntl(F_GETLK) request */
                 /* The old mode was saved in getlk->fl_type so that if the mode
                  * in the lock changes we can decref the appropriate refcount.*/
+		LASSERT(lock->l_flags & LDLM_FL_TEST_LOCK);
                 ldlm_flock_destroy(lock, cfs_flock_type(getlk),
                                    LDLM_FL_WAIT_NOREPROC);
                 switch (lock->l_granted_mode) {

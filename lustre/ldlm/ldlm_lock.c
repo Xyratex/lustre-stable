@@ -1017,6 +1017,21 @@ void ldlm_grant_lock(struct ldlm_lock *lock, cfs_list_t *work_list)
         check_res_locked(res);
 
         lock->l_granted_mode = lock->l_req_mode;
+
+        if (work_list && lock->l_completion_ast != NULL)
+                ldlm_add_ast_work_item(lock, NULL, work_list);
+
+	/* We should not add locks to granted list in the following cases:
+	 * - this is an UNLOCK but not a real lock;
+	 * - this is a TEST lock;
+	 * - this is a F_CANCELLK lock (async flock has req_mode == 0)
+	 * - this is a deadlock (flock cannot be granted) */
+	if (lock->l_req_mode == 0 ||
+	    lock->l_req_mode == LCK_NL ||
+	    lock->l_flags & LDLM_FL_TEST_LOCK ||
+	    lock->l_flags & LDLM_FL_FLOCK_DEADLOCK)
+		RETURN_EXIT;
+
         if (res->lr_type == LDLM_PLAIN || res->lr_type == LDLM_IBITS)
                 ldlm_grant_lock_with_skiplist(lock);
         else if (res->lr_type == LDLM_EXTENT)
@@ -1026,9 +1041,6 @@ void ldlm_grant_lock(struct ldlm_lock *lock, cfs_list_t *work_list)
 
         if (lock->l_granted_mode < res->lr_most_restr)
                 res->lr_most_restr = lock->l_granted_mode;
-
-        if (work_list && lock->l_completion_ast != NULL)
-                ldlm_add_ast_work_item(lock, NULL, work_list);
 
         ldlm_pool_add(&ldlm_res_to_ns(res)->ns_pool, lock);
         EXIT;
@@ -1388,7 +1400,8 @@ ldlm_error_t ldlm_lock_enqueue(struct ldlm_namespace *ns,
 
         /* Some flags from the enqueue want to make it into the AST, via the
          * lock's l_flags. */
-        lock->l_flags |= *flags & LDLM_AST_DISCARD_DATA;
+        lock->l_flags |= *flags & (LDLM_AST_DISCARD_DATA |
+				   LDLM_FL_TEST_LOCK);
 
         /* This distinction between local lock trees is very important; a client
          * namespace only has information about locks taken by that client, and

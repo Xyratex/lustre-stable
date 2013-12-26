@@ -142,8 +142,12 @@ typedef enum {
  * to blocking ast. */
 #define LDLM_FL_CANCEL_ON_BLOCK 0x800000
 
-/* Flags flags inherited from parent lock when doing intents. */
-#define LDLM_INHERIT_FLAGS     (LDLM_FL_CANCEL_ON_BLOCK)
+/* Flags inherited from wire on enqueue/reply between client/server. */
+/* NO_TIMEOUT flag to force ldlm_lock_match() to wait with no timeout. */
+/* TEST_LOCK flag to not let TEST lock to be granted. */
+#define LDLM_INHERIT_FLAGS     (LDLM_FL_CANCEL_ON_BLOCK |	\
+				LDLM_FL_NO_TIMEOUT	|	\
+				LDLM_FL_TEST_LOCK)
 
 /* Used to be LDLM_FL_CP_REQD        0x1000000 moved to non-wire flags */
 /* Used to be LDLM_FL_CLEANED        0x2000000 moved to non-wire flags */

@@ -758,7 +758,8 @@ static void cleanup_resource(struct ldlm_resource *res, cfs_list_t *q,
 				cfs_set_current_state(CFS_TASK_RUNNING);
 			}
                         if (lock->l_completion_ast)
-                                lock->l_completion_ast(lock, 0, NULL);
+                                lock->l_completion_ast(lock,
+						       LDLM_FL_FAILED, NULL);
                         LDLM_LOCK_RELEASE(lock);
                         continue;
                 }
