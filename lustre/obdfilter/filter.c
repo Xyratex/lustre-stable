@@ -77,6 +77,9 @@
 
 #include "filter_internal.h"
 
+static void filter_sync_llogs(struct obd_device *obd, struct obd_export *dexp,
+			      int flags);
+
 static struct lvfs_callback_ops filter_lvfs_ops;
 cfs_mem_cache_t *ll_fmd_cachep;
 
@@ -2393,15 +2396,15 @@ static int filter_llog_finish(struct obd_device *obd, int count)
         struct llog_ctxt *ctxt;
         ENTRY;
 
+	/*
+	 * Make sure that no cached llcds left in recov_thread.
+	 * We actually do sync in disconnect time, but disconnect
+	 * may not come being marked rq_no_resend = 1.
+	 */
+	filter_sync_llogs(obd, NULL, OBD_LLOG_FL_EXIT);
+
         ctxt = llog_group_get_ctxt(&obd->obd_olg, LLOG_MDS_OST_REPL_CTXT);
         if (ctxt) {
-                /*
-                 * Make sure that no cached llcds left in recov_thread.
-                 * We actually do sync in disconnect time, but disconnect
-                 * may not come being marked rq_no_resend = 1.
-                 */
-                llog_sync(ctxt, NULL, OBD_LLOG_FL_EXIT);
-
                 /*
                  * Balance class_import_get() in llog_receptor_accept().
                  * This is safe to do, as llog is already synchronized
@@ -3015,7 +3018,8 @@ static int filter_destroy_export(struct obd_export *exp)
         RETURN(0);
 }
 
-static void filter_sync_llogs(struct obd_device *obd, struct obd_export *dexp)
+static void filter_sync_llogs(struct obd_device *obd, struct obd_export *dexp,
+			      int flags)
 {
         struct obd_llog_group *olg_min, *olg;
         struct filter_obd *filter;
@@ -3058,7 +3062,7 @@ static void filter_sync_llogs(struct obd_device *obd, struct obd_export *dexp)
                         ctxt = llog_group_get_ctxt(olg_min,
                                                    LLOG_MDS_OST_REPL_CTXT);
                         if (ctxt) {
-                                err = llog_sync(ctxt, olg_min->olg_exp, 0);
+                                err = llog_sync(ctxt, olg_min->olg_exp, flags);
                                 llog_ctxt_put(ctxt);
                                 if (err) {
                                         CERROR("error flushing logs to MDS: "
@@ -3084,7 +3088,7 @@ static int filter_disconnect(struct obd_export *exp)
         filter_grant_discard(exp);
 
         /* Flush any remaining cancel messages out to the target */
-        filter_sync_llogs(obd, exp);
+        filter_sync_llogs(obd, exp, 0);
 
         lquota_clearinfo(filter_quota_interface_ref, exp, exp->exp_obd);
 
@@ -3109,7 +3113,7 @@ static void filter_revimp_update(struct obd_export *exp)
         class_export_get(exp);
 
         /* flush any remaining cancel messages out to the target */
-        filter_sync_llogs(exp->exp_obd, exp);
+        filter_sync_llogs(exp->exp_obd, exp, 0);
         class_export_put(exp);
         EXIT;
 }
@@ -4382,7 +4386,7 @@ static int filter_sync(struct obd_export *exp, struct obd_info *oinfo,
         if (!oinfo->oi_oa || !(oinfo->oi_oa->o_valid & OBD_MD_FLID)) {
                 rc = fsfilt_sync(exp->exp_obd, obt->obt_sb);
                 /* Flush any remaining cancel messages out to the target */
-                filter_sync_llogs(exp->exp_obd, exp);
+                filter_sync_llogs(exp->exp_obd, exp, 0);
                 RETURN(rc);
         }
 
