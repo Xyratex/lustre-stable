@@ -3764,7 +3764,8 @@ int mgs_setparam(struct obd_device *obd, struct lustre_cfg *lcfg, char *fsname)
         rc = mgs_parse_devname(devname, fsname, NULL);
         if (!rc && !mgs_parse_devname(devname, NULL, &index)) {
                 /* param related to llite isn't allowed to set by OST or MDT */
-                if (!rc && strncmp(param, PARAM_LLITE, sizeof(PARAM_LLITE)) == 0)
+		if (rc == 0 && strncmp(param, PARAM_LLITE,
+				       sizeof(PARAM_LLITE) - 1) == 0)
                         RETURN(-EINVAL);
         } else {
                 /* assume devname is the fsname */
