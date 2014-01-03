@@ -590,10 +590,11 @@ kgnilnd_map_phys_fmablk(kgn_device_t *device)
 	spin_lock(&device->gnd_fmablk_lock);
 
 	list_for_each_entry(fma_blk, &device->gnd_fma_buffs, gnm_bufflist) {
-		if (fma_blk->gnm_state == GNILND_FMABLK_PHYS)
+		if (fma_blk->gnm_state == GNILND_FMABLK_PHYS) {
 			rc = kgnilnd_map_fmablk(device, fma_blk);
 			if (rc)
 				break;
+		}
 	}
 	spin_unlock(&device->gnd_fmablk_lock);
 
@@ -603,7 +604,7 @@ kgnilnd_map_phys_fmablk(kgn_device_t *device)
 }
 
 void
-kgnilnd_unmap_phys_fmablk(kgn_device_t *device)
+kgnilnd_unmap_fma_blocks(kgn_device_t *device)
 {
 
 	kgn_fma_memblock_t      *fma_blk;
@@ -614,8 +615,7 @@ kgnilnd_unmap_phys_fmablk(kgn_device_t *device)
 	spin_lock(&device->gnd_fmablk_lock);
 
 	list_for_each_entry(fma_blk, &device->gnd_fma_buffs, gnm_bufflist) {
-		if (fma_blk->gnm_state == GNILND_FMABLK_PHYS)
-			kgnilnd_unmap_fmablk(device, fma_blk);
+		kgnilnd_unmap_fmablk(device, fma_blk);
 	}
 	spin_unlock(&device->gnd_fmablk_lock);
 
@@ -940,8 +940,10 @@ kgnilnd_alloc_dgram(kgn_dgram_t **dgramp, kgn_device_t *dev, kgn_dgram_type_t ty
 
 	atomic_inc(&dev->gnd_ndgrams);
 
-	CDEBUG(D_MALLOC|D_NETTRACE, "slab-alloced 'dgram': %lu at %p.\n",
-	       sizeof(*dgram), dgram);
+	CDEBUG(D_MALLOC|D_NETTRACE, "slab-alloced 'dgram': %lu at %p %s ndgrams"
+		" %d\n",
+		sizeof(*dgram), dgram, kgnilnd_dgram_type2str(dgram),
+		atomic_read(&dev->gnd_ndgrams));
 
 	*dgramp = dgram;
 	return 0;
@@ -1153,8 +1155,10 @@ kgnilnd_free_dgram(kgn_device_t *dev, kgn_dgram_t *dgram)
 	atomic_dec(&dev->gnd_ndgrams);
 
 	cfs_mem_cache_free(kgnilnd_data.kgn_dgram_cache, dgram);
-	CDEBUG(D_MALLOC|D_NETTRACE, "slab-freed 'dgram': %lu at %p.\n",
-	       sizeof(*dgram), dgram);
+	CDEBUG(D_MALLOC|D_NETTRACE, "slab-freed 'dgram': %lu at %p %s"
+	       " ndgrams %d\n",
+	       sizeof(*dgram), dgram, kgnilnd_dgram_type2str(dgram),
+	       atomic_read(&dev->gnd_ndgrams));
 }
 
 int
@@ -1305,9 +1309,44 @@ post_failed:
 	RETURN(rc);
 }
 
+/* The shutdown flag is set from the shutdown and stack reset threads. */
 void
-kgnilnd_release_dgram(kgn_device_t *dev, kgn_dgram_t *dgram)
+kgnilnd_release_dgram(kgn_device_t *dev, kgn_dgram_t *dgram, int shutdown)
 {
+	/* The conns of canceled active dgrams need to be put in purgatory so
+	 * we don't reuse the mailbox */
+	if (unlikely(dgram->gndg_state == GNILND_DGRAM_CANCELED)) {
+		kgn_peer_t *peer;
+		kgn_conn_t *conn = dgram->gndg_conn;
+		lnet_nid_t nid = dgram->gndg_conn_out.gncr_dstnid;
+
+		dgram->gndg_state = GNILND_DGRAM_DONE;
+
+		/* During shutdown we've already removed the peer so we don't
+		 * need to add a peer. During stack reset we don't care about
+		 * MDDs since they are all released. */
+		if (!shutdown) {
+			write_lock(&kgnilnd_data.kgn_peer_conn_lock);
+			peer = kgnilnd_find_peer_locked(nid);
+
+			if (peer != NULL) {
+				CDEBUG(D_NET, "adding peer's conn with nid %s "
+					"to purgatory\n", libcfs_nid2str(nid));
+				kgnilnd_conn_addref(conn);
+				conn->gnc_peer = peer;
+				kgnilnd_peer_addref(peer);
+				kgnilnd_admin_addref(conn->gnc_peer->gnp_dirty_eps);
+				conn->gnc_state = GNILND_CONN_CLOSED;
+				list_add_tail(&conn->gnc_list,
+					      &peer->gnp_conns);
+				kgnilnd_add_purgatory_locked(conn,
+							     conn->gnc_peer);
+				kgnilnd_schedule_conn(conn);
+			}
+			write_unlock(&kgnilnd_data.kgn_peer_conn_lock);
+		}
+	}
+
 	spin_lock(&dev->gnd_dgram_lock);
 	kgnilnd_cancel_dgram_locked(dgram);
 	spin_unlock(&dev->gnd_dgram_lock);
@@ -1381,8 +1420,9 @@ kgnilnd_probe_for_dgram(kgn_device_t *dev, kgn_dgram_t **dgramp)
 		 dgram, kgnilnd_dgram_state2str(dgram));
 
 	LASSERTF(!list_empty(&dgram->gndg_list),
-		 "dgram 0x%p with bad list state %s\n",
-		 dgram, kgnilnd_dgram_state2str(dgram));
+		 "dgram 0x%p with bad list state %s type %s\n",
+		 dgram, kgnilnd_dgram_state2str(dgram),
+		 kgnilnd_dgram_type2str(dgram));
 
 	/* now we know that the datagram structure is ok, so pull off list */
 	list_del_init(&dgram->gndg_list);
@@ -1394,16 +1434,15 @@ kgnilnd_probe_for_dgram(kgn_device_t *dev, kgn_dgram_t **dgramp)
 		dgram->gndg_state = GNILND_DGRAM_PROCESSING;
 	}
 
-	spin_unlock(&dev->gnd_dgram_lock);
-
-	/* we now "own" this datagram */
-
 	LASSERTF(dgram->gndg_conn != NULL,
 		"dgram 0x%p with NULL conn\n", dgram);
 
 	grc = kgnilnd_ep_postdata_test_by_id(dgram->gndg_conn->gnc_ephandle,
 					     (__u64)dgram, &post_state,
 					     &remote_addr, &remote_id);
+
+	/* we now "own" this datagram */
+	spin_unlock(&dev->gnd_dgram_lock);
 
 	LASSERTF(grc != GNI_RC_NO_MATCH, "kgni lied! probe_by_id told us that"
 		 " id "LPU64" was ready\n", readyid);
@@ -1434,8 +1473,10 @@ kgnilnd_probe_for_dgram(kgn_device_t *dev, kgn_dgram_t **dgramp)
 		/* fake rc to mark that we've done something */
 		rc = 1;
 	} else {
-		/* bring out your dead! */
-		dgram->gndg_state = GNILND_DGRAM_DONE;
+		/* let kgnilnd_release_dgram take care of canceled dgrams */
+		if (dgram->gndg_state != GNILND_DGRAM_CANCELED) {
+			dgram->gndg_state = GNILND_DGRAM_DONE;
+		}
 	}
 
 	*dgramp = dgram;
@@ -1443,7 +1484,7 @@ kgnilnd_probe_for_dgram(kgn_device_t *dev, kgn_dgram_t **dgramp)
 
 probe_for_out:
 
-	kgnilnd_release_dgram(dev, dgram);
+	kgnilnd_release_dgram(dev, dgram, 0);
 	RETURN(rc);
 }
 
@@ -1550,11 +1591,40 @@ kgnilnd_cancel_wc_dgrams(kgn_device_t *dev)
 
 	list_for_each_entry_safe(dg, dgN, &zombies, gndg_list) {
 		list_del_init(&dg->gndg_list);
-		kgnilnd_release_dgram(dev, dg);
+		kgnilnd_release_dgram(dev, dg, 1);
 	}
 	RETURN(0);
 
 }
+
+int
+kgnilnd_cancel_dgrams(kgn_device_t *dev)
+{
+	kgn_dgram_t *dg, *dgN;
+	int i;
+	ENTRY;
+
+	/* Cancel any outstanding non wildcard datagrams regardless
+	 * of which net they are on as we are in base shutdown and
+	 * dont care about connecting anymore.
+	 */
+
+	LASSERTF(kgnilnd_data.kgn_wc_kill == 1,"We didnt get called from base shutdown\n");
+
+	spin_lock(&dev->gnd_dgram_lock);
+
+	for (i = 0; i < (*kgnilnd_tunables.kgn_peer_hash_size -1); i++) {
+		list_for_each_entry_safe(dg, dgN, &dev->gnd_dgrams[i], gndg_list) {
+			if (dg->gndg_type != GNILND_DGRAM_WC_REQ)
+				kgnilnd_cancel_dgram_locked(dg);
+		}
+	}
+
+	spin_unlock(&dev->gnd_dgram_lock);
+
+	RETURN(0);
+}
+
 
 void
 kgnilnd_wait_for_canceled_dgrams(kgn_device_t *dev)
@@ -1597,7 +1667,7 @@ kgnilnd_wait_for_canceled_dgrams(kgn_device_t *dev)
 		rc = kgnilnd_probe_for_dgram(dev, &dgram);
 		if (rc != 0) {
 			/* if we got a valid dgram or one that is now done, clean up */
-			kgnilnd_release_dgram(dev, dgram);
+			kgnilnd_release_dgram(dev, dgram, 1);
 		}
 	} while (atomic_read(&dev->gnd_canceled_dgrams));
 }
@@ -1690,7 +1760,7 @@ kgnilnd_finish_connect(kgn_dgram_t *dgram)
 	/* assume this is a new peer  - it makes locking cleaner when it isn't */
 	/* no holding kgn_net_rw_sem - already are at the kgnilnd_dgram_mover level */
 
-	rc = kgnilnd_create_peer_safe(&new_peer, her_nid, NULL);
+	rc = kgnilnd_create_peer_safe(&new_peer, her_nid, NULL, GNILND_RCA_NODE_UP);
 	if (rc != 0) {
 		CERROR("Can't create peer for %s\n", libcfs_nid2str(her_nid));
 		return rc;
@@ -1927,7 +1997,6 @@ kgnilnd_process_nak(kgn_dgram_t *dgram)
 			libcfs_nid2str(connreq->gncr_srcnid),
 			libcfs_nid2str(connreq->gncr_dstnid), errno, rc);
 	} else {
-		rc = 0;
 		spin_lock(&dgram->gndg_conn->gnc_device->gnd_connd_lock);
 
 		if (list_empty(&peer->gnp_connd_list)) {
@@ -1958,7 +2027,7 @@ kgnilnd_process_nak(kgn_dgram_t *dgram)
 	/* success! we found a peer and at least marked pending_nak */
 	write_unlock(&kgnilnd_data.kgn_peer_conn_lock);
 
-	return 0;
+	return rc;
 }
 
 int
@@ -2056,7 +2125,7 @@ inform_peer:
 
 	orig_dstnid = dgram->gndg_conn_out.gncr_dstnid;
 
-	kgnilnd_release_dgram(dev, dgram);
+	kgnilnd_release_dgram(dev, dgram, 0);
 
 	CDEBUG(D_NET, "cleaning up dgram to %s, rc %d\n",
 	       libcfs_nid2str(orig_dstnid), rc);
@@ -2445,4 +2514,3 @@ kgnilnd_dgram_mover(void *arg)
 	kgnilnd_thread_fini();
 	return 0;
 }
-
