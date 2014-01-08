@@ -1598,10 +1598,10 @@ static int ldlm_prepare_lru_list(struct ldlm_namespace *ns, cfs_list_t *cancels,
                         if (!(lock->l_flags & LDLM_FL_CANCELING))
                                 break;
 
-                        ldlm_lock_remove_from_lru_nolock(lock);
-                }
-                if (&lock->l_lru == &ns->ns_unused_list)
-                        break;
+			ldlm_lock_remove_from_lru_nolock(lock);
+		}
+		if (&lock->l_lru == &ns->ns_unused_list)
+			break;
 
                 LDLM_LOCK_GET(lock);
                 cfs_spin_unlock(&ns->ns_lock);
