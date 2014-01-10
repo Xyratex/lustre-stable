@@ -1443,6 +1443,23 @@ LB_LINUX_TRY_COMPILE([
 ])
 
 #
+# 3.12 truncate_pagecache without oldsize parameter
+#
+AC_DEFUN([LC_OLDSIZE_TRUNCATE_PAGECACHE],
+[AC_MSG_CHECKING([if truncate_pagecache with old_size parameter])
+LB_LINUX_TRY_COMPILE([
+	#include <linux/mm.h>
+],[
+	truncate_pagecache(NULL, 0, 0);
+],[
+	AC_DEFINE(HAVE_OLDSIZE_TRUNCATE_PAGECACHE, 1, [with oldsize])
+	AC_MSG_RESULT([yes])
+],[
+	AC_MSG_RESULT([no])
+])
+])
+
+#
 # LC_PROG_LINUX
 #
 # Lustre linux kernel checks
@@ -1550,6 +1567,9 @@ AC_DEFUN([LC_PROG_LINUX],
 	 LC_INVALIDATE_RANGE
 	 LC_D_COMPARE_5ARGS
 	 LC_HAVE_DCOUNT
+
+	 # 3.12
+	 LC_OLDSIZE_TRUNCATE_PAGECACHE
 
 	 #
 	 if test x$enable_server != xno ; then
