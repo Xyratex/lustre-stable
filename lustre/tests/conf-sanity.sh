@@ -1819,6 +1819,7 @@ test_42() { #bug 14693
 
 	do_facet mgs $LCTL conf_param $FSNAME.sys.some_wrong_param=20
 	cleanup || error "stopping $FSNAME failed with invalid sys param"
+	load_modules
 	setup
 	check_mount || "client was not mounted with invalid sys param"
 	cleanup || error "stopping $FSNAME failed with invalid sys param"
