@@ -1048,8 +1048,9 @@ static struct dt_index_operations osd_dir_ops = {
  * Primitives for index files using binary keys.
  */
 
-static int osd_prepare_key(struct osd_object *o, __u64 *dst,
-			   const struct dt_key *src)
+/* key integer_size is 8 */
+static int osd_prepare_key_uint64(struct osd_object *o, __u64 *dst,
+				  const struct dt_key *src)
 {
 	int size;
 
@@ -1066,7 +1067,7 @@ static int osd_prepare_key(struct osd_object *o, __u64 *dst,
 		memset(dst + o->oo_keysize, 0, size - o->oo_keysize);
 	memcpy(dst, (const char *)src, o->oo_keysize);
 
-	return size;
+	return (size/sizeof(__u64));
 }
 
 static int osd_index_lookup(const struct lu_env *env, struct dt_object *dt,
@@ -1079,7 +1080,7 @@ static int osd_index_lookup(const struct lu_env *env, struct dt_object *dt,
 	int                rc;
 	ENTRY;
 
-	rc = osd_prepare_key(obj, k, key);
+	rc = osd_prepare_key_uint64(obj, k, key);
 
 	rc = -zap_lookup_uint64(osd->od_objset.os, obj->oo_db->db_object,
 				k, rc, obj->oo_recusize, obj->oo_recsize,
@@ -1131,7 +1132,7 @@ static int osd_index_insert(const struct lu_env *env, struct dt_object *dt,
 
 	oh = container_of0(th, struct osd_thandle, ot_super);
 
-	rc = osd_prepare_key(obj, k, key);
+	rc = osd_prepare_key_uint64(obj, k, key);
 
 	/* Insert (key,oid) into ZAP */
 	rc = -zap_add_uint64(osd->od_objset.os, obj->oo_db->db_object,
@@ -1175,7 +1176,7 @@ static int osd_index_delete(const struct lu_env *env, struct dt_object *dt,
 	LASSERT(th != NULL);
 	oh = container_of0(th, struct osd_thandle, ot_super);
 
-	rc = osd_prepare_key(obj, k, key);
+	rc = osd_prepare_key_uint64(obj, k, key);
 
 	/* Remove binary key from the ZAP */
 	rc = -zap_remove_uint64(osd->od_objset.os, obj->oo_db->db_object,
@@ -1276,7 +1277,7 @@ static int osd_index_it_rec(const struct lu_env *env, const struct dt_it *di,
 	if (rc)
 		RETURN(rc);
 
-	rc = osd_prepare_key(obj, k, (const struct dt_key *)za->za_name);
+	rc = osd_prepare_key_uint64(obj, k, (const struct dt_key *)za->za_name);
 
 	rc = -zap_lookup_uint64(osd->od_objset.os, obj->oo_db->db_object,
 				k, rc, obj->oo_recusize, obj->oo_recsize,
