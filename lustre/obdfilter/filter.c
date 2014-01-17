@@ -3664,6 +3664,7 @@ static int filter_handle_precreate(struct obd_export *exp, struct obdo *oa,
                 if (!cfs_test_bit(group, &filter->fo_destroys_in_progress)) {
                         CERROR("%s:["LPU64"] destroys_in_progress already cleared\n",
                                exp->exp_obd->obd_name, group);
+			oa->o_id = last;
                         cfs_mutex_unlock(&filter->fo_create_locks[group]);
                         RETURN(0);
                 }
