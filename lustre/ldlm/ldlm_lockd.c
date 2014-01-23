@@ -673,11 +673,11 @@ static int ldlm_handle_ast_error(struct ldlm_lock *lock,
                         }
 
                 } else {
-                        LDLM_ERROR(lock, "client (nid %s) returned %d "
+                        LDLM_ERROR(lock, "client (nid %s) returned %d (rc %d) "
                                    "from %s AST", libcfs_nid2str(peer.nid),
                                    (req->rq_repmsg != NULL) ?
                                    lustre_msg_get_status(req->rq_repmsg) : 0,
-                                   ast_type);
+                                   rc, ast_type);
                 }
                 ldlm_lock_cancel(lock);
                 /* Server-side AST functions are called from ldlm_reprocess_all,
@@ -711,6 +711,14 @@ static int ldlm_cb_interpret(const struct lu_env *env,
 
         ldlm_csa_put(arg);
         RETURN(0);
+}
+
+static void ldlm_update_resend(struct ptlrpc_request *req, void *data)
+{
+        struct ldlm_cb_async_args *ca   = data;
+        struct ldlm_lock          *lock = ca->ca_lock;
+
+        ldlm_refresh_waiting_lock(lock, ldlm_get_enq_timeout(lock));
 }
 
 static inline int ldlm_bl_and_cp_ast_tail(struct ptlrpc_request *req,
@@ -806,7 +814,6 @@ int ldlm_server_blocking_ast(struct ldlm_lock *lock,
         ca->ca_lock = lock;
 
         req->rq_interpret_reply = ldlm_cb_interpret;
-        req->rq_no_resend = 1;
 
         lock_res(lock->l_resource);
         if (LDLM_IS(lock, DESTROYED)) {
@@ -837,14 +844,20 @@ int ldlm_server_blocking_ast(struct ldlm_lock *lock,
         LDLM_DEBUG(lock, "server preparing blocking AST");
 
         ptlrpc_request_set_replen(req);
-        if (instant_cancel) {
-                unlock_res(lock->l_resource);
-                ldlm_lock_cancel(lock);
-        } else {
-                LASSERT(lock->l_granted_mode == lock->l_req_mode);
-                ldlm_add_waiting_lock(lock);
-                unlock_res(lock->l_resource);
-        }
+	if (instant_cancel) {
+		unlock_res(lock->l_resource);
+		ldlm_lock_cancel(lock);
+
+		req->rq_no_resend = 1;
+	} else {
+		LASSERT(lock->l_granted_mode == lock->l_req_mode);
+		ldlm_add_waiting_lock(lock);
+		unlock_res(lock->l_resource);
+
+		/* Do not resend after lock callback timeout */
+		req->rq_delay_limit = ldlm_get_enq_timeout(lock);
+		req->rq_resend_cb = ldlm_update_resend;
+	}
 
         req->rq_send_state = LUSTRE_IMP_FULL;
         /* ptlrpc_request_alloc_pack already set timeout */
@@ -902,7 +915,6 @@ int ldlm_server_completion_ast(struct ldlm_lock *lock, __u64 flags, void *data)
         ca->ca_lock = lock;
 
         req->rq_interpret_reply = ldlm_cb_interpret;
-        req->rq_no_resend = 1;
         body = req_capsule_client_get(&req->rq_pill, &RMF_DLM_REQ);
 
         body->lock_handle[0] = lock->l_remote_handle;
@@ -959,11 +971,17 @@ int ldlm_server_completion_ast(struct ldlm_lock *lock, __u64 flags, void *data)
                 if (lock->l_flags & LDLM_FL_CANCEL_ON_BLOCK) {
                         unlock_res_and_lock(lock);
                         ldlm_lock_cancel(lock);
+
                         instant_cancel = 1;
+			req->rq_no_resend = 1;
+
                         lock_res_and_lock(lock);
                 } else {
                         /* start the lock-timeout clock */
                         ldlm_add_waiting_lock(lock);
+			/* Do not resend after lock callback timeout */
+			req->rq_delay_limit = ldlm_get_enq_timeout(lock);
+			req->rq_resend_cb = ldlm_update_resend;
                 }
         }
         unlock_res_and_lock(lock);
