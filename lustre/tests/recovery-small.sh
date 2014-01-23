@@ -103,17 +103,50 @@ test_9() {
 run_test 9 "pause bulk on OST (bug 1420)"
 
 #bug 1521
-test_10() {
-    do_facet client mcreate $DIR/$tfile        || return 1
-    drop_bl_callback "chmod 0777 $DIR/$tfile"  || echo "evicted as expected"
-    # wait for the mds to evict the client
-    #echo "sleep $(($TIMEOUT*2))"
-    #sleep $(($TIMEOUT*2))
-    do_facet client touch $DIR/$tfile || echo "touch failed, evicted"
-    do_facet client checkstat -v -p 0777 $DIR/$tfile  || return 3
-    do_facet client "munlink $DIR/$tfile"
+test_10a() {
+	local BEFORE=`date +%s`
+	local EVICT
+
+	do_facet client "stat $DIR > /dev/null"  ||
+		error "failed to stat $DIR: $?"
+	drop_bl_callback "chmod 0777 $DIR" ||
+		error "failed to chmod $DIR: $?"
+
+	# let the client reconnect
+	client_reconnect
+	EVICT=$(do_facet client $LCTL get_param mdc.$FSNAME-MDT*.state | \
+	    awk -F"[ [,]" '/EVICTED]$/ { if (mx<$4) {mx=$4;} } END { print mx }')
+	[ ! -z "$EVICT" ] && [[ $EVICT -gt $BEFORE ]] ||
+		(do_facet client $LCTL get_param mdc.$FSNAME-MDT*.state;
+		    error "no eviction: $EVICT before:$BEFORE")
+
+	do_facet client checkstat -v -p 0777 $DIR ||
+		{ error "client checkstat failed: $?"; return 3; }
 }
-run_test 10 "finish request on server after client eviction (bug 1521)"
+run_test 10a "finish request on server after client eviction (bug 1521)"
+
+test_10b() {
+	local BEFORE=`date +%s`
+	local EVICT
+
+	do_facet client "stat $DIR > /dev/null"  ||
+		error "failed to stat $DIR: $?"
+	drop_bl_callback_once "chmod 0777 $DIR" ||
+		error "failed to chmod $DIR: $?"
+
+	# let the client reconnect
+	client_reconnect
+	EVICT=$(do_facet client $LCTL get_param mdc.$FSNAME-MDT*.state | \
+	    awk -F"[ [,]" '/EVICTED]$/ { if (mx<$4) {mx=$4;} } END { print mx }')
+
+	[ -z "$EVICT" ] || [[ $EVICT -le $BEFORE ]] ||
+		(do_facet client $LCTL get_param mdc.$FSNAME-MDT*.state;
+		    error "eviction happened: $EVICT before:$BEFORE")
+
+	do_facet client checkstat -v -p 0777 $DIR ||
+		{ error "client checkstat failed: $?"; return 3; }
+}
+run_test 10b "re-send BL AST"
 
 #bug 2460
 # wake up a thread waiting for completion after eviction
