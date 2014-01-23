@@ -129,26 +129,22 @@ set_file_unitsz() {
 }
 
 lustre_fail() {
-        local fail_node=$1
+	local fail_node=$1
 	local fail_loc=$2
 	local fail_val=${3:-0}
+	local NODES=
 
-	if [ $fail_node == "mds" ] || [ $fail_node == "mds_ost" ]; then
-	    if [ $((fail_loc & 0x10000000)) -ne 0  -a $fail_val -gt 0 ] || \
-		[ $((fail_loc)) -eq 0 ]; then
-		do_facet $SINGLEMDS "lctl set_param fail_val=$fail_val"
-	    fi
-	    do_facet $SINGLEMDS "lctl set_param fail_loc=$fail_loc"
+	case $fail_node in
+	mds_ost|mdt_ost) NODES="$(comma_list $(mdts_nodes) $(osts_nodes))";;
+	mds|mdt) NODES="$(comma_list $(mdts_nodes))";;
+	ost) NODES="$(comma_list $(osts_nodes))";;
+	esac
+
+	if [ $((fail_loc & 0x10000000)) -ne 0  -a $fail_val -gt 0 ] || \
+	   [ $((fail_loc)) -eq 0 ]; then
+		do_nodes $NODES "lctl set_param fail_val=$fail_val"
 	fi
-	if [ $fail_node == "ost" ] || [ $fail_node == "mds_ost" ]; then
-	    for num in `seq $OSTCOUNT`; do
-		if [ $((fail_loc & 0x10000000)) -ne 0 -a $fail_val -gt 0 ] || \
-		    [ $((fail_loc)) -eq 0 ]; then
-		    do_facet ost$num "lctl set_param fail_val=$fail_val"
-		fi
-		do_facet ost$num "lctl set_param fail_loc=$fail_loc"
-	    done
-	fi
+	do_nodes $NODES "lctl set_param fail_loc=$fail_loc"
 }
 
 RUNAS="runas -u $TSTID -g $TSTID"
