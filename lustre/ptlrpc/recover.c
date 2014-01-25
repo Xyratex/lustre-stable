@@ -349,10 +349,12 @@ EXPORT_SYMBOL(ptlrpc_recover_import);
 int ptlrpc_import_in_recovery(struct obd_import *imp)
 {
         int in_recovery = 1;
+
         cfs_spin_lock(&imp->imp_lock);
         if (imp->imp_state == LUSTRE_IMP_FULL ||
             imp->imp_state == LUSTRE_IMP_CLOSED ||
-            imp->imp_state == LUSTRE_IMP_DISCON)
+	    imp->imp_state == LUSTRE_IMP_DISCON ||
+	    imp->imp_obd->obd_no_recov)
                 in_recovery = 0;
         cfs_spin_unlock(&imp->imp_lock);
         return in_recovery;
