@@ -230,7 +230,7 @@ static int getpwuid_nss_lib(struct nss_module *nss, uid_t uid, struct passwd *pw
 	}
 	if (err == NSS_STATUS_SUCCESS)
 		return 0;
-	return tmp_errno;
+	return -ENOENT;
 }
 
 static int getgrent_nss_lib(struct nss_module *nss, struct group *gr)
