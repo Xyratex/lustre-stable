@@ -2723,12 +2723,16 @@ static int mgs_wlp_lcfg(struct obd_device *obd, struct fs_db *fsdb,
         rc = mgs_modify(obd, fsdb, mti, logname, tgtname, comment, CM_SKIP);
 	if (rc < 0)
 		return rc;
-        del = mgs_param_empty(ptr);
+	del = mgs_param_empty(ptr);
 
-        LCONSOLE_INFO("%sing parameter %s.%s in log %s\n", del ? "Disabl" : rc ?
-                      "Sett" : "Modify", tgtname, comment, logname);
-        if (del)
-                return rc;
+	LCONSOLE_INFO("%s parameter %s.%s in log %s\n", del ? "Disabling" : rc ?
+		      "Setting" : "Modifying", tgtname, comment, logname);
+	if (del) {
+		/* mgs_modify() will return 1 if nothing had to be done */
+		if (rc == 1)
+			rc = 0;
+		return rc;
+	}
 
         lustre_cfg_bufs_reset(bufs, tgtname);
         lustre_cfg_bufs_set_string(bufs, 1, ptr);
