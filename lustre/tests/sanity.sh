@@ -3216,7 +3216,7 @@ run_test 51a "special situations: split htree with empty entry =="
 # large number may give panic(). debugging on this is going on.
 export NUMTEST=70
 test_51b() {
-	local BASE=$DIR/$tdir
+	local BASE=$DIR/d${base}.${TESTSUITE}
 	mkdir -p $BASE
 
 	local mdtidx=$(printf "%04x" $($LFS getstripe -M $BASE))
