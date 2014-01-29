@@ -126,14 +126,18 @@ static int llog_check_cb(struct llog_handle *handle, struct llog_rec_hdr *rec,
                 }
                 if (handle->lgh_ctxt == NULL)
                         RETURN(-EOPNOTSUPP);
+		cfs_down_write(&handle->lgh_lock);
                 rc = llog_cat_id2handle(handle, &log_handle, &lir->lid_id);
                 if (rc) {
+			cfs_up_write(&handle->lgh_lock);
                         CDEBUG(D_IOCTL,
                                "cannot find log #"LPX64"#"LPX64"#%08x\n",
                                lir->lid_id.lgl_oid, lir->lid_id.lgl_oseq,
                                lir->lid_id.lgl_ogen);
                         RETURN(rc);
                 }
+		cfs_list_del_init(&log_handle->u.phd.phd_entry);
+		cfs_up_write(&handle->lgh_lock);
                 rc = llog_process(log_handle, llog_check_cb, NULL, NULL);
                 llog_close(log_handle);
         } else {
@@ -258,6 +262,7 @@ static int llog_remove_log(struct llog_handle *cat, struct llog_logid *logid)
         llog_cat_set_first_idx(cat, index);
         rc = llog_cancel_rec(cat, index, 1);
 out:
+	cfs_list_del_init(&log->u.phd.phd_entry);
         llog_free_handle(log);
         cfs_up_write(&cat->lgh_lock);
         RETURN(rc);

@@ -306,8 +306,10 @@ static int cat_cancel_cb(struct llog_handle *cathandle,
                LPX64"\n", lir->lid_id.lgl_oid, lir->lid_id.lgl_ogen,
                rec->lrh_index, cathandle->lgh_id.lgl_oid);
 
+	cfs_down_write(&cathandle->lgh_lock);
         rc = llog_cat_id2handle(cathandle, &loghandle, &lir->lid_id);
         if (rc) {
+		cfs_up_write(&cathandle->lgh_lock);
 		CERROR("%s: cannot find handle for llog "LPX64"\n: %d",
 		       loghandle->lgh_ctxt->loc_obd->obd_name,
 		       lir->lid_id.lgl_oid, rc);
@@ -321,6 +323,8 @@ static int cat_cancel_cb(struct llog_handle *cathandle,
         llh = loghandle->lgh_hdr;
         if ((llh->llh_flags & LLOG_F_ZAP_WHEN_EMPTY) &&
             (llh->llh_count == 1)) {
+		cfs_list_del_init(&loghandle->u.phd.phd_entry);
+		cfs_up_write(&cathandle->lgh_lock);
                 rc = llog_destroy(loghandle);
                 if (rc)
                         CERROR("failure destroying log in postsetup: %d\n", rc);
@@ -337,7 +341,9 @@ cat_cleanup:
                               LPX64"\n", lir->lid_id.lgl_oid,
                               lir->lid_id.lgl_ogen, rec->lrh_index,
                               cathandle->lgh_id.lgl_oid);
-        }
+        } else {
+		cfs_up_write(&cathandle->lgh_lock);
+	}
 
         RETURN(rc);
 }
@@ -403,6 +409,7 @@ int llog_obd_origin_cleanup(struct llog_ctxt *ctxt)
 
         cathandle = ctxt->loc_handle;
         if (cathandle) {
+		cfs_down_write(&cathandle->lgh_lock);
                 cfs_list_for_each_entry_safe(loghandle, n,
                                              &cathandle->u.chd.chd_head,
                                              u.phd.phd_entry) {
@@ -410,13 +417,15 @@ int llog_obd_origin_cleanup(struct llog_ctxt *ctxt)
                         if ((llh->llh_flags &
                                 LLOG_F_ZAP_WHEN_EMPTY) &&
                             (llh->llh_count == 1)) {
+				cfs_list_del_init(&loghandle->u.phd.phd_entry);
+				cfs_up_write(&cathandle->lgh_lock);
                                 rc = llog_destroy(loghandle);
                                 if (rc)
                                         CERROR("failure destroying log during "
                                                "cleanup: %d\n", rc);
 
                                 index = loghandle->u.phd.phd_cookie.lgc_index;
-                                llog_free_handle(loghandle);
+				llog_free_handle(loghandle);
 
                                 LASSERT(index);
                                 llog_cat_set_first_idx(cathandle, index);
@@ -425,9 +434,12 @@ int llog_obd_origin_cleanup(struct llog_ctxt *ctxt)
                                         CDEBUG(D_RPCTRACE, "cancel plain log at"
                                                "index %u of catalog "LPX64"\n",
                                                index,cathandle->lgh_id.lgl_oid);
+				cfs_down_write(&cathandle->lgh_lock);
                         }
                 }
-                llog_cat_put(ctxt->loc_handle);
+		cfs_up_write(&cathandle->lgh_lock);
+		llog_cat_put(cathandle);
+
         }
         RETURN(0);
 }

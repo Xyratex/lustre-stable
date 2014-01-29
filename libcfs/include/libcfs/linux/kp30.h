@@ -89,6 +89,7 @@
 #endif
 
 #define LASSERT_SEM_LOCKED(sem) LASSERT(down_trylock(sem) != 0)
+#define LASSERT_RWSEM_WRITE_LOCKED(sem) LASSERT(down_write_trylock(sem) == 0)
 #define LASSERT_MUTEX_LOCKED(x) LASSERT(mutex_is_locked(x))
 
 #define LIBCFS_PANIC(msg)            panic(msg)

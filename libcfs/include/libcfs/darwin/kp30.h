@@ -57,6 +57,7 @@
 #define LASSERT_SPIN_LOCKED(lock) do {} while(0)
 #endif
 #define LASSERT_SEM_LOCKED(sem) do {} while(0) /* XXX */
+#define LASSERT_RWSEM_WRITE_LOCKED(sem) do {} while(0) /* XXX */
 
 #define LIBCFS_PANIC(msg) panic(msg)
 #error libcfs_register_panic_notifier() missing

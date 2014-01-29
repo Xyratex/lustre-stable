@@ -44,6 +44,7 @@
 
 #define LASSERT_SPIN_LOCKED(lock) do {} while(0)
 #define LASSERT_SEM_LOCKED(sem) LASSERT(down_trylock(sem) != 0)
+#define LASSERT_RWSEM_WRITE_LOCKED(sem) do {} while(0)
 
 /* winnt panic */
 void libcfs_panic(char *msg);
