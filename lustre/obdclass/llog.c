@@ -76,8 +76,8 @@ void llog_free_handle(struct llog_handle *loghandle)
 
         if (!loghandle->lgh_hdr)
                 goto out;
-        if (loghandle->lgh_hdr->llh_flags & LLOG_F_IS_PLAIN)
-                cfs_list_del_init(&loghandle->u.phd.phd_entry);
+	if (loghandle->lgh_hdr->llh_flags & LLOG_F_IS_PLAIN)
+		LASSERT(cfs_list_empty(&loghandle->u.phd.phd_entry));
         if (loghandle->lgh_hdr->llh_flags & LLOG_F_IS_CAT)
                 LASSERT(cfs_list_empty(&loghandle->u.chd.chd_head));
         OBD_FREE(loghandle->lgh_hdr, LLOG_CHUNK_SIZE);

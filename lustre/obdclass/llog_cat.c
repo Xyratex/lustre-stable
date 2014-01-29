@@ -65,6 +65,7 @@ static struct llog_handle *llog_cat_new_log(struct llog_handle *cathandle)
         int rc, index, bitmap_size;
         ENTRY;
 
+	LASSERT_RWSEM_WRITE_LOCKED(&cathandle->lgh_lock);
         llh = cathandle->lgh_hdr;
         bitmap_size = LLOG_BITMAP_SIZE(llh);
 
@@ -147,6 +148,7 @@ int llog_cat_id2handle(struct llog_handle *cathandle, struct llog_handle **res,
         if (cathandle == NULL)
                 RETURN(-EBADF);
 
+	LASSERT_RWSEM_WRITE_LOCKED(&cathandle->lgh_lock);
         cfs_list_for_each_entry(loghandle, &cathandle->u.chd.chd_head,
                                 u.phd.phd_entry) {
                 struct llog_logid *cgl = &loghandle->lgh_id;
@@ -191,12 +193,17 @@ int llog_cat_put(struct llog_handle *cathandle)
         int rc;
         ENTRY;
 
+	cfs_down_write(&cathandle->lgh_lock);
         cfs_list_for_each_entry_safe(loghandle, n, &cathandle->u.chd.chd_head,
                                      u.phd.phd_entry) {
-                int err = llog_close(loghandle);
+		int err;
+
+		cfs_list_del_init(&loghandle->u.phd.phd_entry);
+		err = llog_close(loghandle);
                 if (err)
                         CERROR("error closing loghandle\n");
         }
+	cfs_up_write(&cathandle->lgh_lock);
         rc = llog_close(cathandle);
         RETURN(rc);
 }
@@ -346,6 +353,7 @@ int llog_cat_cancel_record(struct llog_handle *cathandle,
                 LASSERT(index);
                 llog_cat_set_first_idx(cathandle, index);
                 rc = llog_cancel_rec(cathandle, index, 1);
+		cfs_list_del_init(&loghandle->u.phd.phd_entry);
                 cfs_up_write(&cathandle->lgh_lock);
                 /* Log catalog cannot be removed when the last
                  * llog record from the last plain llog file is cancelled.
@@ -387,7 +395,9 @@ int llog_cat_process_cb(struct llog_handle *cat_llh, struct llog_rec_hdr *rec,
                LPX64"\n", lir->lid_id.lgl_oid, lir->lid_id.lgl_ogen,
                rec->lrh_index, cat_llh->lgh_id.lgl_oid);
 
+	cfs_down_write(&cat_llh->lgh_lock);
         rc = llog_cat_id2handle(cat_llh, &llh, &lir->lid_id);
+	cfs_up_write(&cat_llh->lgh_lock);
         if (rc) {
                 if (rc == -ENOENT) {
                         CERROR("Skipping non-existing log "LPX64"\n",
@@ -535,7 +545,9 @@ static int llog_cat_reverse_process_cb(struct llog_handle *cat_llh,
                LPX64"\n", lir->lid_id.lgl_oid, lir->lid_id.lgl_ogen,
                le32_to_cpu(rec->lrh_index), cat_llh->lgh_id.lgl_oid);
 
+	cfs_down_write(&cat_llh->lgh_lock);
         rc = llog_cat_id2handle(cat_llh, &llh, &lir->lid_id);
+	cfs_up_write(&cat_llh->lgh_lock);
         if (rc) {
                 if (rc == -ENOENT) {
                         CERROR("Skipping non-existing log at index %u\n",
