@@ -429,6 +429,7 @@ int fld_client_rpc(struct obd_export *exp,
 
 	LASSERT(exp != NULL);
 
+again:
 	imp = class_exp2cliimp(exp);
 	req = ptlrpc_request_alloc_pack(imp, &RQF_FLD_QUERY, LUSTRE_MDS_VERSION,
 					FLD_QUERY);
@@ -457,8 +458,18 @@ int fld_client_rpc(struct obd_export *exp,
         fld_exit_request(&exp->exp_obd->u.cli);
         if (fld_op != FLD_LOOKUP)
                 mdc_put_rpc_lock(exp->exp_obd->u.cli.cl_rpc_lock, NULL);
-        if (rc)
-                GOTO(out_req, rc);
+	if (rc != 0) {
+		if (rc == -EWOULDBLOCK) {
+			/* For no_delay req(see above), EWOULDBLOCK means the
+			 * connection is being evicted, but this seq lookup
+			 * should not return error, since it would cause
+			 * unecessary failure of the application, instead
+			 * it should retry here */
+			ptlrpc_req_finished(req);
+			goto again;
+		}
+		GOTO(out_req, rc);
+	}
 
         prange = req_capsule_server_get(&req->rq_pill, &RMF_FLD_MDFLD);
         if (prange == NULL)
