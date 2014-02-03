@@ -415,7 +415,7 @@ static int ll_xattr_cache_refill(struct inode *inode, struct lookup_intent *oit)
 
 	rc = ll_xattr_find_get_lock(inode, oit, &req);
 	if (rc)
-		GOTO(out_maybe_drop, rc);
+		GOTO(out_no_unlock, rc);
 
 	/* Do we have the data at this point? */
 	if (ll_xattr_cache_valid(lli)) {
