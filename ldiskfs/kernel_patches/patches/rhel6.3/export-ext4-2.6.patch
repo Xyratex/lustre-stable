@@ -31,7 +31,7 @@ Index: linux-stage/fs/ext4/super.c
 +EXPORT_SYMBOL(__ext4_journal_stop);
 +
  MODULE_AUTHOR("Remy Card, Stephen Tweedie, Andrew Morton, Andreas Dilger, Theodore Ts'o and others");
- MODULE_DESCRIPTION("Fourth Extended Filesystem with extents");
+ MODULE_DESCRIPTION("Fourth Extended Filesystem");
  MODULE_LICENSE("GPL");
 Index: linux-stage/fs/ext4/ext4.h
 ===================================================================
