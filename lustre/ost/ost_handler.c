@@ -1058,7 +1058,7 @@ static int ost_brw_write(struct ptlrpc_request *req, struct obd_trans_info *oti)
 
         tls = ost_tls_get(req);
         if (tls == NULL)
-                GOTO(out_bulk, rc = -ENOMEM);
+		GOTO(out, rc = -ENOMEM);
         local_nb = tls->local;
 
         rc = ost_brw_lock_get(LCK_PW, exp, ioo, remote_nb, &lockh);
@@ -1141,13 +1141,13 @@ static int ost_brw_write(struct ptlrpc_request *req, struct obd_trans_info *oti)
 
 		rc = sptlrpc_svc_prep_bulk(req, desc);
 		if (rc != 0)
-			GOTO(out_lock, rc);
+			GOTO(skip_transfer, rc);
 
 		rc = target_bulk_io(exp, desc, &lwi);
 	}
-        no_reply = rc != 0;
 
 skip_transfer:
+	no_reply = rc != 0;
         if (client_cksum != 0 && rc == 0) {
                 static int cksum_counter;
                 repbody->oa.o_valid |= OBD_MD_FLCKSUM | OBD_MD_FLFLAGS;
@@ -1252,7 +1252,6 @@ out_lock:
         ost_brw_lock_put(LCK_PW, ioo, remote_nb, &lockh);
 out_tls:
         ost_tls_put(req);
-out_bulk:
         if (desc)
                 ptlrpc_free_bulk(desc);
 out:
