@@ -950,8 +950,6 @@ void vvp_write_complete(struct ccc_object *club, struct ccc_page *page);
 enum vvp_io_subtype {
         /** normal IO */
         IO_NORMAL,
-        /** io called from .sendfile */
-        IO_SENDFILE,
         /** io started from splice_{read|write} */
         IO_SPLICE
 };
@@ -962,10 +960,6 @@ struct vvp_io {
         enum vvp_io_subtype    cui_io_subtype;
 
         union {
-                struct {
-                        read_actor_t      cui_actor;
-                        void             *cui_target;
-                } sendfile;
                 struct {
                         struct pipe_inode_info *cui_pipe;
                         unsigned int            cui_flags;
@@ -1021,10 +1015,6 @@ struct vvp_io_args {
                         struct iovec      *via_iov;
                         unsigned long      via_nrsegs;
                 } normal;
-                struct {
-                        read_actor_t       via_actor;
-                        void              *via_target;
-                } sendfile;
                 struct {
                         struct pipe_inode_info  *via_pipe;
                         unsigned int       via_flags;
