@@ -1420,14 +1420,12 @@ int ll_setattr_raw(struct dentry *dentry, struct iattr *attr)
         if (op_data == NULL)
                 RETURN(-ENOMEM);
 
-	if (!S_ISDIR(inode->i_mode)) {
-		if (ia_valid & ATTR_SIZE)
-			UP_WRITE_I_ALLOC_SEM(inode);
+	if (!S_ISDIR(inode->i_mode) && (ia_valid & ATTR_SIZE)) {
+		UP_WRITE_I_ALLOC_SEM(inode);
 		mutex_unlock(&inode->i_mutex);
 		cfs_down_write(&lli->lli_trunc_sem);
 		mutex_lock(&inode->i_mutex);
-		if (ia_valid & ATTR_SIZE)
-			DOWN_WRITE_I_ALLOC_SEM(inode);
+		DOWN_WRITE_I_ALLOC_SEM(inode);
 	}
 
         memcpy(&op_data->op_attr, attr, sizeof(*attr));
@@ -1469,7 +1467,8 @@ out:
                 }
                 ll_finish_md_op_data(op_data);
         }
-        if (!S_ISDIR(inode->i_mode))
+
+	if (!S_ISDIR(inode->i_mode) && (ia_valid & ATTR_SIZE))
                 cfs_up_write(&lli->lli_trunc_sem);
 
         ll_stats_ops_tally(ll_i2sbi(inode), (ia_valid & ATTR_SIZE) ?
