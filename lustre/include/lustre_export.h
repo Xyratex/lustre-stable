@@ -269,6 +269,8 @@ struct obd_export {
                 struct filter_export_data eu_filter_data;
                 struct ec_export_data     eu_ec_data;
         } u;
+
+	struct adaptive_timeout    exp_bl_lock_at;
 };
 
 #define exp_target_data u.eu_target_data

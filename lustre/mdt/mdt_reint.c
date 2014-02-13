@@ -488,7 +488,7 @@ static int mdt_reint_setattr(struct mdt_thread_info *info,
                   (unsigned int)ma->ma_attr.la_valid);
 
         if (info->mti_dlm_req)
-                ldlm_request_cancel(req, info->mti_dlm_req, 0);
+                ldlm_request_cancel(req, info->mti_dlm_req, 0, 0);
 
         repbody = req_capsule_server_get(info->mti_pill, &RMF_MDT_BODY);
         mo = mdt_object_find(info->mti_env, info->mti_mdt, rr->rr_fid1);
@@ -615,7 +615,8 @@ static int mdt_reint_create(struct mdt_thread_info *info,
                 RETURN(err_serious(-ESTALE));
 
         if (info->mti_dlm_req)
-                ldlm_request_cancel(mdt_info_req(info), info->mti_dlm_req, 0);
+                ldlm_request_cancel(mdt_info_req(info),
+				    info->mti_dlm_req, 0, 0);
 
         switch (info->mti_attr.ma_attr.la_mode & S_IFMT) {
         case S_IFDIR:{
@@ -671,7 +672,7 @@ static int mdt_reint_unlink(struct mdt_thread_info *info,
                   rr->rr_name);
 
         if (info->mti_dlm_req)
-                ldlm_request_cancel(req, info->mti_dlm_req, 0);
+                ldlm_request_cancel(req, info->mti_dlm_req, 0, 0);
 
         if (OBD_FAIL_CHECK(OBD_FAIL_MDS_REINT_UNLINK))
                 RETURN(err_serious(-ENOENT));
@@ -820,7 +821,7 @@ static int mdt_reint_link(struct mdt_thread_info *info,
                 RETURN(err_serious(-ENOENT));
 
         if (info->mti_dlm_req)
-                ldlm_request_cancel(req, info->mti_dlm_req, 0);
+                ldlm_request_cancel(req, info->mti_dlm_req, 0, 0);
 
         if (info->mti_cross_ref) {
                 /* MDT holding name ask us to add ref. */
@@ -1129,7 +1130,7 @@ static int mdt_reint_rename(struct mdt_thread_info *info,
         ENTRY;
 
         if (info->mti_dlm_req)
-                ldlm_request_cancel(req, info->mti_dlm_req, 0);
+                ldlm_request_cancel(req, info->mti_dlm_req, 0, 0);
 
         if (info->mti_cross_ref) {
                 rc = mdt_reint_rename_tgt(info);

@@ -176,7 +176,7 @@ static int ost_destroy(struct obd_export *exp, struct ptlrpc_request *req,
                 dlm = req_capsule_client_get(&req->rq_pill, &RMF_DLM_REQ);
                 if (dlm == NULL)
                         RETURN (-EFAULT);
-                ldlm_request_cancel(req, dlm, 0);
+                ldlm_request_cancel(req, dlm, 0, 0);
         }
 
         /* If there's a capability, get it */
@@ -1788,25 +1788,29 @@ struct ost_prolong_data {
         struct ldlm_extent     opd_extent;
         ldlm_mode_t            opd_mode;
         unsigned int           opd_locks;
-        int                    opd_timeout;
 };
 
 /* prolong locks for the current service time of the corresponding
  * portal (= OST_IO_PORTAL)
  */
-static inline int prolong_timeout(struct ptlrpc_request *req)
+static inline int prolong_timeout(struct ptlrpc_request *req,
+				  struct ldlm_lock *lock)
 {
         struct ptlrpc_service *svc = req->rq_rqbd->rqbd_service;
 
         if (AT_OFF)
                 return obd_timeout / 2;
 
-        return max(at_est2timeout(at_get(&svc->srv_at_estimate)), ldlm_timeout);
+	/* We are in the middle of the process - BL AST is sent, CANCEL
+	  is ahead. Take half of AT + IO process time. */
+	return at_est2timeout(at_get(&svc->srv_at_estimate)) +
+		(ldlm_bl_timeout(lock) >> 1);
 }
 
 static void ost_prolong_lock_one(struct ost_prolong_data *opd,
                                  struct ldlm_lock *lock)
 {
+	int timeout = prolong_timeout(opd->opd_req, lock);
 	LASSERT(lock->l_export == opd->opd_exp);
 
 	if (lock->l_destroyed) /* lock already cancelled */
@@ -1823,11 +1827,11 @@ static void ost_prolong_lock_one(struct ost_prolong_data *opd,
         LDLM_DEBUG(lock,
                    "refreshed for req x"LPU64" ext("LPU64"->"LPU64") to %ds.\n",
                    opd->opd_req->rq_xid, opd->opd_extent.start,
-                   opd->opd_extent.end, opd->opd_timeout);
+                   opd->opd_extent.end, timeout);
 
         /* OK. this is a possible lock the user holds doing I/O
          * let's refresh eviction timer for it */
-        ldlm_refresh_waiting_lock(lock, opd->opd_timeout);
+        ldlm_refresh_waiting_lock(lock, timeout);
         ++opd->opd_locks;
 }
 
@@ -1970,7 +1974,6 @@ static int ost_rw_hpreq_check(struct ptlrpc_request *req)
         opd.opd_extent.start = nb->offset;
         nb += ioo->ioo_bufcnt - 1;
         opd.opd_extent.end = nb->offset + nb->len - 1;
-        opd.opd_timeout = prolong_timeout(req);
 
         DEBUG_REQ(D_RPCTRACE, req,
                "%s %s: refresh rw locks: " LPU64"/"LPU64" ("LPU64"->"LPU64")\n",
@@ -2040,7 +2043,6 @@ static int ost_punch_hpreq_check(struct ptlrpc_request *req)
         opd.opd_extent.end   = end;
         if (oa->o_blocks == OBD_OBJECT_EOF)
                 opd.opd_extent.end = OBD_OBJECT_EOF;
-        opd.opd_timeout = prolong_timeout(req);
 
         osc_build_res_name(oa->o_id, oa->o_seq, &opd.opd_resid);
 
