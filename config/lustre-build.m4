@@ -665,8 +665,9 @@ AC_DEFUN([LB_CONFIG_RPMBUILD_OPTIONS],[
 		case $arg in
 			--with-release=* ) ;;
 			--with-kmp-moddir=* ) ;;
-			--enable-tests | --disable-tests ) ;;
 			--with-linux=* | --with-linux-obj=* ) ;;
+			--enable-tests | --disable-tests ) ;;
+			--enable-modules | --disable-modules ) ;;
 			* ) CONFIGURE_ARGS="$CONFIGURE_ARGS '$arg'" ;;
 		esac
 	done
@@ -700,9 +701,12 @@ AC_DEFUN([LB_CONFIG_RPMBUILD_OPTIONS],[
 			RPMBINARGS="$RPMBINARGS --define \"cross_requires intel-mic-gpl\""
 		fi
 	fi
+	if test x$enable_modules != xyes ; then
+		RPMBINARGS="$RPMBINARGS --without lustre_modules"
+	fi
 	if test x$enable_tests != xyes ; then
 		RPMBINARGS="$RPMBINARGS --without lustre_tests"
-		RPMSRCARGS="$RPMSRCARGS --without lustre_tests";
+		RPMSRCARGS="$RPMSRCARGS --without lustre_tests"
 	fi
 	if test x$enable_server != xyes ; then
 		RPMBINARGS="$RPMBINARGS --without servers"
