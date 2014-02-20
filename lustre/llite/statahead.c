@@ -766,7 +766,9 @@ static int ll_statahead_thread(void *arg)
 		thread->t_flags = SVC_RUNNING;
         cfs_spin_unlock(&lli->lli_sa_lock);
         cfs_waitq_signal(&thread->t_ctl_waitq);
-        CDEBUG(D_READA, "start doing statahead for %s\n", parent->d_name.name);
+	CDEBUG(D_READA, "statahead thread starting: sai %p, parent %.*s\n",
+	       sai, parent->d_name.len, parent->d_name.name);
+
 
         lli->lli_sa_pos = 0;
         ll_dir_chain_init(&chain);
@@ -896,7 +898,7 @@ keep_de:
                          * go into overflow page.
                          */
                 }
-        }
+	}
         EXIT;
 
 out:
@@ -908,9 +910,9 @@ out:
         cfs_waitq_signal(&thread->t_ctl_waitq);
         ll_sai_put(sai);
         dput(parent);
-        CDEBUG(D_READA, "statahead thread stopped, pid %d\n",
-               cfs_curproc_pid());
-        return rc;
+	CDEBUG(D_READA, "statahead thread stopped: sai %p, parent %.*s\n",
+	       sai, parent->d_name.len, parent->d_name.name);
+	return rc;
 }
 
 /**
@@ -940,8 +942,8 @@ void ll_stop_statahead(struct inode *dir, void *key)
                         cfs_spin_unlock(&lli->lli_sa_lock);
                         cfs_waitq_signal(&thread->t_ctl_waitq);
 
-                        CDEBUG(D_READA, "stopping statahead thread, pid %d\n",
-                               cfs_curproc_pid());
+			CDEBUG(D_READA, "stop statahead thread: sai %p pid %u\n",
+			       lli->lli_sai, (unsigned int)thread->t_pid);
                         l_wait_event(thread->t_ctl_waitq,
                                      sa_is_stopped(lli->lli_sai),
                                      &lwi);
@@ -1208,6 +1210,9 @@ int do_statahead_enter(struct inode *dir, struct dentry **dentryp, int lookup)
                 RETURN(-EAGAIN);
         }
 
+	CDEBUG(D_READA, "start statahead thread: sai %p, parent %.*s\n",
+	       sai, parent->d_name.len, parent->d_name.name);
+
 	/* The sai buffer already has one reference taken at allocation time,
 	 * but as soon as we expose the sai by attaching it to the lli that default
 	 * reference can be dropped by another thread calling ll_stop_statahead.
@@ -1285,12 +1290,13 @@ void ll_statahead_exit(struct inode *dir, struct dentry *dentry, int result)
                 sai->sai_consecutive_miss++;
                 if (sa_low_hit(sai) && sa_is_running(sai)) {
                         atomic_inc(&sbi->ll_sa_wrong);
-                        CDEBUG(D_READA, "Statahead for dir "DFID" hit ratio "
-                               "too low: hit/miss %u/%u, sent/replied %u/%u, "
-                               "stopping statahead thread: pid %d\n",
-                               PFID(&lli->lli_fid), sai->sai_hit,
-                               sai->sai_miss, sai->sai_sent,
-                               sai->sai_replied, cfs_curproc_pid());
+			CDEBUG(D_READA, "Statahead for dir "DFID" hit "
+			       "ratio too low: hit/miss %u/%u "
+			       ", sent/replied %u/%u, stopping "
+			       "statahead thread\n",
+			       PFID(&lli->lli_fid), sai->sai_hit,
+			       sai->sai_miss, sai->sai_sent,
+			       sai->sai_replied);
                         cfs_spin_lock(&lli->lli_sa_lock);
                         if (!sa_is_stopped(sai))
                                 sai->sai_thread.t_flags = SVC_STOPPING;
