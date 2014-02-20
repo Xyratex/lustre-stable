@@ -593,16 +593,18 @@ int mdt_fix_reply(struct mdt_thread_info *info)
          * buffers before growing it */
         if (info->mti_attr.ma_big_lmm_used) {
                 LASSERT(req_capsule_has_field(pill, &RMF_MDT_MD, RCL_SERVER));
-                md_packed = req_capsule_get_size(pill, &RMF_MDT_MD,
-                                                 RCL_SERVER);
-                LASSERT(md_packed > 0);
-                /* buffer must be allocated separately */
-                LASSERT(info->mti_attr.ma_lmm !=
-                        req_capsule_server_get(pill, &RMF_MDT_MD));
-                req_capsule_shrink(pill, &RMF_MDT_MD, 0, RCL_SERVER);
-                /* free big lmm if md_size is not needed */
-                if (md_size == 0)
-                        info->mti_attr.ma_big_lmm_used = 0;
+		/* free big lmm if md_size is not needed */
+		if (md_size == 0) {
+			info->mti_attr.ma_big_lmm_used = 0;
+		} else {
+			md_packed = req_capsule_get_size(pill, &RMF_MDT_MD,
+							 RCL_SERVER);
+			LASSERT(md_packed > 0);
+			/* buffer must be allocated separately */
+			LASSERT(info->mti_attr.ma_lmm !=
+				req_capsule_server_get(pill, &RMF_MDT_MD));
+			req_capsule_shrink(pill, &RMF_MDT_MD, 0, RCL_SERVER);
+		}
         } else if (req_capsule_has_field(pill, &RMF_MDT_MD, RCL_SERVER)) {
                 req_capsule_shrink(pill, &RMF_MDT_MD, md_size, RCL_SERVER);
         }
