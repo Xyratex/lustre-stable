@@ -147,6 +147,39 @@ test_10b() {
 }
 run_test 10b "re-send BL AST"
 
+test_10c() {
+	mount_client $DIR2
+
+	#grant lock1, export2
+	do_facet client $SETSTRIPE -i -0 $DIR2/$tfile || return 1
+	do_facet client $MULTIOP $DIR2/$tfile Ow  || return 1
+
+#define OBD_FAIL_LDLM_BL_EVICT            0x31e
+	do_facet ost $LCTL set_param fail_loc=0x31e
+	#get waiting lock2, export1
+	do_facet client $MULTIOP $DIR/$tfile Ow &
+	PID1=$!
+	# let enqueue to get asleep
+	sleep 2
+
+	#get lock2 blocked
+	do_facet client $MULTIOP $DIR2/$tfile Ow &
+	PID2=$!
+	sleep 2
+
+	#evict export1
+	ost_evict_client
+
+	sleep 2
+	do_facet ost $LCTL set_param fail_loc=0
+
+	wait $PID1
+	wait $PID2
+
+	umount_client $DIR2
+}
+run_test 10c "lock enqueue for destroyed export"
+
 #bug 2460
 # wake up a thread waiting for completion after eviction
 test_11(){

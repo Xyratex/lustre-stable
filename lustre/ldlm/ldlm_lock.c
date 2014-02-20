@@ -1783,7 +1783,7 @@ int ldlm_export_cancel_blocked_locks(struct obd_export *exp) {
 			lock = cfs_list_entry(exp->exp_bl_list.next,
 					      struct ldlm_lock, l_exp_list);
 			LDLM_LOCK_GET(lock);
-			cfs_list_del_init(&exp->exp_bl_list);
+			cfs_list_del_init(&lock->l_exp_list);
 		} else {
 			lock = NULL;
 		}
