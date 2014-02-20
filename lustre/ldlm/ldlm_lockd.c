@@ -667,7 +667,6 @@ static int ldlm_handle_ast_error(struct ldlm_lock *lock,
                         ldlm_lock_cancel(lock);
                         rc = -ERESTART;
                 } else {
-                        ldlm_del_waiting_lock(lock);
                         ldlm_failed_ast(lock, rc, ast_type);
                 }
         } else if (rc) {
@@ -1247,6 +1246,9 @@ existing_lock:
         ldlm_lock2desc(lock, &dlm_rep->lock_desc);
         ldlm_lock2handle(lock, &dlm_rep->lock_handle);
 
+	if (lock && lock->l_resource->lr_type == LDLM_EXTENT)
+		OBD_FAIL_TIMEOUT(OBD_FAIL_LDLM_BL_EVICT, 6);
+
         /* We never send a blocking AST until the lock is granted, but
          * we can tell it right now */
         lock_res_and_lock(lock);
@@ -1341,10 +1343,7 @@ existing_lock:
                                 unlock_res(lock->l_resource);
                         }
                 } else {
-                        lock_res_and_lock(lock);
-                        ldlm_resource_unlink_lock(lock);
-                        ldlm_lock_destroy_nolock(lock);
-                        unlock_res_and_lock(lock);
+			ldlm_lock_cancel(lock);
                 }
 
                 if (!err && dlm_req->lock_desc.l_resource.lr_type != LDLM_FLOCK)
@@ -2158,7 +2157,8 @@ static int ldlm_cancel_handler(struct ptlrpc_request *req)
                 req_capsule_set(&req->rq_pill, &RQF_LDLM_CANCEL);
                 CDEBUG(D_INODE, "cancel\n");
                 if (CFS_FAIL_CHECK(OBD_FAIL_LDLM_CANCEL) ||
-                    CFS_FAIL_CHECK(OBD_FAIL_PTLRPC_CANCEL_RESEND))
+                    CFS_FAIL_CHECK(OBD_FAIL_PTLRPC_CANCEL_RESEND) ||
+		    CFS_FAIL_CHECK(OBD_FAIL_LDLM_BL_EVICT))
                         RETURN(0);
                 rc = ldlm_handle_cancel(req);
                 if (rc)
@@ -2472,6 +2472,8 @@ static int ldlm_bl_thread_exports(struct ldlm_bl_pool *blp,
 {
 	int num;
 	ENTRY;
+
+	OBD_FAIL_TIMEOUT(OBD_FAIL_LDLM_BL_EVICT, 4);
 
 	num = ldlm_export_cancel_blocked_locks(exp);
 	if (num == 0)
