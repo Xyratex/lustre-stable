@@ -28,7 +28,8 @@ NFS_CLIMNTPT=${NFS_CLIMNTPT:-$MOUNT}
 [ -z "$NFS_CLIENTS" ] &&
 	skip_env "need at least two nodes: nfs server and nfs client" && exit 0
 
-[ "$NFSVERSION" = "4" ] && cl_mnt_opt="$MOUNTOPT,32bitapi" || cl_mnt_opt=""
+[ "$NFSVERSION" = "4" ] && cl_mnt_opt="${MOUNT_OPTS:+$MOUNT_OPTS,}32bitapi" ||
+    cl_mnt_opt=""
 
 cleanup_exit () {
 	trap 0
