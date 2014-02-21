@@ -3661,6 +3661,7 @@ static int lfs_hsm_request(int argc, char **argv, int action)
 						strerror(errno));
 					hur = oldhur;
 					rc = -errno;
+					fclose(fp);
 					goto out_free;
 				}
 				memcpy(hur, oldhur, hur_len(oldhur));
@@ -3677,8 +3678,10 @@ static int lfs_hsm_request(int argc, char **argv, int action)
 			rc = lfs_hsm_prepare_file(line, &hui->hui_fid,
 						  &last_dev);
 			hur->hur_request.hr_itemcount++;
-			if (rc)
+			if (rc) {
+				fclose(fp);
 				goto out_free;
+			}
 
 			if ((some_file[0] == '\0') &&
 			    (strlen(line) < sizeof(some_file)))
