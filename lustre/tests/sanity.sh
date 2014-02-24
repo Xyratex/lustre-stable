@@ -10194,6 +10194,24 @@ test_235() {
 }
 run_test 235 "MRP-393: flock deadlock detection does not work properly"
 
+# LU-4659 linkea consistency
+test_238() {
+	touch $DIR/$tfile
+	ln $DIR/$tfile $DIR/$tfile.lnk
+	touch $DIR/$tfile.new
+	mv $DIR/$tfile.new $DIR/$tfile
+	local fid1=$($LFS path2fid $DIR/$tfile)
+	local fid2=$($LFS path2fid $DIR/$tfile.lnk)
+	local path1=$($LFS fid2path $FSNAME $fid1)
+	[ "$tfile" == "$path1" ] || \
+		error "linkea inconsistent: $tfile $fid1 $path1"
+	local path2=$($LFS fid2path $FSNAME $fid2)
+	[ "$tfile.lnk" == "$path2" ] ||
+		error "linkea inconsistent: $tfile.lnk $fid2 $path2!"
+	rm -f $DIR/$tfile*
+}
+run_test 238 "Verify linkea consistency"
+
 #
 # tests that do cleanup/setup should be run at the end
 #

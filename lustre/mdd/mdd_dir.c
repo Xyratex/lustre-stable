@@ -842,11 +842,14 @@ out_pending:
 
 /* caller should take a lock before calling */
 int mdd_finish_unlink(const struct lu_env *env,
-                      struct mdd_object *obj, struct md_attr *ma,
-                      struct thandle *th)
+		      struct mdd_object *obj, struct md_attr *ma,
+		      const struct mdd_object *pobj,
+		      const struct lu_name *lname,
+		      struct thandle *th)
 {
         int rc;
         int reset = 1;
+	int is_dir = S_ISDIR(ma->ma_attr.la_mode);
         ENTRY;
 
         LASSERT(mdd_write_locked(env, obj) != 0);
@@ -877,7 +880,10 @@ int mdd_finish_unlink(const struct lu_env *env,
                                 reset = 0;
                 }
 
-        }
+	} else if (!is_dir) {
+		/* old files may not have link ea; ignore errors */
+		mdd_links_del(env, obj, mdo2fid(pobj), lname, th);
+	}
         if (reset)
                 ma->ma_valid &= ~(MA_LOV | MA_COOKIE);
 
@@ -968,7 +974,7 @@ static int mdd_unlink(const struct lu_env *env, struct md_object *pobj,
                         GOTO(cleanup, rc);
         }
 
-        rc = mdd_finish_unlink(env, mdd_cobj, ma, handle);
+	rc = mdd_finish_unlink(env, mdd_cobj, ma, mdd_pobj, lname, handle);
 #ifdef HAVE_QUOTA_SUPPORT
         if (mds->mds_quota && ma->ma_valid & MA_INODE &&
             ma->ma_attr.la_nlink == 0) {
@@ -986,10 +992,6 @@ static int mdd_unlink(const struct lu_env *env, struct md_object *pobj,
                 }
         }
 #endif
-        if (!is_dir)
-                /* old files may not have link ea; ignore errors */
-                mdd_links_del(env, mdd_cobj, mdo2fid(mdd_pobj), lname, handle);
-
         EXIT;
 cleanup:
         mdd_write_unlock(env, mdd_cobj);
@@ -1872,7 +1874,8 @@ static int mdd_rename(const struct lu_env *env,
 			GOTO(fixup_tpobj, rc);
 		}
 
-                rc = mdd_finish_unlink(env, mdd_tobj, ma, handle);
+		rc = mdd_finish_unlink(env, mdd_tobj, ma,
+					mdd_tpobj, ltname, handle);
                 if (rc)
                         GOTO(fixup_tpobj, rc);
 
