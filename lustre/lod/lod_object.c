@@ -938,9 +938,9 @@ static int lod_declare_object_create(const struct lu_env *env,
 		v3->lmm_stripe_size = cpu_to_le32(lo->ldo_def_stripe_size);
 		v3->lmm_stripe_count = cpu_to_le32(lo->ldo_def_stripenr);
 		v3->lmm_stripe_offset = cpu_to_le16(lo->ldo_def_stripe_offset);
-		if (lo->ldo_pool)
-			strncpy(v3->lmm_pool_name, lo->ldo_pool,
-				LOV_MAXPOOLNAME);
+		if (lo->ldo_pool != NULL)
+			strlcpy(v3->lmm_pool_name, lo->ldo_pool,
+				sizeof(v3->lmm_pool_name));
 
 		info->lti_buf.lb_buf = v3;
 		info->lti_buf.lb_len = sizeof(*v3);
