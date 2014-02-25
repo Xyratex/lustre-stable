@@ -603,7 +603,11 @@ sfw_load_test (sfw_test_instance_t *tsi)
 void
 sfw_unload_test (sfw_test_instance_t *tsi)
 {
-        sfw_test_case_t *tsc = sfw_find_test_case(tsi->tsi_service);
+	sfw_test_case_t *tsc;
+
+	LASSERT(tsi != NULL);
+	tsc = sfw_find_test_case(tsi->tsi_service);
+	LASSERT(tsc != NULL);
 
         LASSERT (tsc != NULL);
 

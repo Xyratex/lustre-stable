@@ -1481,7 +1481,8 @@ lnet_notify (lnet_ni_t *ni, lnet_nid_t nid, int alive, cfs_time_t when)
 
         LNET_UNLOCK();
 
-        lnet_do_notify(lp);
+	if (ni != NULL)
+		lnet_do_notify(lp);
 
         LNET_LOCK();
 
