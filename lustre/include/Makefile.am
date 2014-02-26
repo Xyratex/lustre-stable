@@ -87,6 +87,5 @@ EXTRA_DIST = \
 	obd_cksum.h \
 	obd_class.h \
 	obd.h \
-	obd_ost.h \
 	obd_support.h \
 	obd_target.h
