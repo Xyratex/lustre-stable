@@ -46,6 +46,8 @@ struct ptlrpc_request_set;
 extern int test_req_buffer_pressure;
 
 /* client.c */
+void ptlrpc_at_adj_net_latency(struct ptlrpc_request *req,
+			       unsigned int service_time);
 int ptlrpc_request_cache_init(void);
 int ptlrpc_request_cache_fini(void);
 struct ptlrpc_request *ptlrpc_request_alloc_cache(int flags);
