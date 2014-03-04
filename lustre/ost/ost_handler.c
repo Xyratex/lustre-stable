@@ -900,11 +900,6 @@ static int ost_brw_write(struct ptlrpc_request *req, struct obd_trans_info *oti)
 
         /* pause before transaction has been started */
         OBD_FAIL_TIMEOUT(OBD_FAIL_OST_BRW_PAUSE_BULK, (obd_timeout + 1) / 4);
-	if (OBD_FAIL_PRECHECK(OBD_FAIL_OST_HOLD_WRITE_RPC)) {
-		/* Skip early reply */
-		req->rq_deadline += obd_timeout;
-		OBD_RACE(OBD_FAIL_OST_HOLD_WRITE_RPC);
-	}
         /* ost_body, ioobj & noibuf_remote are verified and swabbed in
          * ost_rw_hpreq_check(). */
         body = req_capsule_client_get(&req->rq_pill, &RMF_OST_BODY);
@@ -920,6 +915,12 @@ static int ost_brw_write(struct ptlrpc_request *req, struct obd_trans_info *oti)
         rc = ost_validate_obdo(exp, &body->oa, ioo);
         if (rc)
                 RETURN(rc);
+
+	if (OBD_FAIL_PRECHECK(OBD_FAIL_OST_HOLD_WRITE_RPC)) {
+		/* Skip early reply */
+		req->rq_deadline += obd_timeout;
+		OBD_RACE(OBD_FAIL_OST_HOLD_WRITE_RPC);
+	}
 
         for (niocount = i = 0; i < objcount; i++)
                 niocount += ioo[i].ioo_bufcnt;
