@@ -806,6 +806,12 @@ static int ptlrpc_connect_interpret(const struct lu_env *env,
         imp->imp_pingable = 1;
         imp->imp_force_reconnect = 0;
 
+        /* The net statistics after (re-)connect is not valid anymore,
+         * because may reflect other routing, etc. */
+        at_init(&imp->imp_at.iat_net_latency, 0, 0);
+        ptlrpc_at_adj_net_latency(request,
+                        lustre_msg_get_service_time(request->rq_repmsg));
+
         if (aa->pcaa_initial_connect) {
                 if (msg_flags & MSG_CONNECT_REPLAYABLE) {
                         imp->imp_replayable = 1;
