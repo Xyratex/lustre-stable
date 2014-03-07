@@ -1231,16 +1231,16 @@ static int ll_dir_ioctl(struct inode *inode, struct file *file,
                 struct mds_body *body;
                 struct lov_user_md *lump;
                 struct lov_mds_md *lmm = NULL;
-                char *filename = NULL;
+                ll_filename *filename = NULL;
                 int rc, lmmsize;
 
                 if (cmd == IOC_MDC_GETFILEINFO ||
                     cmd == IOC_MDC_GETFILESTRIPE) {
-                        filename = getname((const char *)arg);
+                        filename = ll_getname((const char *)arg);
                         if (IS_ERR(filename))
                                 RETURN(PTR_ERR(filename));
 
-                        rc = ll_lov_getstripe_ea_info(inode, filename, &lmm,
+                        rc = ll_lov_getstripe_ea_info(inode, ll_name(filename), &lmm,
                                                       &lmmsize, &request);
                 } else {
                         rc = ll_dir_getstripe(inode, &lmm, &lmmsize, &request);
@@ -1308,7 +1308,7 @@ static int ll_dir_ioctl(struct inode *inode, struct file *file,
         out_req:
                 ptlrpc_req_finished(request);
                 if (filename)
-                        putname(filename);
+                        ll_putname(filename);
                 return rc;
         }
         case IOC_LOV_GETINFO: {

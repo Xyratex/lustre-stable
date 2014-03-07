@@ -1863,6 +1863,23 @@ AC_DEFUN([LC_HAVE_COMPACTION_H],
 ])
 ])
 
+AC_DEFUN([LC_GETNAME],
+[AC_MSG_CHECKING([whether getname returns struct filename *])
+LB_LINUX_TRY_COMPILE([
+        #include <linux/fs.h>
+],[
+        struct filename *f;
+        f = getname("name");
+        f->name = NULL;
+],[
+        AC_MSG_RESULT(yes)
+        AC_DEFINE(HAVE_STRUCT_FILENAME, 1,
+                  [getname returns struct filename *])
+],[
+        AC_MSG_RESULT(no)
+])
+])
+
 #
 # LC_PROG_LINUX
 #
@@ -2025,6 +2042,7 @@ AC_DEFUN([LC_PROG_LINUX],
           LC_DQUOT_INIT
           LC_REQUEST_QUEUE_LIMITS
           LC_HAVE_COMPACTION_H
+          LC_GETNAME
 
           #
           if test x$enable_server = xyes ; then

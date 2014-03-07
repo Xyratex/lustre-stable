@@ -1207,4 +1207,22 @@ __u32 ll_fid_build_gen(struct ll_sb_info *sbi,
 
 #endif
 
+#ifdef HAVE_STRUCT_FILENAME
+typedef struct filename ll_filename;
+#define ll_name(filename) ((filename)->name)
+#else
+typedef const char ll_filename; 
+#define ll_name(name) name
+#endif
+
+static inline ll_filename *ll_getname(const char *name)
+{
+	return getname(name);
+}
+
+static inline void ll_putname(ll_filename *name)
+{
+	putname(name);
+}
+
 #endif /* LLITE_INTERNAL_H */
