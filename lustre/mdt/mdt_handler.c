@@ -4120,6 +4120,8 @@ static void mdt_fini(const struct lu_env *env, struct mdt_device *m)
         struct obd_device *obd = mdt2obd_dev(m);
         ENTRY;
 
+	next->md_ops->mdo_iocontrol(env, next, OBD_IOC_PAUSE_LFSCK, 0, NULL);
+
         target_recovery_fini(obd);
 
         ping_evictor_stop();
@@ -4156,8 +4158,6 @@ static void mdt_fini(const struct lu_env *env, struct mdt_device *m)
 	mdt_quota_fini(env, m);
 
 	cfs_free_nidlist(&m->mdt_squash.rsi_nosquash_nids);
-
-	next->md_ops->mdo_iocontrol(env, next, OBD_IOC_PAUSE_LFSCK, 0, NULL);
 
         mdt_seq_fini(env, m);
         mdt_fld_fini(env, m);
