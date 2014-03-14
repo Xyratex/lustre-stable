@@ -1267,22 +1267,23 @@ static int lmv_placement_policy(struct obd_device *obd,
 
 		lum = (struct lmv_user_md *)op_data->op_data;
 		if (lum->lum_type == LMV_STRIPE_TYPE &&
-		    lum->lum_stripe_offset != -1) {
-			if (lum->lum_stripe_offset >= lmv->desc.ld_tgt_count) {
+		    le32_to_cpu(lum->lum_stripe_offset) != -1) {
+			if (le32_to_cpu(lum->lum_stripe_offset) >=
+					lmv->desc.ld_tgt_count) {
 				CERROR("%s: Stripe_offset %d > MDT count %d:"
 				       " rc = %d\n", obd->obd_name,
-				       lum->lum_stripe_offset,
+				       le32_to_cpu(lum->lum_stripe_offset),
 				       lmv->desc.ld_tgt_count, -ERANGE);
 				RETURN(-ERANGE);
 			}
-			*mds = lum->lum_stripe_offset;
+			*mds = le32_to_cpu(lum->lum_stripe_offset);
 			RETURN(0);
 		}
 	}
 
 	/* Allocate new fid on target according to operation type and parent
 	 * home mds. */
-	*mds = op_data->op_mds;
+	*mds = le32_to_cpu(op_data->op_mds);
 	RETURN(0);
 }
 
