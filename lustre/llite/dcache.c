@@ -373,7 +373,7 @@ static int ll_revalidate_dentry(struct dentry *dentry,
 	if (lookup_flags & (LOOKUP_PARENT | LOOKUP_OPEN | LOOKUP_CREATE))
 		return 1;
 
-	if (!dentry_need_statahead(dir, dentry))
+	if (!dentry_may_statahead(dir, dentry))
 		return 1;
 
 #ifndef HAVE_DCACHE_LOCK
@@ -381,8 +381,7 @@ static int ll_revalidate_dentry(struct dentry *dentry,
 		return -ECHILD;
 #endif
 
-	do_statahead_enter(dir, &dentry, dentry->d_inode == NULL);
-	ll_statahead_mark(dir, dentry);
+	ll_statahead(dir, &dentry, dentry->d_inode == NULL);
 	return 1;
 }
 
