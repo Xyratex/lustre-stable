@@ -113,8 +113,16 @@ struct cl_object *cl_object_find(const struct lu_env *env,
                                  struct cl_device *cd, const struct lu_fid *fid,
                                  const struct cl_object_conf *c)
 {
+	struct cl_object *obj;
+
 	might_sleep();
-        return lu2cl(lu_object_find_slice(env, cl2lu_dev(cd), fid, &c->coc_lu));
+	obj = lu2cl(lu_object_find_slice(env, cl2lu_dev(cd), fid, &c->coc_lu));
+	if (obj == NULL) {
+		CWARN("cl_obj is not found, cl_dev %p, "DFID", conf %p\n",
+			cd, PFID(fid), c);
+		obj = ERR_PTR(-ENOENT);
+	}
+	return obj;
 }
 EXPORT_SYMBOL(cl_object_find);
 
