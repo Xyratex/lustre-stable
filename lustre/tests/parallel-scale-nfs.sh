@@ -19,19 +19,21 @@ check_and_setup_lustre
 # first unmount all the lustre client
 cleanup_mount $MOUNT
 # mount lustre on mds
-lustre_client=$(facet_active_host $SINGLEMDS)
+lustre_client=${NFS_SERVER:-$(facet_active_host $SINGLEMDS)}
+NFS_CLIENTS=${NFS_CLIENTS:-$CLIENTS}
+NFS_CLIENTS=$(exclude_items_from_list $NFS_CLIENTS $lustre_client)
 [ "$NFSVERSION" = "4" ] && cl_mnt_opt="$MOUNTOPT,32bitapi" || cl_mnt_opt=""
 zconf_mount_clients $lustre_client $MOUNT "$cl_mnt_opt" || \
     error "mount lustre on $lustre_client failed"
 
 # setup the nfs
-if ! setup_nfs "$NFSVERSION" "$MOUNT" "$lustre_client" "$CLIENTS"; then
+if ! setup_nfs "$NFSVERSION" "$MOUNT" "$lustre_client" "$NFS_CLIENTS"; then
     error_noexit false "setup nfs failed!"
-    cleanup_nfs "$MOUNT" "$lustre_client" "$CLIENTS" || \
+    cleanup_nfs "$MOUNT" "$lustre_client" "$NFS_CLIENTS" || \
         error_noexit false "failed to cleanup nfs"
     if ! zconf_umount_clients $lustre_client $MOUNT force; then
         error_noexit false "failed to umount lustre on $lustre_client"
-    elif ! zconf_mount_clients $CLIENTS $MOUNT; then
+    elif ! zconf_mount_clients $NFS_CLIENTS $MOUNT; then
         error_noexit false "failed to mount lustre"
     fi
     check_and_cleanup_lustre
@@ -43,7 +45,7 @@ FAIL_ON_ERROR=false
 
 # common setup
 MACHINEFILE=${MACHINEFILE:-$TMP/$(basename $0 .sh).machines}
-clients=${CLIENTS:-$HOSTNAME}
+clients=${NFS_CLIENTS:-$HOSTNAME}
 generate_machine_file $clients $MACHINEFILE || \
     error "Failed to generate machine file"
 num_clients=$(get_node_count ${clients//,/ })
@@ -98,11 +100,11 @@ test_iorfpp() {
 run_test iorfpp "iorfpp"
 
 # cleanup nfs
-cleanup_nfs "$MOUNT" "$lustre_client" "$CLIENTS" || \
+cleanup_nfs "$MOUNT" "$lustre_client" "$NFS_CLIENTS" || \
     error_noexit false "cleanup_nfs failed"
 if ! zconf_umount_clients $lustre_client $MOUNT force; then
     error_noexit false "failed to umount lustre on $lustre_client"
-elif ! zconf_mount_clients $CLIENTS $MOUNT; then
+elif ! zconf_mount_clients $NFS_CLIENTS $MOUNT; then
     error_noexit false "failed to mount lustre after nfs test"
 fi
 
