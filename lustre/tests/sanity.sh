@@ -9769,7 +9769,7 @@ mcreate_path2fid () {
 	local minor=$3
 	local name=$4
 	local desc=$5
-	local path=$DIR/$tdir/$name
+	local path=$(echo $DIR/$tdir/$name | sed s#//*#/#g)
 	local fid
 	local rc
 	local fid_path
