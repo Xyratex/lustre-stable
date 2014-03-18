@@ -10024,7 +10024,10 @@ test_162() {
 	FID=$($LFS path2fid $DIR/$tdir/d2/a/b/c/new_file | tr -d '[]')
 	# fid2path dir/fsname should both work
 	check_path "$tdir/d2/a/b/c/new_file" $FSNAME $FID --link 1
-	check_path "$DIR/$tdir/d2/p/q/r/hlink" $DIR $FID --link 0
+	# The line below is to replace sequences of repeated slashes
+	# with a single slash and to remove a trailing slash.
+	local dir=$(echo $DIR | sed s#//*#/#g | sed s#/\$#''#g)
+	check_path "$dir/$tdir/d2/p/q/r/hlink" $dir $FID --link 0
 
 	# hardlink count: check that there are 2 links
 	# Doesnt work with CMD yet: 17935
