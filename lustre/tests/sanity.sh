@@ -7900,7 +7900,7 @@ changelog_chmask()
     fi
 }
 
-test_160() {
+test_160a() {
     remote_mds_nodsh && skip "remote MDS with nodsh" && return
     USER=$(do_facet $SINGLEMDS $LCTL --device $MDT0 changelog_register -n)
     echo "Registered as changelog user $USER"
@@ -7986,7 +7986,7 @@ test_160() {
 	echo "$USERS other changelog users; can't verify off"
     fi
 }
-run_test 160 "changelog sanity"
+run_test 160a "changelog sanity"
 
 test_160c() {
 	[ "$SLOW" = "no" ] && skip "Skipping slow test" && return
