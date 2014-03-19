@@ -8603,6 +8603,32 @@ changelog_extract_field() {
 		tail -1
 }
 
+test_159() {
+	[ "$SLOW" = "no" ] && skip "Skipping slow test" && return
+
+	local USER=$(do_facet $SINGLEMDS $LCTL --device $MDT0 \
+	    changelog_register -n)
+
+	mkdir -p $DIR/$tdir
+
+	echo "Generating changelogs.."
+	for i in $(seq 1 65000)
+	do
+		touch $DIR/$tdir/$i || { echo "failed to create needed \
+changelogs, the test may be incomplete"; break; }
+	done
+
+	#define OBD_FAIL_LLOG                               0x1300
+	do_facet $SINGLEMDS $LCTL set_param fail_loc=0x80001300
+	$LFS changelog_clear $MDT0 $USER 0 &
+	$LFS changelog_clear $MDT0 $USER 0
+	echo "Waiting for lfs changelog completion"
+	wait
+
+	do_facet $SINGLEMDS $LCTL --device $MDT0 changelog_deregister $USER
+}
+run_test 159 "changelog clear race"
+
 test_160a() {
 	remote_mds_nodsh && skip "remote MDS with nodsh" && return
 	[ $(lustre_version_code $SINGLEMDS) -ge $(version_code 2.2.0) ] ||
@@ -8732,30 +8758,30 @@ test_160b() { # LU-3587
 run_test 160b "Verify that very long rename doesn't crash in changelog"
 
 test_160c() {
-	[ "$SLOW" = "no" ] && skip "Skipping slow test" && return
+	local rc=0
+	[ $PARALLEL == "yes" ] && skip "skip parallel run" && return
 
+	# Registration step
 	local USER=$(do_facet $SINGLEMDS $LCTL --device $MDT0 \
-	    changelog_register -n)
+		changelog_register -n)
 
+	rm -rf $DIR/$tdir
 	mkdir -p $DIR/$tdir
-
-	echo "Generating changelogs.."
-	for i in $(seq 1 65000)
-	do
-		touch $DIR/$tdir/$i || { echo "failed to create needed \
-changelogs, the test may be incomplete"; break; }
-	done
-
-	#define OBD_FAIL_LLOG                               0x1300
-	do_facet $SINGLEMDS $LCTL set_param fail_loc=0x80001300
-	$LFS changelog_clear $MDT0 $USER 0 &
+	$MCREATE $DIR/$tdir/foo_160c
+	changelog_chmask "TRUNC"
+	$TRUNCATE $DIR/$tdir/foo_160c 200
+	changelog_chmask "TRUNC"
+	$TRUNCATE $DIR/$tdir/foo_160c 199
+	$LFS changelog $MDT0
+	TRUNCS=$($LFS changelog $MDT0 | tail -5 | grep -c "TRUNC")
+	[ $TRUNCS -eq 1 ] || err17935 "TRUNC changelog mask count $TRUNCS != 1"
 	$LFS changelog_clear $MDT0 $USER 0
-	echo "Waiting for lfs changelog completion"
-	wait
 
+	# Deregistration step
+	echo "deregistering $USER"
 	do_facet $SINGLEMDS $LCTL --device $MDT0 changelog_deregister $USER
 }
-run_test 160c "changelog clear race"
+run_test 160c "verify that changelog log catch the truncate event"
 
 test_161() {
     mkdir -p $DIR/$tdir
