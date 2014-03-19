@@ -8099,7 +8099,7 @@ changelog_chmask()
     fi
 }
 
-test_160() {
+test_160a() {
     remote_mds_nodsh && skip "remote MDS with nodsh" && return
     [ $(lustre_version_code $SINGLEMDS) -ge $(version_code 2.2.0) ] ||
         { skip "Need MDS version at least 2.2.0"; return; }
@@ -8187,7 +8187,7 @@ test_160() {
 	echo "$USERS other changelog users; can't verify off"
     fi
 }
-run_test 160 "changelog sanity"
+run_test 160a "changelog sanity"
 
 test_160c() {
 	[ "$SLOW" = "no" ] && skip "Skipping slow test" && return
