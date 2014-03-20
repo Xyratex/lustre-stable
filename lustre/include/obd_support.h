@@ -310,6 +310,7 @@ int obd_alloc_fail(const void *ptr, const char *name, const char *type,
 #define OBD_FAIL_LDLM_CP_BL_RACE         0x318
 #define OBD_FAIL_LDLM_NEW_LOCK           0x319
 #define OBD_FAIL_LDLM_BL_EVICT           0x31e
+#define OBD_FAIL_LDLM_PAUSE_CANCEL2      0x31f
 
 /* LOCKLESS IO */
 #define OBD_FAIL_LDLM_SET_CONTENTION     0x385
