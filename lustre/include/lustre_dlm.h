@@ -249,6 +249,9 @@ typedef enum {
  */
 #define LDLM_FL_SERVER_LOCK     0x4000000000000ULL // 1 << 50
 
+/* If the lock is resent */
+#define LDLM_FL_RESENT          0x8000000000000ULL // 1 << 51
+
 #define LDLM_IS(_p,  _f) (((_p)->l_flags & LDLM_FL_##_f) != 0)
 #define LDLM_NOT(_p, _f) (! LDLM_IS(_p, _f))
 #define LDLM_SET(_p, _f) ((_p)->l_flags |=  LDLM_FL_##_f)
