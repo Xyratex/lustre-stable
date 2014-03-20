@@ -1165,7 +1165,10 @@ int ldlm_handle_enqueue0(struct ldlm_namespace *ns,
         }
 #endif
 
-        if (unlikely(flags & LDLM_FL_REPLAY)) {
+	if (unlikely(lustre_msg_get_flags(req->rq_reqmsg) & MSG_RESENT))
+		flags |= LDLM_FL_RESENT;
+
+	if (unlikely(flags & (LDLM_FL_REPLAY | LDLM_FL_RESENT))) {
                 /* Find an existing lock in the per-export lock hash */
                 lock = cfs_hash_lookup(req->rq_export->exp_lock_hash,
                                        (void *)&dlm_req->lock_handle[0]);
@@ -1173,7 +1176,9 @@ int ldlm_handle_enqueue0(struct ldlm_namespace *ns,
                         DEBUG_REQ(D_DLMTRACE, req, "found existing lock cookie "
                                   LPX64, lock->l_handle.h_cookie);
                         GOTO(existing_lock, rc = 0);
-                }
+		} else {
+			flags &= ~LDLM_FL_RESENT;
+		}
         }
 
         /* The lock's callback data might be set in the policy function */
@@ -2434,6 +2439,8 @@ static int ldlm_bl_thread_blwi(struct ldlm_bl_pool *blp,
 
 	if (blwi->blwi_mem_pressure)
 		cfs_memory_pressure_set();
+
+	OBD_FAIL_TIMEOUT(OBD_FAIL_LDLM_PAUSE_CANCEL2, 4);
 
 	if (blwi->blwi_count) {
 		int count;

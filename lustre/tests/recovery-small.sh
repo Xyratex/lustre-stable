@@ -1678,6 +1678,35 @@ test_112b() {
 
 run_test 112b "getattr resend while orignal request is in progress"
 
+test_113() {
+	local BEFORE=`date +%s`
+
+	# modify dir so that next revalidate would not obtain UPDATE lock
+	do_facet client touch $DIR
+
+	# drop 1 reply with UPDATE lock,
+	# resend should not create 2nd lock on server
+	mcreate $DIR/$tfile || error "mcreate failed: $?"
+	drop_ldlm_reply_once "stat $DIR/$tfile" || error "stat failed: $?"
+
+	# 2 BL AST will be sent to client, both must find the same lock,
+	# race them to not get EINVAL for 2nd BL AST
+	#define OBD_FAIL_LDLM_PAUSE_CANCEL2      0x31f
+	lctl set_param fail_loc=0x8000031f
+
+	lctl set_param ldlm.namespaces.*.early_lock_cancel=0 > /dev/null
+	chmod 0777 $DIR/$tfile || error "chmod failed: $?"
+	lctl set_param ldlm.namespaces.*.early_lock_cancel=1 > /dev/null
+
+	# let the client reconnect
+	client_reconnect
+	EVICT=`do_facet client $LCTL get_param mdc.$FSNAME-MDT*.state | \
+	   awk -F"[ [,]" '/EVICTED]$/ { if (mx<$4) {mx=$4;} } END { print mx }'`
+
+	[ -z "$EVICT" ] || [[ $EVICT -le $BEFORE ]] || error "eviction happened"
+}
+run_test 113 "ldlm enqueue dropped reply should not cause deadlocks"
+
 complete $SECONDS
 check_and_cleanup_lustre
 exit_status

@@ -3326,9 +3326,24 @@ drop_bl_callback() {
 drop_ldlm_reply() {
 #define OBD_FAIL_LDLM_REPLY              0x30c
     RC=0
-    do_facet $SINGLEMDS lctl set_param fail_loc=0x30c
+    local list=$(comma_list $(mdts_nodes) $(osts_nodes))
+    do_nodes $list lctl set_param fail_loc=0x30c
+
     do_facet client "$@" || RC=$?
-    do_facet $SINGLEMDS lctl set_param fail_loc=0
+
+    do_nodes $list lctl set_param fail_loc=0
+    return $RC
+}
+
+drop_ldlm_reply_once() {
+#define OBD_FAIL_LDLM_REPLY              0x30c
+    RC=0
+    local list=$(comma_list $(mdts_nodes) $(osts_nodes))
+    do_nodes $list lctl set_param fail_loc=0x8000030c
+
+    do_facet client "$@" || RC=$?
+
+    do_nodes $list lctl set_param fail_loc=0
     return $RC
 }
 
