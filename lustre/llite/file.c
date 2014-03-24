@@ -50,7 +50,17 @@
 
 #include "cl_object.h"
 
-struct ll_file_data *ll_file_data_get(void)
+static int
+ll_put_grouplock(struct inode *inode, struct file *file, unsigned long arg);
+
+static int ll_lease_close(struct obd_client_handle *och, struct inode *inode,
+			  bool *lease_broken);
+
+static enum llioc_iter
+ll_iocontrol_call(struct inode *inode, struct file *file,
+		  unsigned int cmd, unsigned long arg, int *rcp);
+
+static struct ll_file_data *ll_file_data_get(void)
 {
 	struct ll_file_data *fd;
 
@@ -261,8 +271,8 @@ int ll_md_real_close(struct inode *inode, fmode_t fmode)
 	RETURN(rc);
 }
 
-int ll_md_close(struct obd_export *md_exp, struct inode *inode,
-                struct file *file)
+static int ll_md_close(struct obd_export *md_exp, struct inode *inode,
+		       struct file *file)
 {
         struct ll_file_data *fd = LUSTRE_FPRIVATE(file);
         struct ll_inode_info *lli = ll_i2info(inode);
@@ -499,8 +509,8 @@ static int ll_och_fill(struct obd_export *md_exp, struct lookup_intent *it,
 	return md_set_open_replay_data(md_exp, och, it);
 }
 
-int ll_local_open(struct file *file, struct lookup_intent *it,
-                  struct ll_file_data *fd, struct obd_client_handle *och)
+static int ll_local_open(struct file *file, struct lookup_intent *it,
+			 struct ll_file_data *fd, struct obd_client_handle *och)
 {
         struct inode *inode = file->f_dentry->d_inode;
         struct ll_inode_info *lli = ll_i2info(inode);
@@ -756,8 +766,9 @@ static int ll_md_blocking_lease_ast(struct ldlm_lock *lock,
 /**
  * Acquire a lease and open the file.
  */
-struct obd_client_handle *ll_lease_open(struct inode *inode, struct file *file,
-					fmode_t fmode, __u64 open_flags)
+static struct obd_client_handle *
+ll_lease_open(struct inode *inode, struct file *file, fmode_t fmode,
+	      __u64 open_flags)
 {
 	struct lookup_intent it = { .it_op = IT_OPEN };
 	struct ll_sb_info *sbi = ll_i2sbi(inode);
@@ -890,14 +901,13 @@ out:
 		OBD_FREE_PTR(och);
 	RETURN(ERR_PTR(rc));
 }
-EXPORT_SYMBOL(ll_lease_open);
 
 /**
  * Release lease and close the file.
  * It will check if the lease has ever broken.
  */
-int ll_lease_close(struct obd_client_handle *och, struct inode *inode,
-			bool *lease_broken)
+static int ll_lease_close(struct obd_client_handle *och, struct inode *inode,
+			  bool *lease_broken)
 {
 	struct ldlm_lock *lock;
 	bool cancelled = true;
@@ -924,7 +934,6 @@ int ll_lease_close(struct obd_client_handle *och, struct inode *inode,
 				       NULL);
 	RETURN(rc);
 }
-EXPORT_SYMBOL(ll_lease_close);
 
 /* Fills the obdo with the attributes for the lsm */
 static int ll_lsm_getattr(struct lov_stripe_md *lsm, struct obd_export *exp,
@@ -1099,7 +1108,7 @@ static bool file_is_noatime(const struct file *file)
 	return false;
 }
 
-void ll_io_init(struct cl_io *io, const struct file *file, int write)
+static void ll_io_init(struct cl_io *io, const struct file *file, int write)
 {
         struct inode *inode = file->f_dentry->d_inode;
 
@@ -1687,7 +1696,8 @@ static int ll_lov_getstripe(struct inode *inode, unsigned long arg)
 	RETURN(rc);
 }
 
-int ll_get_grouplock(struct inode *inode, struct file *file, unsigned long arg)
+static int
+ll_get_grouplock(struct inode *inode, struct file *file, unsigned long arg)
 {
         struct ll_inode_info   *lli = ll_i2info(inode);
         struct ll_file_data    *fd = LUSTRE_FPRIVATE(file);
@@ -2295,7 +2305,8 @@ out:
 	RETURN(rc);
 }
 
-long ll_file_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+static long
+ll_file_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	struct inode		*inode = file->f_dentry->d_inode;
 	struct ll_file_data	*fd = LUSTRE_FPRIVATE(file);
@@ -2680,7 +2691,7 @@ generic_file_llseek_size(struct file *file, loff_t offset, int origin,
 }
 #endif
 
-loff_t ll_file_seek(struct file *file, loff_t offset, int origin)
+static loff_t ll_file_seek(struct file *file, loff_t offset, int origin)
 {
 	struct inode *inode = file->f_dentry->d_inode;
 	loff_t retval, eof = 0;
@@ -2705,7 +2716,7 @@ loff_t ll_file_seek(struct file *file, loff_t offset, int origin)
 	RETURN(retval);
 }
 
-int ll_flush(struct file *file, fl_owner_t id)
+static int ll_flush(struct file *file, fl_owner_t id)
 {
 	struct inode *inode = file->f_dentry->d_inode;
 	struct ll_inode_info *lli = ll_i2info(inode);
@@ -3039,7 +3050,8 @@ ll_flock_completion_ast_async(struct ldlm_lock *lock, __u64 flags, void *data)
 	RETURN(0);
 }
 
-int ll_file_flock(struct file *file, int cmd, struct file_lock *file_lock)
+static int
+ll_file_flock(struct file *file, int cmd, struct file_lock *file_lock)
 {
 	struct inode *inode = file->f_dentry->d_inode;
 	struct ll_sb_info *sbi = ll_i2sbi(inode);
@@ -3205,7 +3217,8 @@ out:
         RETURN(rc);
 }
 
-int ll_file_noflock(struct file *file, int cmd, struct file_lock *file_lock)
+static int
+ll_file_noflock(struct file *file, int cmd, struct file_lock *file_lock)
 {
         ENTRY;
 
@@ -3301,8 +3314,7 @@ static int ll_inode_revalidate_fini(struct inode *inode, int rc)
 	return rc;
 }
 
-int __ll_inode_revalidate_it(struct dentry *dentry, struct lookup_intent *it,
-                             __u64 ibits)
+static int __ll_inode_revalidate(struct dentry *dentry, __u64 ibits)
 {
         struct inode *inode = dentry->d_inode;
         struct ptlrpc_request *req = NULL;
@@ -3398,14 +3410,14 @@ out:
         return rc;
 }
 
-int ll_inode_revalidate_it(struct dentry *dentry, struct lookup_intent *it,
-			   __u64 ibits)
+static int
+ll_inode_revalidate(struct dentry *dentry, __u64 ibits)
 {
 	struct inode	*inode = dentry->d_inode;
 	int		 rc;
 	ENTRY;
 
-	rc = __ll_inode_revalidate_it(dentry, it, ibits);
+	rc = __ll_inode_revalidate(dentry, ibits);
 	if (rc != 0)
 		RETURN(rc);
 
@@ -3428,16 +3440,15 @@ int ll_inode_revalidate_it(struct dentry *dentry, struct lookup_intent *it,
 	RETURN(rc);
 }
 
-int ll_getattr_it(struct vfsmount *mnt, struct dentry *de,
-                  struct lookup_intent *it, struct kstat *stat)
+int ll_getattr(struct vfsmount *mnt, struct dentry *de, struct kstat *stat)
 {
         struct inode *inode = de->d_inode;
         struct ll_sb_info *sbi = ll_i2sbi(inode);
         struct ll_inode_info *lli = ll_i2info(inode);
         int res = 0;
 
-        res = ll_inode_revalidate_it(de, it, MDS_INODELOCK_UPDATE |
-                                             MDS_INODELOCK_LOOKUP);
+	res = ll_inode_revalidate(de, MDS_INODELOCK_UPDATE |
+				      MDS_INODELOCK_LOOKUP);
         ll_stats_ops_tally(sbi, LPROC_LL_GETATTR, 1);
 
         if (res)
@@ -3463,15 +3474,9 @@ int ll_getattr_it(struct vfsmount *mnt, struct dentry *de,
 
         return 0;
 }
-int ll_getattr(struct vfsmount *mnt, struct dentry *de, struct kstat *stat)
-{
-        struct lookup_intent it = { .it_op = IT_GETATTR };
 
-        return ll_getattr_it(mnt, de, &it, stat);
-}
-
-int ll_fiemap(struct inode *inode, struct fiemap_extent_info *fieinfo,
-                __u64 start, __u64 len)
+static int ll_fiemap(struct inode *inode, struct fiemap_extent_info *fieinfo,
+		     __u64 start, __u64 len)
 {
         int rc;
         size_t num_bytes;
@@ -3506,7 +3511,7 @@ int ll_fiemap(struct inode *inode, struct fiemap_extent_info *fieinfo,
 	return rc;
 }
 
-struct posix_acl * ll_get_acl(struct inode *inode, int type)
+struct posix_acl *ll_get_acl(struct inode *inode, int type)
 {
 	struct ll_inode_info *lli = ll_i2info(inode);
 	struct posix_acl *acl = NULL;
@@ -3577,10 +3582,8 @@ int ll_inode_permission(struct inode *inode, int mask, struct nameidata *nd)
         * need to do it before permission check. */
 
         if (inode == inode->i_sb->s_root->d_inode) {
-                struct lookup_intent it = { .it_op = IT_LOOKUP };
-
-                rc = __ll_inode_revalidate_it(inode->i_sb->s_root, &it,
-                                              MDS_INODELOCK_LOOKUP);
+		rc = __ll_inode_revalidate(inode->i_sb->s_root,
+					   MDS_INODELOCK_LOOKUP);
                 if (rc)
                         RETURN(rc);
         }
@@ -3735,8 +3738,9 @@ void ll_iocontrol_unregister(void *magic)
 EXPORT_SYMBOL(ll_iocontrol_register);
 EXPORT_SYMBOL(ll_iocontrol_unregister);
 
-enum llioc_iter ll_iocontrol_call(struct inode *inode, struct file *file,
-                        unsigned int cmd, unsigned long arg, int *rcp)
+static enum llioc_iter
+ll_iocontrol_call(struct inode *inode, struct file *file,
+		  unsigned int cmd, unsigned long arg, int *rcp)
 {
         enum llioc_iter ret = LLIOC_CONT;
         struct llioc_data *data;

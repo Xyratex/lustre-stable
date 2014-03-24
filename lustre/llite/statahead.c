@@ -1595,9 +1595,9 @@ int do_statahead_enter(struct inode *dir, struct dentry **dentryp,
                 }
 
 		/* if statahead is busy in readdir, help it do post-work */
-                while (!ll_sa_entry_stated(entry) &&
-                       sai->sai_in_readpage &&
-                       !sa_received_empty(sai))
+		while (!ll_sa_entry_stated(entry) &&
+		       sai->sai_in_readpage &&
+		       !sa_received_empty(sai))
 			ll_post_statahead(sai);
 
                 if (!ll_sa_entry_stated(entry)) {
