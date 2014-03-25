@@ -1175,7 +1175,7 @@ int osd_obj_spec_update(struct osd_thread_info *info, struct osd_device *osd,
 			handle_t *th)
 {
 	struct dentry	*root;
-	char		*name;
+	char		*name = NULL;
 	int		 rc;
 	ENTRY;
 
@@ -1196,7 +1196,7 @@ int osd_obj_spec_insert(struct osd_thread_info *info, struct osd_device *osd,
 			handle_t *th)
 {
 	struct dentry	*root;
-	char		*name;
+	char		*name = NULL;
 	int		 rc;
 	ENTRY;
 
@@ -1218,7 +1218,7 @@ int osd_obj_spec_lookup(struct osd_thread_info *info, struct osd_device *osd,
 	struct dentry	*root;
 	struct dentry	*dentry;
 	struct inode	*inode;
-	char		*name;
+	char		*name = NULL;
 	int		rc = -ENOENT;
 	ENTRY;
 
