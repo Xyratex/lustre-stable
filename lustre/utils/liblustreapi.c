@@ -1338,8 +1338,8 @@ static int llapi_semantic_traverse(char *path, int size, DIR *parent,
         int len, ret;
         DIR *d, *p = NULL;
 
-        ret = 0;
-        len = strlen(path);
+	ret = 0;
+	len = strlen(path);
 
         d = opendir(path);
         if (!d && errno != ENOTDIR) {
@@ -1361,6 +1361,8 @@ static int llapi_semantic_traverse(char *path, int size, DIR *parent,
                 GOTO(out, ret = 0);
 
         while ((dent = readdir64(d)) != NULL) {
+		int rc;
+
                 ((struct find_param *)data)->have_fileinfo = 0;
 
                 if (!strcmp(dent->d_name, ".") || !strcmp(dent->d_name, ".."))
@@ -1383,17 +1385,18 @@ static int llapi_semantic_traverse(char *path, int size, DIR *parent,
                 if (dent->d_type == DT_UNKNOWN) {
                         lstat_t *st = &((struct find_param *)data)->lmd->lmd_st;
 
-			ret = get_lmd_info(path, d, NULL,
+			rc = get_lmd_info(path, d, NULL,
 					   ((struct find_param *)data)->lmd,
 					   ((struct find_param *)data)->lumlen);
-                        if (ret == 0) {
+                        if (rc == 0) {
                                 ((struct find_param *)data)->have_fileinfo = 1;
                                 dent->d_type =
                                         llapi_filetype_dir_table[st->st_mode &
                                                                  S_IFMT];
-                        }
-                        if (ret == -ENOENT)
-                                continue;
+                        } else if (ret == 0)
+				ret = rc;
+			if (rc == -ENOENT)
+				continue;
                 }
 
                 switch (dent->d_type) {
@@ -1402,21 +1405,21 @@ static int llapi_semantic_traverse(char *path, int size, DIR *parent,
                                           "error: %s: '%s' is UNKNOWN type %d",
                                           __func__, dent->d_name, dent->d_type);
                         break;
-                case DT_DIR:
-                        ret = llapi_semantic_traverse(path, size, d, sem_init,
-                                                      sem_fini, data, dent);
-                        if (ret < 0)
-                                goto out;
-                        break;
-                default:
-                        ret = 0;
-                        if (sem_init) {
-                                ret = sem_init(path, d, NULL, data, dent);
-                                if (ret < 0)
-                                        goto out;
-                        }
-                        if (sem_fini && ret == 0)
-                                sem_fini(path, d, NULL, data, dent);
+		case DT_DIR:
+			rc = llapi_semantic_traverse(path, size, d, sem_init,
+						      sem_fini, data, dent);
+			if (rc != 0 && ret == 0)
+				ret = rc;
+			break;
+		default:
+			rc = 0;
+			if (sem_init) {
+				rc = sem_init(path, d, NULL, data, dent);
+				if (rc < 0 && ret == 0)
+					ret = rc;
+			}
+			if (sem_fini && rc == 0)
+				sem_fini(path, d, NULL, data, dent);
                 }
         }
 
@@ -1430,7 +1433,7 @@ err:
                 closedir(d);
         if (p)
                 closedir(p);
-        return ret;
+	return ret;
 }
 
 static int param_callback(char *path, semantic_func_t sem_init,
