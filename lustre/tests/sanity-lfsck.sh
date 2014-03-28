@@ -833,10 +833,11 @@ test_9a() {
 
 	do_facet $SINGLEMDS \
 		$LCTL set_param -n mdd.${MDT_DEV}.lfsck_speed_limit 0
-	sleep 5
-	STATUS=$($SHOW_NAMESPACE | awk '/^status/ { print $2 }')
-	[ "$STATUS" == "completed" ] ||
-		error "(7) Expect 'completed', but got '$STATUS'"
+
+	wait_update_facet $SINGLEMDS \
+	    "$LCTL get_param -n mdd.${MDT_DEV}.lfsck_namespace|\
+	    awk '/^status/ { print \\\$2 }'" "completed" 30 ||
+		error "(7) Failed to get expected 'completed'"
 }
 run_test 9a "LFSCK speed control (1)"
 

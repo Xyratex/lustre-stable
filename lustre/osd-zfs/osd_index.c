@@ -1364,6 +1364,11 @@ static struct dt_it *osd_zfs_otable_it_init(const struct lu_env *env,
 
 	it->mit_dev = dev;
 
+	/* XXX: dmu_object_next() does NOT find dnodes allocated
+	 *	in the current non-committed txg, so we force txg
+	 *	commit to find all existing dnodes ... */
+	txg_wait_synced(dmu_objset_pool(dev->od_objset.os), 0ULL);
+
 	RETURN((struct dt_it *)it);
 }
 
@@ -1429,7 +1434,6 @@ static int osd_zfs_otable_it_next(const struct lu_env *env, struct dt_it *di)
 	uchar_t			*v;
 	__u64			 dnode;
 	int			 rc, s;
-	ENTRY;
 
 	memset(&it->mit_fid, 0, sizeof(it->mit_fid));
 
@@ -1477,7 +1481,7 @@ static int osd_zfs_otable_it_next(const struct lu_env *env, struct dt_it *di)
 	       it->mit_pos, PFID(&it->mit_fid), rc);
 
 out:
-	RETURN(rc);
+	return rc;
 }
 
 static struct dt_key *osd_zfs_otable_it_key(const struct lu_env *env,
