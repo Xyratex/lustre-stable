@@ -372,8 +372,8 @@ struct page *ll_get_dir_page(struct inode *dir, __u64 hash,
 		if (IS_ERR(op_data))
 			return (void *)op_data;
 
-		rc = md_enqueue(ll_i2sbi(dir)->ll_md_exp, &einfo, &it,
-				op_data, &lockh, NULL, 0, NULL, 0);
+		rc = md_enqueue(ll_i2sbi(dir)->ll_md_exp, &einfo, NULL,
+				&it, op_data, &lockh, 0);
 
 		ll_finish_md_op_data(op_data);
 

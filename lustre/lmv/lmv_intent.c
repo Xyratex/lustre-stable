@@ -58,9 +58,8 @@
 #include <lprocfs_status.h>
 #include "lmv_internal.h"
 
-static int lmv_intent_remote(struct obd_export *exp, void *lmm,
-			     int lmmsize, struct lookup_intent *it,
-			     const struct lu_fid *parent_fid, int flags,
+static int lmv_intent_remote(struct obd_export *exp, struct lookup_intent *it,
+			     const struct lu_fid *parent_fid,
 			     struct ptlrpc_request **reqp,
 			     ldlm_blocking_callback cb_blocking,
 			     __u64 extra_lock_flags)
@@ -126,8 +125,8 @@ static int lmv_intent_remote(struct obd_export *exp, void *lmm,
 	CDEBUG(D_INODE, "REMOTE_INTENT with fid="DFID" -> mds #%d\n",
 	       PFID(&body->fid1), tgt->ltd_idx);
 
-        rc = md_intent_lock(tgt->ltd_exp, op_data, lmm, lmmsize, it,
-                            flags, &req, cb_blocking, extra_lock_flags);
+	rc = md_intent_lock(tgt->ltd_exp, op_data, it, &req, cb_blocking,
+			    extra_lock_flags);
         if (rc)
                 GOTO(out_free_op_data, rc);
 
@@ -164,10 +163,8 @@ out:
  * may be split dir.
  */
 int lmv_intent_open(struct obd_export *exp, struct md_op_data *op_data,
-                    void *lmm, int lmmsize, struct lookup_intent *it,
-                    int flags, struct ptlrpc_request **reqp,
-                    ldlm_blocking_callback cb_blocking,
-		    __u64 extra_lock_flags)
+		    struct lookup_intent *it, struct ptlrpc_request **reqp,
+		    ldlm_blocking_callback cb_blocking, __u64 extra_lock_flags)
 {
 	struct obd_device	*obd = exp->exp_obd;
 	struct lmv_obd		*lmv = &obd->u.lmv;
@@ -204,8 +201,8 @@ int lmv_intent_open(struct obd_export *exp, struct md_op_data *op_data,
 	       " name='%s' -> mds #%d\n", PFID(&op_data->op_fid1),
 	       PFID(&op_data->op_fid2), op_data->op_name, tgt->ltd_idx);
 
-	rc = md_intent_lock(tgt->ltd_exp, op_data, lmm, lmmsize, it, flags,
-			    reqp, cb_blocking, extra_lock_flags);
+	rc = md_intent_lock(tgt->ltd_exp, op_data, it, reqp, cb_blocking,
+			    extra_lock_flags);
 	if (rc != 0)
 		RETURN(rc);
 	/*
@@ -230,8 +227,8 @@ int lmv_intent_open(struct obd_export *exp, struct md_op_data *op_data,
 	 * Okay, MDS has returned success. Probably name has been resolved in
 	 * remote inode.
 	 */
-	rc = lmv_intent_remote(exp, lmm, lmmsize, it, &op_data->op_fid1, flags,
-			       reqp, cb_blocking, extra_lock_flags);
+	rc = lmv_intent_remote(exp, it, &op_data->op_fid1, reqp,
+			       cb_blocking, extra_lock_flags);
 	if (rc != 0) {
 		LASSERT(rc < 0);
 		/*
@@ -253,11 +250,11 @@ int lmv_intent_open(struct obd_export *exp, struct md_op_data *op_data,
 /*
  * Handler for: getattr, lookup and revalidate cases.
  */
-int lmv_intent_lookup(struct obd_export *exp, struct md_op_data *op_data,
-                      void *lmm, int lmmsize, struct lookup_intent *it,
-                      int flags, struct ptlrpc_request **reqp,
-                      ldlm_blocking_callback cb_blocking,
-		      __u64 extra_lock_flags)
+static int
+lmv_intent_lookup(struct obd_export *exp, struct md_op_data *op_data,
+		  struct lookup_intent *it, struct ptlrpc_request **reqp,
+		  ldlm_blocking_callback cb_blocking,
+		  __u64 extra_lock_flags)
 {
 	struct obd_device      *obd = exp->exp_obd;
 	struct lmv_obd         *lmv = &obd->u.lmv;
@@ -281,9 +278,8 @@ int lmv_intent_lookup(struct obd_export *exp, struct md_op_data *op_data,
 
 	op_data->op_bias &= ~MDS_CROSS_REF;
 
-	rc = md_intent_lock(tgt->ltd_exp, op_data, lmm, lmmsize, it,
-			     flags, reqp, cb_blocking, extra_lock_flags);
-
+	rc = md_intent_lock(tgt->ltd_exp, op_data, it, reqp, cb_blocking,
+			    extra_lock_flags);
 	if (rc < 0 || *reqp == NULL)
 		RETURN(rc);
 
@@ -298,16 +294,14 @@ int lmv_intent_lookup(struct obd_export *exp, struct md_op_data *op_data,
 	if (likely(!(body->valid & OBD_MD_MDS)))
 		RETURN(0);
 
-	rc = lmv_intent_remote(exp, lmm, lmmsize, it, NULL, flags, reqp,
-			       cb_blocking, extra_lock_flags);
-
+	rc = lmv_intent_remote(exp, it, NULL, reqp, cb_blocking,
+			       extra_lock_flags);
 	RETURN(rc);
 }
 
 int lmv_intent_lock(struct obd_export *exp, struct md_op_data *op_data,
-                    void *lmm, int lmmsize, struct lookup_intent *it,
-                    int flags, struct ptlrpc_request **reqp,
-                    ldlm_blocking_callback cb_blocking,
+		    struct lookup_intent *it, struct ptlrpc_request **reqp,
+		    ldlm_blocking_callback cb_blocking,
 		    __u64 extra_lock_flags)
 {
         struct obd_device *obd = exp->exp_obd;
@@ -325,15 +319,14 @@ int lmv_intent_lock(struct obd_export *exp, struct md_op_data *op_data,
         if (rc)
                 RETURN(rc);
 
-        if (it->it_op & (IT_LOOKUP | IT_GETATTR | IT_LAYOUT))
-                rc = lmv_intent_lookup(exp, op_data, lmm, lmmsize, it,
-                                       flags, reqp, cb_blocking,
-                                       extra_lock_flags);
-        else if (it->it_op & IT_OPEN)
-                rc = lmv_intent_open(exp, op_data, lmm, lmmsize, it,
-                                     flags, reqp, cb_blocking,
-                                     extra_lock_flags);
-        else
-                LBUG();
-        RETURN(rc);
+	if (it->it_op & (IT_LOOKUP | IT_GETATTR | IT_LAYOUT))
+		rc = lmv_intent_lookup(exp, op_data, it, reqp, cb_blocking,
+				       extra_lock_flags);
+	else if (it->it_op & IT_OPEN)
+		rc = lmv_intent_open(exp, op_data, it, reqp, cb_blocking,
+				     extra_lock_flags);
+	else
+		LBUG();
+
+	RETURN(rc);
 }

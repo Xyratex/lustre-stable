@@ -961,6 +961,7 @@ struct md_op_data {
         __u32                   op_fsgid;
         cfs_cap_t               op_cap;
         void                   *op_data;
+	size_t			op_data_size;
 
         /* iattr fields and blocks. */
         struct iattr            op_attr;
@@ -1219,9 +1220,9 @@ struct md_ops {
 			__u64, struct ptlrpc_request **);
 
 	int (*m_enqueue)(struct obd_export *, struct ldlm_enqueue_info *,
+			 const ldlm_policy_data_t *,
 			 struct lookup_intent *, struct md_op_data *,
-			 struct lustre_handle *, void *, int,
-			 struct ptlrpc_request **, __u64);
+			 struct lustre_handle *, __u64);
 	int (*m_enqueue_async)(struct obd_export *, struct ldlm_enqueue_info *,
 			       obd_enqueue_update_f, struct md_op_data *,
 			       ldlm_policy_data_t *, __u64);
@@ -1230,7 +1231,7 @@ struct md_ops {
 			 struct ptlrpc_request **);
 
 	int (*m_intent_lock)(struct obd_export *, struct md_op_data *,
-			     void *, int, struct lookup_intent *, int,
+			     struct lookup_intent *,
 			     struct ptlrpc_request **,
 			     ldlm_blocking_callback, __u64);
 
