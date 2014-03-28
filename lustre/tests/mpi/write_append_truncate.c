@@ -301,7 +301,8 @@ int main(int argc, char *argv[])
                 if (rank == 0) {
                         write_size = (rand() % (write_max - 1)) + 1;
                         append_size = (rand() % (append_max - 1)) + 1;
-                        trunc_size = (rand() % ((trunc_max?: append_size)-1))+1;
+			trunc_size = (append_size == 1) ? 1 :
+				     (rand() % ((trunc_max?: append_size)-1))+1;
                         trunc_offset = write_size + trunc_size;
 
                         if (verbose || n % 1000 == 0)
