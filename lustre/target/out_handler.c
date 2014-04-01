@@ -1166,7 +1166,6 @@ static int out_destroy(struct tgt_session_info *tsi)
 	.th_version = 0,				\
 }
 
-#define out_handler mdt_handler
 static struct tgt_handler out_update_ops[] = {
 	DEF_OUT_HNDL(OBJ_CREATE, "obj_create", MUTABOR | HABEO_REFERO,
 		     out_create),

@@ -264,7 +264,7 @@ static void mdt_lock_pdo_mode(struct mdt_thread_info *info, struct mdt_object *o
         EXIT;
 }
 
-int mdt_getstatus(struct tgt_session_info *tsi)
+static int mdt_getstatus(struct tgt_session_info *tsi)
 {
 	struct mdt_thread_info	*info = tsi2mdt_info(tsi);
 	struct mdt_device	*mdt = info->mti_mdt;
@@ -308,7 +308,7 @@ out:
 	return rc;
 }
 
-int mdt_statfs(struct tgt_session_info *tsi)
+static int mdt_statfs(struct tgt_session_info *tsi)
 {
 	struct ptlrpc_request		*req = tgt_ses_req(tsi);
 	struct mdt_thread_info		*info = tsi2mdt_info(tsi);
@@ -607,8 +607,8 @@ int mdt_attr_get_lov(struct mdt_thread_info *info,
 	return rc;
 }
 
-int mdt_attr_get_pfid(struct mdt_thread_info *info,
-		      struct mdt_object *o, struct lu_fid *pfid)
+static int mdt_attr_get_pfid(struct mdt_thread_info *info,
+			     struct mdt_object *o, struct lu_fid *pfid)
 {
 	struct lu_buf		*buf = &info->mti_buf;
 	struct link_ea_header	*leh;
@@ -1045,7 +1045,7 @@ static int mdt_renew_capa(struct mdt_thread_info *info)
         RETURN(rc);
 }
 
-int mdt_getattr(struct tgt_session_info *tsi)
+static int mdt_getattr(struct tgt_session_info *tsi)
 {
 	struct mdt_thread_info	*info = tsi2mdt_info(tsi);
         struct mdt_object       *obj = info->mti_object;
@@ -1137,7 +1137,7 @@ out:
 	return rc;
 }
 
-int mdt_swap_layouts(struct tgt_session_info *tsi)
+static int mdt_swap_layouts(struct tgt_session_info *tsi)
 {
 	struct mdt_thread_info	*info;
 	struct ptlrpc_request	*req = tgt_ses_req(tsi);
@@ -1293,78 +1293,27 @@ static int mdt_getattr_name_lock(struct mdt_thread_info *info,
         struct lu_name         *lname     = NULL;
         struct mdt_lock_handle *lhp       = NULL;
         struct ldlm_lock       *lock;
-        struct ldlm_res_id     *res_id;
-        int                     is_resent;
-        int                     ma_need = 0;
-        int                     rc;
+	bool			is_resent;
+	bool			try_layout;
+	int			ma_need = 0;
+	int			rc;
+	ENTRY;
 
-        ENTRY;
-
-        is_resent = lustre_handle_is_used(&lhc->mlh_reg_lh);
-        LASSERT(ergo(is_resent,
-                     lustre_msg_get_flags(req->rq_reqmsg) & MSG_RESENT));
+	is_resent = lustre_handle_is_used(&lhc->mlh_reg_lh);
+	LASSERT(ergo(is_resent,
+		     lustre_msg_get_flags(req->rq_reqmsg) & MSG_RESENT));
 
 	if (parent == NULL)
 		RETURN(-ENOENT);
 
-	lname = &info->mti_name;
-	mdt_name_unpack(info->mti_pill, &RMF_NAME, lname, MNF_FIX_ANON);
-
-	if (!info->mti_cross_ref) {
-		/*
-		 * XXX: Check for anonymous name is for getattr by fid
-		 * (OBD_CONNECT_ATTRFID), otherwise do not allow empty name,
-		 * that is the name must contain at least one character and
-		 * the terminating '\0'.
-		 */
-		if (!lu_name_is_valid(lname)) {
-			reqbody = req_capsule_client_get(info->mti_pill,
-							 &RMF_MDT_BODY);
-			if (unlikely(reqbody == NULL))
-				RETURN(err_serious(-EFAULT));
-
-			if (unlikely(!fid_is_sane(&reqbody->mbo_fid2)))
-				RETURN(err_serious(-EINVAL));
-
-			CDEBUG(D_INODE, "getattr with lock for "DFID"/"DFID", "
-			       "ldlm_rep = %p\n",
-			       PFID(mdt_object_fid(parent)),
-			       PFID(&reqbody->mbo_fid2), ldlm_rep);
-		} else {
-			CDEBUG(D_INODE, "getattr with lock for "DFID"/"DNAME", "
-			       "ldlm_rep = %p\n", PFID(mdt_object_fid(parent)),
-			       PNAME(lname), ldlm_rep);
-		}
-	}
-
-        mdt_set_disposition(info, ldlm_rep, DISP_LOOKUP_EXECD);
-
-	if (unlikely(!mdt_object_exists(parent)) && lu_name_is_valid(lname)) {
-		LU_OBJECT_DEBUG(D_INODE, info->mti_env,
-				&parent->mot_obj,
-				"Parent doesn't exist!\n");
-		RETURN(-ESTALE);
-	} else if (!info->mti_cross_ref) {
-		LASSERTF(!mdt_object_remote(parent),
-			 "Parent "DFID" is on remote server\n",
-			 PFID(mdt_object_fid(parent)));
-	}
-
-	if (lu_name_is_valid(lname)) {
-                rc = mdt_raw_lookup(info, parent, lname, ldlm_rep);
-                if (rc != 0) {
-                        if (rc > 0)
-                                rc = 0;
-                        RETURN(rc);
-                }
-        }
-
-        if (info->mti_cross_ref) {
-                /* Only getattr on the child. Parent is on another node. */
-                mdt_set_disposition(info, ldlm_rep, DISP_LOOKUP_POS);
-                child = parent;
-                CDEBUG(D_INODE, "partial getattr_name child_fid = "DFID", "
-                       "ldlm_rep=%p\n", PFID(mdt_object_fid(child)), ldlm_rep);
+	if (info->mti_cross_ref) {
+		/* Only getattr on the child. Parent is on another node. */
+		mdt_set_disposition(info, ldlm_rep,
+				    DISP_LOOKUP_EXECD | DISP_LOOKUP_POS);
+		child = parent;
+		CDEBUG(D_INODE, "partial getattr_name child_fid = "DFID", "
+		       "ldlm_rep = %p\n",
+		       PFID(mdt_object_fid(child)), ldlm_rep);
 
 		rc = mdt_check_resent_lock(info, child, lhc);
 		if (rc < 0) {
@@ -1383,27 +1332,74 @@ static int mdt_getattr_name_lock(struct mdt_thread_info *info,
 
 			rc = mdt_object_lock(info, child, lhc, child_bits,
 					     MDT_LOCAL_LOCK);
+			if (rc < 0)
+				RETURN(rc);
 		}
-                if (rc == 0) {
-                        /* Finally, we can get attr for child. */
-			if (!mdt_object_exists(child)) {
-				LU_OBJECT_DEBUG(D_INFO, info->mti_env,
-						&child->mot_obj,
-					     "remote object doesn't exist.\n");
-                                mdt_object_unlock(info, child, lhc, 1);
-				RETURN(-ENOENT);
-			}
 
-                        mdt_set_capainfo(info, 0, mdt_object_fid(child),
-                                         BYPASS_CAPA);
-                        rc = mdt_getattr_internal(info, child, 0);
-                        if (unlikely(rc != 0))
-                                mdt_object_unlock(info, child, lhc, 1);
-                }
+		/* Finally, we can get attr for child. */
+		if (!mdt_object_exists(child)) {
+			LU_OBJECT_DEBUG(D_INFO, info->mti_env,
+					&child->mot_obj,
+					"remote object doesn't exist.\n");
+			mdt_object_unlock(info, child, lhc, 1);
+			RETURN(-ENOENT);
+		}
+
+		mdt_set_capainfo(info, 0, mdt_object_fid(child), BYPASS_CAPA);
+		rc = mdt_getattr_internal(info, child, 0);
+		if (unlikely(rc != 0))
+			mdt_object_unlock(info, child, lhc, 1);
+
                 RETURN(rc);
         }
 
+	lname = &info->mti_name;
+	mdt_name_unpack(info->mti_pill, &RMF_NAME, lname, MNF_FIX_ANON);
+
 	if (lu_name_is_valid(lname)) {
+		CDEBUG(D_INODE, "getattr with lock for "DFID"/"DNAME", "
+		       "ldlm_rep = %p\n", PFID(mdt_object_fid(parent)),
+		       PNAME(lname), ldlm_rep);
+	} else {
+		reqbody = req_capsule_client_get(info->mti_pill, &RMF_MDT_BODY);
+		if (unlikely(reqbody == NULL))
+			RETURN(err_serious(-EPROTO));
+
+		*child_fid = reqbody->mbo_fid2;
+
+		if (unlikely(!fid_is_sane(child_fid)))
+			RETURN(err_serious(-EINVAL));
+
+		CDEBUG(D_INODE, "getattr with lock for "DFID"/"DFID", "
+		       "ldlm_rep = %p\n",
+		       PFID(mdt_object_fid(parent)),
+		       PFID(&reqbody->mbo_fid2), ldlm_rep);
+	}
+
+	mdt_set_disposition(info, ldlm_rep, DISP_LOOKUP_EXECD);
+
+	if (unlikely(!mdt_object_exists(parent)) && lu_name_is_valid(lname)) {
+		LU_OBJECT_DEBUG(D_INODE, info->mti_env,
+				&parent->mot_obj,
+				"Parent doesn't exist!\n");
+		RETURN(-ESTALE);
+	}
+
+	if (mdt_object_remote(parent)) {
+		CERROR("%s: parent "DFID" is on remote target\n",
+		       mdt_obd_name(info->mti_mdt),
+		       PFID(mdt_object_fid(parent)));
+		RETURN(-EIO);
+	}
+
+	if (lu_name_is_valid(lname)) {
+		rc = mdt_raw_lookup(info, parent, lname, ldlm_rep);
+		if (rc != 0) {
+			if (rc > 0)
+				rc = 0;
+			RETURN(rc);
+		}
+
 		/* step 1: lock parent only if parent is a directory */
 		if (S_ISDIR(lu_object_attr(&parent->mot_obj))) {
 			lhp = &info->mti_lh[MDT_LH_PARENT];
@@ -1415,22 +1411,18 @@ static int mdt_getattr_name_lock(struct mdt_thread_info *info,
 				RETURN(rc);
 		}
 
-		/* step 2: lookup child's fid by name */
-		fid_zero(child_fid);
-		rc = mdo_lookup(info->mti_env, mdt_object_child(parent), lname,
+                /* step 2: lookup child's fid by name */
+                fid_zero(child_fid);
+                rc = mdo_lookup(info->mti_env, mdt_object_child(parent), lname,
 				child_fid, &info->mti_spec);
+		if (rc == -ENOENT)
+			mdt_set_disposition(info, ldlm_rep, DISP_LOOKUP_NEG);
 
-		if (rc != 0) {
-			if (rc == -ENOENT)
-				mdt_set_disposition(info, ldlm_rep,
-						    DISP_LOOKUP_NEG);
+		if (rc != 0)
 			GOTO(out_parent, rc);
-		} else
-			mdt_set_disposition(info, ldlm_rep, DISP_LOOKUP_POS);
-	} else {
-		*child_fid = reqbody->mbo_fid2;
-		mdt_set_disposition(info, ldlm_rep, DISP_LOOKUP_POS);
 	}
+
+	mdt_set_disposition(info, ldlm_rep, DISP_LOOKUP_POS);
 
 	/*
 	 *step 3: find the child object by fid & lock it.
@@ -1457,10 +1449,9 @@ static int mdt_getattr_name_lock(struct mdt_thread_info *info,
 	if (rc < 0) {
 		GOTO(out_child, rc);
 	} else if (rc > 0) {
-		bool try_layout = false;
-
                 mdt_lock_handle_init(lhc);
 		mdt_lock_reg_init(lhc, LCK_PR);
+		try_layout = false;
 
 		if (!mdt_object_exists(child)) {
 			LU_OBJECT_DEBUG(D_INODE, info->mti_env,
@@ -1538,7 +1529,6 @@ static int mdt_getattr_name_lock(struct mdt_thread_info *info,
                 mdt_object_unlock(info, child, lhc, 1);
 	} else if (lock) {
 		/* Debugging code. */
-		res_id = &lock->l_resource->lr_name;
 		LDLM_DEBUG(lock, "Returning lock to client");
 		LASSERTF(fid_res_name_eq(mdt_object_fid(child),
 					 &lock->l_resource->lr_name),
@@ -1561,7 +1551,7 @@ out_parent:
 }
 
 /* normal handler: should release the child lock */
-int mdt_getattr_name(struct tgt_session_info *tsi)
+static int mdt_getattr_name(struct tgt_session_info *tsi)
 {
 	struct mdt_thread_info	*info = tsi2mdt_info(tsi);
         struct mdt_lock_handle *lhc = &info->mti_lh[MDT_LH_CHILD];
@@ -1602,7 +1592,7 @@ out_shrink:
 static int mdt_iocontrol(unsigned int cmd, struct obd_export *exp, int len,
                          void *karg, void *uarg);
 
-int mdt_set_info(struct tgt_session_info *tsi)
+static int mdt_set_info(struct tgt_session_info *tsi)
 {
 	struct ptlrpc_request	*req = tgt_ses_req(tsi);
 	char			*key;
@@ -1660,7 +1650,7 @@ int mdt_set_info(struct tgt_session_info *tsi)
 	RETURN(rc);
 }
 
-int mdt_readpage(struct tgt_session_info *tsi)
+static int mdt_readpage(struct tgt_session_info *tsi)
 {
 	struct mdt_thread_info	*info = mdt_th_info(tsi->tsi_env);
 	struct mdt_object	*object = mdt_obj(tsi->tsi_corpus);
@@ -1825,7 +1815,7 @@ static long mdt_reint_opcode(struct ptlrpc_request *req,
 	return opc;
 }
 
-int mdt_reint(struct tgt_session_info *tsi)
+static int mdt_reint(struct tgt_session_info *tsi)
 {
 	long opc;
 	int  rc;
@@ -1889,7 +1879,7 @@ static int mdt_object_sync(struct mdt_thread_info *info)
 	RETURN(rc);
 }
 
-int mdt_sync(struct tgt_session_info *tsi)
+static int mdt_sync(struct tgt_session_info *tsi)
 {
 	struct ptlrpc_request	*req = tgt_ses_req(tsi);
 	struct req_capsule	*pill = tsi->tsi_pill;
@@ -1935,7 +1925,7 @@ int mdt_sync(struct tgt_session_info *tsi)
  * Handle quota control requests to consult current usage/limit, but also
  * to configure quota enforcement
  */
-int mdt_quotactl(struct tgt_session_info *tsi)
+static int mdt_quotactl(struct tgt_session_info *tsi)
 {
 	struct obd_export	*exp  = tsi->tsi_exp;
 	struct req_capsule	*pill = tsi->tsi_pill;
@@ -2087,7 +2077,7 @@ static int mdt_llog_ctxt_unclone(const struct lu_env *env,
 /*
  * sec context handlers
  */
-int mdt_sec_ctx_handle(struct tgt_session_info *tsi)
+static int mdt_sec_ctx_handle(struct tgt_session_info *tsi)
 {
 	int rc;
 
@@ -2109,7 +2099,7 @@ int mdt_sec_ctx_handle(struct tgt_session_info *tsi)
 /*
  * quota request handlers
  */
-int mdt_quota_dqacq(struct tgt_session_info *tsi)
+static int mdt_quota_dqacq(struct tgt_session_info *tsi)
 {
 	struct mdt_device	*mdt = mdt_exp2dev(tsi->tsi_exp);
 	struct lu_device	*qmt = mdt->mdt_qmt_dev;
@@ -2799,7 +2789,7 @@ struct mdt_thread_info *tsi2mdt_info(struct tgt_session_info *tsi)
 	return mti;
 }
 
-int mdt_tgt_connect(struct tgt_session_info *tsi)
+static int mdt_tgt_connect(struct tgt_session_info *tsi)
 {
 	struct ptlrpc_request	*req = tgt_ses_req(tsi);
 	int			 rc;
@@ -3105,7 +3095,6 @@ static int mdt_intent_getattr(enum mdt_it_code opcode,
         struct mdt_lock_handle *lhc = &info->mti_lh[MDT_LH_RMT];
         __u64                   child_bits;
         struct ldlm_reply      *ldlm_rep;
-        struct ptlrpc_request  *req;
         struct mdt_body        *reqbody;
         struct mdt_body        *repbody;
         int                     rc, rc2;
@@ -3138,7 +3127,6 @@ static int mdt_intent_getattr(enum mdt_it_code opcode,
         if (rc)
                 GOTO(out_shrink, rc);
 
-        req = info->mti_pill->rc_req;
         ldlm_rep = req_capsule_server_get(info->mti_pill, &RMF_DLM_REP);
         mdt_set_disposition(info, ldlm_rep, DISP_IT_EXECD);
 
@@ -3618,7 +3606,6 @@ static int mdt_fld_init(const struct lu_env *env,
 static void mdt_stack_pre_fini(const struct lu_env *env,
 			   struct mdt_device *m, struct lu_device *top)
 {
-	struct obd_device       *obd;
 	struct lustre_cfg_bufs  *bufs;
 	struct lustre_cfg       *lcfg;
 	struct mdt_thread_info  *info;
@@ -3633,7 +3620,6 @@ static void mdt_stack_pre_fini(const struct lu_env *env,
 
 	LASSERT(m->mdt_child_exp);
 	LASSERT(m->mdt_child_exp->exp_obd);
-	obd = m->mdt_child_exp->exp_obd;
 
 	/* process cleanup, pass mdt obd name to get obd umount flags */
 	/* XXX: this is needed because all layers are referenced by
@@ -4208,7 +4194,7 @@ static void mdt_fini(const struct lu_env *env, struct mdt_device *m)
 	EXIT;
 }
 
-int mdt_postrecov(const struct lu_env *, struct mdt_device *);
+static int mdt_postrecov(const struct lu_env *, struct mdt_device *);
 
 static int mdt_init0(const struct lu_env *env, struct mdt_device *m,
                      struct lu_device_type *ldt, struct lustre_cfg *cfg)
@@ -5545,7 +5531,7 @@ static int mdt_iocontrol(unsigned int cmd, struct obd_export *exp, int len,
         RETURN(rc);
 }
 
-int mdt_postrecov(const struct lu_env *env, struct mdt_device *mdt)
+static int mdt_postrecov(const struct lu_env *env, struct mdt_device *mdt)
 {
         struct lu_device *ld = md2lu_dev(mdt->mdt_child);
         int rc;
@@ -5555,7 +5541,7 @@ int mdt_postrecov(const struct lu_env *env, struct mdt_device *mdt)
         RETURN(rc);
 }
 
-int mdt_obd_postrecov(struct obd_device *obd)
+static int mdt_obd_postrecov(struct obd_device *obd)
 {
         struct lu_env env;
         int rc;
