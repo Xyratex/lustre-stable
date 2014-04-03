@@ -1363,7 +1363,7 @@ static int ost_set_info(struct obd_export *exp, struct ptlrpc_request *req)
          * a struct ost_body * value */
         rc = obd_set_info_async(exp, keylen, key, vallen, val, NULL);
 out:
-        lustre_msg_set_status(req->rq_repmsg, 0);
+	req->rq_status = 0;
         RETURN(rc);
 }
 
@@ -1501,7 +1501,7 @@ static int ost_get_info(struct obd_export *exp, struct ptlrpc_request *req)
 			RETURN(rc);
 	}
 
-	lustre_msg_set_status(req->rq_repmsg, 0);
+	req->rq_status = 0;
 
         RETURN(rc);
 }
