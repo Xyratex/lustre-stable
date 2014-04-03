@@ -1034,7 +1034,6 @@ regular_open:
         EXIT;
 out:
         req->rq_status = rc;
-        lustre_msg_set_status(req->rq_repmsg, req->rq_status);
         LASSERT(ergo(rc < 0 && rc != -EREMOTE,
 		lustre_msg_get_transno(req->rq_repmsg) == 0));
 }

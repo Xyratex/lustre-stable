@@ -1204,9 +1204,6 @@ static int mdt_set_info(struct mdt_thread_info *info)
 
         /* Swab any part of val you need to here */
         if (KEY_IS(KEY_READ_ONLY)) {
-                req->rq_status = 0;
-                lustre_msg_set_status(req->rq_repmsg, 0);
-
                 cfs_spin_lock(&req->rq_export->exp_lock);
                 if (*(__u32 *)val)
                         req->rq_export->exp_connect_data.ocd_connect_flags |= OBD_CONNECT_RDONLY;
@@ -1228,12 +1225,11 @@ static int mdt_set_info(struct mdt_thread_info *info)
 
                 rc = mdt_iocontrol(OBD_IOC_CHANGELOG_CLEAR, info->mti_exp,
                                    vallen, val, NULL);
-                lustre_msg_set_status(req->rq_repmsg, rc);
 
         } else {
                 RETURN(-EINVAL);
         }
-        RETURN(0);
+	RETURN(rc);
 }
 
 /**
@@ -5511,7 +5507,6 @@ static int mdt_fid2path(const struct lu_env *env, struct mdt_device *mdt,
 
 static int mdt_get_info(struct mdt_thread_info *info)
 {
-        struct ptlrpc_request *req = mdt_info_req(info);
         char *key;
         int keylen;
         __u32 *vallen;
@@ -5546,8 +5541,6 @@ static int mdt_get_info(struct mdt_thread_info *info)
                 rc = mdt_rpc_fid2path(info, key, valout, *vallen);
         else
                 rc = -EINVAL;
-
-        lustre_msg_set_status(req->rq_repmsg, rc);
 
         RETURN(rc);
 }
