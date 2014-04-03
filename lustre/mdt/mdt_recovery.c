@@ -1070,7 +1070,6 @@ void mdt_req_from_lcd(struct ptlrpc_request *req,
         if (req->rq_status != 0)
                 req->rq_transno = 0;
         lustre_msg_set_transno(req->rq_repmsg, req->rq_transno);
-        lustre_msg_set_status(req->rq_repmsg, req->rq_status);
         DEBUG_REQ(D_RPCTRACE, req, "restoring transno "LPD64"/status %d",
                   req->rq_transno, req->rq_status);
 
