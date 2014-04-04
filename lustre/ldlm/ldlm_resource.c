@@ -752,6 +752,11 @@ static void cleanup_resource(struct ldlm_resource *res, cfs_list_t *q,
                          * will go away ... */
                         unlock_res(res);
                         LDLM_DEBUG(lock, "setting FL_LOCAL_ONLY");
+			if (lock->l_flags & LDLM_FL_FAIL_LOC) {
+				cfs_schedule_timeout_and_set_state(
+					CFS_TASK_UNINT, cfs_time_seconds(4));
+				cfs_set_current_state(CFS_TASK_RUNNING);
+			}
                         if (lock->l_completion_ast)
                                 lock->l_completion_ast(lock, 0, NULL);
                         LDLM_LOCK_RELEASE(lock);

@@ -5810,7 +5810,7 @@ run_test 104b "$RUNAS lfs check servers test ===================="
 test_105a() {
 	# doesn't work on 2.4 kernels
         touch $DIR/$tfile
-	if [ -n "$(mount | grep "$MOUNT.*flock" | grep -v noflock)" ]; then
+	if $(flock_is_enabled); then
                 flocks_test 1 on -f $DIR/$tfile || error "fail flock on"
         else
                 flocks_test 1 off -f $DIR/$tfile || error "fail flock off"
@@ -5821,7 +5821,7 @@ run_test 105a "flock when mounted without -o flock test ========"
 
 test_105b() {
         touch $DIR/$tfile
-	if [ -n "$(mount | grep "$MOUNT.*flock" | grep -v noflock)" ]; then
+	if $(flock_is_enabled); then
                 flocks_test 1 on -c $DIR/$tfile || error "fail flock on"
         else
                 flocks_test 1 off -c $DIR/$tfile || error "fail flock off"
@@ -5832,7 +5832,7 @@ run_test 105b "fcntl when mounted without -o flock test ========"
 
 test_105c() {
         touch $DIR/$tfile
-	if [ -n "$(mount | grep "$MOUNT.*flock" | grep -v noflock)" ]; then
+	if $(flock_is_enabled); then
                 flocks_test 1 on -l $DIR/$tfile || error "fail flock on"
         else
                 flocks_test 1 off -l $DIR/$tfile || error "fail flock off"
@@ -5843,8 +5843,7 @@ run_test 105c "lockf when mounted without -o flock test ========"
 
 test_105d() { # bug 15924
         mkdir -p $DIR/$tdir
-	[ -z "$(mount | grep "$MOUNT.*flock" | grep -v noflock)" ] &&
-                skip "mount w/o flock enabled" && return
+	flock_is_enabled || { skip "mount w/o flock enabled" && return; }
         #define OBD_FAIL_LDLM_CP_CB_WAIT  0x315
         $LCTL set_param fail_loc=0x80000315
         flocks_test 2 $DIR/$tdir
@@ -5852,8 +5851,7 @@ test_105d() { # bug 15924
 run_test 105d "flock race (should not freeze) ========"
 
 test_105e() { # bug 22660 && 22040
-	[ -z "$(mount | grep "$MOUNT.*flock" | grep -v noflock)" ] &&
-		skip "mount w/o flock enabled" && return
+	flock_is_enabled || { skip "mount w/o flock enabled" && return; }
 	touch $DIR/$tfile
 	flocks_test 3 $DIR/$tfile
 }
