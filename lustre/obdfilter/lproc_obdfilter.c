@@ -397,15 +397,27 @@ int lprocfs_filter_rd_sync_lock_cancel(char *page, char **start, off_t off,
         return rc;
 }
 
-int lprocfs_filter_wr_sync_lock_cancel(struct file *file, const char *buffer,
-                                          unsigned long count, void *data)
+int lprocfs_filter_wr_sync_lock_cancel(struct file *file,
+				       const char __user *buffer,
+				       unsigned long count, void *data)
 {
         struct obd_device *obd = data;
         int val = -1;
         int i;
+	char kernbuf[16];
+
+	if (count <= 0 || count >= 16)
+		return -EINVAL;
+
+	if (copy_from_user(kernbuf, buffer, count))
+		return -EFAULT;
+
+	kernbuf[count] = 0;
+	if (kernbuf[count - 1] == '\n')
+		kernbuf[count - 1] = 0;
 
         for (i = 0 ; i < NUM_SYNC_ON_CANCEL_STATES; i++) {
-                if (memcmp(buffer, sync_on_cancel_states[i],
+                if (memcmp(kernbuf, sync_on_cancel_states[i],
                     strlen(sync_on_cancel_states[i])) == 0) {
                         val = i;
                         break;

@@ -315,8 +315,9 @@ static int lprocfs_rd_identity_expire(char *page, char **start, off_t off,
                         mdt->mdt_identity_cache->uc_entry_expire);
 }
 
-static int lprocfs_wr_identity_expire(struct file *file, const char *buffer,
-                                      unsigned long count, void *data)
+static int lprocfs_wr_identity_expire(struct file *file,
+				      const char __user *buffer,
+				      unsigned long count, void *data)
 {
         struct obd_device *obd = data;
         struct mdt_device *mdt = mdt_dev(obd->obd_lu_dev);
@@ -343,9 +344,9 @@ static int lprocfs_rd_identity_acquire_expire(char *page, char **start,
 }
 
 static int lprocfs_wr_identity_acquire_expire(struct file *file,
-                                              const char *buffer,
-                                              unsigned long count,
-                                              void *data)
+					      const char __user *buffer,
+					      unsigned long count,
+					      void *data)
 {
         struct obd_device *obd = data;
         struct mdt_device *mdt = mdt_dev(obd->obd_lu_dev);
@@ -374,7 +375,8 @@ static int lprocfs_rd_identity_upcall(char *page, char **start, off_t off,
         return len;
 }
 
-static int lprocfs_wr_identity_upcall(struct file *file, const char *buffer,
+static int lprocfs_wr_identity_upcall(struct file *file,
+				      const char __user *buffer,
                                       unsigned long count, void *data)
 {
         struct obd_device *obd = data;
@@ -417,8 +419,9 @@ static int lprocfs_wr_identity_upcall(struct file *file, const char *buffer,
         RETURN(rc);
 }
 
-static int lprocfs_wr_identity_flush(struct file *file, const char *buffer,
-                                     unsigned long count, void *data)
+static int lprocfs_wr_identity_flush(struct file *file,
+				     const char __user *buffer,
+				     unsigned long count, void *data)
 {
         struct obd_device *obd = data;
         struct mdt_device *mdt = mdt_dev(obd->obd_lu_dev);
@@ -432,7 +435,8 @@ static int lprocfs_wr_identity_flush(struct file *file, const char *buffer,
         return count;
 }
 
-static int lprocfs_wr_identity_info(struct file *file, const char *buffer,
+static int lprocfs_wr_identity_info(struct file *file,
+				    const char __user *buffer,
                                     unsigned long count, void *data)
 {
         struct obd_device *obd = data;
@@ -507,7 +511,7 @@ static int lprocfs_rd_capa(char *page, char **start, off_t off,
                         mdt->mdt_opts.mo_mds_capa ? "mds" : "");
 }
 
-static int lprocfs_wr_capa(struct file *file, const char *buffer,
+static int lprocfs_wr_capa(struct file *file, const char __user *buffer,
                            unsigned long count, void *data)
 {
         struct obd_device *obd = data;
@@ -572,8 +576,8 @@ static int lprocfs_rd_capa_timeout(char *page, char **start, off_t off,
         return snprintf(page, count, "%lu\n", mdt->mdt_capa_timeout);
 }
 
-static int lprocfs_wr_capa_timeout(struct file *file, const char *buffer,
-                                   unsigned long count, void *data)
+static int lprocfs_wr_capa_timeout(struct file *file, const char __user *buffer,
+				   unsigned long count, void *data)
 {
         struct obd_device *obd = data;
         struct mdt_device *mdt = mdt_dev(obd->obd_lu_dev);
@@ -597,8 +601,8 @@ static int lprocfs_rd_ck_timeout(char *page, char **start, off_t off, int count,
         return snprintf(page, count, "%lu\n", mdt->mdt_ck_timeout);
 }
 
-static int lprocfs_wr_ck_timeout(struct file *file, const char *buffer,
-                                 unsigned long count, void *data)
+static int lprocfs_wr_ck_timeout(struct file *file, const char __user *buffer,
+				 unsigned long count, void *data)
 {
         struct obd_device *obd = data;
         struct mdt_device *mdt = mdt_dev(obd->obd_lu_dev);
@@ -615,8 +619,9 @@ static int lprocfs_wr_ck_timeout(struct file *file, const char *buffer,
 
 #define BUFLEN (UUID_MAX + 4)
 
-static int lprocfs_mdt_wr_evict_client(struct file *file, const char *buffer,
-                                       unsigned long count, void *data)
+static int lprocfs_mdt_wr_evict_client(struct file *file,
+				       const char __user *buffer,
+				       unsigned long count, void *data)
 {
         char *kbuf;
         char *tmpbuf;
@@ -660,8 +665,8 @@ static int lprocfs_rd_sec_level(char *page, char **start, off_t off,
         return snprintf(page, count, "%d\n", mdt->mdt_sec_level);
 }
 
-static int lprocfs_wr_sec_level(struct file *file, const char *buffer,
-                                unsigned long count, void *data)
+static int lprocfs_wr_sec_level(struct file *file, const char __user *buffer,
+				unsigned long count, void *data)
 {
         struct obd_device *obd = data;
         struct mdt_device *mdt = mdt_dev(obd->obd_lu_dev);
@@ -693,8 +698,8 @@ static int lprocfs_rd_cos(char *page, char **start, off_t off,
         return snprintf(page, count, "%u\n", mdt_cos_is_enabled(mdt));
 }
 
-static int lprocfs_wr_cos(struct file *file, const char *buffer,
-                                  unsigned long count, void *data)
+static int lprocfs_wr_cos(struct file *file, const char __user *buffer,
+			  unsigned long count, void *data)
 {
         struct obd_device *obd = data;
         struct mdt_device *mdt = mdt_dev(obd->obd_lu_dev);
@@ -732,29 +737,29 @@ static int safe_strtoul(const char *str, char **endp, unsigned long *res)
         return 0;
 }
 
-static int lprocfs_wr_root_squash(struct file *file, const char *buffer,
+static int lprocfs_wr_root_squash(struct file *file, const char __user *buffer,
                                   unsigned long count, void *data)
 {
         struct obd_device *obd = data;
         struct mdt_device *mdt = mdt_dev(obd->obd_lu_dev);
         int rc;
-        char kernbuf[50], *tmp, *end, *errmsg;
+        char kernbuf[64], *tmp, *end, *errmsg;
         unsigned long uid, gid;
         int nouid, nogid;
         ENTRY;
 
         if (count >= sizeof(kernbuf)) {
                 errmsg = "string too long";
-                GOTO(failed, rc = -EINVAL);
+                GOTO(failed_noprint, rc = -EINVAL);
         }
         if (cfs_copy_from_user(kernbuf, buffer, count)) {
                 errmsg = "bad address";
-                GOTO(failed, rc = -EFAULT);
+                GOTO(failed_noprint, rc = -EFAULT);
         }
         kernbuf[count] = '\0';
 
         nouid = nogid = 0;
-        if (safe_strtoul(buffer, &tmp, &uid)) {
+        if (safe_strtoul(kernbuf, &tmp, &uid)) {
                 uid = mdt->mdt_squash_uid;
                 nouid = 1;
         }
@@ -784,10 +789,14 @@ static int lprocfs_wr_root_squash(struct file *file, const char *buffer,
                       mdt->mdt_squash_uid,  mdt->mdt_squash_gid);
         RETURN(count);
 
- failed:
-        CWARN("%s: failed to set root_squash to \"%s\", %s: rc %d\n",
-              obd->obd_name, buffer, errmsg, rc);
-        RETURN(rc);
+failed:
+	CWARN("%s: failed to set root_squash to \"%s\", %s: rc %d\n",
+	      mdt_obd_name(mdt), kernbuf, errmsg, rc);
+	RETURN(rc);
+failed_noprint:
+	CWARN("%s: failed to set root_squash due to %s: rc %d\n",
+	      mdt_obd_name(mdt), errmsg, rc);
+	RETURN(rc);
 }
 
 static int lprocfs_rd_nosquash_nids(char *page, char **start, off_t off,
@@ -801,7 +810,8 @@ static int lprocfs_rd_nosquash_nids(char *page, char **start, off_t off,
         return snprintf(page, count, "NONE\n");
 }
 
-static int lprocfs_wr_nosquash_nids(struct file *file, const char *buffer,
+static int lprocfs_wr_nosquash_nids(struct file *file,
+				    const char __user *buffer,
                                     unsigned long count, void *data)
 {
         struct obd_device *obd = data;
@@ -877,8 +887,8 @@ static int lprocfs_rd_mdt_som(char *page, char **start, off_t off,
                         mdt->mdt_som_conf ? "en" : "dis");
 }
 
-static int lprocfs_wr_mdt_som(struct file *file, const char *buffer,
-                              unsigned long count, void *data)
+static int lprocfs_wr_mdt_som(struct file *file, const char __user *buffer,
+			      unsigned long count, void *data)
 {
         struct obd_export *exp;
         struct obd_device *obd = data;

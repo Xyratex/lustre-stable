@@ -65,7 +65,7 @@ noinst_PROGRAMS += ll_sparseness_write mrename ll_dirstripe_verify mkdirmany
 noinst_PROGRAMS += openfilleddirunlink rename_many memhog
 noinst_PROGRAMS += mmap_sanity writemany reads flocks_test flock_deadlock
 noinst_PROGRAMS += write_time_limit rwv copytool lgetxattr_size_check checkfiemap
-noinst_PROGRAMS += listxattr_size_check
+noinst_PROGRAMS += listxattr_size_check badarea_io
 
 bin_PROGRAMS = mcreate munlink
 testdir = $(libdir)/lustre/tests

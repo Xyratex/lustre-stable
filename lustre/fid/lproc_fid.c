@@ -57,6 +57,9 @@
 #include "fid_internal.h"
 
 #ifdef LPROCFS
+
+/* Format: [0x64BIT_INT - 0x64BIT_INT] + 32 bytes just in case */
+#define MAX_FID_RANGE_STRLEN (32 + 2 * 2 * sizeof(__u64))
 /**
  * Reduce the SEQ range allocated to a node to a strict subset of the range
  * currently-allocated SEQ range.  If the specified range is "clear", then
@@ -65,18 +68,32 @@
  * Note: this function should only be used for testing, it is not necessarily
  * safe for production use.
  */
-static int seq_proc_write_common(struct file *file, const char *buffer,
-				 unsigned long count, void *data,
+static int seq_proc_write_common(struct file *file, const char __user *buffer,
+				 size_t count, void *data,
 				 struct lu_seq_range *range)
 {
 	struct lu_seq_range tmp = { 0, };
 	int rc;
+	char kernbuf[MAX_FID_RANGE_STRLEN];
 	ENTRY;
 
 	LASSERT(range != NULL);
 
+	if (count >= sizeof(kernbuf))
+		RETURN(-EINVAL);
+
+	if (copy_from_user(kernbuf, buffer, count))
+		RETURN(-EFAULT);
+
+	kernbuf[count] = 0;
+
+	if (count == 5 && strcmp(kernbuf, "clear") == 0) {
+		memset(range, 0, sizeof(*range));
+		RETURN(0);
+	}
+
 	/* of the form "[0x0000000240000400 - 0x000000028000400]" */
-	rc = sscanf(buffer, "[%llx - %llx]\n",
+	rc = sscanf(kernbuf, "[%llx - %llx]\n",
 		    (long long unsigned *)&tmp.lsr_start,
 		    (long long unsigned *)&tmp.lsr_end);
 	if (!range_is_sane(&tmp) || range_is_zero(&tmp) ||
@@ -103,7 +120,7 @@ static int seq_proc_read_common(char *page, char **start, off_t off,
  * Server side procfs stuff.
  */
 static int
-seq_server_proc_write_space(struct file *file, const char *buffer,
+seq_server_proc_write_space(struct file *file, const char __user *buffer,
                             unsigned long count, void *data)
 {
         struct lu_server_seq *seq = (struct lu_server_seq *)data;
@@ -172,7 +189,7 @@ seq_server_proc_read_server(char *page, char **start, off_t off,
 }
 
 static int
-seq_server_proc_write_width(struct file *file, const char *buffer,
+seq_server_proc_write_width(struct file *file, const char __user *buffer,
                             unsigned long count, void *data)
 {
         struct lu_server_seq *seq = (struct lu_server_seq *)data;
@@ -218,7 +235,7 @@ seq_server_proc_read_width(char *page, char **start, off_t off,
 
 /* Client side procfs stuff */
 static int
-seq_client_proc_write_space(struct file *file, const char *buffer,
+seq_client_proc_write_space(struct file *file, const char __user *buffer,
                             unsigned long count, void *data)
 {
         struct lu_client_seq *seq = (struct lu_client_seq *)data;
@@ -260,7 +277,7 @@ seq_client_proc_read_space(char *page, char **start, off_t off,
 }
 
 static int
-seq_client_proc_write_width(struct file *file, const char *buffer,
+seq_client_proc_write_width(struct file *file, const char __user *buffer,
                             unsigned long count, void *data)
 {
         struct lu_client_seq *seq = (struct lu_client_seq *)data;
