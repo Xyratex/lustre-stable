@@ -850,7 +850,7 @@ int oscc_init()
         cfs_init_completion(&oscc_thr_stop);
 
         rc = cfs_create_thread(oscc_create_thread, NULL, 0);
-        if (rc > 0) {
+        if (rc >= 0) {
                 rc = 0;
                 cfs_wait_for_completion(&oscc_thr_start);
         }

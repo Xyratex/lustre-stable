@@ -470,7 +470,7 @@ int mgs_ir_init_fs(struct obd_device *obd, struct fs_db *fsdb)
         cfs_waitq_init(&fsdb->fsdb_notify_waitq);
         cfs_init_completion(&fsdb->fsdb_notify_comp);
         rc = cfs_create_thread(mgs_ir_notify, fsdb, CFS_DAEMON_FLAGS);
-        if (rc > 0)
+        if (rc >= 0)
                 cfs_wait_for_completion(&fsdb->fsdb_notify_comp);
         else
                 CERROR("Start notify thread error %d\n", rc);
