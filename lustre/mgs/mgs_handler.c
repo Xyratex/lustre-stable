@@ -833,6 +833,7 @@ int mgs_handle(struct ptlrpc_request *req)
         switch (opc) {
         case MGS_CONNECT:
                 DEBUG_REQ(D_MGS, req, "connect");
+		CFS_FAIL_TIMEOUT(OBD_FAIL_MGS_PAUSE_TARGET_CON, cfs_fail_val);
                 /* MGS and MDS have same request format for connect */
                 req_capsule_set(&req->rq_pill, &RQF_MDS_CONNECT);
                 rc = target_handle_connect(req);
