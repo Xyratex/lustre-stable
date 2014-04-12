@@ -284,6 +284,7 @@ void ptlrpc_invalidate_import(struct obd_import *imp)
         if (!imp->imp_invalid || imp->imp_obd->obd_no_recov)
                 ptlrpc_deactivate_import(imp);
 
+	CFS_FAIL_TIMEOUT(OBD_FAIL_MGS_PAUSE_TARGET_CON, cfs_fail_val * 1.5);
         LASSERT(imp->imp_invalid);
 
         /* Wait forever until inflight == 0. We really can't do it another
@@ -395,6 +396,18 @@ void ptlrpc_activate_import(struct obd_import *imp)
         obd_import_event(obd, imp, IMP_EVENT_ACTIVE);
 }
 
+static void ptlrpc_pinger_force(struct obd_import *imp)
+{
+	CDEBUG(D_HA, "%s: waking up pinger\n",
+	       obd2cli_tgt(imp->imp_obd));
+
+	cfs_spin_lock(&imp->imp_lock);
+	imp->imp_force_verify = 1;
+	cfs_spin_unlock(&imp->imp_lock);
+
+	ptlrpc_pinger_wake_up();
+}
+
 void ptlrpc_fail_import(struct obd_import *imp, __u32 conn_cnt)
 {
         ENTRY;
@@ -411,20 +424,30 @@ void ptlrpc_fail_import(struct obd_import *imp, __u32 conn_cnt)
                         ptlrpc_deactivate_import(imp);
                 }
 
-                CDEBUG(D_HA, "%s: waking up pinger\n",
-                       obd2cli_tgt(imp->imp_obd));
-
-                cfs_spin_lock(&imp->imp_lock);
-                imp->imp_force_verify = 1;
-                cfs_spin_unlock(&imp->imp_lock);
-
-                ptlrpc_pinger_wake_up();
+		ptlrpc_pinger_force(imp);
         }
         EXIT;
 }
 
 int ptlrpc_reconnect_import(struct obd_import *imp)
 {
+#ifdef ENABLE_PINGER
+	int rc;
+	struct l_wait_info lwi;
+	int secs = cfs_time_seconds(obd_timeout);
+
+	ptlrpc_pinger_force(imp);
+
+	CDEBUG(D_HA, "%s: recovery started, waiting %u seconds\n",
+	       obd2cli_tgt(imp->imp_obd), secs);
+
+	lwi = LWI_TIMEOUT(secs, NULL, NULL);
+	rc = l_wait_event(imp->imp_recovery_waitq,
+			  !ptlrpc_import_in_recovery(imp), &lwi);
+	CDEBUG(D_HA, "%s: recovery finished\n",
+	       obd2cli_tgt(imp->imp_obd));
+	return rc;
+#else
         ptlrpc_set_import_discon(imp, 0);
         /* Force a new connect attempt */
         ptlrpc_invalidate_import(imp);
@@ -449,6 +472,7 @@ int ptlrpc_reconnect_import(struct obd_import *imp)
         /* Attempt a new connect */
         ptlrpc_recover_import(imp, NULL);
         return 0;
+#endif
 }
 
 EXPORT_SYMBOL(ptlrpc_reconnect_import);
