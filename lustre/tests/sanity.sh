@@ -11,6 +11,22 @@ set -e
 ALWAYS_EXCEPT="                42a  42b  42c  42d  45   51d   68b   $SANITY_EXCEPT"
 # UPDATE THE COMMENT ABOVE WITH BUG NUMBERS WHEN CHANGING ALWAYS_EXCEPT!
 
+is_sles11()						# LU-4351
+{
+	if [ -r /etc/SuSE-release ]
+	then
+		local vers=`grep VERSION /etc/SuSE-release | awk '{print $3}'`
+		if [ $vers -eq 11 ]
+		then
+			return 0
+		fi
+	fi
+	return 1
+}
+
+if is_sles11; then					# LU-4351
+	ALWAYS_EXCEPT="$ALWAYS_EXCEPT 54c"
+fi
 
 case `uname -r` in
 2.4*) FSTYPE=${FSTYPE:-ext3} ;;
