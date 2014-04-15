@@ -406,20 +406,22 @@ static int mgc_requeue_thread(void *data)
                 struct l_wait_info lwi;
                 struct config_llog_data *cld, *cld_prev;
                 int rand = cfs_rand() & MGC_TIMEOUT_RAND_CENTISEC;
-                int stopped = !!(rq_state & RQ_STOP);
-                int to;
+		int stopped;
+		unsigned int to;
 
                 /* Any new or requeued lostlocks will change the state */
                 rq_state &= ~(RQ_NOW | RQ_LATER);
                 cfs_spin_unlock(&config_list_lock);
 
-                /* Always wait a few seconds to allow the server who
-                   caused the lock revocation to finish its setup, plus some
-                   random so everyone doesn't try to reconnect at once. */
-                to = MGC_TIMEOUT_MIN_SECONDS * CFS_HZ;
-                to += rand * CFS_HZ / 100; /* rand is centi-seconds */
-                lwi = LWI_TIMEOUT(to, NULL, NULL);
-                l_wait_event(rq_waitq, rq_state & RQ_STOP, &lwi);
+		l_wait_condition(rq_waitq, rq_state & (RQ_STOP | RQ_NOW));
+		/* Always wait a few seconds to allow the server who
+		 * caused the lock revocation to finish its setup, plus some
+		 * random so everyone doesn't try to reconnect at once. */
+		to = cfs_time_seconds(MGC_TIMEOUT_MIN_SECONDS);
+		to +=  cfs_time_seconds(rand) / 100; /* rand is centi-seconds */
+		lwi = LWI_TIMEOUT(to, NULL, NULL);
+		l_wait_event(rq_waitq, rq_state & RQ_STOP, &lwi);
+		stopped = !!(rq_state & RQ_STOP);
 
                 /*
                  * iterate & processing through the list. for each cld, process
@@ -434,10 +436,15 @@ static int mgc_requeue_thread(void *data)
                 cfs_spin_lock(&config_list_lock);
                 cfs_list_for_each_entry(cld, &config_llog_list,
                                         cld_list_chain) {
+
                         if (!cld->cld_lostlock)
                                 continue;
 
                         cfs_spin_unlock(&config_list_lock);
+
+			cfs_mutex_lock(&cld->cld_lock);
+			cld->cld_lostlock = 0;
+			cfs_mutex_unlock(&cld->cld_lock);
 
                         LASSERT(cfs_atomic_read(&cld->cld_refcount) > 0);
 
@@ -447,9 +454,9 @@ static int mgc_requeue_thread(void *data)
                                 config_log_put(cld_prev);
                         cld_prev = cld;
 
-                        cld->cld_lostlock = 0;
-                        if (likely(!stopped))
-                                do_requeue(cld);
+			/* llog stopped from watch don't re-enqueue*/
+			if (likely(!stopped))
+				do_requeue(cld);
 
                         cfs_spin_lock(&config_list_lock);
                 }
@@ -464,10 +471,6 @@ static int mgc_requeue_thread(void *data)
                         break;
                 }
 
-                /* Wait a bit to see if anyone else needs a requeue */
-                lwi = (struct l_wait_info) { 0 };
-                l_wait_event(rq_waitq, rq_state & (RQ_NOW | RQ_STOP),
-                             &lwi);
                 cfs_spin_lock(&config_list_lock);
         }
         /* spinlock and while guarantee RQ_NOW and RQ_LATER are not set */
@@ -592,6 +595,9 @@ static int mgc_fs_cleanup(struct obd_device *obd)
         ENTRY;
 
         LASSERT(cli->cl_mgc_vfsmnt != NULL);
+	CFS_FAIL_CHECK_RESET(OBD_FAIL_MGC_FAIL_NET,
+			     (OBD_FAIL_MGC_FS_CLEANUP_RACE | CFS_FAIL_ONCE));
+	CFS_RACE(OBD_FAIL_MGC_FS_CLEANUP_RACE);
 
         if (cli->cl_mgc_configs_dir != NULL) {
                 struct lvfs_run_ctxt saved;
@@ -830,6 +836,9 @@ static int mgc_enqueue(struct obd_export *exp, struct lov_stripe_md *lsm,
 
         CDEBUG(D_MGC, "Enqueue for %s (res "LPX64")\n", cld->cld_logname,
                cld->cld_resid.name[0]);
+
+	if (CFS_FAIL_CHECK(OBD_FAIL_MGC_FAIL_NET))
+		RETURN(-5);
 
         /* We need a callback for every lockholder, so don't try to
            ldlm_lock_match (see rev 1.1.2.11.2.47) */
@@ -1290,6 +1299,7 @@ static int mgc_process_cfg_log(struct obd_device *mgc,
             (lsi->lsi_srv_mnt == cli->cl_mgc_vfsmnt) &&
             !IS_MGS(lsi->lsi_ldd)) {
                 push_ctxt(saved_ctxt, &mgc->obd_lvfs_ctxt, NULL);
+                CFS_RACE(OBD_FAIL_MGC_FS_CLEANUP_RACE);
                 must_pop++;
                 if (!local_only)
                         /* Only try to copy log if we have the lock. */
@@ -1403,6 +1413,9 @@ int mgc_process_log(struct obd_device *mgc, struct config_llog_data *cld)
                mgc->obd_name, cld->cld_logname, rc ? "fail" : "succeed", rc);
 
         cfs_mutex_unlock(&cld->cld_lock);
+
+	if (cld->cld_lostlock)
+		mgc_notify_active(mgc);
 
         /* Now drop the lock so MGS can revoke it */
         if (!rcl) {
