@@ -987,6 +987,20 @@ test_27b() {
 }
 run_test 27b "Reacquire MGS lock after failover"
 
+test_27c() {
+	if ! combined_mgs_mds ; then
+		start_mgs
+	else
+		start_mds
+	fi
+# first OBD_FAIL_MGC_FAIL_NET            0x907 used to hit
+# OBD_FAIL_MGC_FS_CLEANUP_RACE     0x908
+	$LCTL set_param fail_loc=0x907
+	start_ost
+	cleanup
+}
+run_test 27c "do not panic on mgs fs cleanup vs lock enqueue race"
+
 test_28() {
         setup
 	TEST="lctl get_param -n llite.$FSNAME-*.max_read_ahead_whole_mb"
