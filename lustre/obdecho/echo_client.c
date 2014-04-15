@@ -2524,7 +2524,7 @@ static int echo_client_brw_ioctl(int rw, struct obd_export *exp,
         struct obdo *oa = &data->ioc_obdo1;
         struct echo_object *eco;
         int rc;
-        int async = 1;
+        int async = 0;
         int test_mode;
         ENTRY;
 
@@ -2538,8 +2538,6 @@ static int echo_client_brw_ioctl(int rw, struct obd_export *exp,
 
         /** obdfilter don't supported obd_brw now, simulate via prep_commit */
         test_mode = (long)data->ioc_pbuf1;
-        if (test_mode == 1)
-                async = 0;
 
         if (ed->ed_next == NULL && test_mode != 3) {
                 test_mode = 3;
