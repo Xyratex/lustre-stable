@@ -972,22 +972,10 @@ static int mdt_getattr_name_lock(struct mdt_thread_info *info,
                 CDEBUG(D_INODE, "partial getattr_name child_fid = "DFID", "
                        "ldlm_rep=%p\n", PFID(mdt_object_fid(child)), ldlm_rep);
 
-                if (is_resent) {
-                        /* Do not take lock for resent case. */
-                        lock = ldlm_handle2lock(&lhc->mlh_reg_lh);
-                        LASSERTF(lock != NULL, "Invalid lock handle "LPX64"\n",
-                                 lhc->mlh_reg_lh.cookie);
-                        if (!fid_res_name_eq(mdt_object_fid(child),
-					     &lock->l_resource->lr_name)) {
-				CWARN("Although resent, but still not get "
-				      "child lock:"DFID"\n",
-				      PFID(mdt_object_fid(child)));
-				LDLM_LOCK_PUT(lock);
-				RETURN(-EPROTO);
-			}
-                        LDLM_LOCK_PUT(lock);
-                        rc = 0;
-                } else {
+		rc = mdt_check_resent_lock(info, child, lhc);
+		if (rc < 0) {
+			RETURN(-EPROTO);
+		} else if (rc > 0) {
                         mdt_lock_handle_init(lhc);
                         mdt_lock_reg_init(lhc, LCK_PR);
 
@@ -1045,24 +1033,10 @@ static int mdt_getattr_name_lock(struct mdt_thread_info *info,
 
         if (unlikely(IS_ERR(child)))
                 GOTO(out_parent, rc = PTR_ERR(child));
-        if (is_resent) {
-                /* Do not take lock for resent case. */
-                lock = ldlm_handle2lock(&lhc->mlh_reg_lh);
-                LASSERTF(lock != NULL, "Invalid lock handle "LPX64"\n",
-                         lhc->mlh_reg_lh.cookie);
-
-                if (!fid_res_name_eq(mdt_object_fid(child),
-                                    &lock->l_resource->lr_name)) {
-                          CWARN("Although resent, but still not get child lock"
-                                "parent:"DFID" child:"DFID"\n",
-                                PFID(mdt_object_fid(parent)),
-                                PFID(mdt_object_fid(child)));
-                          LDLM_LOCK_PUT(lock);
-			  GOTO(out_parent, rc = -EPROTO);
-                }
-                LDLM_LOCK_PUT(lock);
-                rc = 0;
-        } else {
+	rc = mdt_check_resent_lock(info, child, lhc);
+	if (rc < 0) {
+		GOTO(out_child, rc);
+	} else if (rc > 0) {
                 OBD_FAIL_TIMEOUT(OBD_FAIL_MDS_RESEND, obd_timeout*2);
                 mdt_lock_handle_init(lhc);
                 mdt_lock_reg_init(lhc, LCK_PR);
@@ -2242,6 +2216,35 @@ int mdt_blocking_ast(struct ldlm_lock *lock, struct ldlm_lock_desc *desc,
         RETURN(rc);
 }
 
+int mdt_check_resent_lock(struct mdt_thread_info *info,
+			  struct mdt_object *mo,
+			  struct mdt_lock_handle *lhc)
+{
+	/* the lock might already be gotten in ldlm_handle_enqueue() */
+	if (lustre_handle_is_used(&lhc->mlh_reg_lh)) {
+		struct ptlrpc_request *req = mdt_info_req(info);
+		struct ldlm_lock      *lock;
+
+		lock = ldlm_handle2lock(&lhc->mlh_reg_lh);
+		LASSERT(lustre_msg_get_flags(req->rq_reqmsg) & MSG_RESENT);
+		LASSERTF(lock != NULL, "Invalid lock handle "LPX64"\n",
+			 lhc->mlh_reg_lh.cookie);
+
+		if (!fid_res_name_eq(mdt_object_fid(mo),
+				     &lock->l_resource->lr_name)) {
+			CWARN("%s: Although resent, but still not "
+			      "get child lock:"DFID"\n",
+			      info->mti_exp->exp_obd->obd_name,
+			      PFID(mdt_object_fid(mo)));
+			LDLM_LOCK_PUT(lock);
+			RETURN(-EPROTO);
+		}
+		LDLM_LOCK_PUT(lock);
+		return 0;
+	}
+	return 1;
+}
+
 int mdt_object_lock(struct mdt_thread_info *info, struct mdt_object *o,
                     struct mdt_lock_handle *lh, __u64 ibits, int locality)
 {
@@ -3307,6 +3310,9 @@ static void mdt_intent_fixup_resent(struct mdt_thread_info *info,
 
         dlmreq = req_capsule_client_get(info->mti_pill, &RMF_DLM_REQ);
 
+	/* Check if this is a resend case (MSG_RESENT is set on RPC) and a
+	 * lock was found by ldlm_handle_enqueue(); if so @lh must be
+	 * initialized. */
 	if (flags & LDLM_FL_RESENT) {
 		lh->mlh_reg_lh.cookie = new_lock->l_handle.h_cookie;
 		lh->mlh_reg_mode = new_lock->l_granted_mode;
