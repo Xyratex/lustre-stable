@@ -1131,13 +1131,19 @@ int mdt_open_by_fid_lock(struct mdt_thread_info *info, struct ldlm_reply *rep,
         else
                 lm = LCK_CR;
 
-        mdt_lock_handle_init(lhc);
-        mdt_lock_reg_init(lhc, lm);
-        rc = mdt_object_lock(info, o, lhc,
-                             MDS_INODELOCK_LOOKUP | MDS_INODELOCK_OPEN,
-                             MDT_CROSS_LOCK);
-        if (rc)
-                GOTO(out, rc);
+
+	rc = mdt_check_resent_lock(info, o, lhc);
+	if (rc < 0) {
+		GOTO(out, rc);
+	} else if (rc > 0) {
+		mdt_lock_handle_init(lhc);
+		mdt_lock_reg_init(lhc, lm);
+		rc = mdt_object_lock(info, o, lhc,
+				     MDS_INODELOCK_LOOKUP | MDS_INODELOCK_OPEN,
+				     MDT_CROSS_LOCK);
+		if (rc)
+			GOTO(out, rc);
+	}
 
         rc = mo_attr_get(env, mdt_object_child(o), ma);
         if (rc)
@@ -1448,22 +1454,10 @@ int mdt_reint_open(struct mdt_thread_info *info, struct mdt_lock_handle *lhc)
                          */
                         LASSERT(lhc != NULL);
 
-                        if (lustre_handle_is_used(&lhc->mlh_reg_lh)) {
-                                struct ldlm_lock *lock;
-
-                                LASSERT(msg_flags & MSG_RESENT);
-
-                                lock = ldlm_handle2lock(&lhc->mlh_reg_lh);
-                                if (!lock) {
-                                        CERROR("Invalid lock handle "LPX64"\n",
-                                               lhc->mlh_reg_lh.cookie);
-                                        LBUG();
-                                }
-                                LASSERT(fid_res_name_eq(mdt_object_fid(child),
-                                                        &lock->l_resource->lr_name));
-                                LDLM_LOCK_PUT(lock);
-                                rc = 0;
-                        } else {
+			rc = mdt_check_resent_lock(info, child, lhc);
+			if (rc < 0) {
+				GOTO(out_child, result = rc);
+			} else if (rc > 0) {
                                 mdt_lock_handle_init(lhc);
                                 mdt_lock_reg_init(lhc, LCK_PR);
 
@@ -1479,31 +1473,42 @@ int mdt_reint_open(struct mdt_thread_info *info, struct mdt_lock_handle *lhc)
                 }
         }
 
-        LASSERT(!lustre_handle_is_used(&lhc->mlh_reg_lh));
+	rc = mdt_check_resent_lock(info, child, lhc);
+	if (rc < 0) {
+		GOTO(out_child, result = rc);
+	} else if (rc == 0) {
+		LASSERT(create_flags & MDS_OPEN_LOCK);
 
-        /* get openlock if this is not replay and if a client requested it */
-        if (!req_is_replay(req) && create_flags & MDS_OPEN_LOCK) {
-                ldlm_mode_t lm;
+		result = -EREMOTE;
+		mdt_set_disposition(info, ldlm_rep, DISP_OPEN_LOCK);
+	} else {
+		/* get openlock if this is not replay and if a client
+		 * requested it */
+		if (!req_is_replay(req) && create_flags & MDS_OPEN_LOCK) {
+			ldlm_mode_t lm;
 
-                if (create_flags & FMODE_WRITE)
-                        lm = LCK_CW;
-                else if (create_flags & MDS_FMODE_EXEC)
-                        lm = LCK_PR;
-                else
-                        lm = LCK_CR;
-                mdt_lock_handle_init(lhc);
-                mdt_lock_reg_init(lhc, lm);
-                rc = mdt_object_lock(info, child, lhc,
-                                     MDS_INODELOCK_LOOKUP | MDS_INODELOCK_OPEN,
-                                     MDT_CROSS_LOCK);
-                if (rc) {
-                        result = rc;
-                        GOTO(out_child, result);
-                } else {
-                        result = -EREMOTE;
-                        mdt_set_disposition(info, ldlm_rep, DISP_OPEN_LOCK);
-                }
-        }
+			if (create_flags & FMODE_WRITE)
+				lm = LCK_CW;
+			else if (create_flags & MDS_FMODE_EXEC)
+				lm = LCK_PR;
+			else
+				lm = LCK_CR;
+			mdt_lock_handle_init(lhc);
+			mdt_lock_reg_init(lhc, lm);
+			rc = mdt_object_lock(info, child, lhc,
+					     MDS_INODELOCK_LOOKUP |
+					     MDS_INODELOCK_OPEN,
+					     MDT_CROSS_LOCK);
+			if (rc) {
+				result = rc;
+				GOTO(out_child, result);
+			} else {
+				result = -EREMOTE;
+				mdt_set_disposition(info, ldlm_rep,
+						    DISP_OPEN_LOCK);
+			}
+		}
+	}
 
         /* Try to open it now. */
         rc = mdt_finish_open(info, parent, child, create_flags,

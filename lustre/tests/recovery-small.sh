@@ -1068,13 +1068,13 @@ run_test 55 "ost_brw_read/write drops timed-out read/write request"
 
 test_56() { # b=11277
 #define OBD_FAIL_MDS_RESEND      0x136
-        touch $DIR/$tfile
-        do_facet $SINGLEMDS "lctl set_param fail_loc=0x80000136"
-        stat $DIR/$tfile
-        do_facet $SINGLEMDS "lctl set_param fail_loc=0"
-        rm -f $DIR/$tfile
+	touch $DIR/$tfile
+	do_facet $SINGLEMDS "lctl set_param fail_loc=0x80000136"
+	stat $DIR/$tfile || error "stat failed"
+	do_facet $SINGLEMDS "lctl set_param fail_loc=0"
+	rm -f $DIR/$tfile
 }
-run_test 56 "do not allow reconnect to busy exports"
+run_test 56 "do not fail on getattr resend"
 
 test_57_helper() {
         # no oscs means no client or mdt 
@@ -1588,10 +1588,11 @@ test_112b() {
 run_test 112b "getattr resend while orignal request is in progress"
 
 test_113() {
-	local BEFORE=`date +%s`
+	local BEFORE=$(date +%s)
+	local EVICT
 
 	# modify dir so that next revalidate would not obtain UPDATE lock
-	do_facet client touch $DIR
+	touch $DIR
 
 	# drop 1 reply with UPDATE lock,
 	# resend should not create 2nd lock on server
@@ -1601,16 +1602,16 @@ test_113() {
 	# 2 BL AST will be sent to client, both must find the same lock,
 	# race them to not get EINVAL for 2nd BL AST
 	#define OBD_FAIL_LDLM_PAUSE_CANCEL2      0x31f
-	lctl set_param fail_loc=0x8000031f
+	$LCTL set_param fail_loc=0x8000031f
 
-	lctl set_param ldlm.namespaces.*.early_lock_cancel=0 > /dev/null
+	$LCTL set_param ldlm.namespaces.*.early_lock_cancel=0 > /dev/null
 	chmod 0777 $DIR/$tfile || error "chmod failed: $?"
-	lctl set_param ldlm.namespaces.*.early_lock_cancel=1 > /dev/null
+	$LCTL set_param ldlm.namespaces.*.early_lock_cancel=1 > /dev/null
 
 	# let the client reconnect
 	client_reconnect
-	EVICT=`do_facet client $LCTL get_param mdc.$FSNAME-MDT*.state | \
-	   awk -F"[ [,]" '/EVICTED]$/ { if (mx<$4) {mx=$4;} } END { print mx }'`
+	EVICT=$($LCTL get_param mdc.$FSNAME-MDT*.state |
+		awk -F"[ [,]" '/EVICTED]$/ { if (mx<$4) {mx=$4;} } END { print mx }')
 
 	[ -z "$EVICT" ] || [[ $EVICT -le $BEFORE ]] || error "eviction happened"
 }
