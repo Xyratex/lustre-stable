@@ -651,6 +651,7 @@ int ldlm_process_extent_lock(struct ldlm_lock *lock, __u64 *flags,
         int contended_locks = 0;
         ENTRY;
 
+	LASSERT(lock->l_granted_mode != lock->l_req_mode);
         LASSERT(cfs_list_empty(&res->lr_converting));
         LASSERT(!(*flags & LDLM_FL_DENY_ON_CONTENTION) ||
                 !(lock->l_flags & LDLM_AST_DISCARD_DATA));

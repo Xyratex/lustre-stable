@@ -1697,7 +1697,6 @@ static int filter_intent_policy(struct ldlm_namespace *ns,
         struct ldlm_reply *rep;
         ldlm_error_t err;
         int idx, rc, only_liblustre = 1;
-        __u64 tmpflags = 0;
         struct ldlm_interval_tree *tree;
         struct filter_intent_args arg;
         __u32 repsize[3] = { [MSG_PTLRPC_BODY_OFF] = sizeof(struct ptlrpc_body),
@@ -1720,8 +1719,6 @@ static int filter_intent_policy(struct ldlm_namespace *ns,
                                    sizeof(*reply_lvb));
         LASSERT(reply_lvb != NULL);
 
-        //fixup_handle_for_resent_req(req, lock, &lockh);
-
         /* Call the extent policy function to see if our request can be
          * granted, or is blocked.
          * If the OST lock has LDLM_FL_HAS_INTENT set, it means a glimpse
@@ -1730,8 +1727,17 @@ static int filter_intent_policy(struct ldlm_namespace *ns,
 
         LASSERT(ns == ldlm_res_to_ns(res));
         lock_res(res);
-        rc = policy(lock, &tmpflags, 0, &err, &rpc_list);
-        check_res_locked(res);
+
+	/* Check if this is a resend case (MSG_RESENT is set on RPC) and a
+	 * lock was found by ldlm_handle_enqueue(); if so no need to grant
+	 * it again. */
+	if (flags & LDLM_FL_RESENT) {
+		rc = LDLM_ITER_CONTINUE;
+	} else {
+		__u64 tmpflags = 0;
+		rc = policy(lock, &tmpflags, 0, &err, &rpc_list);
+		check_res_locked(res);
+	}
 
         /* FIXME: we should change the policy function slightly, to not make
          * this list at all, since we just turn around and free it */

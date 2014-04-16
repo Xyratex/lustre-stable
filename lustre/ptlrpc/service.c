@@ -1341,8 +1341,8 @@ static int ptlrpc_server_check_resend_in_progress(struct ptlrpc_request *req)
 	return 0;
 
 found:
-	DEBUG_REQ(D_HA, req, "Found duplicate req in processing\n");
-	DEBUG_REQ(D_HA, tmp, "Request being processed\n");
+	DEBUG_REQ(D_HA, req, "Found duplicate req in processing");
+	DEBUG_REQ(D_HA, tmp, "Request being processed");
 	return -EBUSY;
 }
 
@@ -1763,6 +1763,10 @@ ptlrpc_server_handle_req_in(struct ptlrpc_service *svc)
                 DEBUG_REQ(D_ERROR, req, "Dropping request with 0 timeout");
                 goto err_req;
         }
+
+	/* Skip early reply */
+	if (OBD_FAIL_PRECHECK(OBD_FAIL_MDS_RESEND))
+		req->rq_deadline += obd_timeout;
 
         ptlrpc_at_add_timed(req);
 

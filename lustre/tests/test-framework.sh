@@ -3261,20 +3261,20 @@ drop_request() {
 
 drop_reply() {
 # OBD_FAIL_MDS_ALL_REPLY_NET
-    RC=0
-    do_facet $SINGLEMDS lctl set_param fail_loc=0x122
-    do_facet client "$@" || RC=$?
-    do_facet $SINGLEMDS lctl set_param fail_loc=0
-    return $RC
+	RC=0
+	do_facet $SINGLEMDS $LCTL set_param fail_loc=0x122
+	eval "$@" || RC=$?
+	do_facet $SINGLEMDS $LCTL set_param fail_loc=0
+	return $RC
 }
 
 drop_reint_reply() {
 # OBD_FAIL_MDS_REINT_NET_REP
-    RC=0
-    do_facet $SINGLEMDS lctl set_param fail_loc=0x119
-    do_facet client "$@" || RC=$?
-    do_facet $SINGLEMDS lctl set_param fail_loc=0
-    return $RC
+	RC=0
+	do_facet $SINGLEMDS $LCTL set_param fail_loc=0x119
+	eval "$@" || RC=$?
+	do_facet $SINGLEMDS $LCTL set_param fail_loc=0
+	return $RC
 }
 
 pause_bulk() {
