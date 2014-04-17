@@ -1841,7 +1841,8 @@ static int mdc_iocontrol(unsigned int cmd, struct obd_export *exp, int len,
         ENTRY;
 
 	if (!try_module_get(THIS_MODULE)) {
-		CERROR("Can't get module. Is it alive?");
+		CERROR("%s: cannot get module '%s'\n", obd->obd_name,
+		       module_name(THIS_MODULE));
 		return -EINVAL;
 	}
         switch (cmd) {
