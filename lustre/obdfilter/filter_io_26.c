@@ -497,9 +497,6 @@ int filter_direct_io(int rw, struct dentry *dchild, struct filter_iobuf *iobuf,
                 LASSERT(iobuf->dr_npages > 0);
                 create = 1;
                 mutex = &obd->u.filter.fo_alloc_lock;
-
-                lquota_enforce(filter_quota_interface_ref, obd,
-                               iobuf->dr_ignore_quota);
         }
 
         if (rw == OBD_BRW_WRITE &&
@@ -700,23 +697,6 @@ int filter_commitrw_write(struct obd_export *exp, struct obdo *oa,
 retry:
 	mutex_lock(&inode->i_mutex);
 	fsfilt_check_slow(obd, now, "i_mutex");
-	oti->oti_handle = fsfilt_brw_start(obd, objcount, &fso, niocount, res,
-					   oti);
-	if (IS_ERR(oti->oti_handle)) {
-		mutex_unlock(&inode->i_mutex);
-		rc = PTR_ERR(oti->oti_handle);
-		CDEBUG(rc == -ENOSPC ? D_INODE : D_ERROR,
-		       "error starting transaction: rc = %d\n", rc);
-		oti->oti_handle = NULL;
-		GOTO(cleanup, rc);
-	}
-	/* have to call fsfilt_commit() from this point on */
-
-        fsfilt_check_slow(obd, now, "brw_start");
-
-        /* Locking order: i_mutex -> journal_lock -> dqptr_sem. LU-952 */
-        ll_vfs_dq_init(inode);
-
         i = OBD_MD_FLATIME | OBD_MD_FLMTIME | OBD_MD_FLCTIME;
 
         /* If the inode still has SUID+SGID bits set (see filter_precreate())
@@ -731,11 +711,30 @@ retry:
         iattr_from_obdo(&iattr, oa, i);
         if (iattr.ia_valid & (ATTR_UID | ATTR_GID)) {
                 unsigned int save;
+		void *handle;
+		bool cap_raise = false;
 
-                CDEBUG(D_INODE, "update UID/GID to %lu/%lu\n",
-                       (unsigned long)oa->o_uid, (unsigned long)oa->o_gid);
+		CDEBUG(D_INODE, "update UID/GID to %lu/%lu\n",
+		       (unsigned long)oa->o_uid, (unsigned long)oa->o_gid);
 
-                cfs_cap_raise(CFS_CAP_SYS_RESOURCE);
+		/* cfs_cap_raise() should be called before journal start,
+		 * because it may allocate memory and trigger data flush
+		 * on another fs, that'll probably try to start nested
+		 * transaction on different journal. LU-3071 */
+		if (!cfs_cap_raised(CFS_CAP_SYS_RESOURCE)) {
+			cfs_cap_raise(CFS_CAP_SYS_RESOURCE);
+			cap_raise = true;
+		}
+
+		handle = fsfilt_start(obd, inode, FSFILT_OP_SETATTR, NULL);
+		if (IS_ERR(handle)) {
+			if (cap_raise)
+				cfs_cap_lower(CFS_CAP_SYS_RESOURCE);
+			mutex_unlock(&inode->i_mutex);
+			GOTO(cleanup, rc = PTR_ERR(handle));
+		}
+
+		ll_vfs_dq_init(inode);
 
                 iattr.ia_valid |= ATTR_MODE;
                 iattr.ia_mode = inode->i_mode;
@@ -744,17 +743,41 @@ retry:
                 if (iattr.ia_valid & ATTR_GID)
                         iattr.ia_mode &= ~S_ISGID;
 
-                rc = filter_update_fidea(exp, inode, oti->oti_handle, oa);
+                rc = filter_update_fidea(exp, inode, handle, oa);
 
                 /* To avoid problems with quotas, UID and GID must be set
                  * in the inode before filter_direct_io() - see bug 10357. */
                 save = iattr.ia_valid;
                 iattr.ia_valid &= (ATTR_UID | ATTR_GID);
-                rc = fsfilt_setattr(obd, res->dentry, oti->oti_handle,&iattr,0);
+                rc = fsfilt_setattr(obd, res->dentry, handle, &iattr,0);
                 CDEBUG(D_QUOTA, "set uid(%u)/gid(%u) to ino(%lu). rc(%d)\n",
                                 iattr.ia_uid, iattr.ia_gid, inode->i_ino, rc);
                 iattr.ia_valid = save & ~(ATTR_UID | ATTR_GID);
+
+		err = fsfilt_commit(obd, inode, handle, 0);
+		if (cap_raise)
+			cfs_cap_lower(CFS_CAP_SYS_RESOURCE);
         }
+
+	/* enforce quota before journal start. LU-3071 */
+	lquota_enforce(filter_quota_interface_ref, obd, iobuf->dr_ignore_quota);
+
+	oti->oti_handle = fsfilt_brw_start(obd, objcount, &fso, niocount, res,
+					   oti);
+	if (IS_ERR(oti->oti_handle)) {
+		mutex_unlock(&inode->i_mutex);
+		rc = PTR_ERR(oti->oti_handle);
+		CDEBUG(rc == -ENOSPC ? D_INODE : D_ERROR,
+		       "error starting transaction: rc = %d\n", rc);
+		oti->oti_handle = NULL;
+		GOTO(cleanup, rc);
+	}
+	/* have to call fsfilt_commit() from this point on */
+
+	fsfilt_check_slow(obd, now, "brw_start");
+
+	/* Locking order: i_mutex -> journal_lock -> dqptr_sem. LU-952 */
+	ll_vfs_dq_init(inode);
 
         /* filter_direct_io drops i_mutex */
         rc = filter_direct_io(OBD_BRW_WRITE, res->dentry, iobuf, exp, &iattr,
