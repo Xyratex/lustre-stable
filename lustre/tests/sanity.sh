@@ -6822,6 +6822,8 @@ free_min_max () {
 
 test_116a() { # was previously test_116()
 	[ $PARALLEL == "yes" ] && skip "skip parallel run" && return
+	remote_mds_nodsh && skip "remote MDS with nodsh" && return
+
 	[ "$OSTCOUNT" -lt "2" ] && skip_env "$OSTCOUNT < 2 OSTs" && return
 
 	echo -n "Free space priority "
@@ -10239,6 +10241,7 @@ run_test 180b "test obdecho directly on obdfilter and correctly handle zombies"
 
 test_180c() { # LU-2598
 	[ $PARALLEL == "yes" ] && skip "skip parallel run" && return
+	remote_ost_nodsh && skip "remote OST with nodsh" && return
 	[[ $(lustre_version_code $SINGLEMDS) -lt $(version_code 2.4.0) ]] &&
 		skip "Need MDS version at least 2.4.0" && return
 
@@ -10311,6 +10314,7 @@ test_182() {
 run_test 182 "Disable MDC RPCs semaphore wouldn't crash client ================"
 
 test_183() { # LU-2275
+	remote_mds_nodsh && skip "remote MDS with nodsh" && return
 	[[ $(lustre_version_code $SINGLEMDS) -lt $(version_code 2.3.56) ]] &&
 		skip "Need MDS version at least 2.3.56" && return
 
@@ -11440,6 +11444,8 @@ run_test 219 "LU-394: Write partial won't cause uncontiguous pages vec at LND"
 test_220() { #LU-325
 	[ $PARALLEL == "yes" ] && skip "skip parallel run" && return
 	remote_ost_nodsh && skip "remote OST with nodsh" && return
+	remote_mds_nodsh && skip "remote MDS with nodsh" && return
+	remote_mgs_nodsh && skip "remote MGS with nodsh" && return
 	local OSTIDX=0
 
 	test_mkdir -p $DIR/$tdir
@@ -11577,6 +11583,7 @@ run_test 224b "Don't panic on bulk IO failure"
 MDSSURVEY=${MDSSURVEY:-$(which mds-survey 2>/dev/null || true)}
 test_225a () {
 	[ $PARALLEL == "yes" ] && skip "skip parallel run" && return
+	remote_mds_nodsh && skip "remote MDS with nodsh" && return
 	if [ -z ${MDSSURVEY} ]; then
 	      skip_env "mds-survey not found" && return
 	fi
@@ -11607,6 +11614,7 @@ run_test 225a "Metadata survey sanity with zero-stripe"
 test_225b () {
 	[ $PARALLEL == "yes" ] && skip "skip parallel run" && return
 
+	remote_mds_nodsh && skip "remote MDS with nodsh" && return
 	if [ -z ${MDSSURVEY} ]; then
 	      skip_env "mds-survey not found" && return
 	fi
@@ -11717,6 +11725,7 @@ run_test 227 "running truncated executable does not cause OOM"
 # LU-1512 try to reuse idle OI blocks
 test_228a() {
 	[ $PARALLEL == "yes" ] && skip "skip parallel run" && return
+	remote_mds_nodsh && skip "remote MDS with nodsh" && return
 	[ "$(facet_fstype $SINGLEMDS)" != "ldiskfs" ] &&
 		skip "non-ldiskfs backend" && return
 
