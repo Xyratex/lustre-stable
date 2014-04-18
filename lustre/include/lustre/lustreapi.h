@@ -361,9 +361,12 @@ extern int llapi_json_add_item(struct llapi_json_item_list **item_list,
 			       char *key, __u32 type, void *val);
 extern int llapi_json_write_list(struct llapi_json_item_list **item_list,
 				 FILE *fp);
+/* File lease */
+extern int llapi_lease_get(int fd, int mode);
+extern int llapi_lease_check(int fd);
+extern int llapi_lease_put(int fd);
+
 /** @} llapi */
 
 #endif
-
-
 
