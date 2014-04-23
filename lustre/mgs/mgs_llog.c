@@ -956,8 +956,7 @@ static int mgs_replace_with_backup(struct obd_device *obd, struct mgs_obd *mgs,
         if (rc < 0)
                 GOTO(out_free, rc=-EIO);
 
-        rc = lustre_rename(mgs->mgs_configs_dir, mgs->mgs_vfsmnt,
-                                   new_log, orig_log);
+	rc = lustre_rename(mgs->mgs_configs_dir, new_log, orig_log);
 
 out_free:
         RETURN(rc);

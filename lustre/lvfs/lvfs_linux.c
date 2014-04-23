@@ -293,8 +293,7 @@ out_up:
 EXPORT_SYMBOL(simple_mkdir);
 
 /* utility to rename a file */
-int lustre_rename(struct dentry *dir, struct vfsmount *mnt,
-                  char *oldname, char *newname)
+int lustre_rename(struct dentry *dir, char *oldname, char *newname)
 {
         struct dentry *dchild_old, *dchild_new;
         int err = 0;
