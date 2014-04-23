@@ -1522,8 +1522,10 @@ static void server_put_super(struct super_block *sb)
             (IS_MDT(lsi->lsi_ldd) || IS_OST(lsi->lsi_ldd))) {
                 struct lustre_profile *lprof = NULL;
 
-                /* tell the mgc to drop the config log */
-                lustre_end_log(sb, lsi->lsi_ldd->ldd_svname, NULL);
+		obd = class_name2obd(lsi->lsi_ldd->ldd_svname);
+
+		/* tell the mgc to drop the config log */
+		lustre_end_log(sb, lsi->lsi_ldd->ldd_svname, NULL);
 
                 /* COMPAT_146 - profile may get deleted in mgc_cleanup.
                    If there are any setup/cleanup errors, save the lov
@@ -1534,7 +1536,6 @@ static void server_put_super(struct super_block *sb)
                         strcpy(extraname, lprof->lp_dt);
                 }
 
-                obd = class_name2obd(lsi->lsi_ldd->ldd_svname);
                 if (obd) {
                         CDEBUG(D_MOUNT, "stopping %s\n", obd->obd_name);
                         if (lsi->lsi_flags & LSI_UMOUNT_FAILOVER)
@@ -1547,6 +1548,8 @@ static void server_put_super(struct super_block *sb)
                         CERROR("no obd %s\n", lsi->lsi_ldd->ldd_svname);
                         server_deregister_mount(lsi->lsi_ldd->ldd_svname);
                 }
+
+
         }
 
         /* If they wanted the mgs to stop separately from the mdt, they

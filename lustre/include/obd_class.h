@@ -154,6 +154,7 @@ struct config_llog_instance {
         char               *cfg_obdname;
         void               *cfg_instance;
         struct super_block *cfg_sb;
+	struct lvfs_run_ctxt cfg_lvfs;
         struct obd_uuid     cfg_uuid;
         int                 cfg_last_idx; /* for partial llog processing */
         int                 cfg_flags;

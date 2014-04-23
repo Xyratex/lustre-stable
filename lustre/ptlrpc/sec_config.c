@@ -1074,10 +1074,8 @@ int sptlrpc_target_local_copy_conf(struct obd_device *obd,
 out_close:
         llog_close(llh);
 
-        if (rc == 0) {
-                rc = lustre_rename(dentry, obd->obd_lvfs_ctxt.pwdmnt,
-                                   LOG_SPTLRPC_TMP, LOG_SPTLRPC);
-        }
+	if (rc == 0)
+		rc = lustre_rename(dentry, LOG_SPTLRPC_TMP, LOG_SPTLRPC);
 
 out_dput:
         l_dput(dentry);
