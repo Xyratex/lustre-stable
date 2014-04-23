@@ -721,10 +721,8 @@ static int llog_lvfs_destroy(struct llog_handle *handle)
         fdentry = handle->lgh_file->f_dentry;
         inode = fdentry->d_parent->d_inode;
         if (strcmp(fdentry->d_parent->d_name.name, dir) == 0) {
-                struct lvfs_run_ctxt saved;
                 struct vfsmount *mnt = mntget(handle->lgh_file->f_vfsmnt);
 
-                push_ctxt(&saved, &obd->obd_lvfs_ctxt, NULL);
                 dget(fdentry);
                 rc = llog_lvfs_close(handle);
 
@@ -736,7 +734,6 @@ static int llog_lvfs_destroy(struct llog_handle *handle)
 		mntput(mnt);
 
                 dput(fdentry);
-                pop_ctxt(&saved, &obd->obd_lvfs_ctxt, NULL);
                 RETURN(rc);
         }
 
