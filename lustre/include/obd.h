@@ -476,7 +476,6 @@ struct client_obd {
         /* mgc datastruct */
         cfs_semaphore_t          cl_mgc_sem;
         struct vfsmount         *cl_mgc_vfsmnt;
-        struct dentry           *cl_mgc_configs_dir;
         cfs_atomic_t             cl_mgc_refcount;
         struct obd_export       *cl_mgc_mgsexp;
 
