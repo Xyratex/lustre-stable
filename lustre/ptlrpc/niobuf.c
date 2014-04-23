@@ -693,11 +693,10 @@ int ptl_send_rpc(struct ptlrpc_request *request, int noreply)
 	LASSERT(!((lustre_msg_get_flags(request->rq_reqmsg) & MSG_REPLAY) &&
 		(request->rq_import->imp_state == LUSTRE_IMP_FULL)));
 
-        if (request->rq_import->imp_obd &&
-            request->rq_import->imp_obd->obd_fail) {
-                CDEBUG(D_HA, "muting rpc for failed imp obd %s\n",
-                       request->rq_import->imp_obd->obd_name);
-                /* this prevents us from waiting in ptlrpc_queue_wait */
+	if (unlikely(obd != NULL && obd->obd_fail)) {
+		CDEBUG(D_HA, "muting rpc for failed imp obd %s\n",
+			obd->obd_name);
+		/* this prevents us from waiting in ptlrpc_queue_wait */
 		spin_lock(&request->rq_lock);
 		request->rq_err = 1;
 		spin_unlock(&request->rq_lock);
@@ -816,8 +815,8 @@ int ptl_send_rpc(struct ptlrpc_request *request, int noreply)
 
         /* add references on request for request_out_callback */
         ptlrpc_request_addref(request);
-        if (obd->obd_svc_stats != NULL)
-                lprocfs_counter_add(obd->obd_svc_stats, PTLRPC_REQACTIVE_CNTR,
+	if (obd != NULL && obd->obd_svc_stats != NULL)
+		lprocfs_counter_add(obd->obd_svc_stats, PTLRPC_REQACTIVE_CNTR,
 			atomic_read(&request->rq_import->imp_inflight));
 
 	OBD_FAIL_TIMEOUT(OBD_FAIL_PTLRPC_DELAY_SEND, request->rq_timeout + 5);
