@@ -166,10 +166,9 @@ static int filter_recov_log_unlink_cb(struct llog_ctxt *ctxt,
         OBDO_ALLOC(oa);
         if (oa == NULL)
                 RETURN(-ENOMEM);
-        oa->o_valid |= OBD_MD_FLCOOKIE;
+        oa->o_valid = OBD_MD_FLCOOKIE | OBD_MD_FLID | OBD_MD_FLGROUP;
         oa->o_id = lur->lur_oid;
         oa->o_seq = lur->lur_oseq;
-        oa->o_valid = OBD_MD_FLID | OBD_MD_FLGROUP;
         oa->o_lcookie = *cookie;
         oid = oa->o_id;
         /* objid gap may require to destroy several objects in row */
