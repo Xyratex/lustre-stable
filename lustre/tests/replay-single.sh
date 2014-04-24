@@ -2384,6 +2384,39 @@ test_90() { # bug 19494
 }
 run_test 90 "lfs find identifies the missing striped file segments"
 
+test_91() {
+    # define OBD_FAIL_OBD_LOG_CANCEL_NET 0x601
+    local dir=$DIR/$tdir
+    local num_cancels
+
+    mkdir -p $dir
+    for i in $(seq 1000); do
+        echo 123 > $dir/foo-$i
+    done
+    # ignore llog cancels before failover and mds<->ost sync
+    do_facet $SINGLEMDS "lctl set_param fail_loc=0x00000601"
+    rm  $dir/foo-*
+    facet_failover $SINGLEMDS
+    do_facet $SINGLEMDS "lctl set_param fail_loc=0x0"
+    wait_mds_ost_sync
+    for i in $(seq 20) ; do
+        num_cancels=$(do_facet $SINGLEMDS "lctl get_param -n osc.*-osc-MDT*.stats" | awk 'BEGIN{c=0;} /llog_origin_handle_cancel/ { c = c + $7; } END { print c; }')
+        if [ $num_cancels -ge 1000 ]; then
+            echo
+            echo -n "Got all llog cancel cookies"
+            break
+        fi
+        sleep 2
+        echo -n .
+    done
+    echo
+    if [ $num_cancels -lt 1000 ]; then
+        error "Got only $num_cancels cookies out of 1000"
+    fi
+    rmdir $dir
+}
+run_test 91 "make sure llog cancel cookies are sent back for already deleted objects during mds-ost sync"
+
 complete $SECONDS
 check_and_cleanup_lustre
 exit_status
