@@ -37,26 +37,8 @@
 /** l_flags bits marked as "all_flags" bits */
 #define LDLM_FL_ALL_FLAGS_MASK          0x00FFFFFFC08F932FULL
 
-/** l_flags bits marked as "ast" bits */
-#define LDLM_FL_AST_MASK                0x0000000080008000ULL
-
-/** l_flags bits marked as "blocked" bits */
-#define LDLM_FL_BLOCKED_MASK            0x000000000000000EULL
-
-/** l_flags bits marked as "gone" bits */
-#define LDLM_FL_GONE_MASK               0x0006004000000000ULL
-
 /** l_flags bits marked as "hide_lock" bits */
 #define LDLM_FL_HIDE_LOCK_MASK          0x0000206400000000ULL
-
-/** l_flags bits marked as "inherit" bits */
-#define LDLM_FL_INHERIT_MASK            0x0000000000800000ULL
-
-/** l_flags bits marked as "local_only" bits */
-#define LDLM_FL_LOCAL_ONLY_MASK         0x00FFFFFF00000000ULL
-
-/** l_flags bits marked as "on_wire" bits */
-#define LDLM_FL_ON_WIRE_MASK            0x00000000C08F932FULL
 
 /** extent, mode, or resource changed */
 #define LDLM_FL_LOCK_CHANGED            0x0000000000000001ULL // bit   0
@@ -369,6 +351,27 @@
 #define ldlm_is_excl(_l)                LDLM_TEST_FLAG(( _l), 1ULL << 55)
 #define ldlm_set_excl(_l)               LDLM_SET_FLAG((  _l), 1ULL << 55)
 #define ldlm_clear_excl(_l)             LDLM_CLEAR_FLAG((_l), 1ULL << 55)
+
+/** l_flags bits marked as "ast" bits */
+#define LDLM_FL_AST_MASK                (LDLM_FL_FLOCK_DEADLOCK		|\
+					 LDLM_FL_AST_DISCARD_DATA)
+
+/** l_flags bits marked as "blocked" bits */
+#define LDLM_FL_BLOCKED_MASK            (LDLM_FL_BLOCK_GRANTED		|\
+					 LDLM_FL_BLOCK_CONV		|\
+					 LDLM_FL_BLOCK_WAIT)
+
+/** l_flags bits marked as "gone" bits */
+#define LDLM_FL_GONE_MASK		(LDLM_FL_DESTROYED		|\
+					 LDLM_FL_FAILED)
+
+/** l_flags bits marked as "inherit" bits */
+/* Flags inherited from wire on enqueue/reply between client/server. */
+/* NO_TIMEOUT flag to force ldlm_lock_match() to wait with no timeout. */
+/* TEST_LOCK flag to not let TEST lock to be granted. */
+#define LDLM_FL_INHERIT_MASK            (LDLM_FL_CANCEL_ON_BLOCK	|\
+					 LDLM_FL_NO_TIMEOUT		|\
+					 LDLM_FL_TEST_LOCK)
 
 /** test for ldlm_lock flag bit set */
 #define LDLM_TEST_FLAG(_l, _b)        (((_l)->l_flags & (_b)) != 0)
