@@ -57,6 +57,7 @@
 #include <lprocfs_status.h>
 #include <lustre_lite.h>
 #include <lustre_fid.h>
+#include <lustre_ioctl.h>
 #include "lmv_internal.h"
 
 static void lmv_activate_target(struct lmv_obd *lmv,
