@@ -1027,7 +1027,6 @@ int mdt_getattr(struct tgt_session_info *tsi)
         struct req_capsule      *pill = info->mti_pill;
         struct mdt_body         *reqbody;
         struct mdt_body         *repbody;
-        mode_t                   mode;
         int rc, rc2;
         ENTRY;
 
@@ -1045,8 +1044,10 @@ int mdt_getattr(struct tgt_session_info *tsi)
         LASSERT(obj != NULL);
 	LASSERT(lu_object_assert_exists(&obj->mot_obj));
 
-	mode = lu_object_attr(&obj->mot_obj);
-
+	/* Unlike intent case where we need to pre-fill out buffers early on
+	 * in intent policy for ldlm reasons, here we can have a much better
+	 * guess at EA size by just reading it from disk.
+	 * Exceptions are readdir and (missing) directory striping */
 	/* Readlink */
 	if (reqbody->valid & OBD_MD_LINKNAME) {
 		/* No easy way to know how long is the symlink, but it cannot
@@ -1065,15 +1066,13 @@ int mdt_getattr(struct tgt_session_info *tsi)
 		 * will reallocate */
 		rc = DEF_REP_MD_SIZE;
 	} else {
-		/* Hopefully no race in EA change for either file or directory?
-		 */
+		/* Read the actual EA size from disk */
 		rc = mdt_attr_get_eabuf_size(info, obj);
 	}
 
 	if (rc < 0)
 		GOTO(out_shrink, rc);
 
-	/* old clients may not report needed easize, use max value then */
 	req_capsule_set_size(pill, &RMF_MDT_MD, RCL_SERVER, rc);
 
 	rc = req_capsule_server_pack(pill);
