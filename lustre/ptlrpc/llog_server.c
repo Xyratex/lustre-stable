@@ -397,6 +397,12 @@ int llog_origin_handle_cancel(struct ptlrpc_request *req)
         logcookies = req_capsule_client_get(&req->rq_pill, &RMF_LOGCOOKIES);
         num_cookies = req_capsule_get_size(&req->rq_pill, &RMF_LOGCOOKIES,
                                            RCL_CLIENT) / sizeof(*logcookies);
+
+	if (obd->obd_svc_stats != NULL)
+		lprocfs_counter_add(obd->obd_svc_stats,
+				EXTRA_MAX_OPCODES + opcode_offset(OBD_LOG_CANCEL),
+				num_cookies);
+
         if (logcookies == NULL || num_cookies == 0) {
                 DEBUG_REQ(D_HA, req, "No llog cookies sent");
                 RETURN(-EFAULT);
