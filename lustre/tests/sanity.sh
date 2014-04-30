@@ -8973,14 +8973,16 @@ test_133g() {
 		-type f \
 		-not -name force_lbug \
 		-not -name changelog_mask \
-		-exec badarea_io '{}' \; > /dev/null
+		-exec badarea_io '{}' \; &> /dev/null ||
+		error "find $proc_dirs failed"
 
 	for facet in $SINGLEMDS ost1; do
 		do_facet $facet find $proc_dirs \
 			-type f \
 			-not -name force_lbug \
 			-not -name changelog_mask \
-			-exec badarea_io '{}' \\\; &> /dev/null
+			-exec badarea_io '{}' \\\; &> /dev/null ||
+		error "$facet find $proc_dirs failed"
 
 	done
 
