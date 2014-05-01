@@ -30,6 +30,7 @@
 
 #ifndef _LUSTRE_UPDATE_H
 #define _LUSTRE_UPDATE_H
+#include <lustre_net.h>
 
 #define UPDATE_BUFFER_SIZE	8192
 struct update_request {

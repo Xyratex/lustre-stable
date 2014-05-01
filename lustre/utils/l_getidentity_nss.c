@@ -55,7 +55,6 @@
 #include <nss.h>
 #include <dlfcn.h>
 
-#include <liblustre.h>
 #include <lustre/lustre_user.h>
 #include <lustre/lustre_idl.h>
 
