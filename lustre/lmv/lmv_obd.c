@@ -35,7 +35,6 @@
  */
 
 #define DEBUG_SUBSYSTEM S_LMV
-#ifdef __KERNEL__
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/init.h>
@@ -45,9 +44,6 @@
 #include <linux/math64.h>
 #include <linux/seq_file.h>
 #include <linux/namei.h>
-#else
-#include <liblustre.h>
-#endif
 
 #include <lustre/lustre_idl.h>
 #include <obd_support.h>
@@ -2954,7 +2950,6 @@ int __init lmv_init(void)
 				   LUSTRE_LMV_NAME, NULL);
 }
 
-#ifdef __KERNEL__
 static void lmv_exit(void)
 {
         class_unregister_type(LUSTRE_LMV_NAME);
@@ -2966,4 +2961,3 @@ MODULE_LICENSE("GPL");
 
 module_init(lmv_init);
 module_exit(lmv_exit);
-#endif
