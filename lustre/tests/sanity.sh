@@ -8972,6 +8972,9 @@ test_133g() {
 
 	done
 
+	# remount the FS in case writes/reads /proc break the FS
+	cleanup || error "failed to unmount"
+	setup || error "failed to setup"
 	true
 }
 run_test 133g "Check for Oopses on bad io area writes/reads in /proc"
