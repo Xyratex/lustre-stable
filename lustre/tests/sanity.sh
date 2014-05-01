@@ -8885,6 +8885,14 @@ obdecho_test() {
         local count=${4:-10}
         local rc=0
         local id
+
+	local obd_size=$(get_obd_size $node $OBD)
+	local page_size=$(get_page_size $node)
+	if [[ -n "$obd_size" ]]; then
+		local new_count=$((obd_size / (pages * page_size / 1024)))
+		[[ $new_count -ge $count ]] || count=$new_count
+	fi
+
         do_facet $node "$LCTL attach echo_client ec ec_uuid" || rc=1
         [ $rc -eq 0 ] && { do_facet $node "$LCTL --device ec setup $OBD" ||
                            rc=2; }
