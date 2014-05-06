@@ -258,6 +258,13 @@ struct ost_id {
 #define LL_IOC_GET_LEASE		_IO('f', 244)
 #define LL_IOC_HSM_IMPORT		_IOWR('f', 245, struct hsm_user_import)
 
+/* Lease types for use as arg and return of LL_IOC_{GET,SET}_LEASE ioctl. */
+enum ll_lease_type {
+	LL_LEASE_RDLCK	= 0x1,
+	LL_LEASE_WRLCK	= 0x2,
+	LL_LEASE_UNLCK	= 0x4,
+};
+
 #define LL_STATFS_LMV		1
 #define LL_STATFS_LOV		2
 #define LL_STATFS_NODELAY	4
