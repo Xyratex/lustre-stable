@@ -1401,6 +1401,23 @@ vfs_rename_5args, [
 ]) # LC_VFS_RENAME_5ARGS
 
 #
+# LC_VFS_UNLINK_3ARGS
+#
+# 3.13 has vfs_renane with 3 args
+#
+AC_DEFUN([LC_VFS_UNLINK_3ARGS], [
+LB_CHECK_COMPILE([if Linux kernel has 'vfs_unlink' with 3 args],
+vfs_unlink_3args, [
+	#include <linux/fs.h>
+],[
+	vfs_unlink(NULL, NULL, NULL);
+], [
+	AC_DEFINE(HAVE_VFS_UNLINK_3ARGS, 1,
+		[kernel has vfs_unlink with 3 args])
+])
+]) # LC_VFS_UNLINK_3ARGS
+
+#
 # LC_PROG_LINUX
 #
 # Lustre linux kernel checks
@@ -1515,6 +1532,7 @@ AC_DEFUN([LC_PROG_LINUX], [
 
 	# 3.13
 	LC_VFS_RENAME_5ARGS
+	LC_VFS_UNLINK_3ARGS
 
 	#
 	AS_IF([test "x$enable_server" != xno], [
