@@ -1907,6 +1907,10 @@ ptlrpc_server_handle_req_in(struct ptlrpc_service_part *svcpt,
                 goto err_req;
         }
 
+	/* Skip early reply */
+	if (OBD_FAIL_PRECHECK(OBD_FAIL_MDS_RESEND))
+		req->rq_deadline += obd_timeout;
+
 	req->rq_svc_thread = thread;
 	if (thread != NULL) {
 		/* initialize request session, it is needed for request
