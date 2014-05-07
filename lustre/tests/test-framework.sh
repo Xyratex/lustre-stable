@@ -2172,13 +2172,13 @@ single_local_node () {
 
 # Outputs environment variable assignments that should be passed to remote nodes
 get_env_vars() {
-    local var
-    local value
+	local var
+	local value
 
-    for var in ${!MODOPTS_*}; do
-        value=${!var}
-        echo "${var}=\"$value\""
-    done
+	for var in ${!MODOPTS_*}; do
+		value=${!var}
+		echo -n " ${var}=\"$value\""
+	done
 }
 
 do_nodes() {
