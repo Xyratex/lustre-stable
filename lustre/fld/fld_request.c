@@ -456,12 +456,12 @@ again:
         if (fld_op != FLD_LOOKUP)
                 mdc_put_rpc_lock(exp->exp_obd->u.cli.cl_rpc_lock, NULL);
 	if (rc != 0) {
-		if (rc == -EWOULDBLOCK) {
-			/* For no_delay req(see above), EWOULDBLOCK means the
-			 * connection is being evicted, but this seq lookup
-			 * should not return error, since it would cause
-			 * unecessary failure of the application, instead
-			 * it should retry here */
+		if (rc == -EWOULDBLOCK || rc == -ESHUTDOWN) {
+			/* For no_delay req(see above), EWOULDBLOCK and
+			 * ESHUTDOWN means the connection is being evicted,
+			 * but this seq lookup should not return error,
+			 * since it would cause unecessary failure of the
+			 * application, instead it should retry here */
 			ptlrpc_req_finished(req);
 			rc = 0;
 			goto again;
