@@ -1,5 +1,7 @@
 #!/bin/bash
 
+trap 'kill $(jobs -p)' EXIT
+
 DIR=$1
 MAX=$2
 PROG=/bin/sleep
