@@ -577,6 +577,7 @@ test_17m() {
 	local i
 	local rc=0
 
+	remote_mds_nodsh && skip "remote MDS with nodsh" && return
 	[ $(lustre_version_code $SINGLEMDS) -ge $(version_code 2.2.0) ] &&
 	[ $(lustre_version_code $SINGLEMDS) -le $(version_code 2.2.93) ] &&
 		skip "MDS 2.2.0-2.2.93 do not NUL-terminate symlinks" && return
@@ -654,6 +655,7 @@ check_fs_consistency_17n() {
 test_17n() {
 	local i
 
+	remote_mds_nodsh && skip "remote MDS with nodsh" && return
 	[ $(lustre_version_code $SINGLEMDS) -ge $(version_code 2.2.0) ] &&
 	[ $(lustre_version_code $SINGLEMDS) -le $(version_code 2.2.93) ] &&
 		skip "MDS 2.2.0-2.2.93 do not NUL-terminate symlinks" && return
@@ -5751,6 +5753,7 @@ test_79() { # bug 12743
 run_test 79 "df report consistency check ======================="
 
 test_80() { # bug 10718
+	remote_ost_nodsh && skip "remote OST with nodsh" && return
 	[ $PARALLEL == "yes" ] && skip "skip parallel run" && return
         # relax strong synchronous semantics for slow backends like ZFS
         local soc="obdfilter.*.sync_on_lock_cancel"
@@ -8981,11 +8984,12 @@ test_133d() {
 run_test 133d "Verifying rename_stats ========================================"
 
 test_133e() {
+	remote_mds_nodsh && skip "remote MDS with nodsh" && return
+	remote_ost_nodsh && skip "remote OST with nodsh" && return
 	[ $PARALLEL == "yes" ] && skip "skip parallel run" && return
 	local testdir=$DIR/${tdir}/stats_testdir
 	local ctr f0 f1 bs=32768 count=42 sum
 
-	remote_ost_nodsh && skip "remote OST with nodsh" && return
 	mkdir -p ${testdir} || error "mkdir failed"
 
 	$SETSTRIPE -c 1 -i 0 ${testdir}/${tfile}
@@ -9032,6 +9036,8 @@ test_133f() {
 	local proc_dirs="/proc/fs/lustre/ /proc/sys/lnet/ /proc/sys/lustre/"
 	local facet
 
+	remote_mds_nodsh && skip "remote MDS with nodsh" && return
+	remote_ost_nodsh && skip "remote OST with nodsh" && return
 	# First without trusting modes.
 	find $proc_dirs -exec cat '{}' \; &> /dev/null
 
@@ -10126,6 +10132,7 @@ test_161b() {
 run_test 161b "link ea sanity under remote directory"
 
 test_161c() {
+	remote_mds_nodsh && skip "remote MDS with nodsh" && return
 	[ $PARALLEL == "yes" ] && skip "skip parallel run" && return
 	remote_mds_nodsh && skip "remote MDS with nodsh" && return
 	[[ $(lustre_version_code $SINGLEMDS) -lt $(version_code 2.1.5) ]] &&
@@ -11262,6 +11269,7 @@ test_205() { # Job stats
 	remote_mds_nodsh && skip "remote MDS with nodsh" && return
 	remote_ost_nodsh && skip "remote OST with nodsh" && return
 
+	remote_mgs_nodsh && skip "remote MGS with nodsh" && return
 	[ -z "$(lctl get_param -n mdc.*.connect_flags | grep jobstats)" ] &&
 		skip "Server doesn't support jobstats" && return 0
 	[[ $JOBID_VAR = disable ]] && skip "jobstats is disabled" && return
@@ -11365,6 +11373,7 @@ test_208() {
 	remote_mds_nodsh && skip "remote MDS with nodsh" && return
 	[[ $(lustre_version_code $SINGLEMDS) -ge $(version_code 2.4.52) ]] ||
 		{ skip "Need MDS version at least 2.4.52"; return 0; }
+	remote_mds_nodsh && skip "remote MDS with nodsh" && return
 
 	echo "==== test 1: verify get lease work"
 	$MULTIOP $DIR/$tfile oO_CREAT:O_RDWR:eRE+eU || error "get lease error"
