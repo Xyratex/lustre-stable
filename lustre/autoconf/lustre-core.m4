@@ -82,6 +82,18 @@ AC_TRY_COMPILE([
 ])
 ])
 
+AC_DEFUN([LC_GLIBC_SUPPORT_FHANDLES],
+[AC_MSG_CHECKING([if file handle and related syscalls are supported by glibc])
+AC_CHECK_FUNCS([name_to_handle_at
+],[
+	AC_MSG_RESULT([yes])
+	AC_DEFINE(HAVE_FHANDLE_GLIBC_SUPPORT, 1,
+		[file handle and related syscalls are supported])
+],[
+	AC_MSG_RESULT([no])
+])
+])
+
 #
 # LC_FUNC_DEV_SET_RDONLY
 #
@@ -739,6 +751,18 @@ LB_LINUX_TRY_COMPILE([
 ])
 
 #
+# 2.6.39 The open_by_handle_at() and name_to_handle_at() system calls were
+# added to Linux kernel 2.6.39.
+# Check if client supports these functions
+#
+AC_DEFUN([LC_HAVE_FHANDLE_SYSCALLS],
+[LB_LINUX_CONFIG_IM([FHANDLE],[
+	AC_DEFINE(HAVE_FHANDLE_SYSCALLS, 1,
+		[kernel supports fhandles and related syscalls])
+],[])
+])
+
+#
 # 3.0 dirty_inode() has a flag parameter
 # see kernel commit aa38572954ade525817fe88c54faebf85e5a61c0
 #
@@ -1356,9 +1380,10 @@ AC_DEFUN([LC_PROG_LINUX],
          LC_CONFIG_LRU_RESIZE
          LC_LLITE_LLOOP_MODULE
 
-         LC_CAPA_CRYPTO
-         LC_CONFIG_RMTCLIENT
-         LC_CONFIG_GSS
+	 LC_GLIBC_SUPPORT_FHANDLES
+	 LC_CAPA_CRYPTO
+	 LC_CONFIG_RMTCLIENT
+	 LC_CONFIG_GSS
 
 	 # 2.6.32
 	 LC_BLK_QUEUE_MAX_SEGMENTS
@@ -1387,8 +1412,9 @@ AC_DEFUN([LC_PROG_LINUX],
          LC_D_COMPARE_7ARGS
          LC_D_DELETE_CONST
 
-         # 2.6.39
-         LC_REQUEST_QUEUE_UNPLUG_FN
+	 # 2.6.39
+	 LC_REQUEST_QUEUE_UNPLUG_FN
+	 LC_HAVE_FHANDLE_SYSCALLS
 	 LC_HAVE_FSTYPE_MOUNT
 	 LC_IOP_TRUNCATE
 	 LC_HAVE_INODE_OWNER_OR_CAPABLE
