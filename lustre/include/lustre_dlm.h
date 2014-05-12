@@ -861,6 +861,7 @@ struct ldlm_resource {
         cfs_list_t             lr_granted;
         cfs_list_t             lr_converting;
         cfs_list_t             lr_waiting;
+	cfs_list_t             lr_enqueueing;
         ldlm_mode_t            lr_most_restr;
         ldlm_type_t            lr_type; /* LDLM_{PLAIN,EXTENT,FLOCK} */
         struct ldlm_res_id     lr_name;
@@ -937,6 +938,18 @@ struct ldlm_enqueue_info {
         short ei_async:1; /* async request */
 };
 
+#define FA_FL_CANCEL_RQST	1
+#define FA_FL_CANCELED		2
+
+struct ldlm_flock_info {
+	struct file *fa_file;
+	struct file_lock *fa_fl; /* original file_lock */
+	struct file_lock fa_flc; /* lock copy */
+	int fa_flags;
+	int fa_mode;
+	int (*fa_notify)(struct file_lock *, struct file_lock *, int);
+};
+
 extern struct obd_ops ldlm_obd_ops;
 
 extern char *ldlm_lockname[];
@@ -1004,6 +1017,8 @@ int ldlm_resource_iterate(struct ldlm_namespace *, const struct ldlm_res_id *,
 
 /* ldlm_flock.c */
 int ldlm_flock_completion_ast(struct ldlm_lock *lock, __u64 flags, void *data);
+int ldlm_flock_completion_ast_async(struct ldlm_lock *lock, __u64 flags,
+				    void *data);
 
 /* ldlm_extent.c */
 __u64 ldlm_extent_shift_kms(struct ldlm_lock *lock, __u64 old_kms);

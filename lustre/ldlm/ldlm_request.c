@@ -777,6 +777,15 @@ int ldlm_prep_enqueue_req(struct obd_export *exp, struct ptlrpc_request *req,
 }
 EXPORT_SYMBOL(ldlm_prep_enqueue_req);
 
+static void ldlm_lock_enqueueing(struct ldlm_lock *lock)
+{
+	struct ldlm_resource *res = lock->l_resource;
+
+	lock_res(res);
+	ldlm_resource_add_lock(res, &res->lr_enqueueing, lock);
+	unlock_res(res);
+}
+
 /* If a request has some specific initialisation it is passed in @reqp,
  * otherwise it is created in ldlm_cli_enqueue.
  *
@@ -845,6 +854,8 @@ int ldlm_cli_enqueue(struct obd_export *exp, struct ptlrpc_request **reqp,
 
 			lock->l_req_extent = policy->l_extent;
 		}
+		if (einfo->ei_type == LDLM_FLOCK)
+			ldlm_lock_enqueueing(lock);
                 LDLM_DEBUG(lock, "client-side enqueue START, flags %llx\n",
 			   *flags);
         }

@@ -56,6 +56,14 @@ struct mdc_getattr_args {
         struct ldlm_enqueue_info    *ga_einfo;
 };
 
+struct mdc_enqueue_args {
+	struct ldlm_lock *mea_lock;
+	struct obd_export *mea_exp;
+	ldlm_mode_t mea_mode;
+	__u64 mea_flags;
+	obd_enqueue_update_f mea_upcall;
+};
+
 int it_disposition(struct lookup_intent *it, int flag)
 {
         return it->d.lustre.it_disposition & flag;
@@ -836,6 +844,80 @@ resend:
         rc = mdc_finish_enqueue(exp, req, einfo, it, lockh, rc);
 
         RETURN(rc);
+}
+
+static int mdc_enqueue_async_interpret(const struct lu_env *env,
+				       struct ptlrpc_request *req,
+				       void *args, int rc)
+{
+	struct mdc_enqueue_args	*mea = args;
+	struct obd_export	*exp = mea->mea_exp;
+	struct ldlm_lock	*lock = mea->mea_lock;
+	struct lustre_handle	lockh;
+	ENTRY;
+
+	CDEBUG(D_INFO, "req=%p rc=%d\n", req, rc);
+
+	ldlm_lock2handle(lock, &lockh);
+	rc = ldlm_cli_enqueue_fini(exp, req, LDLM_FLOCK, 1, mea->mea_mode,
+				   &mea->mea_flags, NULL, 0, &lockh, rc);
+	if (rc == -ENOLCK)
+		LDLM_LOCK_RELEASE(lock);
+
+	/* we expect failed_lock_cleanup() to destroy lock */
+	if (rc)
+		LASSERT(cfs_list_empty(&lock->l_res_link));
+
+	if (mea->mea_upcall)
+		mea->mea_upcall(lock, rc);
+
+	LDLM_LOCK_PUT(lock);
+
+	RETURN(rc);
+}
+
+int mdc_enqueue_async(struct obd_export *exp, struct ldlm_enqueue_info *einfo,
+		      obd_enqueue_update_f upcall, struct md_op_data *op_data,
+		      ldlm_policy_data_t *policy, __u64 flags)
+{
+	struct mdc_enqueue_args *mea;
+	struct ptlrpc_request *req = NULL;
+	int                    rc;
+	struct ldlm_res_id res_id;
+	struct lustre_handle lockh;
+	ENTRY;
+
+	fid_build_reg_res_name(&op_data->op_fid1, &res_id);
+
+	/* The only way right now is FLOCK, in this case we hide flock
+	   policy as lmm, but lmmsize is 0 */
+	LASSERTF(einfo->ei_type == LDLM_FLOCK, "lock type %d\n",
+		 einfo->ei_type);
+	res_id.name[3] = LDLM_FLOCK;
+
+	rc = ldlm_cli_enqueue(exp, &req, einfo, &res_id, policy, &flags, NULL,
+			      0, &lockh, 1);
+
+	if (rc) {
+		CERROR("ldlm_cli_enqueue: %d\n", rc);
+		ptlrpc_req_finished(req);
+		RETURN(rc);
+	}
+
+	CLASSERT(sizeof(*mea) <= sizeof(req->rq_async_args));
+	mea = ptlrpc_req_async_args(req);
+	mea->mea_exp = exp;
+	mea->mea_lock = ldlm_handle2lock(&lockh);
+	LASSERT(mea->mea_lock != NULL);
+
+	mea->mea_mode = einfo->ei_mode;
+	mea->mea_flags = flags;
+	mea->mea_upcall = upcall;
+
+	req->rq_interpret_reply = mdc_enqueue_async_interpret;
+	ptlrpcd_add_req(req, PSCOPE_OTHER);
+
+	RETURN(0);
 }
 
 static int mdc_finish_intent_lock(struct obd_export *exp,

@@ -2422,6 +2422,7 @@ struct md_ops mdc_md_ops = {
         .m_create           = mdc_create,
         .m_done_writing     = mdc_done_writing,
         .m_enqueue          = mdc_enqueue,
+	.m_enqueue_async    = mdc_enqueue_async,
         .m_getattr          = mdc_getattr,
         .m_getattr_name     = mdc_getattr_name,
         .m_intent_lock      = mdc_intent_lock,
