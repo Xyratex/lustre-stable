@@ -100,6 +100,15 @@ ldlm_flocks_overlap(struct ldlm_lock *lock, struct ldlm_lock *new)
                 lock->l_policy_data.l_flock.start));
 }
 
+static int ldlm_flock_compare(struct ldlm_lock *l1, struct ldlm_lock *l2)
+{
+	return 	ldlm_same_flock_owner(l1, l2) &&
+		(l1->l_policy_data.l_flock.start ==
+		 l2->l_policy_data.l_flock.start) &&
+		(l1->l_policy_data.l_flock.end ==
+		 l2->l_policy_data.l_flock.end);
+}
+
 static inline void ldlm_flock_blocking_link(struct ldlm_lock *req,
 					    struct ldlm_lock *lock)
 {
@@ -328,6 +337,29 @@ ldlm_process_flock_lock(struct ldlm_lock *req, __u64 *flags, int first_enq,
         }
 
 reprocess:
+	if (*flags != LDLM_FL_WAIT_NOREPROC && mode == LCK_NL) {
+		cfs_list_for_each_entry(lock, &res->lr_waiting, l_res_link) {
+			if (ldlm_flock_compare(req, lock)) {
+				CFS_LIST_HEAD(rpc_list);
+
+				LDLM_DEBUG(lock, "server-side: cancel waiting");
+				/* client receives cancelled lock as granted
+				 * with l_granted_mode == 0 */
+				LASSERT(lock->l_granted_mode == 0);
+				lock->l_flags |= LDLM_FL_AST_SENT;
+				ldlm_resource_unlink_lock(lock);
+				ldlm_add_ast_work_item(lock, NULL, &rpc_list);
+				unlock_res_and_lock(req);
+				ldlm_run_ast_work(ns, &rpc_list,
+						  LDLM_WORK_CP_AST);
+				LDLM_LOCK_GET(lock);
+				ldlm_lock_cancel(lock);
+				LDLM_LOCK_RELEASE(lock);
+				lock_res_and_lock(req);
+				break;
+			}
+		}
+	}
         if ((*flags == LDLM_FL_WAIT_NOREPROC) || (mode == LCK_NL)) {
                 /* This loop determines where this processes locks start
                  * in the resource lr_granted list. */
@@ -651,6 +683,77 @@ ldlm_flock_interrupted_wait(void *data)
         EXIT;
 }
 
+static void ldlm_flock_mark_canceled(struct ldlm_lock *req)
+{
+	struct ldlm_flock_info *args;
+	struct ldlm_lock *lock = NULL;
+	struct ldlm_resource *res = req->l_resource;
+	ENTRY;
+
+	check_res_locked(res);
+	cfs_list_for_each_entry(lock, &res->lr_enqueueing, l_res_link) {
+		if (ldlm_flock_compare(lock, req)) {
+			LDLM_DEBUG(lock, "mark canceled enqueueing lock");
+			args = lock->l_ast_data;
+			if (args)
+				args->fa_flags |= FA_FL_CANCELED;
+			RETURN_EXIT;
+		}
+	}
+	cfs_list_for_each_entry(lock, &res->lr_waiting, l_res_link) {
+		if (ldlm_flock_compare(lock, req)) {
+			LDLM_DEBUG(lock, "mark canceled waiting lock");
+			args = lock->l_ast_data;
+			if (args)
+				args->fa_flags |= FA_FL_CANCELED;
+			RETURN_EXIT;
+		}
+	}
+	EXIT;
+}
+
+static int ldlm_flock_completion_common(struct ldlm_lock *lock)
+{
+	struct ldlm_flock_info *args = lock->l_ast_data;
+	int rc = 0;
+
+	/* Protect against race where lock could have been just destroyed
+	 * due to overlap in ldlm_process_flock_lock().
+	 */
+	if (lock->l_flags & LDLM_FL_DESTROYED) {
+		LDLM_DEBUG(lock, "client-side enqueue waking up: destroyed");
+		return -EIO;
+	}
+	/* ldlm_lock_enqueue() has already placed lock on the granted list. */
+	ldlm_resource_unlink_lock(lock);
+
+	/* Import invalidation. We need to actually release the lock
+	 * references being held, so that it can go away. No point in
+	 * holding the lock even if app still believes it has it, since
+	 * server already dropped it anyway. Only for granted locks too. */
+	/* Do the same for DEADLOCK'ed locks. */
+	if (lock->l_flags & LDLM_FL_FAILED ||
+	    lock->l_flags & LDLM_FL_FLOCK_DEADLOCK) {
+		__u32 mode = args ? args->fa_mode : lock->l_granted_mode;
+
+		/* args is NULL only for granted locks */
+		LASSERT(args != NULL ||
+			lock->l_req_mode == lock->l_granted_mode);
+
+		if (lock->l_flags & LDLM_FL_FLOCK_DEADLOCK) {
+			LDLM_DEBUG(lock, "client-side enqueue deadlock "
+				   "received");
+			rc = -EDEADLK;
+		} else {
+			LDLM_DEBUG(lock, "client-side lock cleanup");
+			rc = -EIO;
+		}
+		ldlm_flock_destroy(lock, mode, LDLM_FL_WAIT_NOREPROC);
+	}
+
+	return rc;
+}
+
 /**
  * Flock completion callback function.
  *
@@ -660,11 +763,30 @@ ldlm_flock_interrupted_wait(void *data)
  *
  * \retval 0    : success
  * \retval <0   : failure
+ *
+ * This funclion is called from:
+ * 1. ldlm_cli_enqueue_fini()
+ *	a) grant a new lock or UNLOCK(l_granted_mode == LCK_NL) lock
+ *	b) TEST lock, l_flags & LDLM_FL_TEST_LOCK; if can be granted
+ *	   server returns a conflicting lock, otherwise
+ *	   l_granted_mode == LCK_NL
+ * 2. ldlm_handle_cp_callback()
+ *	a) grant a new lock
+ *	b) cancel a DEADLOCK'ed lock, l_flags & LDLM_FL_FLOCK_DEADLOCK,
+ *	   l_granted_mode == 0
+ *	c) cancel async waiting lock (F_CANCELLK), l_flags & FA_FL_CANCELED,
+ *	   l_granted_mode == 0
+ * 3. cleanup_resource() (called only for the forced umount case)
+ *	a) a granted or waiting lock is to be destroyed,
+ *	lock->l_flags & flags have LDLM_FL_FAILED.
+ * 4. races between the 3 above
+ *	a) cleanup vs. reply or CP AST
+ *	b) F_CANCELLK vs. CP AST granting a new lock
  */
 int
 ldlm_flock_completion_ast(struct ldlm_lock *lock, __u64 flags, void *data)
 {
-	struct file_lock		*getlk = lock->l_ast_data;
+	struct ldlm_flock_info         *args;
         struct obd_device              *obd;
         struct obd_import              *imp = NULL;
         struct ldlm_flock_wait_data     fwd;
@@ -680,8 +802,8 @@ ldlm_flock_completion_ast(struct ldlm_lock *lock, __u64 flags, void *data)
 		unlock_res_and_lock(lock);
 		OBD_FAIL_TIMEOUT(OBD_FAIL_LDLM_CP_CB_WAIT3, 4);
 	}
-	CDEBUG(D_DLMTRACE, "flags: "LPX64" data: %p getlk: %p\n",
-	       flags, data, getlk);
+	CDEBUG(D_DLMTRACE, "flags: "LPX64" data: %p l_ast_data: %p\n",
+	       flags, data, lock->l_ast_data);
 
 	LASSERT(flags != LDLM_FL_WAIT_NOREPROC);
 
@@ -745,63 +867,43 @@ granted:
 
 	lock_res_and_lock(lock);
 
-
-	/* Protect against race where lock could have been just destroyed
-	 * due to overlap in ldlm_process_flock_lock().
-	 */
-	if (lock->l_flags & LDLM_FL_DESTROYED) {
-		unlock_res_and_lock(lock);
-		LDLM_DEBUG(lock, "client-side enqueue waking up: destroyed");
-
-		/* An error is still to be returned, to propagate it up to
-		 * ldlm_cli_enqueue_fini() caller. */
-		RETURN(-EIO);
-	}
-
-        /* ldlm_lock_enqueue() has already placed lock on the granted list. */
-	ldlm_resource_unlink_lock(lock);
-
-	/* Import invalidation. We need to actually release the lock
-	 * references being held, so that it can go away. No point in
-	 * holding the lock even if app still believes it has it, since
-	 * server already dropped it anyway. Only for granted locks too. */
-	/* Do the same for DEADLOCK'ed locks. */
-	if (ldlm_is_failed(lock) || ldlm_is_flock_deadlock(lock)) {
-		int mode;
-
-		if (flags & LDLM_FL_TEST_LOCK)
-			LASSERT(ldlm_is_test_lock(lock));
-
-		if (ldlm_is_test_lock(lock) || ldlm_is_flock_deadlock(lock))
-			mode = flock_type(getlk);
-		else
-			mode = lock->l_granted_mode;
-
-		if (ldlm_is_flock_deadlock(lock)) {
-			LDLM_DEBUG(lock, "client-side enqueue deadlock "
-				   "received");
-			rc = -EDEADLK;
-		}
-		ldlm_flock_destroy(lock, mode, LDLM_FL_WAIT_NOREPROC);
+	rc = ldlm_flock_completion_common(lock);
+	if (rc) {
+		lock->l_ast_data = NULL;
 		unlock_res_and_lock(lock);
 
-		/* Need to wake up the waiter if we were evicted */
+		/* Need to wake up the waiter */
 		wake_up(&lock->l_waitq);
 
 		/* An error is still to be returned, to propagate it up to
 		 * ldlm_cli_enqueue_fini() caller. */
-		RETURN(rc ? : -EIO);
+		RETURN(rc);
+	}
+
+	args = lock->l_ast_data;
+
+	if (lock->l_granted_mode == 0) {
+		ldlm_flock_destroy(lock, args->fa_mode, LDLM_FL_WAIT_NOREPROC);
+		lock->l_ast_data = NULL;
+		unlock_res_and_lock(lock);
+		CERROR("client-side: only asynchronous lock enqueue can be "
+		       "canceled by CANCELK\n");
+		RETURN(-EIO);
+	}
+
+	if (args->fa_flags & FA_FL_CANCEL_RQST) {
+		LDLM_DEBUG(lock, "client-side granted CANCELK lock");
+		ldlm_flock_mark_canceled(lock);
 	}
 
 	LDLM_DEBUG(lock, "client-side enqueue granted");
 
 	if (flags & LDLM_FL_TEST_LOCK) {
+		struct file_lock *getlk = args->fa_fl;
+
                 /* fcntl(F_GETLK) request */
-                /* The old mode was saved in getlk->fl_type so that if the mode
-                 * in the lock changes we can decref the appropriate refcount.*/
 		LASSERT(ldlm_is_test_lock(lock));
-		ldlm_flock_destroy(lock, flock_type(getlk),
-				   LDLM_FL_WAIT_NOREPROC);
+		ldlm_flock_destroy(lock, args->fa_mode, LDLM_FL_WAIT_NOREPROC);
 		switch (lock->l_granted_mode) {
 		case LCK_PR:
 			flock_set_type(getlk, F_RDLCK);
@@ -824,10 +926,66 @@ granted:
 		 * with existing locks owned by this process. */
 		ldlm_process_flock_lock(lock, &noreproc, 1, &err, NULL);
 	}
+	lock->l_ast_data = NULL;
 	unlock_res_and_lock(lock);
 	RETURN(rc);
 }
 EXPORT_SYMBOL(ldlm_flock_completion_ast);
+
+/* This function is called in same cases as ldlm_flock_completion_ast()
+ * except UNLOCK, TEST lock, F_CANCELLK which are using only
+ * synchronous mechanism
+ */
+int
+ldlm_flock_completion_ast_async(struct ldlm_lock *lock, __u64 flags, void *data)
+{
+	__u64 noreproc = LDLM_FL_WAIT_NOREPROC;
+	ldlm_error_t err;
+	int rc;
+	ENTRY;
+
+	LDLM_DEBUG(lock, "flags: 0x%llx data: %p l_ast_data: %p",
+		   flags, data, lock->l_ast_data);
+
+	LASSERT(flags != LDLM_FL_WAIT_NOREPROC);
+
+	lock_res_and_lock(lock);
+
+	rc = ldlm_flock_completion_common(lock);
+	if (rc) {
+	        unlock_res_and_lock(lock);
+		RETURN(rc);
+	}
+
+	if (lock->l_granted_mode != LCK_NL) {
+		struct ldlm_flock_info *args = lock->l_ast_data;
+
+		LASSERT(args != NULL);
+		if (args->fa_flags & FA_FL_CANCELED ||
+		    lock->l_granted_mode == 0) {
+			LDLM_DEBUG(lock, "client-side granted canceled lock");
+			ldlm_flock_destroy(lock, args->fa_mode,
+					   LDLM_FL_WAIT_NOREPROC);
+			unlock_res_and_lock(lock);
+
+			RETURN(-EIO);
+		}
+	}
+
+	if (data != NULL)
+		LDLM_DEBUG(lock, "client-side granted a blocked lock");
+	else
+		LDLM_DEBUG(lock, "client-side lock granted");
+
+	/* We need to reprocess the lock to do merges or splits
+	 * with existing locks owned by this process. */
+	ldlm_process_flock_lock(lock, &noreproc, 1, &err, NULL);
+
+	unlock_res_and_lock(lock);
+
+	RETURN(0);
+}
+EXPORT_SYMBOL(ldlm_flock_completion_ast_async);
 
 int ldlm_flock_blocking_ast(struct ldlm_lock *lock, struct ldlm_lock_desc *desc,
                             void *data, int flag)
