@@ -3290,6 +3290,22 @@ test_79() {
 }
 run_test 79 "check recovery_hard_time"
 
+test_80() {
+	start_mds
+	start_ost
+	uuid=$(do_facet ost1 lctl get_param -n mgc.*.uuid)
+#define OBD_FAIL_MGS_PAUSE_TARGET_CON       0x906
+	do_facet ost1 "lctl set_param fail_loc=0x906"
+	do_facet mgs "lctl set_param fail_loc=0x906"
+	do_facet mgs "lctl set_param -n mgs/MGS/evict_client $uuid"
+	sleep $((3*$TIMEOUT/2))
+	start_ost2
+
+	do_facet ost1 "lctl set_param fail_loc=0"
+	stopall
+}
+run_test 80 "mgc import reconnect race"
+
 if ! combined_mgs_mds ; then
 	stop mgs
 fi

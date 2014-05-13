@@ -283,6 +283,7 @@ void ptlrpc_invalidate_import(struct obd_import *imp)
         if (!imp->imp_invalid || imp->imp_obd->obd_no_recov)
                 ptlrpc_deactivate_import(imp);
 
+	CFS_FAIL_TIMEOUT(OBD_FAIL_MGS_PAUSE_TARGET_CON, 3 * PING_INTERVAL);
         LASSERT(imp->imp_invalid);
 
         /* Wait forever until inflight == 0. We really can't do it another
