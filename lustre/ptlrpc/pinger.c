@@ -253,6 +253,12 @@ static void ptlrpc_pinger_process_import(struct obd_import *imp,
                        " or recovery disabled: %s)\n",
                        obd2cli_tgt(imp->imp_obd),
                        ptlrpc_import_state_name(level));
+		/* Sould be removed after correct fix for MRP-1516 */
+		if (force) {
+			cfs_spin_lock(&imp->imp_lock);
+			imp->imp_force_verify = 1;
+			cfs_spin_unlock(&imp->imp_lock);
+		}
         } else if (imp->imp_pingable || force) {
                 ptlrpc_ping(imp);
         }
