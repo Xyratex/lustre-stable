@@ -61,6 +61,8 @@
 #error Unsupported operating system.
 #endif
 
+#define LUSTRE_EOF 0xffffffffffffffffULL
+
 /* for statfs() */
 #define LL_SUPER_MAGIC 0x0BD00BD0
 
@@ -133,6 +135,11 @@ struct lu_fid {
 	 **/
 	__u32 f_ver;
 };
+
+static inline bool fid_is_zero(const struct lu_fid *fid)
+{
+	return fid->f_seq == 0 && fid->f_oid == 0;
+}
 
 struct filter_fid {
 	struct lu_fid	ff_parent;  /* ff_parent.f_ver == file stripe number */
@@ -291,9 +298,13 @@ struct ost_id {
 #define LMV_MAGIC_V1      0x0CD10CD0    /*normal stripe lmv magic */
 #define LMV_USER_MAGIC    0x0CD20CD0    /*default lmv magic*/
 
-#define LOV_PATTERN_RAID0 0x001
-#define LOV_PATTERN_RAID1 0x002
-#define LOV_PATTERN_FIRST 0x100
+#define LOV_PATTERN_RAID0	0x001
+#define LOV_PATTERN_RAID1	0x002
+#define LOV_PATTERN_FIRST	0x100
+#define LOV_PATTERN_CMOBD	0x200
+
+#define LOV_PATTERN_F_MASK	0xffff0000
+#define LOV_PATTERN_F_RELEASED	0x80000000 /* HSM released file */
 
 #define LOV_MAXPOOLNAME 16
 #define LOV_POOLNAMEF "%.16s"
@@ -507,6 +518,20 @@ liblustreapi.c:2893: warning: format '%lx' expects type 'long unsigned int *', b
 
 
 /********* Quotas **********/
+
+#define LUSTRE_QUOTABLOCK_BITS 10
+#define LUSTRE_QUOTABLOCK_SIZE (1 << LUSTRE_QUOTABLOCK_BITS)
+
+static inline __u64 lustre_stoqb(size_t space)
+{
+	return (space + LUSTRE_QUOTABLOCK_SIZE - 1) >> LUSTRE_QUOTABLOCK_BITS;
+}
+
+#define Q_QUOTACHECK	0x800100 /* deprecated as of 2.4 */
+#define Q_INITQUOTA	0x800101 /* deprecated as of 2.4  */
+#define Q_GETOINFO	0x800102 /* get obd quota info */
+#define Q_GETOQUOTA	0x800103 /* get obd quotas */
+#define Q_FINVALIDATE	0x800104 /* deprecated as of 2.4 */
 
 /* these must be explicitly translated into linux Q_* in ll_dir_ioctl */
 #define LUSTRE_Q_QUOTAON    0x800002     /* turn quotas on */

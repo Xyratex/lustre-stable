@@ -54,6 +54,7 @@
 #include <err.h>
 #include <pwd.h>
 #include <grp.h>
+#include <sys/quota.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -64,16 +65,11 @@
 # include <sys/quota.h>
 #endif
 
-/* For dirname() */
-#include <libgen.h>
-
-#include <lnet/lnetctl.h>
-
 #include <libcfs/libcfs.h>
-#include <lustre/lustre_idl.h>
-#include <lustre/lustreapi.h>
-
 #include <libcfs/libcfsutil.h>
+#include <lnet/lnetctl.h>
+#include <lustre/lustreapi.h>
+#include <lustre_ver.h>
 #include "obdctl.h"
 
 /* all functions */
@@ -2560,7 +2556,7 @@ static void print_quota(char *mnt, struct if_quotactl *qctl, int type,
 		char strbuf[32];
 
                 if (dqb->dqb_bhardlimit &&
-                    toqb(dqb->dqb_curspace) >= dqb->dqb_bhardlimit) {
+		    lustre_stoqb(dqb->dqb_curspace) >= dqb->dqb_bhardlimit) {
                         bover = 1;
                 } else if (dqb->dqb_bsoftlimit && dqb->dqb_btime) {
                         if (dqb->dqb_btime > now) {
@@ -2590,7 +2586,7 @@ static void print_quota(char *mnt, struct if_quotactl *qctl, int type,
 		if (bover)
 			diff2str(dqb->dqb_btime, timebuf, now);
 
-		kbytes2str(toqb(dqb->dqb_curspace), strbuf, h);
+		kbytes2str(lustre_stoqb(dqb->dqb_curspace), strbuf, h);
 		if (rc == -EREMOTEIO)
 			sprintf(numbuf[0], "%s*", strbuf);
 		else
@@ -3056,7 +3052,8 @@ static int lfs_changelog(int argc, char **argv)
                         /* namespace rec includes parent and filename */
 			printf(" p="DFID" %.*s", PFID(&rec->cr_pfid),
 				rec->cr_namelen, rec->cr_name);
-		if (fid_is_sane(&rec->cr_sfid))
+
+		if (!fid_is_zero(&rec->cr_sfid))
 			printf(" s="DFID" sp="DFID" %.*s",
 				PFID(&rec->cr_sfid), PFID(&rec->cr_spfid),
 				changelog_rec_snamelen(rec),
@@ -3430,7 +3427,7 @@ static int lfs_hsm_action(int argc, char **argv)
 		if ((hps == HPS_RUNNING) &&
 		    (hua == HUA_ARCHIVE || hua == HUA_RESTORE))
 			printf("("LPX64 " bytes moved)\n", he.length);
-		else if ((he.offset + he.length) == OBD_OBJECT_EOF)
+		else if ((he.offset + he.length) == LUSTRE_EOF)
 			printf("(from "LPX64 " to EOF)\n", he.offset);
 		else
 			printf("(from "LPX64 " to "LPX64")\n",
@@ -3725,3 +3722,7 @@ int main(int argc, char **argv)
         return rc < 0 ? -rc : rc;
 }
 
+#ifdef _LUSTRE_IDL_H_
+/* Everything we need here should be included by lustreapi.h. */
+# error "lfs should not depend on lustre_idl.h"
+#endif /* _LUSTRE_IDL_H_ */
