@@ -294,7 +294,7 @@ void ptlrpc_invalidate_import(struct obd_import *imp)
 		ptlrpc_deactivate_import(imp);
 
 	CFS_FAIL_TIMEOUT(OBD_FAIL_MGS_CONNECT_NET, 3 * cfs_fail_val / 2);
-        LASSERT(imp->imp_invalid);
+	LASSERT(imp->imp_invalid);
 
         /* Wait forever until inflight == 0. We really can't do it another
          * way because in some cases we need to wait for very long reply
