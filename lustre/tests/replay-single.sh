@@ -2417,6 +2417,77 @@ test_91() {
 }
 run_test 91 "make sure llog cancel cookies are sent back for already deleted objects during mds-ost sync"
 
+#MRP-1658
+# set_blk_tunables(btune_sz)
+set_blk_tunesz() {
+        local btune=$(($1 * BLK_SZ))
+        # set btune size on all obdfilters
+        do_nodes $(comma_list $(osts_nodes)) "lctl set_param lquota.${FSNAME}-OST*.quota_btune_sz=$btune"
+        # set btune size on mds
+        do_facet $SINGLEMDS "lctl set_param lquota.mdd_obd-${FSNAME}-MDT*.quota_btune_sz=$btune"
+}
+
+# set_blk_unitsz(bunit_sz)
+set_blk_unitsz() {
+        local bunit=$(($1 * BLK_SZ))
+        # set bunit size on all obdfilters
+        do_nodes $(comma_list $(osts_nodes)) "lctl set_param lquota.${FSNAME}-OST*.quota_bunit_sz=$bunit"
+        # set bunit size on mds
+        do_facet $SINGLEMDS "lctl set_param lquota.mdd_obd-${FSNAME}-MDT*.quota_bunit_sz=$bunit"
+}
+do_client_write() {
+     local FSIZE=`$LFS df $DIR | grep OST0000 | awk '{print $4}'`
+     FSIZE=$(($FSIZE/1024))
+
+     echo start io filesize = $FSIZE
+     for i in {1..100}
+     do
+         dd if=/dev/zero of=$DIR/$tdir/data bs=1M count=$FSIZE > /dev/null 2>&1
+     done
+     rm -rf $DIR/$tdir/data
+     echo end io
+}
+
+#this test requeires ENABLE_QOUTA=yes
+test_92() {
+    mkdir -p $DIR/$tdir
+    $SETSTRIPE -i 0 -c 1 $DIR/$tdir
+    #remount ost1 with errors=panic
+    stop ost1
+    mount_facet ost1 -o errors=panic
+
+    local now=`date +"%s"`
+    local period=$((60*3))
+
+    local till=$(($now+$period))
+    local iteration=0
+
+    local pid=99999999
+    while [ $(date +"%s") -lt  $till ]
+    do
+        #run IO activity on clients fpp
+        kill -s 0 $pid > /dev/null 2>&1
+        if [ $? != 0 ]; then
+            do_client_write &
+            pid=$!
+            sleep 4
+        fi
+        echo iteration $iteration
+        local svc=ost1_svc
+        let iteration++
+        #Here we emulate failback operations notransno/readonly/umount
+        do_facet ost1 "$LCTL --device %${!svc} notransno;$LCTL --device %${!svc} readonly;"
+        stop ost1
+        #The OSS should panic during stop ost1, and this command would not be completed
+        mount_facet ost1 -o errors=panic
+        sleep 30
+   done
+   wait $pid
+   rm -rf $DIR/$tdir
+}
+run_test 92 "Check failback with errors=panic"
+
+
 complete $SECONDS
 check_and_cleanup_lustre
 exit_status
