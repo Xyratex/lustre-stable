@@ -920,8 +920,8 @@ static int lprocfs_wr_mdt_som(struct file *file, const char __user *buffer,
 
         /* 1 stands for self export. */
         cfs_list_for_each_entry(exp, &obd->obd_exports, exp_obd_chain) {
-                if (exp == obd->obd_self_export)
-                        continue;
+		if (exp->exp_self)
+			continue;
 		if (exp_connect_flags(exp) & OBD_CONNECT_MDS_MDS)
 			continue;
                 /* Some clients are already connected, skip the change */

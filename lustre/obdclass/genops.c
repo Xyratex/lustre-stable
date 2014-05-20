@@ -367,6 +367,18 @@ void class_free_dev(struct obd_device *obd)
 	CDEBUG(D_INFO, "Release obd device %s obd_type name = %s\n",
 	       obd->obd_name, obd->obd_type->typ_name);
 
+	CDEBUG(D_CONFIG, "finishing cleanup of obd %s (%s)\n",
+			 obd->obd_name, obd->obd_uuid.uuid);
+	if (obd->obd_stopping) {
+		int err;
+
+		/* If we're not stopping, we were never set up */
+		err = obd_cleanup(obd);
+		if (err)
+			CERROR("Cleanup %s returned %d\n",
+				obd->obd_name, err);
+	}
+
 	obd_device_free(obd);
 
 	class_put_type(obd_type);
@@ -953,6 +965,8 @@ void class_export_put(struct obd_export *exp)
 	LASSERT_ATOMIC_GT_LT(&exp->exp_refcount, 0, LI_POISON);
 
         if (cfs_atomic_dec_and_test(&exp->exp_refcount)) {
+		struct obd_device *obd = exp->exp_obd;
+
                 LASSERT(!cfs_list_empty(&exp->exp_obd_chain));
 		LASSERT(cfs_list_empty(&exp->exp_stale_list));
                 CDEBUG(D_IOCTL, "final put %p/%s\n",
@@ -960,13 +974,17 @@ void class_export_put(struct obd_export *exp)
 
                 /* release nid stat refererence */
                 lprocfs_exp_cleanup(exp);
-		if (exp == exp->exp_obd->obd_self_export)
+		if (exp->exp_self) {
 			/* self export should be destroyed without zombie thread
 			 * as does not hold a reference to obd as none
 			 * resources are held */
 			class_export_destroy(exp);
-		else
+			/* self export destroy so none class references exist
+			 * and it is safe to free obd */
+			class_free_dev(obd);
+		} else {
 			obd_zombie_export_add(exp);
+		}
         }
 }
 EXPORT_SYMBOL(class_export_put);
@@ -1023,17 +1041,18 @@ struct obd_export *class_new_export(struct obd_device *obd,
         export->exp_client_uuid = *cluuid;
         obd_init_export(export);
 
-        cfs_spin_lock(&obd->obd_dev_lock);
-         /* shouldn't happen, but might race */
-        if (obd->obd_stopping)
-                GOTO(exit_unlock, rc = -ENODEV);
-
-        hash = cfs_hash_getref(obd->obd_uuid_hash);
-        if (hash == NULL)
-                GOTO(exit_unlock, rc = -ENODEV);
-        cfs_spin_unlock(&obd->obd_dev_lock);
-
         if (!obd_uuid_equals(cluuid, &obd->obd_uuid)) {
+		/* we don't need to push to hash self export */
+		cfs_spin_lock(&obd->obd_dev_lock);
+		/* shouldn't happen, but might race */
+		if (obd->obd_stopping)
+			GOTO(exit_unlock, rc = -ENODEV);
+
+		hash = cfs_hash_getref(obd->obd_uuid_hash);
+		if (hash == NULL)
+			GOTO(exit_unlock, rc = -ENODEV);
+		cfs_spin_unlock(&obd->obd_dev_lock);
+
                 rc = cfs_hash_add_unique(hash, cluuid, &export->exp_uuid_hash);
                 if (rc != 0) {
                         LCONSOLE_WARN("%s: denying duplicate export for %s, %d\n",
@@ -1045,7 +1064,8 @@ struct obd_export *class_new_export(struct obd_device *obd,
         at_init(&export->exp_bl_lock_at, obd_timeout, 0);
         cfs_spin_lock(&obd->obd_dev_lock);
         if (obd->obd_stopping) {
-                cfs_hash_del(hash, cluuid, &export->exp_uuid_hash);
+		if (hash)
+			cfs_hash_del(hash, cluuid, &export->exp_uuid_hash);
 		GOTO(exit_unlock, rc = -ESHUTDOWN);
         }
 
@@ -1055,11 +1075,13 @@ struct obd_export *class_new_export(struct obd_device *obd,
 				  &obd->obd_exports_timed);
 		obd->obd_num_exports++;
 	} else {
+		export->exp_self = 1;
 		CFS_INIT_LIST_HEAD(&export->exp_obd_chain_timed);
 	}
 	cfs_list_add(&export->exp_obd_chain, &obd->obd_exports);
-        cfs_spin_unlock(&obd->obd_dev_lock);
-        cfs_hash_putref(hash);
+	cfs_spin_unlock(&obd->obd_dev_lock);
+	if (hash)
+		cfs_hash_putref(hash);
         RETURN(export);
 
 exit_unlock:
@@ -1777,6 +1799,8 @@ static int obd_zombie_impexp_check(void *arg)
  * Add export to the obd_zombe thread and notify it.
  */
 static void obd_zombie_export_add(struct obd_export *exp) {
+	CDEBUG(D_INFO, "export2zombi %p\n", exp);
+
 	cfs_atomic_dec(&obd_stale_export_num);
         cfs_spin_lock(&exp->exp_obd->obd_dev_lock);
         LASSERT(!cfs_list_empty(&exp->exp_obd_chain));

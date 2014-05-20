@@ -329,6 +329,7 @@ EXPORT_SYMBOL(class_match_net);
  */
 int class_attach(struct lustre_cfg *lcfg)
 {
+	struct obd_export *exp;
         struct obd_device *obd = NULL;
         char *typename, *name, *uuid;
         int rc, len;
@@ -379,15 +380,27 @@ int class_attach(struct lustre_cfg *lcfg)
 	LASSERTF(strncmp(obd->obd_name, name, strlen(name)) == 0,
 		 "%p obd_name %s != %s\n", obd, obd->obd_name, name);
 
+	exp = class_new_export(obd, &obd->obd_uuid, 1);
+	if (IS_ERR(exp)) {
+		/* force free */
+		class_free_dev(obd);
+		RETURN(PTR_ERR(exp));
+	}
+
+	obd->obd_self_export = exp;
+	cfs_list_del_init(&exp->exp_obd_chain_timed);
+	class_export_put(exp);
+
 	rc = class_register_device(obd);
 	if (rc != 0)
 		GOTO(out, rc);
 
 	obd->obd_attached = 1;
+
         CDEBUG(D_IOCTL, "OBD: dev %d attached type %s with refcount %d\n",
                obd->obd_minor, typename, cfs_atomic_read(&obd->obd_refcount));
         RETURN(0);
- out:
+out:
 	if (obd != NULL)
 		class_decref(obd, "attach", obd);
 
@@ -401,7 +414,6 @@ EXPORT_SYMBOL(class_attach);
 int class_setup(struct obd_device *obd, struct lustre_cfg *lcfg)
 {
         int err = 0;
-        struct obd_export *exp;
         ENTRY;
 
         LASSERT(obd != NULL);
@@ -449,7 +461,7 @@ int class_setup(struct obd_device *obd, struct lustre_cfg *lcfg)
                                              CFS_HASH_MAX_THETA,
                                              &uuid_hash_ops, CFS_HASH_DEFAULT);
         if (!obd->obd_uuid_hash)
-                GOTO(err_hash, err = -ENOMEM);
+		GOTO(err_exit, err = -ENOMEM);
 
         /* create a nid-export lustre hash */
         obd->obd_nid_hash = cfs_hash_create("NID_HASH",
@@ -460,7 +472,7 @@ int class_setup(struct obd_device *obd, struct lustre_cfg *lcfg)
                                             CFS_HASH_MAX_THETA,
                                             &nid_hash_ops, CFS_HASH_DEFAULT);
         if (!obd->obd_nid_hash)
-                GOTO(err_hash, err = -ENOMEM);
+		GOTO(err_exit, err = -ENOMEM);
 
         /* create a nid-stats lustre hash */
         obd->obd_nid_stats_hash = cfs_hash_create("NID_STATS",
@@ -471,19 +483,12 @@ int class_setup(struct obd_device *obd, struct lustre_cfg *lcfg)
                                                   CFS_HASH_MAX_THETA,
                                                   &nid_stat_hash_ops, CFS_HASH_DEFAULT);
         if (!obd->obd_nid_stats_hash)
-                GOTO(err_hash, err = -ENOMEM);
+		GOTO(err_exit, err = -ENOMEM);
 
-        exp = class_new_export(obd, &obd->obd_uuid, 1);
-        if (IS_ERR(exp))
-                GOTO(err_hash, err = PTR_ERR(exp));
-
-        obd->obd_self_export = exp;
-        cfs_list_del_init(&exp->exp_obd_chain_timed);
-        class_export_put(exp);
 
         err = obd_setup(obd, lcfg);
         if (err)
-                GOTO(err_exp, err);
+		GOTO(err_exit, err);
 
         obd->obd_set_up = 1;
 
@@ -496,12 +501,7 @@ int class_setup(struct obd_device *obd, struct lustre_cfg *lcfg)
                obd->obd_name, obd->obd_uuid.uuid);
 
         RETURN(0);
-err_exp:
-        if (obd->obd_self_export) {
-                class_unlink_export(obd->obd_self_export);
-                obd->obd_self_export = NULL;
-        }
-err_hash:
+err_exit:
         if (obd->obd_uuid_hash) {
                 cfs_hash_putref(obd->obd_uuid_hash);
                 obd->obd_uuid_hash = NULL;
@@ -670,7 +670,6 @@ EXPORT_SYMBOL(class_incref);
 
 void class_decref(struct obd_device *obd, const char *scope, const void *source)
 {
-	int err;
 	int last;
 
 	CDEBUG(D_INFO, "Decref %s (%p) now %d - %s\n", obd->obd_name, obd,
@@ -683,9 +682,12 @@ void class_decref(struct obd_device *obd, const char *scope, const void *source)
 		struct obd_export *exp;
 
 		LASSERT(!obd->obd_attached);
+		cfs_spin_lock(&obd->obd_dev_lock);
 		/* All exports have been destroyed; there should
 		 * be no more in-progress ops by this point.*/
 		exp = obd->obd_self_export;
+		obd->obd_self_export = NULL;
+		cfs_spin_unlock(&obd->obd_dev_lock);
 		if (exp) {
 			exp->exp_flags |= exp_flags_from_obd(obd);
 			/*
@@ -695,16 +697,6 @@ void class_decref(struct obd_device *obd, const char *scope, const void *source)
 			class_unlink_export(exp);
 		}
 
-                CDEBUG(D_CONFIG, "finishing cleanup of obd %s (%s)\n",
-                       obd->obd_name, obd->obd_uuid.uuid);
-                if (obd->obd_stopping) {
-                        /* If we're not stopping, we were never set up */
-                        err = obd_cleanup(obd);
-                        if (err)
-                                CERROR("Cleanup %s returned %d\n",
-                                       obd->obd_name, err);
-                }
-		class_free_dev(obd);
         }
 }
 EXPORT_SYMBOL(class_decref);
