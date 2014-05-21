@@ -312,7 +312,7 @@ out:
 
 static int ofd_obd_disconnect(struct obd_export *exp)
 {
-	struct ofd_device	*ofd = ofd_dev(exp->exp_obd->obd_lu_dev);
+	struct ofd_device	*ofd = ofd_exp(exp);
 	struct lu_env		 env;
 	int			 rc;
 
@@ -370,7 +370,7 @@ static int ofd_init_export(struct obd_export *exp)
 
 static int ofd_destroy_export(struct obd_export *exp)
 {
-	struct ofd_device *ofd = ofd_dev(exp->exp_obd->obd_lu_dev);
+	struct ofd_device *ofd = ofd_exp(exp);
 
 	if (exp->exp_filter_data.fed_pending)
 		CERROR("%s: cli %s/%p has %lu pending on destroyed export"
@@ -411,7 +411,7 @@ int ofd_postrecov(const struct lu_env *env, struct ofd_device *ofd)
 {
 	struct lu_device *ldev = &ofd->ofd_dt_dev.dd_lu_dev;
 
-	CDEBUG(D_HA, "%s: recovery is over\n", ofd_obd(ofd)->obd_name);
+	CDEBUG(D_HA, "%s: recovery is over\n", ofd_name(ofd));
 	return ldev->ld_ops->ldo_recovery_complete(env, ldev);
 }
 
@@ -582,7 +582,7 @@ int ofd_statfs(const struct lu_env *env,  struct obd_export *exp,
 	       struct obd_statfs *osfs, __u64 max_age, __u32 flags)
 {
         struct obd_device	*obd = class_exp2obd(exp);
-	struct ofd_device	*ofd = ofd_dev(exp->exp_obd->obd_lu_dev);
+	struct ofd_device	*ofd = ofd_exp(exp);
 	int			 rc;
 
 	ENTRY;
