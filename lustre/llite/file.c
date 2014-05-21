@@ -3156,6 +3156,10 @@ int ll_file_flock(struct file *file, int cmd, struct file_lock *file_lock)
 				&lockh, &flock, 0, NULL /* req */, flags);
 		OBD_FREE_PTR(cb_data);
 
+		if (!(flags & LDLM_FL_TEST_LOCK) && fl_type == F_UNLCK) {
+			CFS_FAIL_TIMEOUT(OBD_FAIL_LLITE_FLOCK_UNLOCK_RACE, 3);
+		}
+
 		if (!(flags & LDLM_FL_TEST_LOCK) && fl_type == F_UNLCK && rc) {
 			if (s2lsi(inode->i_sb)->lsi_flags & LSI_UMOUNT_FORCE) {
 				/* There is no possibility to recover from
