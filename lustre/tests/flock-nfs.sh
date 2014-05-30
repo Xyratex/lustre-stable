@@ -119,15 +119,20 @@ test_2b() {
 run_test 2b "simple cleanup"
 
 test_3a() {
-	do_node $lustre_client "flock -e $LUSTRE_MNT/$LOCKF -c 'sleep 10'" &
+	do_node $lustre_client "touch $LUSTRE_MNT/$LOCKF"
+	do_node $lustre_client \
+		"flocks_test 5 set write sleep 10 $LUSTRE_MNT/$LOCKF" &
 	sleep 1
-	do_node $lustre_client "flock -e $LUSTRE_MNT/$LOCKF -c 'sleep 5'" &
+	do_node $lustre_client \
+		"flocks_test 5 set write sleep 5 $LUSTRE_MNT/$LOCKF" &
 	sleep 1
 	echo "umount -f /mnt/mds1"
-	stop mds1 -f || true
-	do_node $lustre_client "killall flock"
+	stop mds1 -f || error "MDS umount failed"
 	echo "umount -f $LUSTRE_MNT"
 	do_node $lustre_client "umount -f $LUSTRE_MNT"
+	wait
+	do_node $lustre_client "umount -f $LUSTRE_MNT" || \
+		error "client umount failed"
 	stopall -f || error "cleanup failed"
 	check_and_setup_lustre
 }
@@ -144,6 +149,8 @@ test_3b() {
 	nfs_stop
 	cleanup_client3
 	do_node $lustre_client "umount -f $LUSTRE_MNT"
+	wait
+	do_node $lustre_client "umount -f $LUSTRE_MNT" || error "client umount failed"
 	stopall -f || error "cleanup failed"
 	check_and_setup_lustre
 }
