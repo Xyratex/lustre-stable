@@ -2889,20 +2889,25 @@ static int ll_file_flc2policy(struct file_lock *file_lock, int cmd,
 	RETURN(0);
 }
 
-static void ll_file_flock_lock(struct file *file, struct file_lock *file_lock)
+static int ll_file_flock_lock(struct file *file, struct file_lock *file_lock)
 {
 	int rc = -EINVAL;
 
-	/* We can sleep here only if lock enqueue reply comes earlier than
-	 * unlock reply. Fortunatelly unlocks can't block therefore we can't
-	 * deadlock here. */
-	file_lock->fl_flags |= FL_SLEEP;
+	/* We don't need to sleep on conflicting locks.
+	 * It is called in following usecases :
+	 * 1. adding new lock - no conflicts exist as it is already granted
+	 *    on the server.
+	 * 2. unlock - never conflicts with anything.
+	 */
+	file_lock->fl_flags &= ~FL_SLEEP;
 	if (file_lock->fl_flags & FL_FLOCK)
 		rc = flock_lock_file_wait(file, file_lock);
 	if (file_lock->fl_flags & FL_POSIX)
-		rc = posix_lock_file_wait(file, file_lock);
+		rc = posix_lock_file(file, file_lock, NULL);
 	if (rc)
 		CDEBUG(D_ERROR, "kernel lock failed rc=%d\n", rc);
+
+	return rc;
 }
 
 static int ll_flock_upcall(void *cookie, int err);
@@ -3152,6 +3157,19 @@ int ll_file_flock(struct file *file, int cmd, struct file_lock *file_lock)
 			rc = FILE_LOCK_DEFERRED;
 		}
 	} else {
+		if (file_lock->fl_type == F_UNLCK &&
+		    (flags != LDLM_FL_TEST_LOCK)) {
+			/* We unlock kernel lock before ldlm one to avoid race
+			 * with reordering of unlock & lock responses from
+			 * server.*/
+			rc = ll_file_flock_lock(file, file_lock);
+			if (rc) {
+				CDEBUG(D_ERROR,
+				       "local unlock failed rc=%d\n", rc);
+				OBD_FREE_PTR(cb_data);
+				GOTO(out, rc);
+			}
+		}
 		rc = md_enqueue(sbi->ll_md_exp, &einfo, NULL, op_data,
 				&lockh, &flock, 0, NULL /* req */, flags);
 		OBD_FREE_PTR(cb_data);
@@ -3160,25 +3178,19 @@ int ll_file_flock(struct file *file, int cmd, struct file_lock *file_lock)
 			CFS_FAIL_TIMEOUT(OBD_FAIL_LLITE_FLOCK_UNLOCK_RACE, 3);
 		}
 
-		if (!(flags & LDLM_FL_TEST_LOCK) && fl_type == F_UNLCK && rc) {
-			if (s2lsi(inode->i_sb)->lsi_flags & LSI_UMOUNT_FORCE) {
-				/* There is no possibility to recover from
-				 * forced umount */
-				CDEBUG(D_ERROR, "unlock failed (%d) during "
-						"forced umount inode %lu "
-						"file_lock %p\n",
-				       rc, inode->i_ino, file_lock);
-				rc = 0;
-			} else if (file_lock->fl_flags & FL_CLOSE) {
-				CDEBUG(D_ERROR, "unlock failed (%d) during "
-						"close inode %lu "
-						"file_lock %p\n",
-				       rc, inode->i_ino, file_lock);
-				rc = 0;
+		if (rc == 0 && file_lock->fl_type != F_UNLCK &&
+		    !(flags & LDLM_FL_TEST_LOCK)) {
+			int rc2;
+
+			rc2 = ll_file_flock_lock(file, file_lock);
+			if (rc2) {
+				einfo.ei_mode = LCK_NL;
+				md_enqueue(sbi->ll_md_exp, &einfo, NULL,
+					   op_data, &lockh, &flock, 0,
+					   NULL /* req */, flags);
+				rc = rc2;
 			}
 		}
-		if (!(flags & LDLM_FL_TEST_LOCK) && rc == 0)
-			ll_file_flock_lock(file, file_lock);
 	}
 out:
 	ll_finish_md_op_data(op_data);
