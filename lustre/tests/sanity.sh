@@ -12218,6 +12218,31 @@ test_241() {
 }
 run_test 241 "bio vs dio"
 
+test_242() {
+	local l1
+	local l2
+	local dpath
+
+	remote_mds_nodsh && skip "remote MDS with nodsh" && return
+	dpath=$(do_facet $SINGLEMDS "lctl get_param -n debug_path")
+	if [ "$dpath" == "NONE" ]; then
+		skip "Dumping log disabled" && return
+	else
+		echo Dumping log pattern: $dpath
+	fi
+        # check is done on MDS
+	l1=$(do_facet $SINGLEMDS "dmesg | grep dumping" | awk  '/dumping log to / { s=$5 } END { print s }')
+        do_facet $SINGLEMDS "lctl set_param trigger_watchdog=1"
+	l2=$(do_facet $SINGLEMDS "dmesg | grep dumping" | awk  '/dumping log to / { s=$5 } END { print s }')
+
+	if [ "$l1" != "$l2" ] ; then
+		echo "Lustre log was dumped to $l2 on $SINGLEMDS"
+	else
+		error "Lustre log wasn't dumped"
+	fi
+}
+run_test 242 "Check that watchdog causes kernel log dump"
+
 #
 # tests that do cleanup/setup should be run at the end
 #
