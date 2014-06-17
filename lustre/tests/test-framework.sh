@@ -6846,7 +6846,7 @@ check_clients_evicted() {
 		((rc++))
 		echo "Check state for $osc"
 		evicted=`do_facet client $LCTL get_param osc.$osc.state |\
-			tail -n 3 | awk -F"[ [,]" '/EVICTED]$/ { if (mx<$4) {mx=$4;} } END { print mx }'`
+			tail -n 3 | awk -F"[ [,]" '/EVICTED ]$/ { if (mx<$5) {mx=$5;} } END { print mx }'`
 		if [ $? -eq 0 ] && [[ $evicted -gt $BEFORE ]]; then
 			echo "$osc is evicted at $evicted"
 			((rc--))

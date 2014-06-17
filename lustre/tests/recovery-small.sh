@@ -161,7 +161,7 @@ test_10a() {
 	# let the client reconnect
 	client_reconnect
 	evict=$(do_facet client $LCTL get_param mdc.$FSNAME-MDT*.state | \
-	    awk -F"[ [,]" '/EVICTED]$/ { if (mx<$4) {mx=$4;} } END { print mx }')
+	    awk -F"[ [,]" '/EVICTED ]$/ { if (mx<$5) {mx=$5;} } END { print mx }')
 	[ ! -z "$evict" ] && [[ $evict -gt $before ]] ||
 		(do_facet client $LCTL get_param mdc.$FSNAME-MDT*.state;
 		    error "no eviction: $evict before:$before")
@@ -183,7 +183,7 @@ test_10b() {
 	# let the client reconnect
 	client_reconnect
 	evict=$(do_facet client $LCTL get_param mdc.$FSNAME-MDT*.state | \
-	    awk -F"[ [,]" '/EVICTED]$/ { if (mx<$4) {mx=$4;} } END { print mx }')
+	    awk -F"[ [,]" '/EVICTED ]$/ { if (mx<$5) {mx=$5;} } END { print mx }')
 
 	[ -z "$evict" ] || [[ $evict -le $before ]] ||
 		(do_facet client $LCTL get_param mdc.$FSNAME-MDT*.state;
@@ -458,8 +458,9 @@ test_19a() {
 
 	# let the client reconnect
 	client_reconnect
-	EVICT=$(do_facet client $LCTL get_param mdc.$FSNAME-MDT*.state | \
-	    awk -F"[ [,]" '/EVICTED]$/ { if (mx<$4) {mx=$4;} } END { print mx }')
+	EVICT=$(do_facet client $LCTL get_param mdc.$FSNAME-MDT*.state |
+		awk -F"[ [,]" '/EVICTED ]$/ \
+			{ if (mx<$5) {mx=$5;} } END { print mx }')
 
 	[ ! -z "$EVICT" ] && [[ $EVICT -gt $BEFORE ]] ||
 		(do_facet client $LCTL get_param mdc.$FSNAME-MDT*.state;
@@ -487,8 +488,9 @@ test_19b() {
 
 	# let the client reconnect
 	client_reconnect
-	EVICT=$(do_facet client $LCTL get_param osc.$FSNAME-OST*.state | \
-	    awk -F"[ [,]" '/EVICTED]$/ { if (mx<$4) {mx=$4;} } END { print mx }')
+	EVICT=$(do_facet client $LCTL get_param osc.$FSNAME-OST*.state |
+		awk -F"[ [,]" '/EVICTED ]$/ \
+			{ if (mx < $5) {mx = $5;} } END { print mx }')
 
 	[ ! -z "$EVICT" ] && [[ $EVICT -gt $BEFORE ]] ||
 		(do_facet client $LCTL get_param osc.$FSNAME-OST*.state;
@@ -520,7 +522,7 @@ test_19c() {
 	# let the client reconnect
 	sleep 5
 	EVICT=$(do_facet client $LCTL get_param mdc.$FSNAME-MDT*.state |
-	   awk -F"[ [,]" '/EVICTED]$/ { if (mx<$4) {mx=$4;} } END { print mx }')
+	   awk -F"[ [,]" '/EVICTED ]$/ { if (mx<$5) {mx=$5;} } END { print mx }')
 
 	[ -z "$EVICT" ] || [[ $EVICT -le $BEFORE ]] || error "eviction happened"
 }
@@ -1905,7 +1907,7 @@ test_113() {
 	# let the client reconnect
 	client_reconnect
 	EVICT=$($LCTL get_param mdc.$FSNAME-MDT*.state |
-	   awk -F"[ [,]" '/EVICTED]$/ { if (mx<$4) {mx=$4;} } END { print mx }')
+	   awk -F"[ [,]" '/EVICTED ]$/ { if (mx<$5) {mx=$5;} } END { print mx }')
 
 	[ -z "$EVICT" ] || [[ $EVICT -le $BEFORE ]] || error "eviction happened"
 }
