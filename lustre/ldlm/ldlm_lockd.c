@@ -1165,19 +1165,16 @@ int ldlm_handle_enqueue0(struct ldlm_namespace *ns,
         }
 #endif
 
-	if (unlikely(lustre_msg_get_flags(req->rq_reqmsg) & MSG_RESENT))
-		flags |= LDLM_FL_RESENT;
-
-	if (unlikely(flags & (LDLM_FL_REPLAY | LDLM_FL_RESENT))) {
+	if (unlikely((flags & LDLM_FL_REPLAY) ||
+		     (lustre_msg_get_flags(req->rq_reqmsg) & MSG_RESENT))) {
                 /* Find an existing lock in the per-export lock hash */
                 lock = cfs_hash_lookup(req->rq_export->exp_lock_hash,
                                        (void *)&dlm_req->lock_handle[0]);
                 if (lock != NULL) {
                         DEBUG_REQ(D_DLMTRACE, req, "found existing lock cookie "
                                   LPX64, lock->l_handle.h_cookie);
+			flags |= LDLM_FL_RESENT;
                         GOTO(existing_lock, rc = 0);
-		} else {
-			flags &= ~LDLM_FL_RESENT;
 		}
         }
 
