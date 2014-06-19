@@ -344,18 +344,19 @@ static int mdt_md_create(struct mdt_thread_info *info)
 		rc = mdo_create(info->mti_env, next, &rr->rr_name,
 				mdt_object_child(child), &info->mti_spec, ma);
 
-                if (rc == 0) {
-                        /* Return fid & attr to client. */
-                        if (ma->ma_valid & MA_INODE)
-                                mdt_pack_attr2body(info, repbody, &ma->ma_attr,
-                                                   mdt_object_fid(child));
-                }
+		if (rc == 0) {
+			/* Return fid & attr to client. */
+			if (ma->ma_valid & MA_INODE)
+				mdt_pack_attr2body(info, repbody, &ma->ma_attr,
+						   mdt_object_fid(child));
+		}
 out_put_child:
-                mdt_object_put(info->mti_env, child);
-        } else {
-                rc = PTR_ERR(child);
-        }
-        mdt_create_pack_capa(info, rc, child, repbody);
+		mdt_create_pack_capa(info, rc, child, repbody);
+		mdt_object_put(info->mti_env, child);
+	} else {
+		rc = PTR_ERR(child);
+		mdt_create_pack_capa(info, rc, NULL, repbody);
+	}
 out_put_parent:
         mdt_object_unlock_put(info, parent, lh, rc);
         RETURN(rc);
