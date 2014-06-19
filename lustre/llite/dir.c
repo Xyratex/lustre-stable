@@ -550,8 +550,14 @@ int ll_dir_read(struct inode *inode, __u64 *_pos, void *cookie,
                                  * to access the 'ent' through its 'lde_name',
                                  * so the parameter 'name' for 'filldir()' must
                                  * be part of the 'ent'. */
+#ifdef HAVE_DIR_CONTEXT
+				ctx->pos = lhash;
+				done = !dir_emit(ctx, ent->lde_name, namelen,
+						 ino, type);
+#else
                                 done = filldir(cookie, ent->lde_name, namelen,
                                                lhash, ino, type);
+#endif
                         }
                         next = le64_to_cpu(dp->ldp_hash_end);
                         if (!done) {
@@ -591,8 +597,11 @@ int ll_dir_read(struct inode *inode, __u64 *_pos, void *cookie,
                                PFID(&info->lli_fid), (unsigned long)pos, rc);
                 }
         }
-
+#ifdef HAVE_DIR_CONTEXT
+	ctx->pos = pos;
+#else
 	*_pos = pos;
+#endif
 	ll_dir_chain_fini(&chain);
 	RETURN(rc);
 }
