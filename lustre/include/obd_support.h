@@ -229,6 +229,8 @@ int obd_alloc_fail(const void *ptr, const char *name, const char *type,
 #define OBD_FAIL_MDS_LOV_CREATE_RACE     0x148
 #define OBD_FAIL_MDS_RENAME              0x153
 #define OBD_FAIL_MDS_RENAME2             0x154
+#define OBD_FAIL_MDS_RENAME3             0x155
+#define OBD_FAIL_MDS_RENAME4             0x156
 
 /* CMD */
 #define OBD_FAIL_MDS_IS_SUBDIR_NET       0x180

@@ -1070,39 +1070,35 @@ static void mdt_rename_unlock(struct lustre_handle *lh)
  * target. Source should not be ancestor of target dir. May be other rename
  * checks can be moved here later.
  */
-static int mdt_rename_sanity(struct mdt_thread_info *info,
-			     const struct lu_fid *dir_fid,
-			     const struct lu_fid *fid)
+static int mdt_is_subdir(struct mdt_thread_info *info,
+			 struct mdt_object *dir,
+			 const struct lu_fid *fid)
 {
-        struct mdt_object *dst;
-	struct lu_fid dst_fid = *dir_fid;
+	struct lu_fid dir_fid = dir->mot_header.loh_fid;
         int rc = 0;
         ENTRY;
 
 	/* If the source and target are in the same directory, they can not
 	 * be parent/child relationship, so subdir check is not needed */
-	if (lu_fid_eq(dir_fid, fid))
+	if (lu_fid_eq(&dir_fid, fid))
 		return 0;
 
-        do {
-                LASSERT(fid_is_sane(&dst_fid));
-                dst = mdt_object_find(info->mti_env, info->mti_mdt, &dst_fid);
-                if (!IS_ERR(dst)) {
-                        rc = mdo_is_subdir(info->mti_env,
-                                           mdt_object_child(dst), fid,
-                                           &dst_fid);
-                        mdt_object_put(info->mti_env, dst);
-                        if (rc != -EREMOTE && rc < 0) {
-                                CERROR("Failed mdo_is_subdir(), rc %d\n", rc);
-                        } else {
-                                /* check the found fid */
-                                if (lu_fid_eq(&dst_fid, fid))
-					rc = -EEXIST;
-                        }
-                } else {
-                        rc = PTR_ERR(dst);
-                }
-        } while (rc == -EREMOTE);
+	if (!mdt_object_exists(dir))
+		RETURN(-ENOENT);
+
+	rc = mdo_is_subdir(info->mti_env, mdt_object_child(dir),
+			   fid, &dir_fid);
+	if (rc < 0) {
+		CERROR("failed subdir check in "DFID" for "DFID
+		       ": rc = %d\n", PFID(&dir_fid), PFID(fid), rc);
+		/* Return EINVAL only if a parent is the @fid */
+		if (rc == -EINVAL)
+			rc = -EIO;
+	} else {
+		/* check the found fid */
+		if (lu_fid_eq(&dir_fid, fid))
+			rc = -EINVAL;
+	}
 
         RETURN(rc);
 }
@@ -1172,22 +1168,26 @@ static int mdt_rename_parents_lock(struct mdt_thread_info *info,
 	if (IS_ERR(src))
 		RETURN(PTR_ERR(src));
 
+	OBD_FAIL_TIMEOUT(OBD_FAIL_MDS_RENAME3, 5);
+
 	if (lu_fid_eq(fid_src, fid_tgt)) {
 		tgt = src;
 		mdt_object_get(info->mti_env, tgt);
 	} else {
+		/* Check if the @src is not a child of the @tgt, otherwise a
+		 * reverse locking must take place. */
+		rc = mdt_is_subdir(info, src, fid_tgt);
+		if (rc == -EINVAL)
+			reverse = 1;
+		else if (rc)
+			GOTO(err_src_put, rc);
+
 		tgt = mdt_object_find_check(info, fid_tgt, 1);
 		if (IS_ERR(tgt))
 			GOTO(err_src_put, rc = PTR_ERR(tgt));
-
-		/* Check if the @src is not a child of the @tgt, otherwise
-		 * a reverse locking must take place */
-		rc = mdt_rename_sanity(info, fid_src, fid_tgt);
-		if (rc == -EEXIST)
-			reverse = 1;
-		else if (rc)
-			GOTO(err_tgt_put, rc);
 	}
+
+	OBD_FAIL_TIMEOUT(OBD_FAIL_MDS_RENAME4, 5);
 
 	/* lock parents in the proper order. */
 	if (reverse) {
@@ -1216,12 +1216,15 @@ static int mdt_rename_parents_lock(struct mdt_thread_info *info,
 	if (rc)
 		GOTO(err_unlock, rc);
 
+	OBD_FAIL_TIMEOUT(OBD_FAIL_MDS_RENAME4, 5);
+
 	*srcp = src;
 	*tgtp = tgt;
 	RETURN(0);
 
 err_unlock:
-	/* The order does not matter as the handle is checked inside. */
+	/* The order does not matter as the handle is checked inside,
+	 * as well as not used handle. */
 	mdt_object_unlock(info, src, lh_src, rc);
 	mdt_object_unlock(info, tgt, lh_tgt, rc);
 err_tgt_put:
@@ -1312,7 +1315,7 @@ static int mdt_reint_rename(struct mdt_thread_info *info,
 
 	/* Check if @mtgtdir is subdir of @mold, before locking child
 	 * to avoid reverse locking. */
-	rc = mdt_rename_sanity(info, rr->rr_fid2, old_fid);
+	rc = mdt_is_subdir(info, mtgtdir, old_fid);
 	if (rc)
 		GOTO(out_put_old, rc);
 
@@ -1353,7 +1356,7 @@ static int mdt_reint_rename(struct mdt_thread_info *info,
 
 		/* Check if @msrcdir is subdir of @mnew, before locking child
 		 * to avoid reverse locking. */
-		rc = mdt_rename_sanity(info, rr->rr_fid1, new_fid);
+		rc = mdt_is_subdir(info, msrcdir, new_fid);
 		if (rc)
 			GOTO(out_put_new, rc);
 
