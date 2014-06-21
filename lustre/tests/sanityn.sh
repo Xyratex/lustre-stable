@@ -2134,6 +2134,27 @@ test_55c()
 }
 run_test 55c "rename vs unlink orphan target dir"
 
+test_55d()
+{
+	touch $DIR/f1
+
+#define OBD_FAIL_MDS_RENAME3              0x155
+	do_facet mds $LCTL set_param fail_loc=0x155
+	mv $DIR/f1 $DIR/$tdir &
+	PID1=$!
+	sleep 2
+
+	# while rename is sleeping, create $tdir, but as a directory
+	mkdir -p $DIR2/$tdir || error "(1) mkdir failed"
+
+	# link in reverse locking order
+	ln $DIR2/f1 $DIR2/$tdir/
+
+	wait $PID1 && error "(2) mv succeeded"
+	rm -rf $DIR/f1
+}
+run_test 55d "rename file vs link"
+
 test_71() {
 	checkfiemap --test ||
 		{ skip "checkfiemap not runnable: $?" && return; }
