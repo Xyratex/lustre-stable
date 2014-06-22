@@ -1668,6 +1668,10 @@ static int ofd_prolong_extent_locks(struct tgt_session_info *tsi,
 		LASSERT(lock->l_flags & LDLM_FL_AST_SENT);
 		LASSERT(lock->l_resource->lr_type == LDLM_EXTENT);
 
+		/* ignore waiting locks, no more granted locks in the list */
+		if (lock->l_granted_mode != lock->l_req_mode)
+			break;
+
 		if (!ldlm_res_eq(&tsi->tsi_resid, &lock->l_resource->lr_name))
 			continue;
 
@@ -2119,6 +2123,10 @@ static void ofd_fini(const struct lu_env *env, struct ofd_device *m)
 	lfsck_stop(env, m->ofd_osd, true);
 	lfsck_degister(env, m->ofd_osd);
 	target_recovery_fini(obd);
+	if (m->ofd_namespace != NULL)
+		ldlm_namespace_free_prior(m->ofd_namespace, NULL,
+					  d->ld_obd->obd_force);
+
 	obd_exports_barrier(obd);
 	obd_zombie_barrier();
 
@@ -2129,8 +2137,7 @@ static void ofd_fini(const struct lu_env *env, struct ofd_device *m)
 	cleanup_capa_hash(obd->u.filter.fo_capa_hash);
 
 	if (m->ofd_namespace != NULL) {
-		ldlm_namespace_free(m->ofd_namespace, NULL,
-				    d->ld_obd->obd_force);
+		ldlm_namespace_free_post(m->ofd_namespace);
 		d->ld_obd->obd_namespace = m->ofd_namespace = NULL;
 	}
 
