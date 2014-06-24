@@ -1924,6 +1924,58 @@ test_70b () {
 	wait $pid || error "rundbench load on $clients failed!"
 }
 run_test 70b "mds recovery; $CLIENTCOUNT clients"
+
+test_70c() {
+	[ $CLIENTCOUNT -lt 3 ] && \
+		{ skip "Need 3 or more clients, have $CLIENTCOUNT" && return; }
+
+	zconf_mount_clients $CLIENTS $MOUNT
+
+	local -a cli=(${CLIENTS//,/ })
+	local c1=${cli[0]}
+	local c2=${cli[1]}
+	local c3=${cli[2]}
+
+	echo "generate file data"
+	local source=/tmp/70file
+	do_node $c3 "dd if=/dev/urandom of=$source bs=1M count=1"
+	do_node $c2 "dd if=/dev/urandom of=$source bs=1M count=1"
+
+	local dest=$DIR/$tfile
+	$SETSTRIPE -c 1 -i 0 $dest
+
+	replay_barrier ost1
+
+	echo "$c3 writes ..."
+	do_node $c3 "dd if=$source of=$dest bs=1M count=1 conv=notrunc"
+
+	echo "$c2 writes ..."
+	do_node $c2 "dd if=$source of=$dest bs=1M count=1 seek=1 conv=notrunc"
+
+	echo "$c1 writes ..."
+	do_node $c1 "dd if=/dev/zero of=$dest bs=1M count=1 seek=2 conv=notrunc"
+
+	#define OBD_FAIL_PTLRPC_FAIL_CONNECT	   0x518
+	# get $c1 eviction on recovery
+	do_nodes $c1 "lctl set_param fail_loc=0x518"
+
+	#define OBD_FAIL_PTLRPC_DELAY_CONNECT	 0x517
+	# hold connection of $c3 for 5 seconds
+	do_nodes $c3 "lctl set_param fail_loc=0x517"
+	do_nodes $c3 "lctl set_param fail_val=5"
+	facet_failover ost1
+	do_nodes $c2,$c3 "df $MOUNT"
+
+	# check written data
+	do_node $c3 "cmp -b -i 0:0 -n 1M $dest $source" ||
+		error "wrong first MB after recovery"
+	do_node $c2 "cmp -b -i 1M:0 -n 1M $dest $source" ||
+		error "wrong second MB after recovery"
+
+	do_nodes $c1,$c2,$c3 "lctl set_param fail_loc=0"
+	do_nodes $c1 "df $MOUNT"
+}
+run_test 70c "oss recovery; $CLIENTCOUNT clients"
 # end multi-client tests
 
 test_73a() {
