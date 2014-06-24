@@ -622,6 +622,12 @@ int ptlrpc_connect_import(struct obd_import *imp)
         int rc;
         ENTRY;
 
+	if (!strcmp(obd->obd_type->typ_name, LUSTRE_OSC_NAME)) {
+		if (CFS_FAIL_CHECK(OBD_FAIL_PTLRPC_FAIL_CONNECT))
+			RETURN(-ENOTCONN);
+		CFS_FAIL_TIMEOUT(OBD_FAIL_PTLRPC_DELAY_CONNECT, cfs_fail_val);
+	}
+
 	spin_lock(&imp->imp_lock);
 	if (imp->imp_state == LUSTRE_IMP_CLOSED) {
 		spin_unlock(&imp->imp_lock);
