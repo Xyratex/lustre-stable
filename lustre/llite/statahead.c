@@ -1269,6 +1269,7 @@ do_it:
         EXIT;
 
 out:
+	ll_dir_chain_fini(&chain);
         if (sai->sai_agl_valid) {
 		spin_lock(&plli->lli_agl_lock);
 		thread_set_flags(agl_thread, SVC_STOPPING);
@@ -1284,7 +1285,6 @@ out:
                 /* Set agl_thread flags anyway. */
                 thread_set_flags(&sai->sai_agl_thread, SVC_STOPPED);
         }
-        ll_dir_chain_fini(&chain);
 	spin_lock(&plli->lli_sa_lock);
 	if (!sa_received_empty(sai)) {
 		thread_set_flags(thread, SVC_STOPPING);
@@ -1301,9 +1301,9 @@ out:
 	wake_up(&sai->sai_waitq);
 	wake_up(&thread->t_ctl_waitq);
         ll_sai_put(sai);
-        dput(parent);
 	CDEBUG(D_READA, "statahead thread stopped: sai %p, parent %.*s\n",
 	       sai, parent->d_name.len, parent->d_name.name);
+	dput(parent);
 	return rc;
 }
 
