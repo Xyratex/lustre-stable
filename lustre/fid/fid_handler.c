@@ -69,12 +69,11 @@ int seq_server_set_cli(struct lu_server_seq *seq,
          */
 	mutex_lock(&seq->lss_mutex);
 
-        if (cli == NULL) {
-                CDEBUG(D_INFO, "%s: Detached sequence client %s\n",
-                       seq->lss_name, cli->lcs_name);
-                seq->lss_cli = cli;
-                GOTO(out_up, rc = 0);
-        }
+	if (cli == NULL) {
+		CDEBUG(D_INFO, "%s: Detached sequence client\n", seq->lss_name);
+		seq->lss_cli = NULL;
+		GOTO(out_up, rc = 0);
+	}
 
 	if (seq->lss_cli != NULL) {
 		CDEBUG(D_HA, "%s: Sequence controller is already "
