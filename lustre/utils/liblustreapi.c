@@ -3103,15 +3103,17 @@ int llapi_poll_quotacheck(char *mnt, struct if_quotacheck *qchk)
 
         while (1) {
                 rc = ioctl(dirfd(root), LL_IOC_POLL_QUOTACHECK, qchk);
-                if (!rc)
-                        break;
+		if (rc != 0)
+			rc = -errno;
+		if (rc != -ENODATA)
+			break;
                 sleep(poll_intvl);
                 if (poll_intvl < 30)
                         poll_intvl *= 2;
         }
 
         closedir(root);
-        return 0;
+        return rc;
 }
 
 int llapi_quotactl(char *mnt, struct if_quotactl *qctl)
