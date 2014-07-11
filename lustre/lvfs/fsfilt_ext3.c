@@ -1772,7 +1772,7 @@ static int v3_write_dqinfo(struct file *f, int type, struct if_dqinfo *info)
         dqinfo.dqi_free_blk = 0;
         dqinfo.dqi_free_entry = 0;
 
-        return cfs_user_write(f, (char *)&dqinfo, sizeof(dqinfo), &offset);
+	return fsfilt_ext3_write_record(f, (char *)&dqinfo, sizeof(dqinfo), &offset, 0);
 }
 
 static int v3_write_dqheader(struct file *f, int type)
@@ -1788,7 +1788,7 @@ static int v3_write_dqheader(struct file *f, int type)
         dqhead.dqh_magic = cpu_to_le32(quota_magics[type]);
         dqhead.dqh_version = cpu_to_le32(quota_versions[type]);
 
-        return cfs_user_write(f, (char *)&dqhead, sizeof(dqhead), &offset);
+	return fsfilt_ext3_write_record(f, (char *)&dqhead, sizeof(dqhead), &offset, 0);
 }
 
 static int create_new_quota_files(struct qchk_ctxt *qctxt,
