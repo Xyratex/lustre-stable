@@ -1149,6 +1149,7 @@ static void mdt_reconstruct_setattr(struct mdt_thread_info *mti,
         struct mdt_device *mdt = mti->mti_mdt;
         struct mdt_object *obj;
         struct mdt_body *body;
+	int rc;
 
         mdt_req_from_lcd(req, med->med_ted.ted_lcd);
         if (req->rq_status)
@@ -1157,7 +1158,7 @@ static void mdt_reconstruct_setattr(struct mdt_thread_info *mti,
         body = req_capsule_server_get(mti->mti_pill, &RMF_MDT_BODY);
         obj = mdt_object_find(mti->mti_env, mdt, mti->mti_rr.rr_fid1);
         if (IS_ERR(obj)) {
-                int rc = PTR_ERR(obj);
+                rc = PTR_ERR(obj);
                 LCONSOLE_WARN(""DFID" lookup error %d."
                               " Evicting client %s with export %s.\n",
                               PFID(mdt_object_fid(obj)), rc,
