@@ -241,10 +241,11 @@ struct lfsck_operations {
 
 struct lfsck_component {
 	/* into lfsck_instance::li_list_(scan,double_scan,idle} */
-	cfs_list_t		 lc_link;
+	struct list_head	 lc_link;
 
 	/* into lfsck_instance::li_list_dir */
-	cfs_list_t		 lc_link_dir;
+	struct list_head	 lc_link_dir;
+
 	struct rw_semaphore	 lc_sem;
 	atomic_t		 lc_ref;
 
@@ -267,21 +268,21 @@ struct lfsck_instance {
 	spinlock_t		  li_lock;
 
 	/* Link into the lfsck_instance_list. */
-	cfs_list_t		  li_link;
+	struct list_head	  li_link;
 
 	/* For the components in (first) scanning via otable-based iteration. */
-	cfs_list_t		  li_list_scan;
+	struct list_head	  li_list_scan;
 
 	/* For the components in scanning via directory traversal. Because
 	 * directory traversal cannot guarantee all the object be scanned,
 	 * so the component in the li_list_dir must be in li_list_scan. */
-	cfs_list_t		  li_list_dir;
+	struct list_head	  li_list_dir;
 
 	/* For the components in double scanning. */
-	cfs_list_t		  li_list_double_scan;
+	struct list_head	  li_list_double_scan;
 
 	/* For the components those are not scanning now. */
-	cfs_list_t		  li_list_idle;
+	struct list_head	  li_list_idle;
 
 	atomic_t		  li_ref;
 	struct ptlrpc_thread	  li_thread;
