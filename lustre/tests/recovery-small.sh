@@ -1950,6 +1950,31 @@ test_120() {
 }
 run_test 120 "flock race: completion vs. evict"
 
+test_112b() {
+	mount_client $DIR2
+	mkdir -p $DIR2/$tdir
+	touch $DIR2/$tdir/${tfile}
+	umount_client $DIR2
+
+	#OBD_FAIL_MDS_GETATTR_NET         0x102
+	do_facet $SINGLEMDS lctl set_param fail_loc=0x80000102  # hold getattr
+	local BEFORE=`date +%s`
+	stat $DIR/$tdir/${tfile} &
+	wait
+	do_facet $SINGLEMDS lctl set_param fail_loc=0
+	local DURATION=$((`date +%s`- $BEFORE))
+	echo 'Stat take - '$DURATION' sec'
+	fail $SINGLEMDS
+	remount_client $MOUNT
+
+	#if stat operation took less then obd_timeout,
+	#that`s mean that mds did not drop resent request with the same xid
+	[[ $DURATION -lt $TIMEOUT ]] && error "MDS fail to found resent request"
+
+	return 0
+}
+run_test 112b "getattr resend while orignal request is in progress"
+
 complete $SECONDS
 check_and_cleanup_lustre
 exit_status
