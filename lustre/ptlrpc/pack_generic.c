@@ -2131,8 +2131,6 @@ void lustre_swab_lmv_stripe_md (struct lmv_stripe_md *mea)
 
 void lustre_swab_lmv_user_md(struct lmv_user_md *lum)
 {
-	int i;
-
 	__swab32s(&lum->lum_magic);
 	__swab32s(&lum->lum_stripe_count);
 	__swab32s(&lum->lum_stripe_offset);
@@ -2141,12 +2139,6 @@ void lustre_swab_lmv_user_md(struct lmv_user_md *lum)
 	CLASSERT(offsetof(typeof(*lum), lum_padding1) != 0);
 	CLASSERT(offsetof(typeof(*lum), lum_padding2) != 0);
 	CLASSERT(offsetof(typeof(*lum), lum_padding3) != 0);
-
-	for (i = 0; i < lum->lum_stripe_count; i++) {
-		__swab32s(&lum->lum_objects[i].lum_mds);
-		lustre_swab_lu_fid(&lum->lum_objects[i].lum_fid);
-	}
-
 }
 EXPORT_SYMBOL(lustre_swab_lmv_user_md);
 
