@@ -63,7 +63,7 @@ atomic_t libcfs_kmemory = {0};
 
 struct obd_device *obd_devs[MAX_OBD_DEVICES];
 EXPORT_SYMBOL(obd_devs);
-cfs_list_t obd_types;
+struct list_head obd_types;
 DEFINE_RWLOCK(obd_dev_lock);
 
 __u64 obd_max_pages = 0;
@@ -528,7 +528,6 @@ int obd_init_checks(void)
 #define obd_init_checks() do {} while(0)
 #endif
 
-extern spinlock_t obd_types_lock;
 extern int class_procfs_init(void);
 extern int class_procfs_clean(void);
 
@@ -543,7 +542,7 @@ int init_obdclass(void)
         int lustre_register_fs(void);
 
         for (i = CAPA_SITE_CLIENT; i < CAPA_SITE_MAX; i++)
-                CFS_INIT_LIST_HEAD(&capa_list[i]);
+		INIT_LIST_HEAD(&capa_list[i]);
 
 	spin_lock_init(&obd_stale_export_lock);
 	INIT_LIST_HEAD(&obd_stale_exports);
@@ -579,7 +578,7 @@ int init_obdclass(void)
         if (err)
                 return err;
 
-        CFS_INIT_LIST_HEAD(&obd_types);
+	INIT_LIST_HEAD(&obd_types);
 
 	err = misc_register(&obd_psdev);
 	if (err) {
