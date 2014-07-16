@@ -556,7 +556,7 @@ run_test 21b "commit on sharing, two clients"
 
 # end commit on sharing tests 
 
-test_22() {
+test_24() {
 	cancel_lru_locks osc
 
 	$SETSTRIPE -i 0 -c 1 $DIR/$tfile
@@ -576,7 +576,7 @@ test_22() {
 	killall multiop
 	wait
 }
-run_test 22 "replay|resend"
+run_test 24 "replay|resend"
 
 complete $(basename $0) $SECONDS
 SLEEP=$((`date +%s` - $NOW))
