@@ -2544,6 +2544,9 @@ static int echo_client_brw_ioctl(int rw, struct obd_export *exp,
                 data->ioc_plen1 = data->ioc_count;
         }
 
+	if (test_mode == 3)
+		async = 1;
+
         /* Truncate batch size to maximum */
 	if (data->ioc_plen1 > PTLRPC_MAX_BRW_SIZE)
                 data->ioc_plen1 = PTLRPC_MAX_BRW_SIZE;
