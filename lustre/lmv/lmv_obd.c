@@ -2311,7 +2311,7 @@ retry:
 
 	/* Not cross-ref case, just get out of here. */
 	if (likely(!(body->mbo_valid & OBD_MD_MDS)))
-		RETURN(0);
+		RETURN(rc);
 
 	CDEBUG(D_INODE, "%s: try unlink to another MDT for "DFID"\n",
 	       exp->exp_obd->obd_name, PFID(&body->mbo_fid1));
