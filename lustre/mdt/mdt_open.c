@@ -1803,6 +1803,8 @@ int mdt_reint_open(struct mdt_thread_info *info, struct mdt_lock_handle *lhc)
 			 * object. */
 			ma->ma_need |= MA_HSM;
 			result = mdt_attr_get_complex(info, child, ma);
+			if (result != 0)
+				GOTO(out_child, result);
 		} else {
 			/* Object does not exist. Likely FS corruption. */
 			CERROR("%s: name '"DNAME"' present, but FID "
