@@ -1768,19 +1768,27 @@ static int mdd_declare_object_initialize(const struct lu_env *env,
 	LASSERT(attr->la_valid & (LA_MODE | LA_TYPE));
 	attr->la_valid &= ~(LA_MODE | LA_TYPE);
 	rc = mdo_declare_attr_set(env, child, attr, handle);
+	if (rc != 0)
+		RETURN(rc);
+
 	attr->la_valid |= LA_MODE | LA_TYPE;
-	if (rc == 0 && S_ISDIR(attr->la_mode)) {
+	if (S_ISDIR(attr->la_mode)) {
 		rc = mdo_declare_index_insert(env, child, mdo2fid(child),
 					      dot, handle);
-                if (rc == 0)
-                        rc = mdo_declare_ref_add(env, child, handle);
+		if (rc != 0)
+			RETURN(rc);
+
+		rc = mdo_declare_ref_add(env, child, handle);
+		if (rc != 0)
+			RETURN(rc);
 
 		rc = mdo_declare_index_insert(env, child, mdo2fid(parent),
 					      dotdot, handle);
+		if (rc != 0)
+			RETURN(rc);
         }
 
-	if (rc == 0)
-		mdd_declare_links_add(env, child, handle, ldata);
+	rc = mdd_declare_links_add(env, child, handle, ldata);
 
 	RETURN(rc);
 }
