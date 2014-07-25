@@ -8,3 +8,4 @@ quota-avoid-dqget-calls.patch
 lockd.patch
 export-2.6.32-lru_add_drain.patch
 jbd2-log_wait_for_space-2.6-rhel6.patch
+module-load-deadlock-rhel6.patch
