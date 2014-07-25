@@ -1623,7 +1623,9 @@ static int mdd_unlink(const struct lu_env *env, struct md_object *pobj,
 	}
 	EXIT;
 cleanup:
-	mdd_write_unlock(env, mdd_cobj);
+	if (likely(mdd_cobj != NULL))
+		mdd_write_unlock(env, mdd_cobj);
+
 	if (rc == 0) {
 		int cl_flags = 0;
 
