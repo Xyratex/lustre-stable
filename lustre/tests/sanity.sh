@@ -9482,9 +9482,11 @@ dot_lustre_fid_permission_check() {
 
 	$OPENFILE -f O_LOV_DELAY_CREATE:O_CREAT $test_dir/$tfile-2
 	fid=$($LFS path2fid $test_dir/$tfile-2)
+
 	echo "cp /etc/passwd $MOUNT/.lustre/fid/$fid"
-	cp /etc/passwd $MOUNT/.lustre/fid/$fid &&
-		error "create lov data thru .lustre should fail."
+	cp /etc/passwd $MOUNT/.lustre/fid/$fid ||
+		error "create lov data thru .lustre failed"
+
 	echo "cp /etc/passwd $test_dir/$tfile-2"
 	cp /etc/passwd $test_dir/$tfile-2 ||
 		error "copy to $test_dir/$tfile-2 failed."
