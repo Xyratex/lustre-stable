@@ -40,7 +40,17 @@
 
 #include "o2iblnd.h"
 
-void
+static void kiblnd_peer_alive(kib_peer_t *peer);
+static void kiblnd_peer_connect_failed(kib_peer_t *peer, int active, int error);
+static void kiblnd_check_sends(kib_conn_t *conn);
+static void kiblnd_init_tx_msg(lnet_ni_t *ni, kib_tx_t *tx,
+			       int type, int body_nob);
+static int kiblnd_init_rdma(kib_conn_t *conn, kib_tx_t *tx, int type,
+			    int resid, kib_rdma_desc_t *dstrd, __u64 dstcookie);
+static void kiblnd_queue_tx_locked(kib_tx_t *tx, kib_conn_t *conn);
+static void kiblnd_queue_tx(kib_tx_t *tx, kib_conn_t *conn);
+
+static void
 kiblnd_tx_done (lnet_ni_t *ni, kib_tx_t *tx)
 {
 	lnet_msg_t *lntmsg[2];
@@ -99,7 +109,7 @@ kiblnd_txlist_done(lnet_ni_t *ni, struct list_head *txlist, int status)
 	}
 }
 
-kib_tx_t *
+static kib_tx_t *
 kiblnd_get_idle_tx(lnet_ni_t *ni, lnet_nid_t target)
 {
 	kib_net_t		*net = (kib_net_t *)ni->ni_data;
@@ -127,7 +137,7 @@ kiblnd_get_idle_tx(lnet_ni_t *ni, lnet_nid_t target)
         return tx;
 }
 
-void
+static void
 kiblnd_drop_rx(kib_rx_t *rx)
 {
 	kib_conn_t		*conn	= rx->rx_conn;
@@ -213,7 +223,7 @@ kiblnd_post_rx (kib_rx_t *rx, int credit)
 	return 0;
 }
 
-kib_tx_t *
+static kib_tx_t *
 kiblnd_find_waiting_tx_locked(kib_conn_t *conn, int txtype, __u64 cookie)
 {
 	struct list_head *tmp;
@@ -238,7 +248,7 @@ kiblnd_find_waiting_tx_locked(kib_conn_t *conn, int txtype, __u64 cookie)
 	return NULL;
 }
 
-void
+static void
 kiblnd_handle_completion(kib_conn_t *conn, int txtype, int status, __u64 cookie)
 {
 	kib_tx_t    *tx;
@@ -277,7 +287,7 @@ kiblnd_handle_completion(kib_conn_t *conn, int txtype, int status, __u64 cookie)
 		kiblnd_tx_done(ni, tx);
 }
 
-void
+static void
 kiblnd_send_completion(kib_conn_t *conn, int type, int status, __u64 cookie)
 {
 	lnet_ni_t   *ni = conn->ibc_peer->ibp_ni;
@@ -296,7 +306,7 @@ kiblnd_send_completion(kib_conn_t *conn, int type, int status, __u64 cookie)
         kiblnd_queue_tx(tx, conn);
 }
 
-void
+static void
 kiblnd_handle_rx (kib_rx_t *rx)
 {
         kib_msg_t    *msg = rx->rx_msg;
@@ -457,7 +467,7 @@ kiblnd_handle_rx (kib_rx_t *rx)
                 kiblnd_post_rx(rx, post_credit);
 }
 
-void
+static void
 kiblnd_rx_complete (kib_rx_t *rx, int status, int nob)
 {
         kib_msg_t    *msg = rx->rx_msg;
@@ -531,7 +541,7 @@ kiblnd_rx_complete (kib_rx_t *rx, int status, int nob)
         kiblnd_drop_rx(rx);                     /* Don't re-post rx. */
 }
 
-struct page *
+static struct page *
 kiblnd_kvaddr_to_page (unsigned long vaddr)
 {
         struct page *page;
@@ -705,7 +715,7 @@ kiblnd_map_tx(lnet_ni_t *ni, kib_tx_t *tx,
 }
 
 
-int
+static int
 kiblnd_setup_rd_iov(lnet_ni_t *ni, kib_tx_t *tx, kib_rdma_desc_t *rd,
                     unsigned int niov, struct iovec *iov, int offset, int nob)
 {
@@ -758,7 +768,7 @@ kiblnd_setup_rd_iov(lnet_ni_t *ni, kib_tx_t *tx, kib_rdma_desc_t *rd,
         return kiblnd_map_tx(ni, tx, rd, sg - tx->tx_frags);
 }
 
-int
+static int
 kiblnd_setup_rd_kiov (lnet_ni_t *ni, kib_tx_t *tx, kib_rdma_desc_t *rd,
                       int nkiov, lnet_kiov_t *kiov, int offset, int nob)
 {
@@ -798,7 +808,7 @@ kiblnd_setup_rd_kiov (lnet_ni_t *ni, kib_tx_t *tx, kib_rdma_desc_t *rd,
         return kiblnd_map_tx(ni, tx, rd, sg - tx->tx_frags);
 }
 
-int
+static int
 kiblnd_post_tx_locked (kib_conn_t *conn, kib_tx_t *tx, int credit)
 {
         kib_msg_t         *msg = tx->tx_msg;
@@ -935,7 +945,7 @@ kiblnd_post_tx_locked (kib_conn_t *conn, kib_tx_t *tx, int credit)
 	return -EIO;
 }
 
-void
+static void
 kiblnd_check_sends (kib_conn_t *conn)
 {
         int        ver = conn->ibc_version;
@@ -1007,7 +1017,7 @@ kiblnd_check_sends (kib_conn_t *conn)
 	kiblnd_conn_decref(conn); /* ...until here */
 }
 
-void
+static void
 kiblnd_tx_complete (kib_tx_t *tx, int status)
 {
         int           failed = (status != IB_WC_SUCCESS);
@@ -1062,7 +1072,7 @@ kiblnd_tx_complete (kib_tx_t *tx, int status)
         kiblnd_conn_decref(conn);               /* ...until here */
 }
 
-void
+static void
 kiblnd_init_tx_msg (lnet_ni_t *ni, kib_tx_t *tx, int type, int body_nob)
 {
         kib_hca_dev_t     *hdev = tx->tx_pool->tpo_hdev;
@@ -1096,9 +1106,9 @@ kiblnd_init_tx_msg (lnet_ni_t *ni, kib_tx_t *tx, int type, int body_nob)
         tx->tx_nwrq++;
 }
 
-int
-kiblnd_init_rdma (kib_conn_t *conn, kib_tx_t *tx, int type,
-		  int resid, kib_rdma_desc_t *dstrd, __u64 dstcookie)
+static int
+kiblnd_init_rdma(kib_conn_t *conn, kib_tx_t *tx, int type,
+		 int resid, kib_rdma_desc_t *dstrd, __u64 dstcookie)
 {
 	kib_msg_t         *ibmsg = tx->tx_msg;
 	kib_rdma_desc_t   *srcrd = tx->tx_rd;
@@ -1181,8 +1191,8 @@ kiblnd_init_rdma (kib_conn_t *conn, kib_tx_t *tx, int type,
         return rc;
 }
 
-void
-kiblnd_queue_tx_locked (kib_tx_t *tx, kib_conn_t *conn)
+static void
+kiblnd_queue_tx_locked(kib_tx_t *tx, kib_conn_t *conn)
 {
 	struct list_head *q;
 
@@ -1234,7 +1244,7 @@ kiblnd_queue_tx_locked (kib_tx_t *tx, kib_conn_t *conn)
 	list_add_tail(&tx->tx_list, q);
 }
 
-void
+static void
 kiblnd_queue_tx (kib_tx_t *tx, kib_conn_t *conn)
 {
 	spin_lock(&conn->ibc_lock);
@@ -1286,7 +1296,7 @@ static int kiblnd_resolve_addr(struct rdma_cm_id *cmid,
         return rc;
 }
 
-void
+static void
 kiblnd_connect_peer (kib_peer_t *peer)
 {
         struct rdma_cm_id *cmid;
@@ -1643,7 +1653,7 @@ kiblnd_send (lnet_ni_t *ni, void *private, lnet_msg_t *lntmsg)
         return 0;
 }
 
-void
+static void
 kiblnd_reply (lnet_ni_t *ni, kib_rx_t *rx, lnet_msg_t *lntmsg)
 {
         lnet_process_id_t target = lntmsg->msg_target;
@@ -1830,13 +1840,13 @@ kiblnd_thread_start(int (*fn)(void *arg), void *arg, char *name)
 	return 0;
 }
 
-void
+static void
 kiblnd_thread_fini (void)
 {
 	atomic_dec (&kiblnd_data.kib_nthreads);
 }
 
-void
+static void
 kiblnd_peer_alive (kib_peer_t *peer)
 {
 	/* This is racy, but everyone's only writing cfs_time_current() */
@@ -1844,7 +1854,7 @@ kiblnd_peer_alive (kib_peer_t *peer)
 	smp_mb();
 }
 
-void
+static void
 kiblnd_peer_notify (kib_peer_t *peer)
 {
         int           error = 0;
@@ -1952,7 +1962,7 @@ kiblnd_close_conn(kib_conn_t *conn, int error)
 	write_unlock_irqrestore(&kiblnd_data.kib_global_lock, flags);
 }
 
-void
+static void
 kiblnd_handle_early_rxs(kib_conn_t *conn)
 {
 	unsigned long    flags;
@@ -1975,7 +1985,7 @@ kiblnd_handle_early_rxs(kib_conn_t *conn)
 	write_unlock_irqrestore(&kiblnd_data.kib_global_lock, flags);
 }
 
-void
+static void
 kiblnd_abort_txs(kib_conn_t *conn, struct list_head *txs)
 {
 	struct list_head	 zombies = LIST_HEAD_INIT(zombies);
@@ -2011,7 +2021,7 @@ kiblnd_abort_txs(kib_conn_t *conn, struct list_head *txs)
 	kiblnd_txlist_done(conn->ibc_peer->ibp_ni, &zombies, -ECONNABORTED);
 }
 
-void
+static void
 kiblnd_finalise_conn (kib_conn_t *conn)
 {
 	LASSERT (!in_interrupt());
@@ -2036,8 +2046,8 @@ kiblnd_finalise_conn (kib_conn_t *conn)
 	kiblnd_handle_early_rxs(conn);
 }
 
-void
-kiblnd_peer_connect_failed (kib_peer_t *peer, int active, int error)
+static void
+kiblnd_peer_connect_failed(kib_peer_t *peer, int active, int error)
 {
 	struct list_head zombies = LIST_HEAD_INIT(zombies);
 	unsigned long	flags;
@@ -2090,7 +2100,7 @@ kiblnd_peer_connect_failed (kib_peer_t *peer, int active, int error)
 	kiblnd_txlist_done(peer->ibp_ni, &zombies, -EHOSTUNREACH);
 }
 
-void
+static void
 kiblnd_connreq_done(kib_conn_t *conn, int status)
 {
 	kib_peer_t	 *peer = conn->ibc_peer;
@@ -2185,7 +2195,7 @@ kiblnd_connreq_done(kib_conn_t *conn, int status)
 	kiblnd_handle_early_rxs(conn);
 }
 
-void
+static void
 kiblnd_reject(struct rdma_cm_id *cmid, kib_rej_t *rej)
 {
         int          rc;
@@ -2196,7 +2206,7 @@ kiblnd_reject(struct rdma_cm_id *cmid, kib_rej_t *rej)
                 CWARN("Error %d sending reject\n", rc);
 }
 
-int
+static int
 kiblnd_passive_connect (struct rdma_cm_id *cmid, void *priv, int priv_nob)
 {
 	rwlock_t		*g_lock = &kiblnd_data.kib_global_lock;
@@ -2470,7 +2480,7 @@ kiblnd_passive_connect (struct rdma_cm_id *cmid, void *priv, int priv_nob)
         return -ECONNREFUSED;
 }
 
-void
+static void
 kiblnd_reconnect (kib_conn_t *conn, int version,
                   __u64 incarnation, int why, kib_connparams_t *cp)
 {
@@ -2534,7 +2544,7 @@ kiblnd_reconnect (kib_conn_t *conn, int version,
         kiblnd_connect_peer(peer);
 }
 
-void
+static void
 kiblnd_rejected (kib_conn_t *conn, int reason, void *priv, int priv_nob)
 {
 	kib_peer_t    *peer = conn->ibc_peer;
@@ -2673,7 +2683,7 @@ kiblnd_rejected (kib_conn_t *conn, int reason, void *priv, int priv_nob)
         kiblnd_connreq_done(conn, -ECONNREFUSED);
 }
 
-void
+static void
 kiblnd_check_connreply (kib_conn_t *conn, void *priv, int priv_nob)
 {
         kib_peer_t    *peer = conn->ibc_peer;
@@ -2772,7 +2782,7 @@ kiblnd_check_connreply (kib_conn_t *conn, void *priv, int priv_nob)
         kiblnd_connreq_done(conn, 0);
 }
 
-int
+static int
 kiblnd_active_connect (struct rdma_cm_id *cmid)
 {
         kib_peer_t              *peer = (kib_peer_t *)cmid->context;
@@ -3047,7 +3057,7 @@ kiblnd_conn_timed_out_locked(kib_conn_t *conn)
                 kiblnd_check_txs_locked(conn, &conn->ibc_active_txs);
 }
 
-void
+static void
 kiblnd_check_conns (int idx)
 {
 	struct list_head  closes = LIST_HEAD_INIT(closes);
@@ -3129,7 +3139,7 @@ kiblnd_check_conns (int idx)
 	}
 }
 
-void
+static void
 kiblnd_disconnect_conn (kib_conn_t *conn)
 {
 	LASSERT (!in_interrupt());
@@ -3268,7 +3278,7 @@ kiblnd_qp_event(struct ib_event *event, void *arg)
         }
 }
 
-void
+static void
 kiblnd_complete (struct ib_wc *wc)
 {
         switch (kiblnd_wreqid2type(wc->wr_id)) {
