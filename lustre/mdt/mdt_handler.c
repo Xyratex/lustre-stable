@@ -6119,10 +6119,6 @@ static struct mdt_handler mdt_llog_ops[] = {
         DEF_LLOG_HNDL(0, ORIGIN_HANDLE_CREATE,      mdt_llog_create),
         DEF_LLOG_HNDL(0, ORIGIN_HANDLE_NEXT_BLOCK,  mdt_llog_next_block),
         DEF_LLOG_HNDL(0, ORIGIN_HANDLE_READ_HEADER, mdt_llog_read_header),
-        DEF_LLOG_HNDL(0, ORIGIN_HANDLE_WRITE_REC,   NULL),
-        DEF_LLOG_HNDL(0, ORIGIN_HANDLE_CLOSE,       NULL),
-        DEF_LLOG_HNDL(0, ORIGIN_CONNECT,            NULL),
-        DEF_LLOG_HNDL(0, CATINFO,                   NULL),
         DEF_LLOG_HNDL(0, ORIGIN_HANDLE_PREV_BLOCK,  mdt_llog_prev_block),
         DEF_LLOG_HNDL(0, ORIGIN_HANDLE_DESTROY,     mdt_llog_destroy),
 };
