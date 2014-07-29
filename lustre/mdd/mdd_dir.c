@@ -98,16 +98,10 @@ __mdd_lookup(const struct lu_env *env, struct md_object *pobj,
 		RETURN(rc);
 
 	if (likely(S_ISDIR(mdd_object_type(mdd_obj)) &&
-		   dt_try_as_dir(env, dir))) {
-
-		rc = dir->do_index_ops->dio_lookup(env, dir,
-						 (struct dt_rec *)fid, key,
-						 mdd_object_capa(env, mdd_obj));
-		if (rc > 0)
-			rc = 0;
-		else if (rc == 0)
-			rc = -ENOENT;
-	} else
+		   dt_try_as_dir(env, dir)))
+		rc = dt_lookup(env, dir, (struct dt_rec *)fid, key,
+			       mdd_object_capa(env, mdd_obj));
+	else
 		rc = -ENOTDIR;
 
 	RETURN(rc);
@@ -552,21 +546,19 @@ static int mdd_link_sanity_check(const struct lu_env *env,
 }
 
 static int __mdd_index_delete_only(const struct lu_env *env, struct mdd_object *pobj,
-                                   const char *name, struct thandle *handle,
-                                   struct lustre_capa *capa)
+				   const char *name, struct thandle *handle,
+				   struct lustre_capa *capa)
 {
-        struct dt_object *next = mdd_object_child(pobj);
-        int               rc;
-        ENTRY;
+	struct dt_object *next = mdd_object_child(pobj);
+	int rc;
+	ENTRY;
 
-        if (dt_try_as_dir(env, next)) {
-                rc = next->do_index_ops->dio_delete(env, next,
-                                                    (struct dt_key *)name,
-                                                    handle, capa);
-        } else
-                rc = -ENOTDIR;
+	if (dt_try_as_dir(env, next))
+		rc = dt_delete(env, next, (struct dt_key *)name, handle, capa);
+	else
+		rc = -ENOTDIR;
 
-        RETURN(rc);
+	RETURN(rc);
 }
 
 static int __mdd_index_insert_only(const struct lu_env *env,
@@ -584,10 +576,9 @@ static int __mdd_index_insert_only(const struct lu_env *env,
 		int ignore_quota;
 
 		ignore_quota = uc ? uc->uc_cap & CFS_CAP_SYS_RESOURCE_MASK : 1;
-		rc = next->do_index_ops->dio_insert(env, next,
-						    (struct dt_rec*)lf,
-						    (const struct dt_key *)name,
-						    handle, capa, ignore_quota);
+		rc = dt_insert(env, next, (struct dt_rec*)lf,
+			       (const struct dt_key *)name, handle, capa,
+			       ignore_quota);
 	} else {
 		rc = -ENOTDIR;
 	}

@@ -93,19 +93,17 @@ static struct dt_key* orph_key_fill_18(const struct lu_env *env,
 }
 
 static inline void mdd_orphan_write_lock(const struct lu_env *env,
-                                    struct mdd_device *mdd)
+					 struct mdd_device *mdd)
 {
-
-        struct dt_object        *dor    = mdd->mdd_orphans;
-        dor->do_ops->do_write_lock(env, dor, MOR_TGT_ORPHAN);
+	struct dt_object *dor = mdd->mdd_orphans;
+	dt_write_lock(env, dor, MOR_TGT_ORPHAN);
 }
 
 static inline void mdd_orphan_write_unlock(const struct lu_env *env,
-                                           struct mdd_device *mdd)
+					   struct mdd_device *mdd)
 {
-
-        struct dt_object        *dor    = mdd->mdd_orphans;
-        dor->do_ops->do_write_unlock(env, dor);
+	struct dt_object *dor = mdd->mdd_orphans;
+	dt_write_unlock(env, dor);
 }
 
 static inline int mdd_orphan_insert_obj(const struct lu_env *env,
@@ -119,10 +117,8 @@ static inline int mdd_orphan_insert_obj(const struct lu_env *env,
         struct dt_key           *key    = orph_key_fill(env, lf, op);
         ENTRY;
 
-        return  dor->do_index_ops->dio_insert(env, dor,
-                                              (struct dt_rec *)lf,
-                                              key, th,
-                                              BYPASS_CAPA, 1);
+        return  dt_insert(env, dor, (struct dt_rec *)lf, key, th,
+			  BYPASS_CAPA, 1);
 }
 
 static inline int mdd_orphan_delete_obj(const struct lu_env *env,
@@ -130,27 +126,25 @@ static inline int mdd_orphan_delete_obj(const struct lu_env *env,
                                         struct dt_key *key,
                                         struct thandle *th)
 {
-        struct dt_object        *dor    = mdd->mdd_orphans;
+	struct dt_object *dor = mdd->mdd_orphans;
 
-        return  dor->do_index_ops->dio_delete(env, dor,
-                                              key, th,
-                                              BYPASS_CAPA);
+	return dt_delete(env, dor, key, th, BYPASS_CAPA);
 }
 
-static inline void mdd_orphan_ref_add(const struct lu_env *env,
-                                 struct mdd_device *mdd,
-                                 struct thandle *th)
+static inline int mdd_orphan_ref_add(const struct lu_env *env,
+				     struct mdd_device *mdd,
+				     struct thandle *th)
 {
-        struct dt_object        *dor    = mdd->mdd_orphans;
-        dor->do_ops->do_ref_add(env, dor, th);
+	struct dt_object *dor = mdd->mdd_orphans;
+	return dt_ref_add(env, dor, th);
 }
 
-static inline void mdd_orphan_ref_del(const struct lu_env *env,
-                                 struct mdd_device *mdd,
-                                 struct thandle *th)
+static inline int mdd_orphan_ref_del(const struct lu_env *env,
+				     struct mdd_device *mdd,
+				     struct thandle *th)
 {
-        struct dt_object        *dor    = mdd->mdd_orphans;
-        dor->do_ops->do_ref_del(env, dor, th);
+	struct dt_object *dor = mdd->mdd_orphans;
+	return dt_ref_del(env, dor, th);
 }
 
 
@@ -224,14 +218,11 @@ static int orph_index_insert(const struct lu_env *env,
          * from here */
         if (!dt_try_as_dir(env, next))
 		GOTO(out, rc = 0);
-        next->do_index_ops->dio_delete(env, next,
-                                       (const struct dt_key *)dotdot,
-                                       th, BYPASS_CAPA);
 
-        next->do_index_ops->dio_insert(env, next,
-                                       (struct dt_rec *)lf_dor,
-                                       (const struct dt_key *)dotdot,
-                                       th, BYPASS_CAPA, 1);
+	dt_delete(env, next, (const struct dt_key *)dotdot, th, BYPASS_CAPA);
+
+        dt_insert(env, next, (struct dt_rec *)lf_dor,
+		  (const struct dt_key *)dotdot, th, BYPASS_CAPA, 1);
 
 out:
         if (rc == 0)
