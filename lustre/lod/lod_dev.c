@@ -150,7 +150,7 @@ static int lod_cleanup_desc_tgts(const struct lu_env *env,
 {
 	struct lu_device  *next;
 	int rc = 0;
-	int i;
+	unsigned int i;
 
 	lod_getref(ltd);
 	if (ltd->ltd_tgts_size <= 0) {
@@ -441,7 +441,8 @@ static int lod_recovery_complete(const struct lu_env *env,
 {
 	struct lod_device   *lod = lu2lod_dev(dev);
 	struct lu_device    *next = &lod->lod_child->dd_lu_dev;
-	int		     i, rc;
+	unsigned int	     i;
+	int		     rc;
 	ENTRY;
 
 	LASSERT(lod->lod_recovery_completed == 0);
@@ -592,7 +593,8 @@ static int lod_sync(const struct lu_env *env, struct dt_device *dev)
 {
 	struct lod_device   *lod = dt2lod_dev(dev);
 	struct lod_ost_desc *ost;
-	int                  rc = 0, i;
+	unsigned int         i;
+	int                  rc = 0;
 	ENTRY;
 
 	lod_getref(&lod->lod_ost_descs);
@@ -975,7 +977,8 @@ static int lod_obd_get_info(const struct lu_env *env, struct obd_export *exp,
 		struct obd_device	*obd = exp->exp_obd;
 		struct lod_device	*d;
 		struct lod_ost_desc	*ost;
-		int			i, rc = 1;
+		unsigned int		i;
+		int			rc = 1;
 
 		if (!obd->obd_set_up || obd->obd_stopping)
 			RETURN(-EAGAIN);

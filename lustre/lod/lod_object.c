@@ -624,7 +624,7 @@ static int lod_cache_parent_striping(const struct lu_env *env,
 	if (rc < 0)
 		GOTO(unlock, rc);
 
-	if (rc < sizeof(struct lov_user_md)) {
+	if (rc < (typeof(rc))sizeof(struct lov_user_md)) {
 		/* don't lookup for non-existing or invalid striping */
 		lp->ldo_def_striping_set = 0;
 		lp->ldo_striping_cached = 1;
@@ -1044,7 +1044,8 @@ static int lod_object_destroy(const struct lu_env *env,
 {
 	struct dt_object  *next = dt_object_child(dt);
 	struct lod_object *lo = lod_dt_obj(dt);
-	int                rc, i;
+	unsigned int       i;
+	int                rc;
 	ENTRY;
 
 	/* destroy local object */
