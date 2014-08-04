@@ -756,7 +756,6 @@ range_be_to_cpu(struct lu_seq_range *dst, const struct lu_seq_range *src)
         dst->lsr_index = be32_to_cpu(src->lsr_index);
         dst->lsr_flags = be32_to_cpu(src->lsr_flags);
 }
-
 /** @} fid */
 
 #endif /* __LUSTRE_FID_H */

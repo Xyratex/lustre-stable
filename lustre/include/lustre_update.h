@@ -54,10 +54,11 @@ static inline unsigned long update_size(struct update *update)
 	return size;
 }
 
-static inline void *object_update_param_get(struct update *update, int index,
-					    int *size)
+static inline void
+*object_update_param_get(const struct update *update, size_t index,
+			 size_t *size)
 {
-	int	i;
+	size_t	i;
 	void	*ptr;
 
 	if (index >= UPDATE_BUF_COUNT)
@@ -78,8 +79,8 @@ static inline void *object_update_param_get(struct update *update, int index,
 
 static inline unsigned long update_buf_size(struct update_buf *buf)
 {
-	unsigned long size;
-	int	   i = 0;
+	unsigned long	size;
+	size_t		i = 0;
 
 	size = cfs_size_round(offsetof(struct update_buf, ub_bufs[0]));
 	for (i = 0; i < buf->ub_count; i++) {
@@ -92,11 +93,12 @@ static inline unsigned long update_buf_size(struct update_buf *buf)
 	return size;
 }
 
-static inline void *update_buf_get(struct update_buf *buf, int index, int *size)
+static inline void
+*update_buf_get(struct update_buf *buf, size_t index, size_t *size)
 {
-	int	count = buf->ub_count;
+	size_t	count = buf->ub_count;
 	void	*ptr;
-	int	i = 0;
+	size_t	i;
 
 	if (index >= count)
 		return NULL;
@@ -112,18 +114,19 @@ static inline void *update_buf_get(struct update_buf *buf, int index, int *size)
 	return ptr;
 }
 
-static inline void update_init_reply_buf(struct update_reply *reply, int count)
+static inline void
+update_init_reply_buf(struct update_reply *reply, size_t count)
 {
 	reply->ur_version = UPDATE_REPLY_V1;
 	reply->ur_count = count;
 }
 
-static inline void *update_get_buf_internal(struct update_reply *reply,
-					    int index, int *size)
+static inline void
+*update_get_buf_internal(struct update_reply *reply, size_t index, size_t *size)
 {
 	char *ptr;
-	int count = reply->ur_count;
-	int i;
+	size_t count = reply->ur_count;
+	size_t i;
 
 	if (index >= count)
 		return NULL;
@@ -141,8 +144,10 @@ static inline void *update_get_buf_internal(struct update_reply *reply,
 	return ptr;
 }
 
-static inline void update_insert_reply(struct update_reply *reply, void *data,
-				       int data_len, int index, int rc)
+static inline void
+update_insert_reply(struct update_reply *reply,
+		    void *data, size_t data_len, size_t index,
+		    int rc)
 {
 	char *ptr;
 
@@ -158,11 +163,11 @@ static inline void update_insert_reply(struct update_reply *reply, void *data,
 	reply->ur_lens[index] = data_len + sizeof(int);
 }
 
-static inline int update_get_reply_buf(struct update_reply *reply, void **buf,
-				       int index)
+static inline int
+update_get_reply_buf(struct update_reply *reply, void **buf, size_t index)
 {
 	char *ptr;
-	int  size = 0;
+	size_t size = 0;
 	int  result;
 
 	ptr = update_get_buf_internal(reply, index, &size);
@@ -181,7 +186,7 @@ static inline int update_get_reply_result(struct update_reply *reply,
 					  void **buf, int index)
 {
 	void *ptr;
-	int  size;
+	size_t size;
 
 	ptr = update_get_buf_internal(reply, index, &size);
 	LASSERT(ptr != NULL && size > sizeof(int));

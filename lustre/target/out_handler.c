@@ -297,7 +297,7 @@ static int out_create(struct tgt_session_info *tsi)
 	struct lu_attr		*attr = &tti->tti_attr;
 	struct lu_fid		*fid = NULL;
 	struct obdo		*wobdo;
-	int			size;
+	size_t			size;
 	int			rc;
 
 	ENTRY;
@@ -315,8 +315,6 @@ static int out_create(struct tgt_session_info *tsi)
 
 	dof->dof_type = dt_mode_to_dft(attr->la_mode);
 	if (S_ISDIR(attr->la_mode)) {
-		int size;
-
 		fid = object_update_param_get(update, 1, &size);
 		if (fid == NULL || size != sizeof(*fid)) {
 			CERROR("%s: invalid fid: rc = %d\n",
@@ -406,7 +404,7 @@ static int out_attr_set(struct tgt_session_info *tsi)
 	struct dt_object        *obj = tti->tti_u.update.tti_dt_object;
 	struct obdo		*lobdo = &tti->tti_u.update.tti_obdo;
 	struct obdo		*wobdo;
-	int			 size;
+	size_t			 size;
 	int			 rc;
 
 	ENTRY;
@@ -671,9 +669,9 @@ static int out_xattr_set(struct tgt_session_info *tsi)
 	char			*name;
 	char			*buf;
 	__u32			*tmp;
-	int			 buf_len = 0;
+	size_t			 buf_len = 0;
 	int			 flag;
-	int			 size = 0;
+	size_t			 size = 0;
 	int			 rc;
 	ENTRY;
 
@@ -696,7 +694,7 @@ static int out_xattr_set(struct tgt_session_info *tsi)
 
 	tmp = object_update_param_get(update, 2, &size);
 	if (tmp == NULL || size != sizeof(*tmp)) {
-		CERROR("%s: emptry or wrong size %d flag: rc = %d\n",
+		CERROR("%s: emptry or wrong size %zd flag: rc = %d\n",
 		       tgt_name(tsi->tsi_tgt), size, -EPROTO);
 		RETURN(err_serious(-EPROTO));
 	}
@@ -966,14 +964,13 @@ static int __out_tx_index_insert(const struct lu_env *env,
 
 static int out_index_insert(struct tgt_session_info *tsi)
 {
-	struct tgt_thread_info	*tti = tgt_th_info(tsi->tsi_env);
-	struct update	  *update = tti->tti_u.update.tti_update;
+	struct tgt_thread_info  *tti = tgt_th_info(tsi->tsi_env);
+	struct update     *update = tti->tti_u.update.tti_update;
 	struct dt_object  *obj = tti->tti_u.update.tti_dt_object;
-	struct lu_fid	  *fid;
-	char		  *name;
-	int		   rc = 0;
-	int		   size;
-
+	struct lu_fid     *fid;
+	char              *name;
+	int                rc = 0;
+	size_t             size;
 	ENTRY;
 
 	name = (char *)object_update_param_get(update, 0, NULL);
