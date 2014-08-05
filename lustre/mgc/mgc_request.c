@@ -845,7 +845,10 @@ static int mgc_fs_cleanup(const struct lu_env *env, struct obd_device *obd)
 	ENTRY;
 
 	LASSERT(cli->cl_mgc_los != NULL);
+	CFS_FAIL_CHECK_RESET(OBD_FAIL_MGC_FAIL_NET,
+			     (OBD_FAIL_MGC_FS_CLEANUP_RACE | CFS_FAIL_ONCE));
 
+	CFS_RACE(OBD_FAIL_MGC_FS_CLEANUP_RACE);
 	mgc_local_llog_fini(env, obd);
 
 	dt_object_put_nocache(env, cli->cl_mgc_configs_dir);
@@ -1131,6 +1134,9 @@ static int mgc_enqueue(struct obd_export *exp, enum ldlm_type type,
 
 	CDEBUG(D_MGC, "Enqueue for %s (res %#llx)\n", cld->cld_logname,
                cld->cld_resid.name[0]);
+
+	if (CFS_FAIL_CHECK(OBD_FAIL_MGC_FAIL_NET))
+		RETURN(-EIO);
 
         /* We need a callback for every lockholder, so don't try to
            ldlm_lock_match (see rev 1.1.2.11.2.47) */
@@ -1931,6 +1937,7 @@ static int mgc_process_cfg_log(struct obd_device *mgc,
 	    cli->cl_mgc_configs_dir != NULL &&
 	    lu2dt_dev(cli->cl_mgc_configs_dir->do_lu.lo_dev) ==
 	    lsi->lsi_dt_dev) {
+		CFS_RACE(OBD_FAIL_MGC_FS_CLEANUP_RACE);
 		if (!local_only && !lsi->lsi_dt_dev->dd_rdonly)
 			/* Only try to copy log if we have the lock. */
 			rc = mgc_llog_local_copy(env, mgc, ctxt, lctxt,
