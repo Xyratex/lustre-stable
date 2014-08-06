@@ -1843,6 +1843,7 @@ static struct ptlrpc_request *target_next_replay_req(struct obd_device *obd)
 	 *  (see more details in handle_recovery_req).
 	 */
 	CFS_FAIL_TIMEOUT_MS(OBD_FAIL_TGT_REPLAY_DELAY, 300);
+	CFS_FAIL_TIMEOUT(OBD_FAIL_TGT_REPLAY_DELAY2, cfs_fail_val);
 
         if (target_recovery_overseer(obd, check_for_next_transno,
                                      exp_req_replay_healthy)) {
