@@ -29,3 +29,4 @@ CLIENT_LOADS=($LOADS)
 SRUN=${SRUN:-$(which srun 2>/dev/null || true)}
 SRUN_PARTITION=${SRUN_PARTITION:-""}
 SRUN_OPTIONS=${SRUN_OPTIONS:-"-W 1800 -l -O"}
+MPILIB=${MPILIB:-"openmpi"}

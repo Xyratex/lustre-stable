@@ -49,7 +49,7 @@ test_3a() {
     # a half of clients by default
     increment=${INCREMENT:-$(( CLIENTCOUNT / 2 ))}
 
-    machinefile=${MACHINEFILE:-$TMP/$TESTSUITE.machines}
+    MACHINEFILE=${MACHINEFILE:-$TMP/$TESTSUITE.machines}
     local LOG=$TMP/${TESTSUITE}_$tfile
 
     local var=${SINGLEMDS}_svc
@@ -72,19 +72,15 @@ test_3a() {
     local num=$increment
 
 	while [ $num -le $CLIENTCOUNT ]; do
-		list=$(comma_list ${nodes[@]:0:$num})
-
-		generate_machine_file $list $machinefile ||
-			{ error "can not generate machinefile"; exit 1; }
+		NODES_TO_USE=$(comma_list ${nodes[@]:0:$num})
 
 		for i in $(seq $iters); do
-			mdsrate_cleanup $num $machinefile $nfiles $dir 'f%%d' \
+			mdsrate_cleanup $num $nfiles $dir 'f%%d' \
 				--ignore
 
 			COMMAND="${MDSRATE} --create --nfiles $nfiles --dir
 				 $dir --filefmt 'f%%d'"
-			mpi_run ${MACHINEFILE_OPTION} $machinefile \
-				-np $((num * nthreads)) ${COMMAND} | tee ${LOG}&
+			mpi_run "-np $((num * nthreads))" ${COMMAND} | tee ${LOG}&
 
 			pid=$!
 			echo "pid=$pid"
@@ -112,7 +108,7 @@ test_3a() {
 		num=$((num + increment))
 	done
 
-    mdsrate_cleanup $num $machinefile $nfiles $dir 'f%%d' --ignore
+    mdsrate_cleanup $num $nfiles $dir 'f%%d' --ignore
 
     i=0
     while [ $i -lt ${#res[@]} ]; do

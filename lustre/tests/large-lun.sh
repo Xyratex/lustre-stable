@@ -72,9 +72,6 @@ cleanup_dirs() {
 
 # Run mdsrate.
 run_mdsrate() {
-	generate_machine_file $NODES_TO_USE $MACHINEFILE ||
-		error "can not generate machinefile"
-
 	# set the default stripe count for files in this test to one
 	local testdir=$MOUNT/mdsrate
 	mkdir -p $testdir
@@ -93,8 +90,7 @@ run_mdsrate() {
 		--nfiles $num_files --filefmt 'file%%d'"
 
 	echo "# $command"
-	mpi_run -machinefile $MACHINEFILE \
-		-np $((NUM_CLIENTS * THREADS_PER_CLIENT)) $command
+	mpi_run "-np $((NUM_CLIENTS * THREADS_PER_CLIENT))" $command
 
 	if [ ${PIPESTATUS[0]} != 0 ]; then
 		error "mdsrate create failed"

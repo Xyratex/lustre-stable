@@ -172,9 +172,19 @@ signaled() {
 
 mpi_run () {
     local mpirun="$MPIRUN $MPIRUN_OPTIONS"
-    local command="$mpirun $@"
+    local options=$1
+    shift
+    local cmd=$@
     local mpilog=$TMP/mpi.log
     local rc
+
+    if [ "$MPILIB" = "openmpi" ]; then
+	generate_machine_file $NODES_TO_USE $MACHINEFILE ||
+		error "can not generate machinefile"
+	options="${MACHINEFILE_OPTION} ${MACHINEFILE} $options"
+    fi
+
+    command="$mpirun $options $cmd"
 
     if [ -n "$MPI_USER" -a "$MPI_USER" != root -a -n "$mpirun" ]; then
         echo "+ chmod 0777 $MOUNT"
@@ -362,8 +372,7 @@ run_metabench() {
 			-n $((num_clients * mbench_THREADS)) \
 			-p $SRUN_PARTITION -- $cmd
 	else
-		mpi_run ${MACHINEFILE_OPTION} ${MACHINEFILE} \
-			-np $((num_clients * $mbench_THREADS)) $cmd
+		mpi_run "-np $((num_clients * $mbench_THREADS))" $cmd
 	fi
 
     local rc=$?
@@ -410,8 +419,7 @@ run_simul() {
 			-n $((num_clients * simul_THREADS)) -p $SRUN_PARTITION \
 			-- $cmd
 	else
-		mpi_run ${MACHINEFILE_OPTION} ${MACHINEFILE} \
-			-np $((num_clients * simul_THREADS)) $cmd
+		mpi_run "-np $((num_clients * simul_THREADS))" $cmd
 	fi
 
     local rc=$?
@@ -466,8 +474,7 @@ run_mdtest() {
 			-n $((num_clients * mdtest_THREADS)) \
 			-p $SRUN_PARTITION -- $cmd
 	else
-		mpi_run ${MACHINEFILE_OPTION} ${MACHINEFILE} \
-			-np $((num_clients * mdtest_THREADS)) $cmd
+		mpi_run "-np $((num_clients * mdtest_THREADS))" $cmd
 	fi
 
     local rc=$?
@@ -600,8 +607,7 @@ run_ior() {
 			-n $((num_clients * ior_THREADS)) -p $SRUN_PARTITION \
 			-- $cmd
 	else
-		mpi_run ${MACHINEFILE_OPTION} ${MACHINEFILE} \
-			-np $((num_clients * $ior_THREADS)) $cmd
+		mpi_run "-np $((num_clients * $ior_THREADS))" $cmd
 	fi
 
     local rc=$?
@@ -654,8 +660,7 @@ run_mib() {
 			-n $((num_clients * mib_THREADS)) -p $SRUN_PARTITION \
 			-- $cmd
 	else
-		mpi_run ${MACHINEFILE_OPTION} ${MACHINEFILE} \
-			-np $((num_clients * mib_THREADS)) $cmd
+		mpi_run "-np $((num_clients * mib_THREADS))" $cmd
 	fi
 
     local rc=$?
@@ -696,8 +701,7 @@ run_cascading_rw() {
     local cmd="$CASC_RW -g -d $testdir -n $casc_REP"
 
 	echo "+ $cmd"
-	mpi_run ${MACHINEFILE_OPTION} ${MACHINEFILE} \
-		-np $((num_clients * $casc_THREADS)) $cmd
+	mpi_run "-np $((num_clients * $casc_THREADS))" $cmd
 
     local rc=$?
     if [ $rc != 0 ] ; then
@@ -738,8 +742,7 @@ run_write_append_truncate() {
     local cmd="write_append_truncate -n $write_REP $file"
 
 	echo "+ $cmd"
-	mpi_run ${MACHINEFILE_OPTION} ${MACHINEFILE} \
-		-np $((num_clients * $write_THREADS)) $cmd
+	mpi_run "-np $((num_clients * $write_THREADS))" $cmd
 
     local rc=$?
     if [ $rc != 0 ] ; then
@@ -778,8 +781,7 @@ run_write_disjoint() {
     local cmd="$WRITE_DISJOINT -f $testdir/file -n $wdisjoint_REP"
 
 	echo "+ $cmd"
-	mpi_run ${MACHINEFILE_OPTION} ${MACHINEFILE} \
-		-np $((num_clients * $wdisjoint_THREADS)) $cmd
+	mpi_run "-np $((num_clients * $wdisjoint_THREADS))" $cmd
 
     local rc=$?
     if [ $rc != 0 ] ; then
@@ -820,8 +822,7 @@ run_parallel_grouplock() {
 		local cmd="$PARALLEL_GROUPLOCK -g -v -d $testdir $subtest"
 		echo "+ $cmd"
 
-		mpi_run ${MACHINEFILE_OPTION} ${MACHINEFILE} \
-			-np $parallel_grouplock_MINTASKS $cmd
+		mpi_run "-np $parallel_grouplock_MINTASKS" $cmd
 		local rc=$?
 		if [ $rc != 0 ] ; then
 			error_noexit "parallel_grouplock subtests $subtest " \
@@ -876,7 +877,7 @@ run_statahead () {
     # cleanup only $statahead_NUMFILES number of files
     # ignore the other files created by someone else
     [ -d $testdir ] &&
-        mdsrate_cleanup $((num_clients * 32)) $MACHINEFILE \
+        mdsrate_cleanup $((num_clients * 32)) \
             $statahead_NUMFILES $testdir 'f%%d' --ignore
 
     mkdir -p $testdir
@@ -897,8 +898,7 @@ run_statahead () {
     local cmd="$cmd1 $cmd2"
     echo "+ $cmd"
 
-	mpi_run ${MACHINEFILE_OPTION} ${MACHINEFILE} \
-		-np $((num_clients * 32)) $cmd
+	mpi_run "-np $((num_clients * 32))" $cmd
 
     local rc=$?
     if [ $rc != 0 ] ; then
@@ -921,7 +921,7 @@ run_statahead () {
 
     do_rpc_nodes $clients do_ls $mntpt_root $num_mntpts $dir
 
-    mdsrate_cleanup $((num_clients * 32)) $MACHINEFILE \
+    mdsrate_cleanup $((num_clients * 32)) \
         $num_files $testdir 'f%%d' --ignore
 
     # use rm instead of rmdir because of
