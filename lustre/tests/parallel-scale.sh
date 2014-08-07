@@ -25,8 +25,7 @@ fi
 # common setup
 MACHINEFILE=${MACHINEFILE:-$TMP/$(basename $0 .sh).machines}
 clients=${CLIENTS:-$HOSTNAME}
-generate_machine_file $clients $MACHINEFILE ||
-    error "Failed to generate machine file"
+NODES_TO_USE=$clients
 num_clients=$(get_node_count ${clients//,/ })
 
 # compilbench

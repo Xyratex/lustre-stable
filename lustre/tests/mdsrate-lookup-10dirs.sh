@@ -48,8 +48,6 @@ if [ $IFree -lt $((NUM_FILES * NUM_DIRS)) ]; then
     NUM_FILES=$((IFree / NUM_DIRS))
 fi
 
-generate_machine_file $NODES_TO_USE $MACHINEFILE || error "can not generate machinefile"
-
 DIRfmt="${BASEDIR}/lookup-%d"
 
 #
@@ -59,7 +57,7 @@ DIRfmt="${BASEDIR}/lookup-%d"
 mdsrate_cleanup_all() {
 	local i
 	for i in $(seq 0 $NUM_DIRS); do
-		mdsrate_cleanup $NUM_CLIENTS $MACHINEFILE $NUM_FILES \
+		mdsrate_cleanup $NUM_CLIENTS $NUM_FILES \
 				$BASEDIR/lookup-$i 'f%%d' --ignore
 	done
 }
@@ -80,8 +78,7 @@ else
 	# This is just a test preparation, does not matter how many threads we
 	# use for files creation; we just should be aware that NUM_DIRS is less
 	# than or equal to the number of threads np
-	mpi_run ${MACHINEFILE_OPTION} ${MACHINEFILE} -np ${NUM_DIRS} \
-		${COMMAND} 2>&1
+	mpi_run "-np ${NUM_DIRS}" ${COMMAND} 2>&1
 
 	# No lookup if error occurs on file creation, abort.
 	if [ ${PIPESTATUS[0]} != 0 ]; then
@@ -101,8 +98,7 @@ if [ -n "$NOSINGLE" ]; then
 else
 	log "===== $0 ### 1 NODE LOOKUPS ###"
 	echo "+" ${COMMAND}
-	mpi_run ${MACHINEFILE_OPTION} ${MACHINEFILE} -np 1 ${COMMAND} |
-		tee ${LOG}
+	mpi_run "-np 1" ${COMMAND} | tee ${LOG}
 
 	if [ ${PIPESTATUS[0]} != 0 ]; then
 		[ -f $LOG ] && sed -e "s/^/log: /" $LOG
@@ -119,8 +115,7 @@ if [ -n "$NOMULTI" ]; then
 else
 	log "===== $0 ### ${NUM_CLIENTS} NODES LOOKUPS ###"
 	echo "+" ${COMMAND}
-	mpi_run ${MACHINEFILE_OPTION} ${MACHINEFILE} -np ${NUM_CLIENTS} \
-		${COMMAND} | tee ${LOG}
+	mpi_run "-np ${NUM_CLIENTS}" ${COMMAND} | tee ${LOG}
 
 	if [ ${PIPESTATUS[0]} != 0 ]; then
 		[ -f $LOG ] && sed -e "s/^/log: /" $LOG

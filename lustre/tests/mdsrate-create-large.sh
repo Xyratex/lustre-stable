@@ -42,8 +42,6 @@ if [ $IFree -lt $NUM_FILES ]; then
     NUM_FILES=$IFree
 fi
 
-generate_machine_file $NODES_TO_USE $MACHINEFILE || error "can not generate machinefile"
-
 # Make sure we start with a clean slate
 rm -f ${LOG}
 
@@ -51,20 +49,19 @@ if [ -n "$NOSINGLE" ]; then
     echo "NO Test for creates for a single client."
 else
     # We can use np = $NUM_CLIENTS to speed up the cleanup
-    mdsrate_cleanup $NUM_CLIENTS $MACHINEFILE $NUM_FILES $TESTDIR_SINGLE 'f%%d' --ignore
+    mdsrate_cleanup $NUM_CLIENTS $NUM_FILES $TESTDIR_SINGLE 'f%%d' --ignore
 
     log "===== $0 ### 1 NODE CREATE ###"
 
 	COMMAND="${MDSRATE} ${MDSRATE_DEBUG} --create --time ${TIME_PERIOD}
 		--nfiles ${NUM_FILES} --dir ${TESTDIR_SINGLE} --filefmt 'f%%d'"
 	echo "+ ${COMMAND}"
-	mpi_run ${MACHINEFILE_OPTION} ${MACHINEFILE} -np 1 ${COMMAND} |
-		tee ${LOG}
+	mpi_run "-np 1" ${COMMAND} | tee ${LOG}
 
 	if [ ${PIPESTATUS[0]} != 0 ]; then
 		[ -f $LOG ] && sed -e "s/^/log: /" $LOG
 		error_noexit "mdsrate create on single client failed, aborting"
-		mdsrate_cleanup $NUM_CLIENTS $MACHINEFILE $NUM_FILES \
+		mdsrate_cleanup $NUM_CLIENTS $NUM_FILES \
 				$TESTDIR_SINGLE 'f%%d' --ignore
 		exit 1
 	fi
@@ -74,7 +71,7 @@ else
     COMMAND="${MDSRATE} ${MDSRATE_DEBUG} --unlink
                 --nfiles ${NUM_FILES} --dir ${TESTDIR_SINGLE} --filefmt 'f%%d'"
     echo "+ ${COMMAND}"
-    mpi_run ${MACHINEFILE_OPTION} ${MACHINEFILE} -np 1 ${COMMAND} | tee ${LOG}
+    mpi_run "-np 1" ${COMMAND} | tee ${LOG}
 
     if [ ${PIPESTATUS[0]} != 0 ]; then
 	[ -f $LOG ] && sed -e "s/^/log: /" $LOG
@@ -93,20 +90,19 @@ fi
 if [ -n "$NOMULTI" ]; then
     echo "NO test for create on multiple nodes."
 else
-    mdsrate_cleanup $NUM_CLIENTS $MACHINEFILE $NUM_FILES $TESTDIR_MULTI 'f%%d' --ignore
+    mdsrate_cleanup $NUM_CLIENTS $NUM_FILES $TESTDIR_MULTI 'f%%d' --ignore
 
     log "===== $0 ### $NUM_CLIENTS NODES CREATE ###"
 
 	COMMAND="${MDSRATE} ${MDSRATE_DEBUG} --create --time ${TIME_PERIOD}
 		--nfiles $NUM_FILES --dir ${TESTDIR_MULTI} --filefmt 'f%%d'"
 	echo "+ ${COMMAND}"
-	mpi_run ${MACHINEFILE_OPTION} ${MACHINEFILE} -np ${NUM_CLIENTS} \
-		${COMMAND} | tee ${LOG}
+	mpi_run "-np ${NUM_CLIENTS}" ${COMMAND} | tee ${LOG}
 
 	if [ ${PIPESTATUS[0]} != 0 ]; then
 		[ -f $LOG ] && sed -e "s/^/log: /" $LOG
 		error_noexit "mdsrate create on multiple nodes failed, aborting"
-		mdsrate_cleanup $NUM_CLIENTS $MACHINEFILE $NUM_FILES \
+		mdsrate_cleanup $NUM_CLIENTS $NUM_FILES \
 				$TESTDIR_MULTI 'f%%d' --ignore
 		exit 1
 	fi
@@ -116,8 +112,7 @@ else
 	COMMAND="${MDSRATE} ${MDSRATE_DEBUG} --unlink
 		--nfiles ${NUM_FILES} --dir ${TESTDIR_MULTI} --filefmt 'f%%d'"
 	echo "+ ${COMMAND}"
-	mpi_run ${MACHINEFILE_OPTION} ${MACHINEFILE} -np ${NUM_CLIENTS} \
-		${COMMAND} | tee ${LOG}
+	mpi_run "-np ${NUM_CLIENTS}" ${COMMAND} | tee ${LOG}
 
     if [ ${PIPESTATUS[0]} != 0 ]; then
 	[ -f $LOG ] && sed -e "s/^/log: /" $LOG
