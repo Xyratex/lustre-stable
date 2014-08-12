@@ -1247,8 +1247,7 @@ static int lmv_choose_mds(struct lmv_obd *lmv, struct md_op_data *op_data,
  * This is _inode_ placement policy function (not name).
  */
 static int lmv_placement_policy(struct obd_device *obd,
-                                struct md_op_data *op_data,
-                                mdsno_t *mds)
+				struct md_op_data *op_data, u32 *mds)
 {
 	struct lmv_obd          *lmv = &obd->u.lmv;
 	ENTRY;
@@ -1289,8 +1288,7 @@ static int lmv_placement_policy(struct obd_device *obd,
 	RETURN(0);
 }
 
-int __lmv_fid_alloc(struct lmv_obd *lmv, struct lu_fid *fid,
-		    mdsno_t mds)
+int __lmv_fid_alloc(struct lmv_obd *lmv, struct lu_fid *fid, u32 mds)
 {
 	struct lmv_tgt_desc	*tgt;
 	int			 rc;
@@ -1329,7 +1327,7 @@ int lmv_fid_alloc(struct obd_export *exp, struct lu_fid *fid,
 {
         struct obd_device     *obd = class_exp2obd(exp);
         struct lmv_obd        *lmv = &obd->u.lmv;
-        mdsno_t                mds = 0;
+	u32		       mds = 0;
         int                    rc;
         ENTRY;
 

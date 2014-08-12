@@ -118,7 +118,7 @@ struct lu_object *lod_object_alloc(const struct lu_env *env,
 	struct lod_object	*lod_obj;
 	struct lu_object	*lu_obj;
 	const struct lu_fid	*fid = &hdr->loh_fid;
-	mdsno_t			mds;
+	u32			mds;
 	int			rc = 0;
 	ENTRY;
 

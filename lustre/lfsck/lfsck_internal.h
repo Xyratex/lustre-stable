@@ -553,7 +553,7 @@ static inline void lfsck_object_put(const struct lu_env *env,
 	lu_object_put(env, &obj->do_lu);
 }
 
-static inline mdsno_t lfsck_dev_idx(struct dt_device *dev)
+static inline u32 lfsck_dev_idx(struct dt_device *dev)
 {
 	return dev->dd_lu_dev.ld_site->ld_seq_site->ss_node_id;
 }

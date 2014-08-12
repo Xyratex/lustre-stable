@@ -222,7 +222,7 @@ struct lod_object {
 	__u32		   ldo_def_stripe_size;
 	__u16		   ldo_def_stripenr;
 	__u16		   ldo_def_stripe_offset;
-	mdsno_t		   ldo_mds_num;
+	u64		   ldo_mds_num;
 };
 
 
@@ -322,7 +322,7 @@ static inline struct lod_thread_info *lod_env_info(const struct lu_env *env)
 
 /* lod_dev.c */
 int lod_fld_lookup(const struct lu_env *env, struct lod_device *lod,
-		   const struct lu_fid *fid, mdsno_t *tgt, int flags);
+		   const struct lu_fid *fid, __u32 *tgt, int flags);
 /* lod_lov.c */
 void lod_getref(struct lod_tgt_descs *ltd);
 void lod_putref(struct lod_device *lod, struct lod_tgt_descs *ltd);
