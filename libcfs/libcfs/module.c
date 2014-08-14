@@ -40,6 +40,7 @@
 #include <libcfs/libcfs_crypto.h>
 #include <lnet/lib-lnet.h>
 #include <lnet/lnet.h>
+#include <lnet/nidstr.h>
 #include "tracefile.h"
 
 void

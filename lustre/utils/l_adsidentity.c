@@ -21,6 +21,7 @@
 
 #include <lustre/lustre_user.h>
 #include <lustre/lustre_idl.h>
+#include <lnet/nidstr.h>
 
 #define PERM_PATHNAME      "/etc/lustre/perm.conf"
 #define ADSCONF_PATHNAME   "/etc/lustre/ads.conf"
