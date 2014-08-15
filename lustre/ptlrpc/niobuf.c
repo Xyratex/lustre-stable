@@ -556,6 +556,14 @@ int ptlrpc_send_reply(struct ptlrpc_request *req, int flags)
         LASSERT (rs->rs_cb_id.cbid_fn == reply_out_callback);
         LASSERT (rs->rs_cb_id.cbid_arg == rs);
 
+	if (req->rq_export && req->rq_export->exp_imp_reverse &&
+		(req->rq_export->exp_imp_reverse->imp_state ==
+						LUSTRE_IMP_CLOSED)) {
+		DEBUG_REQ(D_RPCTRACE, req, "IMP_CLOSED ");
+		req->rq_status = -EIO;
+		return -EIO;
+	}
+
         /* There may be no rq_export during failover */
 
         if (unlikely(req->rq_export && req->rq_export->exp_obd &&

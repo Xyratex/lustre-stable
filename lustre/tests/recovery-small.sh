@@ -155,8 +155,11 @@ test_10a() {
 
 	do_facet client "stat $DIR > /dev/null"  ||
 		error "failed to stat $DIR: $?"
-	drop_bl_callback "chmod 0777 $DIR" ||
-		error "failed to chmod $DIR: $?"
+	#Client must be evicted due to a lock blocking callback time out.
+	#After eviction import state becomes LUSTRE_IMP_CLOSED and all
+	#replyies will be dropped. So it is OK when chmod failes.
+	drop_bl_callback "chmod 0777 $DIR" &&
+		error "chmod not failed $DIR: $?"
 
 	# let the client reconnect
 	client_reconnect
