@@ -2050,7 +2050,6 @@ int __init mgc_init(void)
 				   LUSTRE_MGC_NAME, NULL);
 }
 
-#ifdef __KERNEL__
 static void /*__exit*/ mgc_exit(void)
 {
         class_unregister_type(LUSTRE_MGC_NAME);
@@ -2062,4 +2061,3 @@ MODULE_LICENSE("GPL");
 
 module_init(mgc_init);
 module_exit(mgc_exit);
-#endif

@@ -48,7 +48,6 @@
 #ifndef _MDT_INTERNAL_H
 #define _MDT_INTERNAL_H
 
-#if defined(__KERNEL__)
 
 #include <libcfs/lucache.h>
 #include <lustre_net.h>
@@ -1103,5 +1102,4 @@ static inline char *mdt_obd_name(struct mdt_device *mdt)
 int mds_mod_init(void);
 void mds_mod_exit(void);
 
-#endif /* __KERNEL__ */
 #endif /* _MDT_H */

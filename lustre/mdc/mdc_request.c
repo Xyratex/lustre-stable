@@ -36,15 +36,11 @@
 
 #define DEBUG_SUBSYSTEM S_MDC
 
-#ifdef __KERNEL__
-# include <linux/module.h>
-# include <linux/pagemap.h>
-# include <linux/miscdevice.h>
-# include <linux/init.h>
-# include <linux/utsname.h>
-#else
-# include <liblustre.h>
-#endif
+#include <linux/module.h>
+#include <linux/pagemap.h>
+#include <linux/miscdevice.h>
+#include <linux/init.h>
+#include <linux/utsname.h>
 
 #include <lustre_acl.h>
 #include <lustre_ioctl.h>
@@ -2722,7 +2718,6 @@ int __init mdc_init(void)
 				   LUSTRE_MDC_NAME, NULL);
 }
 
-#ifdef __KERNEL__
 static void /*__exit*/ mdc_exit(void)
 {
         class_unregister_type(LUSTRE_MDC_NAME);
@@ -2734,4 +2729,3 @@ MODULE_LICENSE("GPL");
 
 module_init(mdc_init);
 module_exit(mdc_exit);
-#endif

@@ -39,15 +39,8 @@
  */
 
 #define DEBUG_SUBSYSTEM S_CLASS
-#ifdef __KERNEL__
 #include <obd_class.h>
 #include <linux/string.h>
-#else
-#include <liblustre.h>
-#include <string.h>
-#include <obd_class.h>
-#include <obd.h>
-#endif
 #include <lustre_ioctl.h>
 #include <lustre_log.h>
 #include <lprocfs_status.h>
@@ -1274,7 +1267,6 @@ EXPORT_SYMBOL(class_process_config);
 int class_process_proc_param(char *prefix, struct lprocfs_vars *lvars,
                              struct lustre_cfg *lcfg, void *data)
 {
-#ifdef __KERNEL__
         struct lprocfs_vars *var;
         char *key, *sval;
         int i, keylen, vallen;
@@ -1352,19 +1344,13 @@ int class_process_proc_param(char *prefix, struct lprocfs_vars *lvars,
         if (!rc && skip)
                 rc = skip;
         RETURN(rc);
-#else
-        CDEBUG(D_CONFIG, "liblustre can't process params.\n");
-        /* Don't throw config error */
-        RETURN(0);
-#endif
 }
 EXPORT_SYMBOL(class_process_proc_param);
-#endif
+#endif /* !HAVE_ONLY_PROCFS_SEQ */
 
 int class_process_proc_seq_param(char *prefix, struct lprocfs_seq_vars *lvars,
 				 struct lustre_cfg *lcfg, void *data)
 {
-#ifdef __KERNEL__
 	struct lprocfs_seq_vars *var;
 	struct file fakefile;
 	struct seq_file fake_seqfile;
@@ -1447,19 +1433,10 @@ int class_process_proc_seq_param(char *prefix, struct lprocfs_seq_vars *lvars,
 	if (!rc && skip)
 		rc = skip;
 	RETURN(rc);
-#else
-	CDEBUG(D_CONFIG, "liblustre can't process params.\n");
-	/* Don't throw config error */
-	RETURN(0);
-#endif
 }
 EXPORT_SYMBOL(class_process_proc_seq_param);
 
-#ifdef __KERNEL__
 extern int lustre_check_exclusion(struct super_block *sb, char *svname);
-#else
-#define lustre_check_exclusion(a,b)  0
-#endif
 
 /*
  * Supplemental functions for config logs, it allocates lustre_cfg
@@ -1600,7 +1577,7 @@ int class_config_llog_handler(const struct lu_env *env,
                         }
                 }
 
-#if defined(HAVE_SERVER_SUPPORT) && defined(__KERNEL__)
+#ifdef HAVE_SERVER_SUPPORT
 		/* newer MDS replaces LOV/OSC with LOD/OSP */
 		{
 			char *typename = lustre_cfg_string(lcfg, 1);
@@ -1624,7 +1601,7 @@ int class_config_llog_handler(const struct lu_env *env,
 				strcpy(typename, LUSTRE_OSP_NAME);
 			}
 		}
-#endif
+#endif /* HAVE_SERVER_SUPPORT */
 
 		if (clli->cfg_flags & CFG_F_EXCLUDE) {
 			CDEBUG(D_CONFIG, "cmd: %x marked EXCLUDED\n",

@@ -42,14 +42,9 @@
 
 #define DEBUG_SUBSYSTEM S_FLD
 
-#ifdef __KERNEL__
-# include <libcfs/libcfs.h>
-# include <linux/module.h>
-# include <linux/math64.h>
-#else /* __KERNEL__ */
-# include <liblustre.h>
-# include <libcfs/list.h>
-#endif
+#include <libcfs/libcfs.h>
+#include <linux/module.h>
+#include <linux/math64.h>
 
 #include <obd.h>
 #include <obd_class.h>
@@ -326,7 +321,7 @@ void fld_client_proc_fini(struct lu_client_fld *fld)
         }
         EXIT;
 }
-#else
+#else /* LPROCFS */
 static int fld_client_proc_init(struct lu_client_fld *fld)
 {
         return 0;
@@ -336,7 +331,7 @@ void fld_client_proc_fini(struct lu_client_fld *fld)
 {
         return;
 }
-#endif
+#endif /* !LPROCFS */
 
 EXPORT_SYMBOL(fld_client_proc_fini);
 
@@ -512,12 +507,12 @@ int fld_client_lookup(struct lu_client_fld *fld, u64 seq, u32 *mds,
 	res.lsr_start = seq;
 	fld_range_set_type(&res, flags);
 
-#if defined(__KERNEL__) && defined(HAVE_SERVER_SUPPORT)
+#ifdef HAVE_SERVER_SUPPORT
 	if (target->ft_srv != NULL) {
 		LASSERT(env != NULL);
 		rc = fld_server_lookup(env, target->ft_srv, seq, &res);
 	} else
-#endif
+#endif /* HAVE_SERVER_SUPPORT */
 	{
 		rc = fld_client_rpc(target->ft_exp, &res, FLD_LOOKUP);
 	}
@@ -537,7 +532,6 @@ void fld_client_flush(struct lu_client_fld *fld)
 }
 EXPORT_SYMBOL(fld_client_flush);
 
-#ifdef __KERNEL__
 
 struct proc_dir_entry *fld_type_proc_dir;
 
@@ -551,7 +545,7 @@ static int __init fld_mod_init(void)
 
 #ifdef HAVE_SERVER_SUPPORT
 	fld_server_mod_init();
-#endif
+#endif /* HAVE_SERVER_SUPPORT */
 
 	return 0;
 }
@@ -560,7 +554,7 @@ static void __exit fld_mod_exit(void)
 {
 #ifdef HAVE_SERVER_SUPPORT
 	fld_server_mod_exit();
-#endif
+#endif /* HAVE_SERVER_SUPPORT */
 
 	if (fld_type_proc_dir != NULL && !IS_ERR(fld_type_proc_dir)) {
 		lprocfs_remove(&fld_type_proc_dir);
@@ -573,4 +567,3 @@ MODULE_DESCRIPTION("Lustre FLD");
 MODULE_LICENSE("GPL");
 
 cfs_module(mdd, LUSTRE_VERSION_STRING, fld_mod_init, fld_mod_exit);
-#endif /* __KERNEL__ */
