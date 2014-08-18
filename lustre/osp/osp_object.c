@@ -27,15 +27,63 @@
  * Copyright (c) 2007, 2010, Oracle and/or its affiliates. All rights reserved.
  * Use is subject to license terms.
  *
- * Copyright (c) 2012, 2013, Intel Corporation.
+ * Copyright (c) 2014, Intel Corporation.
  */
 /*
- * This file is part of Lustre, http://www.lustre.org/
- * Lustre is a trademark of Sun Microsystems, Inc.
- *
  * lustre/osp/osp_object.c
  *
- * Lustre OST Proxy Device
+ * Lustre OST Proxy Device (OSP) is the agent on the local MDT for the OST
+ * or remote MDT.
+ *
+ * OSP object attributes cache
+ * ---------------------------
+ * OSP object is the stub of the remote OST-object or MDT-object. Both the
+ * attribute and the extended attributes are stored on the peer side remotely.
+ * It is inefficient to send RPC to peer to fetch those attributes when every
+ * get_attr()/get_xattr() called. For a large system, the LFSCK synchronous
+ * mode scanning is prohibitively inefficient.
+ *
+ * So the OSP maintains the OSP object attributes cache to cache some
+ * attributes on the local MDT. The cache is organized against the OSP
+ * object as follows:
+ *
+ * struct osp_xattr_entry {
+ *	struct list_head	 oxe_list;
+ *	atomic_t		 oxe_ref;
+ *	void			*oxe_value;
+ *	int			 oxe_buflen;
+ *	int			 oxe_namelen;
+ *	int			 oxe_vallen;
+ *	unsigned int		 oxe_exist:1,
+ *				 oxe_ready:1;
+ *	char			 oxe_buf[0];
+ * };
+ *
+ * struct osp_object_attr {
+ *	struct lu_attr		ooa_attr;
+ *	struct list_head	ooa_xattr_list;
+ * };
+ *
+ * struct osp_object {
+ *	...
+ *	struct osp_object_attr *opo_ooa;
+ *	spinlock_t		opo_lock;
+ *	...
+ * };
+ *
+ * The basic attributes, such as owner/mode/flags, are stored in the
+ * osp_object_attr::ooa_attr. The extended attributes will be stored
+ * as osp_xattr_entry. Every extended attribute has an independent
+ * osp_xattr_entry, and all the osp_xattr_entry are linked into the
+ * osp_object_attr::ooa_xattr_list. The OSP object attributes cache
+ * is protected by the osp_object::opo_lock.
+ *
+ * Not all OSP objects have an attributes cache because maintaining
+ * the cache requires some resources. Currently, the OSP object
+ * attributes cache will be initialized when the attributes or the
+ * extended attributes are pre-fetched via osp_declare_attr_get()
+ * or osp_declare_xattr_get(). That is usually for LFSCK purpose,
+ * but it also can be shared by others.
  *
  * Author: Alex Zhuravlev <alexey.zhuravlev@intel.com>
  * Author: Mikhail Pershin <mike.tappro@intel.com>
@@ -45,6 +93,16 @@
 
 #include "osp_internal.h"
 
+/**
+ * Assign FID to the OST object.
+ *
+ * This function will assign the FID to the OST object of a striped file.
+ *
+ * \param[in] env	pointer to the thread context
+ * \param[in] d		pointer to the OSP device
+ * \param[in] o		pointer to the OSP object that the FID will be
+ *			assigned to
+ */
 static void osp_object_assign_fid(const struct lu_env *env,
 				 struct osp_device *d, struct osp_object *o)
 {
@@ -59,6 +117,46 @@ static void osp_object_assign_fid(const struct lu_env *env,
 	lu_object_assign_fid(env, &o->opo_obj.do_lu, &osi->osi_fid);
 }
 
+/**
+ * Implement OSP layer dt_object_operations::do_declare_attr_set() interface.
+ * XXX: NOT prepare set_{attr,xattr} RPC for remote transaction.
+ *
+ * According to our current transaction/dt_object_lock framework (to make
+ * the cross-MDTs modification for DNE1 to be workable), the transaction
+ * sponsor will start the transaction firstly, then try to acquire related
+ * dt_object_lock if needed. Under such rules, if we want to prepare the
+ * set_{attr,xattr} RPC in the RPC declare phase, then related attr/xattr
+ * should be known without dt_object_lock. But such condition maybe not
+ * true for some remote transaction case. For example:
+ *
+ * For linkEA repairing (by LFSCK) case, before the LFSCK thread obtained
+ * the dt_object_lock on the target MDT-object, it cannot know whether
+ * the MDT-object has linkEA or not, neither invalid or not.
+ *
+ * Since the LFSCK thread cannot hold dt_object_lock before the (remote)
+ * transaction start (otherwise there will be some potential deadlock),
+ * it cannot prepare related RPC for repairing during the declare phase
+ * as other normal transactions do.
+ *
+ * To resolve the trouble, we will make OSP to prepare related RPC
+ * (set_attr/set_xattr/del_xattr) after remote transaction started,
+ * and trigger the remote updating (RPC sending) when trans_stop.
+ * Then the up layer users, such as LFSCK, can follow the general
+ * rule to handle trans_start/dt_object_lock for repairing linkEA
+ * inconsistency without distinguishing remote MDT-object.
+ *
+ * In fact, above solution for remote transaction should be the normal
+ * model without considering DNE1. The trouble brought by DNE1 will be
+ * resolved in DNE2. At that time, this patch can be removed.
+ *
+ * \param[in] env	pointer to the thread context
+ * \param[in] dt	pointer to the OSP layer dt_object
+ * \param[in] attr	pointer to the attribute to be set
+ * \param[in] th	pointer to the transaction handler
+ *
+ * \retval		0 for success
+ * \retval		negative error number on failure
+ */
 static int osp_declare_attr_set(const struct lu_env *env, struct dt_object *dt,
 				const struct lu_attr *attr, struct thandle *th)
 {
@@ -71,7 +169,7 @@ static int osp_declare_attr_set(const struct lu_env *env, struct dt_object *dt,
 	/*
 	 * Usually we don't allow server stack to manipulate size
 	 * but there is a special case when striping is created
-	 * late, after stripless file got truncated to non-zero.
+	 * late, after stripeless file got truncated to non-zero.
 	 *
 	 * In this case we do the following:
 	 *
@@ -116,6 +214,29 @@ static int osp_declare_attr_set(const struct lu_env *env, struct dt_object *dt,
 	RETURN(rc);
 }
 
+/**
+ * Implement OSP layer dt_object_operations::do_attr_set() interface.
+ *
+ * Set attribute to the specified OST object.
+ *
+ * If the transaction is a remote transaction, then related modification
+ * sub-request has been added in the declare phase and related OUT RPC
+ * has been triggered at transaction start. Otherwise it will generate
+ * a MDS_SETATTR64_REC record in the llog. There is a dedicated thread
+ * to handle the llog asynchronously.
+ *
+ * If the attribute entry exists in the OSP object attributes cache,
+ * then update the cached attribute according to given attribute.
+ *
+ * \param[in] env	pointer to the thread context
+ * \param[in] dt	pointer to the OSP layer dt_object
+ * \param[in] attr	pointer to the attribute to be set
+ * \param[in] th	pointer to the transaction handler
+ * \param[in] capa	the capability for this operation
+ *
+ * \retval		0 for success
+ * \retval		negative error number on failure
+ */
 static int osp_attr_set(const struct lu_env *env, struct dt_object *dt,
 			const struct lu_attr *attr, struct thandle *th,
 			struct lustre_capa *capa)
@@ -149,6 +270,32 @@ static int osp_attr_set(const struct lu_env *env, struct dt_object *dt,
 	RETURN(rc);
 }
 
+/**
+ * Implement OSP layer dt_object_operations::do_declare_create() interface.
+ *
+ * Declare that the caller will create the OST object.
+ *
+ * If the transaction is a remote transaction (please refer to the
+ * comment of osp_trans_create() for remote transaction), then the FID
+ * for the OST object has been assigned already, and will be handled
+ * as create (remote) MDT object via osp_md_declare_object_create().
+ * This function is usually used for LFSCK to re-create the lost OST
+ * object. Otherwise, if it is not replay case, the OSP will reserve
+ * pre-created object for the subsequent create operation; if the MDT
+ * side cached pre-created objects are less than some threshold, then
+ * it will wakeup the pre-create thread.
+ *
+ * \param[in] env	pointer to the thread context
+ * \param[in] dt	pointer to the OSP layer dt_object
+ * \param[in] attr	the attribute for the object to be created
+ * \param[in] hint	pointer to the hint for creating the object, such as
+ *			the parent object
+ * \param[in] dof	pointer to the dt_object_format for help the creation
+ * \param[in] th	pointer to the transaction handler
+ *
+ * \retval		0 for success
+ * \retval		negative error number on failure
+ */
 static int osp_declare_object_create(const struct lu_env *env,
 				     struct dt_object *dt,
 				     struct lu_attr *attr,
@@ -219,6 +366,30 @@ static int osp_declare_object_create(const struct lu_env *env,
 	RETURN(rc);
 }
 
+/**
+ * Implement OSP layer dt_object_operations::do_create() interface.
+ *
+ * Create the OST object.
+ *
+ * For remote transaction case, the real create sub-request has been
+ * added in the declare phase and related (OUT) RPC has been triggered
+ * at transaction start. Here, like creating (remote) MDT object, the
+ * OSP will mark the object existence via osp_md_object_create().
+ *
+ * For non-remote transaction case, the OSP will assign FID to the
+ * object to be created, and update last_used Object ID (OID) file.
+ *
+ * \param[in] env	pointer to the thread context
+ * \param[in] dt	pointer to the OSP layer dt_object
+ * \param[in] attr	the attribute for the object to be created
+ * \param[in] hint	pointer to the hint for creating the object, such as
+ *			the parent object
+ * \param[in] dof	pointer to the dt_object_format for help the creation
+ * \param[in] th	pointer to the transaction handler
+ *
+ * \retval		0 for success
+ * \retval		negative error number on failure
+ */
 static int osp_object_create(const struct lu_env *env, struct dt_object *dt,
 			     struct lu_attr *attr,
 			     struct dt_allocation_hint *hint,
@@ -232,7 +403,7 @@ static int osp_object_create(const struct lu_env *env, struct dt_object *dt,
 	ENTRY;
 
 	if (o->opo_reserved) {
-		/* regular case, fid is assigned holding trunsaction open */
+		/* regular case, fid is assigned holding transaction open */
 		 osp_object_assign_fid(env, d, o);
 	}
 
@@ -276,7 +447,7 @@ static int osp_object_create(const struct lu_env *env, struct dt_object *dt,
 			d->opd_gap_count = 0;
 			spin_unlock(&d->opd_pre_lock);
 
-			CDEBUG(D_HA, "Writting gap "DFID"+%d in llog\n",
+			CDEBUG(D_HA, "Writing gap "DFID"+%d in llog\n",
 			       PFID(&d->opd_gap_start_fid), count);
 			/* real gap handling is disabled intil ORI-692 will be
 			 * fixed, now we only report gaps */
@@ -303,8 +474,24 @@ static int osp_object_create(const struct lu_env *env, struct dt_object *dt,
 	RETURN(rc);
 }
 
+/**
+ * Implement OSP layer dt_object_operations::do_declare_destroy() interface.
+ *
+ * Declare that the caller will destroy the specified OST object.
+ *
+ * The OST object destroy will be handled via llog asynchronously. This
+ * function will declare the credits for generating MDS_UNLINK64_REC llog.
+ *
+ * \param[in] env	pointer to the thread context
+ * \param[in] dt	pointer to the OSP layer dt_object to be destroyed
+ * \param[in] th	pointer to the transaction handler
+ *
+ * \retval		0 for success
+ * \retval		negative error number on failure
+ */
 static int osp_declare_object_destroy(const struct lu_env *env,
-				      struct dt_object *dt, struct thandle *th)
+				      struct dt_object *dt,
+				      struct thandle *th)
 {
 	struct osp_object	*o = dt2osp_obj(dt);
 	int			 rc = 0;
@@ -319,6 +506,23 @@ static int osp_declare_object_destroy(const struct lu_env *env,
 	RETURN(rc);
 }
 
+/**
+ * Implement OSP layer dt_object_operations::do_destroy() interface.
+ *
+ * Destroy the specified OST object.
+ *
+ * The OSP generates a MDS_UNLINK64_REC record in the llog. There
+ * will be some dedicated thread to handle the llog asynchronously.
+ *
+ * It also marks the object as non-cached.
+ *
+ * \param[in] env	pointer to the thread context
+ * \param[in] dt	pointer to the OSP layer dt_object to be destroyed
+ * \param[in] th	pointer to the transaction handler
+ *
+ * \retval		0 for success
+ * \retval		negative error number on failure
+ */
 static int osp_object_destroy(const struct lu_env *env, struct dt_object *dt,
 			      struct thandle *th)
 {
@@ -355,6 +559,21 @@ static int is_ost_obj(struct lu_object *lo)
 	return !osp->opd_connect_mdt;
 }
 
+/**
+ * Implement OSP layer lu_object_operations::loo_object_init() interface.
+ *
+ * Initialize the object.
+ *
+ * If it is a remote MDT object, then call do_attr_get() to fetch
+ * the attribute from the peer.
+ *
+ * \param[in] env	pointer to the thread context
+ * \param[in] o		pointer to the OSP layer lu_object
+ * \param[in] conf	unused
+ *
+ * \retval		0 for success
+ * \retval		negative error number on failure
+ */
 static int osp_object_init(const struct lu_env *env, struct lu_object *o,
 			   const struct lu_object_conf *conf)
 {
@@ -380,6 +599,17 @@ static int osp_object_init(const struct lu_env *env, struct lu_object *o,
 	RETURN(rc);
 }
 
+/**
+ * Implement OSP layer lu_object_operations::loo_object_free() interface.
+ *
+ * Finalize the object.
+ *
+ * If the OSP object has attributes cache, then destroy the cache.
+ * Free the object finally.
+ *
+ * \param[in] env	pointer to the thread context
+ * \param[in] o		pointer to the OSP layer lu_object
+ */
 static void osp_object_free(const struct lu_env *env, struct lu_object *o)
 {
 	struct osp_object	*obj = lu2osp_obj(o);
@@ -390,6 +620,17 @@ static void osp_object_free(const struct lu_env *env, struct lu_object *o)
 	OBD_SLAB_FREE_PTR(obj, osp_object_kmem);
 }
 
+/**
+ * Implement OSP layer lu_object_operations::loo_object_release() interface.
+ *
+ * Cleanup (not free) the object.
+ *
+ * If it is a reserved object but failed to be created, or it is an OST
+ * object, then mark the object as non-cached.
+ *
+ * \param[in] env	pointer to the thread context
+ * \param[in] o		pointer to the OSP layer lu_object
+ */
 static void osp_object_release(const struct lu_env *env, struct lu_object *o)
 {
 	struct osp_object	*po = lu2osp_obj(o);
