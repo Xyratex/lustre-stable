@@ -550,7 +550,7 @@ static int mdt_reint_setattr(struct mdt_thread_info *info,
                 mfd->mfd_xid = req->rq_xid;
 
 		spin_lock(&med->med_open_lock);
-		cfs_list_add(&mfd->mfd_list, &med->med_open_head);
+		list_add(&mfd->mfd_list, &med->med_open_head);
 		spin_unlock(&med->med_open_lock);
 		repbody->mbo_handle.cookie = mfd->mfd_handle.h_cookie;
         }
@@ -576,8 +576,8 @@ static int mdt_reint_setattr(struct mdt_thread_info *info,
                 LASSERT(mfd->mfd_mode == MDS_FMODE_SOM);
                 LASSERT(!(info->mti_ioepoch->flags & MF_EPOCH_CLOSE));
 
-                class_handle_unhash(&mfd->mfd_handle);
-                cfs_list_del_init(&mfd->mfd_list);
+		class_handle_unhash(&mfd->mfd_handle);
+		list_del_init(&mfd->mfd_list);
 		spin_unlock(&med->med_open_lock);
 
                 mdt_mfd_close(info, mfd);
