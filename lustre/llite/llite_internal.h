@@ -45,7 +45,7 @@
 #include <cl_object.h>
 #include <lclient.h>
 #include <lustre_mdc.h>
-#include <linux/lustre_intent.h>
+#include <lustre_intent.h>
 #include <linux/compat.h>
 
 #ifndef FMODE_EXEC

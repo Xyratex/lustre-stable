@@ -53,8 +53,8 @@
 #ifdef CONFIG_FS_POSIX_ACL
 # include <linux/posix_acl_xattr.h>
 #endif /* CONFIG_FS_POSIX_ACL */
-#include <linux/lustre_intent.h>
 #include <lustre_handles.h>
+#include <lustre_intent.h>
 #include <libcfs/libcfs.h>
 #include <obd_class.h>
 #include <lustre/lustre_idl.h>
