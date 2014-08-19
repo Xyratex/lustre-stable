@@ -1949,6 +1949,7 @@ static int handle_recovery_req(struct ptlrpc_thread *thread,
         /* don't reset timer for final stage */
         if (!exp_finished(req->rq_export)) {
                 int to = obd_timeout;
+                struct obd_device *obd;
 
                 /**
                  * Add request timeout to the recovery time so next request from
@@ -1966,8 +1967,30 @@ static int handle_recovery_req(struct ptlrpc_thread *thread,
                                  (int)lustre_msg_get_timeout(req->rq_reqmsg));
                         /* Add net_latency (see ptlrpc_replay_req) */
                         to += lustre_msg_get_service_time(req->rq_reqmsg);
+
+                        req->rq_export->exp_last_replay_data.svc_at_estimate =
+                                at_get(&svc->srv_at_estimate);
+                        req->rq_export->exp_last_replay_data.msg_timeout =
+                                lustre_msg_get_timeout(req->rq_reqmsg);
+                        req->rq_export->exp_last_replay_data.msg_service_time =
+                                lustre_msg_get_service_time(req->rq_reqmsg);
+                } else {
+                        req->rq_export->exp_last_replay_data.svc_at_estimate = 0;
+                        req->rq_export->exp_last_replay_data.msg_timeout = 0;
+                        req->rq_export->exp_last_replay_data.msg_service_time = 0;
                 }
+                req->rq_export->exp_last_replay_data.handle_time =
+                        cfs_time_current_sec();
+                obd = class_exp2obd(req->rq_export);
+                req->rq_export->exp_last_replay_data.obd_timeout_old =
+                        obd->obd_recovery_timeout;
+
                 extend_recovery_timer(class_exp2obd(req->rq_export), to, true);
+
+                req->rq_export->exp_last_replay_data.obd_timeout_new =
+                        obd->obd_recovery_timeout;
+                req->rq_export->exp_last_replay_data.obd_timer_expires =
+                        cfs_timer_deadline(&obd->obd_recovery_timer);
         }
 reqcopy_put:
         RETURN(rc);

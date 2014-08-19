@@ -1355,7 +1355,7 @@ void class_disconnect_stale_exports(struct obd_device *obd,
 
                 cfs_list_move(&exp->exp_obd_chain, &work_list);
                 evicted++;
-                CDEBUG(D_HA, "%s: disconnect stale client %s@%s\n",
+                LCONSOLE_WARN("%s: disconnect stale client %s@%s\n",
                        obd->obd_name, exp->exp_client_uuid.uuid,
                        exp->exp_connection == NULL ? "<unknown>" :
                        libcfs_nid2str(exp->exp_connection->c_peer.nid));
@@ -1364,8 +1364,11 @@ void class_disconnect_stale_exports(struct obd_device *obd,
 	cfs_spin_unlock(&obd->obd_dev_lock);
 
 	if (evicted)
-		LCONSOLE_WARN("%s: disconnecting %d stale clients\n",
-			      obd->obd_name, evicted);
+		LCONSOLE_WARN("%s: disconnecting %d stale clients, "
+                              "timer deadline "CFS_TIME_T", to %d\n",
+                              obd->obd_name, evicted,
+                              cfs_timer_deadline(&obd->obd_recovery_timer),
+                              obd->obd_recovery_timeout);
 	class_disconnect_export_list(&work_list, exp_flags_from_obd(obd) |
 				     OBD_OPT_ABORT_RECOV);
         EXIT;
@@ -1502,7 +1505,9 @@ static void print_export_data(struct obd_export *exp, const char *status,
         }
         cfs_spin_unlock(&exp->exp_lock);
 
-        CDEBUG(D_HA, "%s: %s %p %s %s %d (%d %d %d) %d %d %d %d: %p %s "LPU64"\n",
+        LCONSOLE_WARN("%s: %s %p %s %s %d (%d %d %d) %d %d %d %d: %p %s "LPU64
+                      "lr [rt "CFS_TIME_T" ht "CFS_TIME_T
+                      " se %d to %u st %u oto %d nto %d tdl "CFS_TIME_T"]\n",
                exp->exp_obd->obd_name, status, exp, exp->exp_client_uuid.uuid,
                obd_export_nid2str(exp), cfs_atomic_read(&exp->exp_refcount),
                cfs_atomic_read(&exp->exp_rpc_count),
@@ -1510,7 +1515,15 @@ static void print_export_data(struct obd_export *exp, const char *status,
                cfs_atomic_read(&exp->exp_locks_count),
                exp->exp_disconnected, exp->exp_delayed, exp->exp_failed,
                nreplies, first_reply, nreplies > 3 ? "..." : "",
-               exp->exp_last_committed);
+               exp->exp_last_committed,
+               exp->exp_last_request_time,
+               exp->exp_last_replay_data.handle_time,
+               exp->exp_last_replay_data.svc_at_estimate,
+               exp->exp_last_replay_data.msg_timeout,
+               exp->exp_last_replay_data.msg_service_time,
+               exp->exp_last_replay_data.obd_timeout_old,
+               exp->exp_last_replay_data.obd_timeout_new,
+               exp->exp_last_replay_data.obd_timer_expires);
 #if LUSTRE_TRACKS_LOCK_EXP_REFS
         if (locks && class_export_dump_hook != NULL)
                 class_export_dump_hook(exp);

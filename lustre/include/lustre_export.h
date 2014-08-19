@@ -284,6 +284,16 @@ struct obd_export {
         } u;
 
 	struct adaptive_timeout    exp_bl_lock_at;
+
+        struct {
+                cfs_time_t                handle_time;
+                int                       svc_at_estimate;
+                __u32                     msg_timeout;
+                __u32                     msg_service_time;
+                int                       obd_timeout_old;
+                int                       obd_timeout_new;
+                cfs_time_t                obd_timer_expires;
+        } exp_last_replay_data;
 };
 
 #define exp_target_data u.eu_target_data
