@@ -652,9 +652,8 @@ static int ldlm_handle_ast_error(struct ldlm_lock *lock,
 {
         lnet_process_id_t peer = req->rq_import->imp_connection->c_peer;
 
-        if (rc == -ETIMEDOUT || rc == -EINTR || rc == -ENOTCONN) {
-                LASSERT(lock->l_export);
-                if (lock->l_export->exp_libclient) {
+        if (!req->rq_replied || (rc && rc != -EINVAL)) {
+                if (lock->l_export && lock->l_export->exp_libclient) {
                         LDLM_DEBUG(lock, "%s AST to liblustre client (nid %s)"
                                    " timeout, just cancelling lock", ast_type,
                                    libcfs_nid2str(peer.nid));
@@ -667,35 +666,36 @@ static int ldlm_handle_ast_error(struct ldlm_lock *lock,
                         ldlm_lock_cancel(lock);
                         rc = -ERESTART;
                 } else {
-                        ldlm_failed_ast(lock, rc, ast_type);
-                }
-        } else if (rc) {
-                if (rc == -EINVAL) {
-                        struct ldlm_resource *res = lock->l_resource;
-                        LDLM_DEBUG(lock, "client (nid %s) returned %d"
-                               " from %s AST - normal race",
-                               libcfs_nid2str(peer.nid),
-                               req->rq_repmsg ?
-                               lustre_msg_get_status(req->rq_repmsg) : -1,
-                               ast_type);
-                        if (res) {
-                                /* update lvbo to return proper attributes.
-                                 * see bug 23174 */
-                                ldlm_resource_getref(res);
-                                ldlm_res_lvbo_update(res, NULL, 1);
-                                ldlm_resource_putref(res);
-                        }
-
-                } else {
-                        LDLM_ERROR(lock, "client (nid %s) returned %d (rc %d) "
-                                   "from %s AST", libcfs_nid2str(peer.nid),
+                        LDLM_ERROR(lock, "client (nid %s) %s %s AST "
+                                   "(req status %d rc %d), evict it",
+                                   libcfs_nid2str(peer.nid),
+                                   req->rq_replied ? "returned error from" :
+                                   "failed to reply to",
+                                   ast_type,
                                    (req->rq_repmsg != NULL) ?
                                    lustre_msg_get_status(req->rq_repmsg) : 0,
-                                   rc, ast_type);
+                                   rc);
+                        ldlm_failed_ast(lock, rc, ast_type);
+                }
+                return rc;
+        }
+
+        if (rc == -EINVAL) {
+                struct ldlm_resource *res = lock->l_resource;
+                LDLM_DEBUG(lock, "client (nid %s) returned %d"
+                           " from %s AST - normal race",
+                           libcfs_nid2str(peer.nid),
+                           req->rq_repmsg ?
+                           lustre_msg_get_status(req->rq_repmsg) : -1,
+                           ast_type);
+                if (res) {
+                        /* update lvbo to return proper attributes.
+                         * see bug 23174 */
+                        ldlm_resource_getref(res);
+                        ldlm_res_lvbo_update(res, NULL, 1);
+                        ldlm_resource_putref(res);
                 }
                 ldlm_lock_cancel(lock);
-                /* Server-side AST functions are called from ldlm_reprocess_all,
-                 * which needs to be told to please restart its reprocessing. */
                 rc = -ERESTART;
         }
 
