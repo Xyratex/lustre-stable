@@ -293,7 +293,9 @@ static int mdt_clients_data_init(const struct lu_env *env,
                        last_transno, lsd->lsd_last_transno,
                        lcd_last_xid(lcd));
 
-		exp = class_new_export(obd, (struct obd_uuid *)lcd->lcd_uuid, 0);
+		exp = target_client_restore(obd,
+					    (struct obd_uuid *)lcd->lcd_uuid,
+					    last_transno);
                 if (IS_ERR(exp)) {
                         if (PTR_ERR(exp) == -EALREADY) {
                                 /* export already exists, zero out this one */
@@ -306,19 +308,11 @@ static int mdt_clients_data_init(const struct lu_env *env,
                 mti = lu_context_key_get(&env->le_ctx, &mdt_thread_key);
                 LASSERT(mti != NULL);
                 mti->mti_exp = exp;
-                /* copy on-disk lcd to the export */
-                *exp->exp_target_data.ted_lcd = *lcd;
+		/* copy on-disk lcd to the export */
+		*exp->exp_target_data.ted_lcd = *lcd;
                 rc = mdt_client_add(env, mdt, cl_idx);
                 /* can't fail existing */
                 LASSERTF(rc == 0, "rc = %d\n", rc);
-                /* VBR: set export last committed version */
-                exp->exp_last_committed = last_transno;
-                cfs_spin_lock(&exp->exp_lock);
-                exp->exp_connecting = 0;
-                exp->exp_in_recovery = 0;
-                cfs_spin_unlock(&exp->exp_lock);
-                obd->obd_max_recoverable_clients++;
-                class_export_put(exp);
 
                 CDEBUG(D_OTHER, "client at idx %d has last_transno="LPU64"\n",
                        cl_idx, last_transno);

@@ -877,7 +877,9 @@ static int filter_init_server_data(struct obd_device *obd, struct file * filp)
                 /* These exports are cleaned up by filter_disconnect(), so they
                  * need to be set up like real exports as filter_connect() does.
                  */
-		exp = class_new_export(obd, (struct obd_uuid *)lcd->lcd_uuid, 0);
+		exp = target_client_restore(obd,
+					    (struct obd_uuid *)lcd->lcd_uuid,
+					    last_rcvd);
                 if (IS_ERR(exp)) {
                         if (PTR_ERR(exp) == -EALREADY) {
                                 /* export already exists, zero out this one */
@@ -895,15 +897,6 @@ static int filter_init_server_data(struct obd_device *obd, struct file * filp)
                 rc = filter_client_add(obd, exp, cl_idx);
                 /* can't fail for existing client */
                 LASSERTF(rc == 0, "rc = %d\n", rc);
-
-                /* VBR: set export last committed */
-                exp->exp_last_committed = last_rcvd;
-                cfs_spin_lock(&exp->exp_lock);
-                exp->exp_connecting = 0;
-                exp->exp_in_recovery = 0;
-                cfs_spin_unlock(&exp->exp_lock);
-                obd->obd_max_recoverable_clients++;
-                class_export_put(exp);
 
                 if (last_rcvd > le64_to_cpu(lsd->lsd_last_transno))
                         lsd->lsd_last_transno = cpu_to_le64(last_rcvd);
