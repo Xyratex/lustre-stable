@@ -795,7 +795,7 @@ out:
 	wake_up(&d->opd_pre_user_waitq);
 }
 
-int osp_init_pre_fid(struct osp_device *osp)
+static int osp_init_pre_fid(struct osp_device *osp)
 {
 	struct lu_env		env;
 	struct osp_thread_info	*osi;
@@ -803,8 +803,6 @@ int osp_init_pre_fid(struct osp_device *osp)
 	struct lu_fid		*last_fid;
 	int			rc;
 	ENTRY;
-
-	LASSERT(osp->opd_pre != NULL);
 
 	/* Return if last_used fid has been initialized */
 	if (!fid_is_zero(&osp->opd_last_used_fid))
@@ -895,9 +893,20 @@ static int osp_precreate_thread(void *_arg)
 			break;
 
 		LASSERT(d->opd_obd->u.cli.cl_seq != NULL);
-		/* Sigh, fid client is not ready yet */
-		if (d->opd_obd->u.cli.cl_seq->lcs_exp == NULL)
-			continue;
+		if (d->opd_obd->u.cli.cl_seq->lcs_exp == NULL) {
+			/* Get new sequence for client first */
+			LASSERT(d->opd_exp != NULL);
+			d->opd_obd->u.cli.cl_seq->lcs_exp =
+			class_export_get(d->opd_exp);
+			rc = osp_init_pre_fid(d);
+			if (rc != 0) {
+				class_export_put(d->opd_exp);
+				d->opd_obd->u.cli.cl_seq->lcs_exp = NULL;
+				CERROR("%s: init pre fid error: rc = %d\n",
+				       d->opd_obd->obd_name, rc);
+				continue;
+			}
+		}
 
 		osp_statfs_update(d);
 
@@ -1224,10 +1233,6 @@ int osp_init_precreate(struct osp_device *d)
 
 	ENTRY;
 
-	OBD_ALLOC_PTR(d->opd_pre);
-	if (d->opd_pre == NULL)
-		RETURN(-ENOMEM);
-
 	/* initially precreation isn't ready */
 	d->opd_pre_status = -EAGAIN;
 	fid_zero(&d->opd_pre_used_fid);
@@ -1275,24 +1280,16 @@ int osp_init_precreate(struct osp_device *d)
 
 void osp_precreate_fini(struct osp_device *d)
 {
-	struct ptlrpc_thread *thread;
+	struct ptlrpc_thread *thread = &d->opd_pre_thread;
 
 	ENTRY;
 
 	cfs_timer_disarm(&d->opd_statfs_timer);
 
-	if (d->opd_pre == NULL)
-		RETURN_EXIT;
-
-	thread = &d->opd_pre_thread;
-
 	thread->t_flags = SVC_STOPPING;
 	wake_up(&d->opd_pre_waitq);
 
 	wait_event(thread->t_ctl_waitq, thread->t_flags & SVC_STOPPED);
-
-	OBD_FREE_PTR(d->opd_pre);
-	d->opd_pre = NULL;
 
 	EXIT;
 }

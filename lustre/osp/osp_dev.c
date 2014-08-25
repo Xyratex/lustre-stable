@@ -419,8 +419,7 @@ static int osp_recovery_complete(const struct lu_env *env,
 
 	ENTRY;
 	osp->opd_recovery_completed = 1;
-
-	if (!osp->opd_connect_mdt && osp->opd_pre != NULL)
+	if (!osp->opd_connect_mdt)
 		wake_up(&osp->opd_pre_waitq);
 	RETURN(rc);
 }
@@ -445,9 +444,6 @@ static int osp_statfs(const struct lu_env *env, struct dt_device *dev,
 	if (unlikely(d->opd_imp_active == 0))
 		RETURN(-ENOTCONN);
 
-	if (d->opd_pre == NULL)
-		RETURN(0);
-
 	/* return recently updated data */
 	*sfs = d->opd_statfs;
 
@@ -455,6 +451,7 @@ static int osp_statfs(const struct lu_env *env, struct dt_device *dev,
 	 * layer above osp (usually lod) can use ffree to estimate
 	 * how many objects are available for immediate creation
 	 */
+
 	spin_lock(&d->opd_pre_lock);
 	LASSERTF(fid_seq(&d->opd_pre_last_created_fid) ==
 		 fid_seq(&d->opd_pre_used_fid),
@@ -688,14 +685,6 @@ static int osp_init0(const struct lu_env *env, struct osp_device *m,
 
 	osp_lprocfs_init(m);
 
-	rc = obd_fid_init(m->opd_obd, NULL, m->opd_connect_mdt ?
-			  LUSTRE_SEQ_METADATA : LUSTRE_SEQ_DATA);
-	if (rc) {
-		CERROR("%s: fid init error: rc = %d\n",
-		       m->opd_obd->obd_name, rc);
-		GOTO(out_proc, rc);
-	}
-
 	if (!m->opd_connect_mdt) {
 		/* Initialize last id from the storage - will be
 		 * used in orphan cleanup. */
@@ -703,6 +692,12 @@ static int osp_init0(const struct lu_env *env, struct osp_device *m,
 		if (rc)
 			GOTO(out_proc, rc);
 
+		rc = obd_fid_init(m->opd_obd, NULL, LUSTRE_SEQ_DATA);
+		if (rc) {
+			CERROR("%s: fid init error: rc = %d\n",
+			       m->opd_obd->obd_name, rc);
+			GOTO(out_last_used, rc);
+		}
 
 		/* Initialize precreation thread, it handles new
 		 * connections as well. */
@@ -717,8 +712,8 @@ static int osp_init0(const struct lu_env *env, struct osp_device *m,
 		rc = osp_sync_init(env, m);
 		if (rc)
 			GOTO(out_precreat, rc);
-	}
 
+	}
 	/*
 	 * Initiate connect to OST
 	 */
@@ -856,33 +851,6 @@ static int osp_reconnect(const struct lu_env *env,
 			 struct obd_connect_data *data,
 			 void *localdata)
 {
-	return 0;
-}
-
-static int osp_prepare_fid_client(struct osp_device *osp)
-{
-	int rc;
-
-	LASSERT(osp->opd_obd->u.cli.cl_seq != NULL);
-	if (osp->opd_obd->u.cli.cl_seq->lcs_exp != NULL)
-		return 0;
-
-	LASSERT(osp->opd_exp != NULL);
-	osp->opd_obd->u.cli.cl_seq->lcs_exp =
-				class_export_get(osp->opd_exp);
-	if (osp->opd_pre == NULL)
-		return 0;
-
-	/* Init fid for osp_precreate if necessary */
-	rc = osp_init_pre_fid(osp);
-	if (rc != 0) {
-		class_export_put(osp->opd_exp);
-		osp->opd_obd->u.cli.cl_seq->lcs_exp = NULL;
-		CERROR("%s: init pre fid error: rc = %d\n",
-		       osp->opd_obd->obd_name, rc);
-		return rc;
-	}
-
 	return 0;
 }
 
@@ -1053,42 +1021,27 @@ static int osp_import_event(struct obd_device *obd, struct obd_import *imp,
 		d->opd_imp_connected = 0;
 		if (d->opd_connect_mdt)
 			break;
-
-		if (d->opd_pre != NULL) {
-			osp_pre_update_status(d, -ENODEV);
-			wake_up(&d->opd_pre_waitq);
-		}
-
+		osp_pre_update_status(d, -ENODEV);
+		wake_up(&d->opd_pre_waitq);
 		CDEBUG(D_HA, "got disconnected\n");
 		break;
 	case IMP_EVENT_INACTIVE:
 		d->opd_imp_active = 0;
 		if (d->opd_connect_mdt)
 			break;
-
-		if (d->opd_pre != NULL) {
-			osp_pre_update_status(d, -ENODEV);
-			wake_up(&d->opd_pre_waitq);
-		}
-
+		osp_pre_update_status(d, -ENODEV);
+		wake_up(&d->opd_pre_waitq);
 		CDEBUG(D_HA, "got inactive\n");
 		break;
 	case IMP_EVENT_ACTIVE:
 		d->opd_imp_active = 1;
-
-		if (osp_prepare_fid_client(d) != 0)
-			break;
-
 		if (d->opd_got_disconnected)
 			d->opd_new_connection = 1;
 		d->opd_imp_connected = 1;
 		d->opd_imp_seen_connected = 1;
 		if (d->opd_connect_mdt)
 			break;
-
-		if (d->opd_pre != NULL)
-			wake_up(&d->opd_pre_waitq);
-
+		wake_up(&d->opd_pre_waitq);
 		__osp_sync_check_for_work(d);
 		CDEBUG(D_HA, "got connected\n");
 		break;

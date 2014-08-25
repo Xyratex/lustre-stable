@@ -103,14 +103,10 @@ static int seq_client_rpc(struct lu_client_seq *seq,
 			req->rq_no_delay = req->rq_no_resend = 1;
 		debug_mask = D_CONSOLE;
 	} else {
-		if (seq->lcs_type == LUSTRE_SEQ_METADATA) {
-			req->rq_reply_portal = MDC_REPLY_PORTAL;
+		if (seq->lcs_type == LUSTRE_SEQ_METADATA)
 			req->rq_request_portal = SEQ_METADATA_PORTAL;
-		} else {
-			req->rq_reply_portal = OSC_REPLY_PORTAL;
+		else
 			req->rq_request_portal = SEQ_DATA_PORTAL;
-		}
-
 		debug_mask = D_INFO;
 	}
 
