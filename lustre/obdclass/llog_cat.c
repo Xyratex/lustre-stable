@@ -171,8 +171,8 @@ int llog_cat_id2handle(struct llog_handle *cathandle, struct llog_handle **res,
         } else {
                 rc = llog_init_handle(loghandle, LLOG_F_IS_PLAIN, NULL);
                 if (!rc) {
-                        cfs_list_add(&loghandle->u.phd.phd_entry,
-                                     &cathandle->u.chd.chd_head);
+                        cfs_list_add_tail(&loghandle->u.phd.phd_entry,
+					  &cathandle->u.chd.chd_head);
                 }
         }
         if (!rc) {
