@@ -456,6 +456,12 @@ again:
         fld_enter_request(&exp->exp_obd->u.cli);
         rc = ptlrpc_queue_wait(req);
         fld_exit_request(&exp->exp_obd->u.cli);
+
+	if (rc == -ENOENT) {
+		/* Don't loop forever on non-existing FID sequences. */
+		GOTO(out_req, rc);
+	}
+
         if (fld_op != FLD_LOOKUP)
                 mdc_put_rpc_lock(exp->exp_obd->u.cli.cl_rpc_lock, NULL);
 	if (rc != 0) {
