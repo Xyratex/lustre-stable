@@ -1289,7 +1289,6 @@ static int mdt_getattr_name_lock(struct mdt_thread_info *info,
         struct mdt_body        *reqbody   = NULL;
         struct mdt_object      *parent    = info->mti_object;
         struct mdt_object      *child;
-        struct md_object       *next      = mdt_object_child(parent);
         struct lu_fid          *child_fid = &info->mti_tmp_fid1;
         struct lu_name         *lname     = NULL;
         struct mdt_lock_handle *lhp       = NULL;
@@ -1305,7 +1304,8 @@ static int mdt_getattr_name_lock(struct mdt_thread_info *info,
         LASSERT(ergo(is_resent,
                      lustre_msg_get_flags(req->rq_reqmsg) & MSG_RESENT));
 
-        LASSERT(parent != NULL);
+	if (parent == NULL)
+		RETURN(-ENOENT);
 
 	lname = &info->mti_name;
 	mdt_name_unpack(info->mti_pill, &RMF_NAME, lname, MNF_FIX_ANON);
@@ -1417,8 +1417,8 @@ static int mdt_getattr_name_lock(struct mdt_thread_info *info,
 
 		/* step 2: lookup child's fid by name */
 		fid_zero(child_fid);
-		rc = mdo_lookup(info->mti_env, next, lname, child_fid,
-				&info->mti_spec);
+		rc = mdo_lookup(info->mti_env, mdt_object_child(parent), lname,
+				child_fid, &info->mti_spec);
 
 		if (rc != 0) {
 			if (rc == -ENOENT)
