@@ -154,39 +154,6 @@ test_10b() {
 run_test 10b "re-send BL AST"
 
 test_10c() {
-	mount_client $MOUNT2
-
-	#grant lock1, export2
-	do_facet client $SETSTRIPE -i -0 $DIR2/$tfile || return 1
-	do_facet client multiop $DIR2/$tfile Ow  || return 2
-
-#define OBD_FAIL_LDLM_BL_EVICT            0x31e
-	do_facet ost $LCTL set_param fail_loc=0x31e
-	#get waiting lock2, export1
-	do_facet client multiop $DIR/$tfile Ow &
-	PID1=$!
-	# let enqueue to get asleep
-	sleep 2
-
-	#get lock2 blocked
-	do_facet client multiop $DIR2/$tfile Ow &
-	PID2=$!
-	sleep 2
-
-	#evict export1
-	ost_evict_client
-
-	sleep 2
-	do_facet ost $LCTL set_param fail_loc=0
-
-	wait $PID1
-	wait $PID2
-
-	umount_client $MOUNT2
-}
-run_test 10c "lock enqueue for destroyed export"
-
-test_10d() {
 	local before=`date +%s`
 	local evict
 	local mdccli
@@ -228,7 +195,40 @@ test_10d() {
 	checkstat -v -p 0777 "${workdir}" ||
 		{ error "client checkstat failed: $?";}
 }
-run_test 10d "re-send BL AST vs reconnect race (MRP-2038)"
+run_test 10c "re-send BL AST vs reconnect race (MRP-2038)"
+
+test_10d() {
+	local before=$(date +%s)
+	local evict
+	# sleep 1 is to make sure that BEFORE is not equal to EVICTED below
+	sleep 1
+	echo -n ", world" | dd of=$TMP/$tfile bs=1c seek=5
+
+	mount_client $MOUNT2
+
+	$LFS setstripe -i 0 -c 1 $DIR1/$tfile
+	echo -n hello > $DIR1/$tfile
+
+	$LCTL set_param fail_val=71
+	drop_bl_callback_once "echo -n \\\", world\\\" >> $DIR2/$tfile"
+	$LCTL set_param fail_val=0
+
+	client_reconnect
+
+	cmp $DIR1/$tfile $DIR2/$tfile || error "file contents differ"
+	cmp $DIR1/$tfile $TMP/$tfile || error "wrong content found"
+
+	evict=$(do_facet client $LCTL get_param osc.$FSNAME-OST0000*.state | \
+	    awk -F"[ [,]" '/EVICTED]$/ { if (mx<$4) {mx=$4;} } END { print mx }')
+
+	[[ $evict -gt $before ]] ||
+		(do_facet client $LCTL get_param osc.$FSNAME-OST0000*.state;
+		    error "no eviction: $evict before:$before")
+
+	rm $TMP/$tfile
+	umount_client $MOUNT2
+}
+run_test 10d "test failed blocking ast"
 
 #bug 2460
 # wake up a thread waiting for completion after eviction
@@ -1269,6 +1269,39 @@ test_61()
 	rm -rf $DIR/$tdir
 }
 run_test 61 "Verify to not reuse orphan objects - bug 17025"
+
+test_65() {
+	mount_client $MOUNT2
+
+	#grant lock1, export2
+	do_facet client $SETSTRIPE -i -0 $DIR2/$tfile || return 1
+	do_facet client multiop $DIR2/$tfile Ow  || return 2
+
+#define OBD_FAIL_LDLM_BL_EVICT            0x31e
+	do_facet ost $LCTL set_param fail_loc=0x31e
+	#get waiting lock2, export1
+	do_facet client multiop $DIR/$tfile Ow &
+	PID1=$!
+	# let enqueue to get asleep
+	sleep 2
+
+	#get lock2 blocked
+	do_facet client multiop $DIR2/$tfile Ow &
+	PID2=$!
+	sleep 2
+
+	#evict export1
+	ost_evict_client
+
+	sleep 2
+	do_facet ost $LCTL set_param fail_loc=0
+
+	wait $PID1
+	wait $PID2
+
+	umount_client $MOUNT2
+}
+run_test 65 "lock enqueue for destroyed export"
 
 check_cli_ir_state()
 {
