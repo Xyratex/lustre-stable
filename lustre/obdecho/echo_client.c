@@ -3016,9 +3016,6 @@ int echo_client_init(void)
 	rc = lu_kmem_init(echo_caches);
 	if (rc == 0) {
 		rc = class_register_type(&echo_client_obd_ops, NULL, true, NULL,
-#ifndef HAVE_ONLY_PROCFS_SEQ
-					 NULL,
-#endif
 					 LUSTRE_ECHO_CLIENT_NAME,
 					 &echo_device_type);
 		if (rc)
@@ -3048,10 +3045,7 @@ static int __init obdecho_init(void)
                 goto failed_0;
 
 	rc = class_register_type(&echo_obd_ops, NULL, true, NULL,
-#ifndef HAVE_ONLY_PROCFS_SEQ
-				NULL,
-#endif
-				LUSTRE_ECHO_NAME, NULL);
+				 LUSTRE_ECHO_NAME, NULL);
 	if (rc != 0)
 		goto failed_1;
 # endif
