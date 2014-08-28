@@ -145,7 +145,7 @@ typedef enum {
 /* Flags inherited from wire on enqueue/reply between client/server. */
 /* NO_TIMEOUT flag to force ldlm_lock_match() to wait with no timeout. */
 /* TEST_LOCK flag to not let TEST lock to be granted. */
-#define LDLM_INHERIT_FLAGS     (LDLM_FL_CANCEL_ON_BLOCK |	\
+#define LDLM_FL_INHERIT_MASK   (LDLM_FL_CANCEL_ON_BLOCK |	\
 				LDLM_FL_NO_TIMEOUT	|	\
 				LDLM_FL_TEST_LOCK)
 
@@ -252,6 +252,16 @@ typedef enum {
 
 /* If a lock is found on RPC resend */
 #define LDLM_FL_RESENT          0x8000000000000ULL // 1 << 51
+
+#define LDLM_FL_BLOCKED_MASK		(LDLM_FL_BLOCK_GRANTED		|\
+					 LDLM_FL_BLOCK_CONV		|\
+					 LDLM_FL_BLOCK_WAIT)
+
+/** flags returned in @flags parameter on ldlm_lock_enqueue,
+ * to be re-constructed on re-send */
+#define LDLM_FL_SRV_ENQ_MASK	(LDLM_FL_LOCK_CHANGED		|\
+				 LDLM_FL_BLOCKED_MASK		|\
+				 LDLM_FL_NO_TIMEOUT)
 
 #define LDLM_IS(_p,  _f) (((_p)->l_flags & LDLM_FL_##_f) != 0)
 #define LDLM_NOT(_p, _f) (! LDLM_IS(_p, _f))

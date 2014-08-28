@@ -740,8 +740,7 @@ int ldlm_process_extent_lock(struct ldlm_lock *lock, __u64 *flags,
                                  * called and it causes the interval node to be
                                  * freed. Then we will fail at
                                  * ldlm_extent_add_lock() */
-                                *flags &= ~(LDLM_FL_BLOCK_GRANTED | LDLM_FL_BLOCK_CONV |
-                                            LDLM_FL_BLOCK_WAIT);
+                                *flags &= ~LDLM_FL_BLOCKED_MASK;
                                 GOTO(out, rc = 0);
                         }
 
