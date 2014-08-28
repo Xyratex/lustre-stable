@@ -661,7 +661,8 @@ static void enable_default_ext4_features(struct mkfs_opts *mop, char *anchor,
 
                 append_unique(anchor, ",", "flex_bg", NULL, maxbuflen);
 
-                if (IS_OST(&mop->mo_ldd)) {
+		if (IS_OST(&mop->mo_ldd) &&
+			strstr(mop->mo_mkfsopts, "-G") == NULL) {
                         snprintf(tmp_buf, sizeof(tmp_buf), " -G %u",
                                  (1 << 20) / L_BLOCK_SIZE);
                         strscat(anchor, tmp_buf, maxbuflen);

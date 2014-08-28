@@ -3306,6 +3306,43 @@ test_80() {
 }
 run_test 80 "mgc import reconnect race"
 
+test_86() {
+	cleanup
+	local NEWSIZE=1024
+	local SAVED_OST_MKFS_OPTS=$OST_MKFS_OPTS
+	local OLDSIZE=$(do_facet ost1 "$DEBUGFS -c -R stats `ostdevname 1`" \
+		| awk '/Flex block group size: / { print $NF; exit;}')
+
+	#uncomment this string to test "true" branch in next condition
+	#OST_MKFS_OPTS="--ost --fsname=lustre --device-size=200000" \
+	#	"--mgsnode=devvm-sl6-2@tcp --param sys.timeout=20"
+	local opts=OST_MKFS_OPTS
+        if [[ ${!opts} != *mkfsoptions* ]]; then
+            eval OST_MKFS_OPTS=\"${!opts} \
+	    --mkfsoptions='\\\"-O flex_bg -G $NEWSIZE\\\"'\"
+	else
+            val=${!opts//--mkfsoptions=\\\"/ \
+		    --mkfsoptions=\\\"-O flex_bg -G $NEWSIZE }
+            eval OST_MKFS_OPTS='${val}'
+        fi
+
+	echo "params: $OST_MKFS_OPTS"
+	reformat
+
+	local FOUNDSIZE=$(do_facet ost1 "$DEBUGFS -c -R stats `ostdevname 1`" \
+		| awk '/Flex block group size: / { print $NF; exit;}')
+
+	OST_MKFS_OPTS=$SAVED_OST_MKFS_OPTS
+	echo "params: $OST_MKFS_OPTS"
+	reformat
+	setup
+
+	[[ $FOUNDSIZE -ne $NEWSIZE ]] && error \
+		"Flex block group size: "$FOUNDSIZE", expected: "$NEWSIZE""
+	return 0
+}
+run_test 86 "Replacing mkfs.lustre -G option"
+
 if ! combined_mgs_mds ; then
 	stop mgs
 fi
