@@ -71,8 +71,8 @@
 
 #include "ldlm_internal.h"
 
-int ldlm_enqueue_min = OBD_TIMEOUT_DEFAULT;
-CFS_MODULE_PARM(ldlm_enqueue_min, "i", int, 0644,
+unsigned int ldlm_enqueue_min = OBD_TIMEOUT_DEFAULT;
+CFS_MODULE_PARM(ldlm_enqueue_min, "i", uint, 0644,
                 "lock enqueue timeout minimum");
 
 /* in client side, whether the cached locks will be canceled before replay */
@@ -137,43 +137,52 @@ int ldlm_expired_completion_wait(void *data)
 }
 EXPORT_SYMBOL(ldlm_expired_completion_wait);
 
-/* We use the same basis for both server side and client side functions
-   from a single node. */
-int ldlm_get_enq_timeout(struct ldlm_lock *lock)
+/**
+ * Calculate the Completion timeout (covering enqueue, BL AST, data flush,
+ * lock cancel, and their replies). Used for lock completion timeout on the
+ * client side.
+ *
+ * \param[in] lock        lock which is waiting the completion callback
+ *
+ * \retval            timeout in seconds to wait for the server reply
+ */
+static unsigned int ldlm_cp_timeout(struct ldlm_lock *lock)
 {
-        int timeout = at_get(ldlm_lock_to_ns_at(lock));
-        if (AT_OFF)
-                return obd_timeout / 2;
-        /* Since these are non-updating timeouts, we should be conservative.
-           It would be nice to have some kind of "early reply" mechanism for
-           lock callbacks too... */
-        timeout = min_t(int, at_max, timeout + (timeout >> 1)); /* 150% */
-        return max(timeout, ldlm_enqueue_min);
+	unsigned int timeout;
+
+	if (AT_OFF)
+		return obd_timeout;
+
+	/* Wait a long time for enqueue - server may have to callback a
+	 * lock from another client.  Server will evict the other client if it
+	 * doesn't respond reasonably, and then give us the lock. */
+	timeout = at_get(ldlm_lock_to_ns_at(lock));
+	return max(3 * timeout, ldlm_enqueue_min);
 }
-EXPORT_SYMBOL(ldlm_get_enq_timeout);
 
 /**
  * Helper function for ldlm_completion_ast(), updating timings when lock is
  * actually granted.
  */
-static int ldlm_completion_tail(struct ldlm_lock *lock)
+static int ldlm_completion_tail(struct ldlm_lock *lock, void *data)
 {
 	long delay;
-	int  result;
+	int  result = 0;
 
 	if (lock->l_flags & (LDLM_FL_DESTROYED | LDLM_FL_FAILED)) {
 		LDLM_DEBUG(lock, "client-side enqueue: destroyed");
 		result = -EIO;
+	} else if (data == NULL) {
+		LDLM_DEBUG(lock, "client-side enqueue: granted");
 	} else {
+		/* Take into AT only CP RPC, not immediately granted locks */
 		delay = cfs_time_sub(cfs_time_current_sec(),
 				     lock->l_last_activity);
 		LDLM_DEBUG(lock, "client-side enqueue: granted after "
 			   CFS_DURATION_T"s", delay);
 
 		/* Update our time estimate */
-		at_measured(ldlm_lock_to_ns_at(lock),
-			    delay);
-		result = 0;
+		at_measured(ldlm_lock_to_ns_at(lock), delay);
 	}
 	return result;
 }
@@ -195,7 +204,7 @@ int ldlm_completion_ast_async(struct ldlm_lock *lock, __u64 flags, void *data)
 	if (!(flags & (LDLM_FL_BLOCK_WAIT | LDLM_FL_BLOCK_GRANTED |
 		       LDLM_FL_BLOCK_CONV))) {
 		wake_up(&lock->l_waitq);
-		RETURN(ldlm_completion_tail(lock));
+		RETURN(ldlm_completion_tail(lock, data));
 	}
 
 	LDLM_DEBUG(lock, "client-side enqueue returned a blocked lock, "
@@ -260,12 +269,10 @@ noreproc:
                 imp = obd->u.cli.cl_import;
         }
 
-        /* Wait a long time for enqueue - server may have to callback a
-           lock from another client.  Server will evict the other client if it
-           doesn't respond reasonably, and then give us the lock. */
-        timeout = ldlm_get_enq_timeout(lock) * 2;
+	timeout = ldlm_cp_timeout(lock);
 
-        lwd.lwd_lock = lock;
+	lwd.lwd_lock = lock;
+	lock->l_last_activity = cfs_time_current_sec();
 
         if (lock->l_flags & LDLM_FL_NO_TIMEOUT) {
                 LDLM_DEBUG(lock, "waiting indefinitely because of NO_TIMEOUT");
@@ -297,9 +304,9 @@ noreproc:
                 LDLM_DEBUG(lock, "client-side enqueue waking up: failed (%d)",
                            rc);
                 RETURN(rc);
-        }
+	}
 
-        RETURN(ldlm_completion_tail(lock));
+	RETURN(ldlm_completion_tail(lock, data));
 }
 EXPORT_SYMBOL(ldlm_completion_ast);
 
