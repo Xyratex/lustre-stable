@@ -340,8 +340,7 @@ static int mgs_completion_ast_config(struct ldlm_lock *lock, __u64 flags,
 {
         ENTRY;
 
-        if (!(flags & (LDLM_FL_BLOCK_WAIT | LDLM_FL_BLOCK_GRANTED |
-                       LDLM_FL_BLOCK_CONV))) {
+        if (!(flags & LDLM_FL_BLOCKED_MASK)) {
                 struct fs_db *fsdb = (struct fs_db *)lock->l_ast_data;
 
                 /* clear the bit before lock put */
@@ -356,8 +355,7 @@ static int mgs_completion_ast_ir(struct ldlm_lock *lock, __u64 flags,
 {
         ENTRY;
 
-        if (!(flags & (LDLM_FL_BLOCK_WAIT | LDLM_FL_BLOCK_GRANTED |
-                       LDLM_FL_BLOCK_CONV))) {
+        if (!(flags & LDLM_FL_BLOCKED_MASK)) {
                 struct fs_db *fsdb = (struct fs_db *)lock->l_ast_data;
                 mgs_ir_notify_complete(fsdb);
         }

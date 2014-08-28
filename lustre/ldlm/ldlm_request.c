@@ -167,8 +167,7 @@ int ldlm_completion_ast_async(struct ldlm_lock *lock, __u64 flags, void *data)
                 RETURN(0);
         }
 
-        if (!(flags & (LDLM_FL_BLOCK_WAIT | LDLM_FL_BLOCK_GRANTED |
-                       LDLM_FL_BLOCK_CONV))) {
+        if (!(flags & LDLM_FL_BLOCKED_MASK)) {
                 cfs_waitq_signal(&lock->l_waitq);
                 RETURN(ldlm_completion_tail(lock, data));
         }
@@ -218,8 +217,7 @@ int ldlm_completion_ast(struct ldlm_lock *lock, __u64 flags, void *data)
                 goto noreproc;
         }
 
-        if (!(flags & (LDLM_FL_BLOCK_WAIT | LDLM_FL_BLOCK_GRANTED |
-                       LDLM_FL_BLOCK_CONV))) {
+	if (!(flags & LDLM_FL_BLOCKED_MASK)) {
                 cfs_waitq_signal(&lock->l_waitq);
                 RETURN(0);
         }
@@ -552,7 +550,7 @@ int ldlm_cli_enqueue_fini(struct obd_export *exp, struct ptlrpc_request *req,
 
 	*flags = ldlm_flags_from_wire(reply->lock_flags);
 	lock->l_flags |= ldlm_flags_from_wire(reply->lock_flags &
-					      LDLM_INHERIT_FLAGS);
+					      LDLM_FL_INHERIT_MASK);
         /* move NO_TIMEOUT flag to the lock to force ldlm_lock_match()
          * to wait with no timeout as well */
 	lock->l_flags |= ldlm_flags_from_wire(reply->lock_flags &
