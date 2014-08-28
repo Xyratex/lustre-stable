@@ -3020,8 +3020,7 @@ ll_flock_completion_ast_async(struct ldlm_lock *lock, __u64 flags, void *data)
 	int rc;
 	ENTRY;
 
-	if (flags & (LDLM_FL_BLOCK_WAIT | LDLM_FL_BLOCK_GRANTED |
-		     LDLM_FL_BLOCK_CONV)) {
+	if (flags & LDLM_FL_BLOCKED_MASK) {
 		LDLM_DEBUG(lock, "client-side enqueue returned a blocked lock");
 		RETURN(0);
 	}
