@@ -2036,8 +2036,11 @@ static int ost_rw_hpreq_lock_match(struct ptlrpc_request *req,
                              &lock->l_resource->lr_name))
                 RETURN(0);
 
+        /* a bulk write can only hold a reference on a PW extent lock */
         mode = LCK_PW;
         if (opc == OST_READ)
+                /* whereas a bulk read can be protected by either a PR or PW
+                 * extent lock */
                 mode |= LCK_PR;
         if (!(lock->l_granted_mode & mode))
                 RETURN(0);

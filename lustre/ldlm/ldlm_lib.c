@@ -2881,8 +2881,15 @@ int target_bulk_io(struct obd_export *exp, struct ptlrpc_bulk_desc *desc,
                 ptlrpc_abort_bulk(desc);
         } else if (rc == 0) {
                 time_t start = cfs_time_current_sec();
+		time_t deadline;
+
+		/* limit actual bulk transfer to bulk_timeout seconds */
+		deadline = start + bulk_timeout;
+		if (deadline > req->rq_deadline)
+			deadline = req->rq_deadline;
+
                 do {
-                        long timeoutl = req->rq_deadline - cfs_time_current_sec();
+			long timeoutl = deadline - cfs_time_current_sec();
                         cfs_duration_t timeout = timeoutl <= 0 ?
                                 CFS_TICK : cfs_time_seconds(timeoutl);
                         *lwi = LWI_TIMEOUT_INTERVAL(timeout,
@@ -2896,16 +2903,17 @@ int target_bulk_io(struct obd_export *exp, struct ptlrpc_bulk_desc *desc,
 					  lwi);
                         LASSERT(rc == 0 || rc == -ETIMEDOUT);
                         /* Wait again if we changed deadline */
+			deadline = start + bulk_timeout;
+			if (deadline > req->rq_deadline)
+				deadline = req->rq_deadline;
                 } while ((rc == -ETIMEDOUT) &&
-                         (req->rq_deadline > cfs_time_current_sec()));
+			 (deadline > cfs_time_current_sec()));
 
                 if (rc == -ETIMEDOUT) {
                         DEBUG_REQ(D_ERROR, req,
                                   "timeout on bulk %s after %ld%+lds",
-                                  bulk2type(desc),
-                                  req->rq_deadline - start,
-                                  cfs_time_current_sec() -
-                                  req->rq_deadline);
+				  bulk2type(desc), deadline - start,
+				  cfs_time_current_sec() - deadline);
                         ptlrpc_abort_bulk(desc);
                 } else if (exp->exp_failed) {
                         DEBUG_REQ(D_ERROR, req, "Eviction on bulk %s",

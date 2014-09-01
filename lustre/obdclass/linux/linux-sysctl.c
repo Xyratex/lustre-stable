@@ -77,6 +77,7 @@ enum {
         OBD_AT_EXTRA,
         OBD_AT_EARLY_MARGIN,
         OBD_AT_HISTORY,
+	OBD_BULK_TIMEOUT,
 };
 
 #else
@@ -102,6 +103,7 @@ enum {
 #define OBD_AT_EXTRA            CTL_UNNUMBERED
 #define OBD_AT_EARLY_MARGIN     CTL_UNNUMBERED
 #define OBD_AT_HISTORY          CTL_UNNUMBERED
+#define OBD_BULK_TIMEOUT        CTL_UNNUMBERED
 
 #endif
 
@@ -281,6 +283,10 @@ int proc_alloc_fail_rate(struct ctl_table *table, int write,
 }
 #endif
 
+int LL_PROC_PROTO(proc_bulk_timeout)
+{
+	return proc_dointvec(table, write, buffer, lenp, ppos);
+}
 int LL_PROC_PROTO(proc_at_min)
 {
 	return proc_dointvec(table, write, buffer, lenp, ppos);
@@ -394,6 +400,14 @@ static cfs_sysctl_table_t obd_table[] = {
                 .mode     = 0644,
                 .proc_handler = &proc_max_dirty_pages_in_mb
         },
+	{
+		INIT_CTL_NAME(OBD_BULK_TIMEOUT)
+		.procname	= "bulk_timeout",
+		.data		= &bulk_timeout,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= &proc_bulk_timeout
+	},
         {
                 INIT_CTL_NAME(OBD_AT_MIN)
                 .procname = "at_min",
