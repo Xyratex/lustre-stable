@@ -106,45 +106,51 @@ run_test 9 "pause bulk on OST (bug 1420)"
 test_10a() {
 	local BEFORE=`date +%s`
 	local EVICT
+	local workdir
 
-	do_facet client "stat $DIR > /dev/null"  ||
-		error "failed to stat $DIR: $?"
-	drop_bl_callback "chmod 0777 $DIR" ||
-		error "failed to chmod $DIR: $?"
+	workdir="${DIR}/${tdir}"
+	mkdir -p "${workdir}"
+	do_facet client "stat ${workdir} > /dev/null"  ||
+		error "failed to stat ${workdir}: $?"
+	drop_bl_callback "chmod 0777 ${workdir}" ||
+		error "failed to chmod ${workdir}: $?"
 
 	# let the client reconnect
 	client_reconnect
 	EVICT=$(do_facet client $LCTL get_param mdc.$FSNAME-MDT*.state | \
 	    awk -F"[ [,]" '/EVICTED]$/ { if (mx<$4) {mx=$4;} } END { print mx }')
-	[ ! -z "$EVICT" ] && [[ $EVICT -gt $BEFORE ]] ||
+	[[ $EVICT -gt $BEFORE ]] ||
 		(do_facet client $LCTL get_param mdc.$FSNAME-MDT*.state;
 		    error "no eviction: $EVICT before:$BEFORE")
 
-	do_facet client checkstat -v -p 0777 $DIR ||
-		{ error "client checkstat failed: $?"; return 3; }
+	do_facet client checkstat -v -p 0777 ${workdir} ||
+		{ error "client checkstat failed: $?"; }
 }
 run_test 10a "finish request on server after client eviction (bug 1521)"
 
 test_10b() {
 	local BEFORE=`date +%s`
 	local EVICT
+	local workdir
 
-	do_facet client "stat $DIR > /dev/null"  ||
-		error "failed to stat $DIR: $?"
-	drop_bl_callback_once "chmod 0777 $DIR" ||
-		error "failed to chmod $DIR: $?"
+	workdir="${DIR}/${tdir}"
+	mkdir -p "${workdir}"
+	do_facet client "stat ${workdir} > /dev/null"  ||
+		error "failed to stat ${workdir}: $?"
+	drop_bl_callback_once "chmod 0777 ${workdir}" ||
+		error "failed to chmod ${workdir}: $?"
 
 	# let the client reconnect
 	client_reconnect
 	EVICT=$(do_facet client $LCTL get_param mdc.$FSNAME-MDT*.state | \
 	    awk -F"[ [,]" '/EVICTED]$/ { if (mx<$4) {mx=$4;} } END { print mx }')
 
-	[ -z "$EVICT" ] || [[ $EVICT -le $BEFORE ]] ||
+	[[ $EVICT -le $BEFORE ]] ||
 		(do_facet client $LCTL get_param mdc.$FSNAME-MDT*.state;
 		    error "eviction happened: $EVICT before:$BEFORE")
 
-	do_facet client checkstat -v -p 0777 $DIR ||
-		{ error "client checkstat failed: $?"; return 3; }
+	do_facet client checkstat -v -p 0777 ${workdir} ||
+		{ error "client checkstat failed: $?"; }
 }
 run_test 10b "re-send BL AST"
 
@@ -180,6 +186,49 @@ test_10c() {
 	umount_client $DIR2
 }
 run_test 10c "lock enqueue for destroyed export"
+
+test_10d() {
+	local before=`date +%s`
+	local evict
+	local mdccli
+	local mdcpath
+	local conn_uuid
+	local workdir
+	local pid
+	local rc
+
+	#assume one client
+	mdccli=$($LCTL dl | awk '/-mdc-/ {print $4;}')
+	conn_uuid=$($LCTL get_param -n mdc.${mdccli}.mds_conn_uuid)
+	mdcpath="mdc.${mdccli}.import=connection=${conn_uuid}"
+
+	workdir="${DIR}/${tdir}"
+	mkdir -p ${workdir} || error "can't create workdir $?"
+	stat ${workdir} > /dev/null || 
+		error "failed to stat ${workdir}: $?"
+	drop_bl_callback_once "chmod 0777 ${workdir}" &
+	pid=$!
+
+	# let chmod blocked
+	sleep 1
+	# force client reconnect
+	$LCTL set_param "${mdcpath}"
+
+	# wait client reconnect
+	client_reconnect
+	wait $pid
+	rc=$?
+	evict=$($LCTL get_param mdc.${mdccli}.state | \
+	    awk -F"[ [,]" '/EVICTED]$/ { if (mx<$4) {mx=$4;} } END { print mx }')
+
+	[[ ${evict} -gt ${before} ]] ||
+		    error "eviction not happened"
+
+	[ $rc -eq 0 ] || error "chmod must finished OK"
+	checkstat -v -p 0777 "${workdir}" ||
+		{ error "client checkstat failed: $?";}
+}
+run_test 10d "re-send BL AST vs reconnect race (MRP-2038)"
 
 #bug 2460
 # wake up a thread waiting for completion after eviction

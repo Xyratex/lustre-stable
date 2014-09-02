@@ -1248,6 +1248,7 @@ void class_destroy_import(struct obd_import *import)
 {
         LASSERT(import != NULL);
         LASSERT(import != LP_POISON);
+	ENTRY;
 
         class_handle_unhash(&import->imp_handle);
 
