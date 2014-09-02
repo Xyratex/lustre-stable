@@ -217,6 +217,7 @@ EXPORT_SYMBOL(client_import_find_conn);
 
 void client_destroy_import(struct obd_import *imp)
 {
+	ENTRY;
         /* drop security policy instance after all rpc finished/aborted
          * to let all busy contexts be released. */
         class_import_get(imp);
