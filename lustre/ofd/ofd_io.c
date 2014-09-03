@@ -446,7 +446,8 @@ static int
 ofd_commitrw_write(const struct lu_env *env, struct obd_export *exp,
 		   struct ofd_device *ofd, struct lu_fid *fid,
 		   struct lu_attr *la, struct filter_fid *ff, int objcount,
-		   int niocount, struct niobuf_local *lnb, int old_rc)
+		   int niocount, struct niobuf_local *lnb,
+		   struct obd_trans_info *oti, int old_rc)
 {
 	struct ofd_thread_info	*info = ofd_info(env);
 	struct ofd_object	*fo;
@@ -534,6 +535,8 @@ retry:
 	rc = dt_attr_get(env, o, la, ofd_object_capa(env, fo));
 
 out_stop:
+	oti->oti_wait = th->th_sync;
+
 	/* Force commit to make the just-deleted blocks
 	 * reusable. LU-456 */
 	if (rc == -ENOSPC)
@@ -610,7 +613,7 @@ int ofd_commitrw(const struct lu_env *env, int cmd, struct obd_export *exp,
 
 		rc = ofd_commitrw_write(env, exp, ofd, &info->fti_fid,
 					&info->fti_attr, ff, objcount, npages,
-					lnb, old_rc);
+					lnb, oti, old_rc);
 		if (rc == 0)
 			obdo_from_la(oa, &info->fti_attr,
 				     OFD_VALID_FLAGS | LA_GID | LA_UID);

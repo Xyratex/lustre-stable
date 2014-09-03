@@ -1819,8 +1819,11 @@ int tgt_brw_write(struct tgt_session_info *tsi)
 	cksum_type_t		 cksum_type = OBD_CKSUM_CRC32;
 	bool			 no_reply = false, mmap;
 	struct tgt_thread_big_cache *tbc = req->rq_svc_thread->t_data;
+	struct obd_trans_info trans_info = { 0 };
 
 	ENTRY;
+
+	oti_init(&trans_info, req);
 
 	if (ptlrpc_req2svc(req)->srv_req_portal != OST_IO_PORTAL) {
 		CERROR("%s: deny write request from %s to portal %u\n",
@@ -1977,8 +1980,8 @@ skip_transfer:
 
 	/* Must commit after prep above in all cases */
 	rc = obd_commitrw(tsi->tsi_env, OBD_BRW_WRITE, exp, &repbody->oa,
-			  objcount, ioo, remote_nb, npages, local_nb, NULL,
-			  rc);
+			  objcount, ioo, remote_nb, npages, local_nb,
+			  &trans_info, rc);
 	if (rc == -ENOTCONN)
 		/* quota acquire process has been given up because
 		 * either the client has been evicted or the client
@@ -2020,7 +2023,15 @@ out_lock:
 	if (desc)
 		ptlrpc_free_bulk_nopin(desc);
 out:
-	if (no_reply) {
+	if (likely(no_reply == 0))
+		no_reply = !target_committed_to_req(req) && trans_info.oti_wait;
+	if (!no_reply) {
+		req->rq_status = rc;
+		if (rc == 0)
+			ptlrpc_reply(req);
+		else
+			ptlrpc_error(req);
+	} else {
 		req->rq_no_reply = 1;
 		/* reply out callback would free */
 		ptlrpc_req_drop_rs(req);
