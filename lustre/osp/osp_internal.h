@@ -91,7 +91,7 @@ struct osp_device {
 	struct obd_uuid			 opd_cluuid;
 	struct obd_connect_data		*opd_connect_data;
 	int				 opd_connects;
-	cfs_proc_dir_entry_t		*opd_proc_entry;
+	struct proc_dir_entry		*opd_proc_entry;
 	struct lprocfs_stats		*opd_stats;
 	/* connection status. */
 	int				 opd_new_connection;
@@ -178,7 +178,7 @@ struct osp_device {
 	/* how often to update statfs data */
 	int				 opd_statfs_maxage;
 
-	cfs_proc_dir_entry_t		*opd_symlink;
+	struct proc_dir_entry		*opd_symlink;
 };
 
 extern struct kmem_cache *osp_object_kmem;
