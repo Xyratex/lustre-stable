@@ -16,29 +16,42 @@ init_logging
 
 check_and_setup_lustre
 
-# first unmount all the lustre client
+# first unmount all the lustre clients
 cleanup_mount $MOUNT
-# mount lustre on mds
-lustre_client=${NFS_SERVER:-$(facet_active_host $SINGLEMDS)}
+# lustre client used as nfs server (default is mds node)
+LUSTRE_CLIENT_NFSSRV=${LUSTRE_CLIENT_NFSSRV:-$(facet_active_host $SINGLEMDS)}
+NFS_SRVMNTPT=${NFS_SRVMNTPT:-$MOUNT}
 NFS_CLIENTS=${NFS_CLIENTS:-$CLIENTS}
-NFS_CLIENTS=$(exclude_items_from_list $NFS_CLIENTS $lustre_client)
+NFS_CLIENTS=$(exclude_items_from_list $NFS_CLIENTS $LUSTRE_CLIENT_NFSSRV)
+NFS_CLIMNTPT=${NFS_CLIMNTPT:-$MOUNT}
+
 [ "$NFSVERSION" = "4" ] && cl_mnt_opt="$MOUNTOPT,32bitapi" || cl_mnt_opt=""
-zconf_mount_clients $lustre_client $MOUNT "$cl_mnt_opt" || \
-    error "mount lustre on $lustre_client failed"
+
+cleanup_exit () {
+	trap 0
+	cleanup
+	check_and_cleanup_lustre
+	exit
+}
+
+cleanup () {
+	cleanup_nfs "$NFS_CLIMNTPT" "$LUSTRE_CLIENT_NFSSRV" "$NFS_CLIENTS" ||
+		error_noexit false "failed to cleanup nfs"
+	zconf_umount $LUSTRE_CLIENT_NFSSRV $NFS_SRVMNTPT force ||
+		error_noexit false "failed to umount lustre on $LUSTRE_CLIENT_NFSSRV"
+	# restore lustre mount
+	restore_mount $MOUNT ||
+		error_noexit false "failed to mount lustre"
+}
+
+trap cleanup_exit EXIT SIGHUP SIGINT
+
+zconf_mount $LUSTRE_CLIENT_NFSSRV $NFS_SRVMNTPT "$cl_mnt_opt" ||
+    error "mount lustre on $LUSTRE_CLIENT_NFSSRV failed"
 
 # setup the nfs
-if ! setup_nfs "$NFSVERSION" "$MOUNT" "$lustre_client" "$NFS_CLIENTS"; then
-    error_noexit false "setup nfs failed!"
-    cleanup_nfs "$MOUNT" "$lustre_client" "$NFS_CLIENTS" || \
-        error_noexit false "failed to cleanup nfs"
-    if ! zconf_umount_clients $lustre_client $MOUNT force; then
-        error_noexit false "failed to umount lustre on $lustre_client"
-    elif ! zconf_mount_clients $NFS_CLIENTS $MOUNT; then
-        error_noexit false "failed to mount lustre"
-    fi
-    check_and_cleanup_lustre
-    exit
-fi
+setup_nfs "$NFSVERSION" "$NFS_SRVMNTPT" "$LUSTRE_CLIENT_NFSSRV" "$NFS_CLIENTS" ||
+    error false "setup nfs failed!"
 
 NFSCLIENT=true
 FAIL_ON_ERROR=false
@@ -98,15 +111,5 @@ test_iorfpp() {
 }
 run_test iorfpp "iorfpp"
 
-# cleanup nfs
-cleanup_nfs "$MOUNT" "$lustre_client" "$NFS_CLIENTS" || \
-    error_noexit false "cleanup_nfs failed"
-if ! zconf_umount_clients $lustre_client $MOUNT force; then
-    error_noexit false "failed to umount lustre on $lustre_client"
-elif ! zconf_mount_clients $NFS_CLIENTS $MOUNT; then
-    error_noexit false "failed to mount lustre after nfs test"
-fi
-
 complete $SECONDS
-check_and_cleanup_lustre
 exit_status
