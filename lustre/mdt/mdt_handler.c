@@ -3818,7 +3818,7 @@ static int mdt_stack_init(const struct lu_env *env, struct mdt_device *mdt,
 	if (!obd) {
 		CERROR("Can not find obd %s (%s in config)\n",
 		       MDD_OBD_NAME, lustre_cfg_string(cfg, 0));
-		GOTO(class_detach, rc = -EINVAL);
+		GOTO(lcfg_cleanup, rc = -EINVAL);
 	}
 
 	lustre_cfg_free(lcfg);
@@ -3948,7 +3948,7 @@ static int mdt_quota_init(const struct lu_env *env, struct mdt_device *mdt,
 	if (!obd) {
 		CERROR("Can not find obd %s (%s in config)\n", qmtname,
 		       lustre_cfg_string(cfg, 0));
-		GOTO(class_detach, rc = -EINVAL);
+		GOTO(lcfg_cleanup, rc = -EINVAL);
 	}
 
 	lustre_cfg_free(lcfg);
