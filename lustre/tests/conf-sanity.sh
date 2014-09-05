@@ -4892,6 +4892,36 @@ test_85() {
 }
 run_test 85 "check recovery_time_hard"
 
+test_86() {
+	local ost_opts="$(mkfs_opts ost1 $(ostdevname 1)) \
+		--reformat $(ostdevname 1) $(ostvdevname 1)"
+	local newsize=1024
+	local oldsize=$(do_facet ost1 "$DEBUGFS -c -R stats `ostdevname 1`" \
+		| awk '/Flex block group size: / { print $NF; exit;}')
+
+	local opts=ost_opts
+	if [[ ${!opts} != *mkfsoptions* ]]; then
+		eval opts=\"${!opts} \
+			--mkfsoptions='\\\"-O flex_bg -G $newsize\\\"'\"
+	else
+		local val=${!opts//--mkfsoptions=\\\"/ \
+			--mkfsoptions=\\\"-O flex_bg -G $newsize }
+		eval opts='${val}'
+	fi
+
+	echo "params: $opts"
+
+	add ost1 $opts || error "add ost1 failed with new params"
+
+	local foundsize=$(do_facet ost1 "$DEBUGFS -c -R stats `ostdevname 1`" \
+		| awk '/Flex block group size: / { print $NF; exit;}')
+
+	[[ $foundsize -ne $newsize ]] && error \
+		"Flex block group size: "$foundsize", expected: "$newsize""
+	return 0
+}
+run_test 86 "Replacing mkfs.lustre -G option"
+
 if ! combined_mgs_mds ; then
 	stop mgs
 fi
