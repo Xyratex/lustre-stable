@@ -109,10 +109,6 @@ struct obd_client_handle {
 void statfs_pack(struct obd_statfs *osfs, struct kstatfs *sfs);
 void statfs_unpack(struct kstatfs *sfs, struct obd_statfs *osfs);
 
-/* Until such time as we get_info the per-stripe maximum from the OST,
- * we define this to be 2T - 4k, which is the ext3 maxbytes. */
-#define LUSTRE_STRIPE_MAXBYTES 0x1fffffff000ULL
-
 /* Special values for remove LOV EA from disk */
 #define LOVEA_DELETE_VALUES(size, count, offset) (size == 0 && count == 0 && \
                                                  offset == (typeof(offset))(-1))
