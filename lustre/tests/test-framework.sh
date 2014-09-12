@@ -2838,7 +2838,7 @@ get_env_vars() {
 	local facet
 
 	for var in ${!MODOPTS_*}; do
-		value=${!var}
+		value=${!var//\"/\\\"}
 		echo -n " ${var}=\"$value\""
 	done
 
