@@ -12180,6 +12180,31 @@ test_238() {
 }
 run_test 238 "Verify linkea consistency"
 
+test_241_bio() {
+	for LOOP in $(seq $1); do
+		dd if=$DIR/$tfile of=/dev/null bs=40960 count=1 2>/dev/null
+		cancel_lru_locks osc > /dev/null
+	done
+}
+
+test_241_dio() {
+	for LOOP in $(seq $1); do
+		dd if=$DIR/$tfile of=/dev/null bs=40960 count=1 \
+						iflag=direct 2>/dev/null
+	done
+}
+
+test_241() {
+	dd if=/dev/zero of=$DIR/$tfile count=1 bs=40960
+	ls -la $DIR/$tfile
+	cancel_lru_locks osc
+	test_241_bio 1000 &
+	PID=$!
+	test_241_dio 1000
+	wait $PID
+}
+run_test 241 "bio vs dio"
+
 #
 # tests that do cleanup/setup should be run at the end
 #
