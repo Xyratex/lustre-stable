@@ -53,8 +53,8 @@ static inline unsigned long update_size(struct update *update)
 	return size;
 }
 
-static inline void *update_param_buf(struct update *update, int index,
-				     int *size)
+static inline void *object_update_param_get(struct update *update, int index,
+					    int *size)
 {
 	int	i;
 	void	*ptr;

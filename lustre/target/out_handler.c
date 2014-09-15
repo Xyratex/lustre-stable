@@ -102,17 +102,22 @@ static int out_trans_stop(const struct lu_env *env,
 
 int out_tx_end(const struct lu_env *env, struct thandle_exec_args *ta)
 {
-	struct tgt_session_info *tsi = tgt_ses_info(env);
-	int i = 0, rc;
 
-	LASSERT(ta->ta_dev);
-	LASSERT(ta->ta_handle);
+	struct tgt_session_info *tsi = tgt_ses_info(env);
+	int                     i;
+	int                     rc;
+	int                     rc1;
+	ENTRY;
+
+	if (ta->ta_handle == NULL)
+		RETURN(0);
 
 	if (ta->ta_err != 0 || ta->ta_argno == 0)
 		GOTO(stop, rc = ta->ta_err);
 
+	LASSERT(ta->ta_dev != NULL);
 	rc = out_trans_start(env, ta);
-	if (unlikely(rc))
+	if (unlikely(rc != 0))
 		GOTO(stop, rc);
 
 	for (i = 0; i < ta->ta_argno; i++) {
@@ -130,14 +135,18 @@ int out_tx_end(const struct lu_env *env, struct thandle_exec_args *ta)
 			}
 			break;
 		}
+
+		CDEBUG(D_INFO, "%s: executed %u/%u: rc = %d\n",
+		       dt_obd_name(ta->ta_dev), i, ta->ta_argno, rc);
 	}
 
 	/* Only fail for real update */
 	tsi->tsi_reply_fail_id = OBD_FAIL_UPDATE_OBJ_NET_REP;
 stop:
-	CDEBUG(D_INFO, "%s: executed %u/%u: rc = %d\n",
-	       dt_obd_name(ta->ta_dev), i, ta->ta_argno, rc);
-	out_trans_stop(env, ta, rc);
+	rc1 = out_trans_stop(env, ta, rc);
+	if (rc == 0)
+		rc = rc1;
+
 	ta->ta_handle = NULL;
 	ta->ta_argno = 0;
 	ta->ta_err = 0;
@@ -290,7 +299,7 @@ static int out_create(struct tgt_session_info *tsi)
 
 	ENTRY;
 
-	wobdo = update_param_buf(update, 0, &size);
+	wobdo = object_update_param_get(update, 0, &size);
 	if (wobdo == NULL || size != sizeof(*wobdo)) {
 		CERROR("%s: obdo is NULL, invalid RPC: rc = %d\n",
 		       tgt_name(tsi->tsi_tgt), -EPROTO);
@@ -305,7 +314,7 @@ static int out_create(struct tgt_session_info *tsi)
 	if (S_ISDIR(attr->la_mode)) {
 		int size;
 
-		fid = update_param_buf(update, 1, &size);
+		fid = object_update_param_get(update, 1, &size);
 		if (fid == NULL || size != sizeof(*fid)) {
 			CERROR("%s: invalid fid: rc = %d\n",
 			       tgt_name(tsi->tsi_tgt), -EPROTO);
@@ -399,7 +408,7 @@ static int out_attr_set(struct tgt_session_info *tsi)
 
 	ENTRY;
 
-	wobdo = update_param_buf(update, 0, &size);
+	wobdo = object_update_param_get(update, 0, &size);
 	if (wobdo == NULL || size != sizeof(*wobdo)) {
 		CERROR("%s: empty obdo in the update: rc = %d\n",
 		       tgt_name(tsi->tsi_tgt), -EPROTO);
@@ -505,7 +514,7 @@ static int out_xattr_get(struct tgt_session_info *tsi)
 
 	ENTRY;
 
-	name = (char *)update_param_buf(update, 0, NULL);
+	name = (char *)object_update_param_get(update, 0, NULL);
 	if (name == NULL) {
 		CERROR("%s: empty name for xattr get: rc = %d\n",
 		       tgt_name(tsi->tsi_tgt), -EPROTO);
@@ -554,7 +563,7 @@ static int out_index_lookup(struct tgt_session_info *tsi)
 	if (!lu_object_exists(&obj->do_lu))
 		RETURN(-ENOENT);
 
-	name = (char *)update_param_buf(update, 0, NULL);
+	name = (char *)object_update_param_get(update, 0, NULL);
 	if (name == NULL) {
 		CERROR("%s: empty name for lookup: rc = %d\n",
 		       tgt_name(tsi->tsi_tgt), -EPROTO);
@@ -658,20 +667,21 @@ static int out_xattr_set(struct tgt_session_info *tsi)
 	struct lu_buf		*lbuf = &tti->tti_buf;
 	char			*name;
 	char			*buf;
-	char			*tmp;
+	__u32			*tmp;
 	int			 buf_len = 0;
 	int			 flag;
+	int			 size = 0;
 	int			 rc;
 	ENTRY;
 
-	name = update_param_buf(update, 0, NULL);
+	name = object_update_param_get(update, 0, NULL);
 	if (name == NULL) {
 		CERROR("%s: empty name for xattr set: rc = %d\n",
 		       tgt_name(tsi->tsi_tgt), -EPROTO);
 		RETURN(err_serious(-EPROTO));
 	}
 
-	buf = (char *)update_param_buf(update, 1, &buf_len);
+	buf = (char *)object_update_param_get(update, 1, &buf_len);
 	if (buf == NULL || buf_len == 0) {
 		CERROR("%s: empty buf for xattr set: rc = %d\n",
 		       tgt_name(tsi->tsi_tgt), -EPROTO);
@@ -681,10 +691,10 @@ static int out_xattr_set(struct tgt_session_info *tsi)
 	lbuf->lb_buf = buf;
 	lbuf->lb_len = buf_len;
 
-	tmp = (char *)update_param_buf(update, 2, NULL);
-	if (tmp == NULL) {
-		CERROR("%s: empty flag for xattr set: rc = %d\n",
-		       tgt_name(tsi->tsi_tgt), -EPROTO);
+	tmp = object_update_param_get(update, 2, &size);
+	if (tmp == NULL || size != sizeof(*tmp)) {
+		CERROR("%s: emptry or wrong size %d flag: rc = %d\n",
+		       tgt_name(tsi->tsi_tgt), size, -EPROTO);
 		RETURN(err_serious(-EPROTO));
 	}
 
@@ -963,14 +973,14 @@ static int out_index_insert(struct tgt_session_info *tsi)
 
 	ENTRY;
 
-	name = (char *)update_param_buf(update, 0, NULL);
+	name = (char *)object_update_param_get(update, 0, NULL);
 	if (name == NULL) {
 		CERROR("%s: empty name for index insert: rc = %d\n",
 		       tgt_name(tsi->tsi_tgt), -EPROTO);
 		RETURN(err_serious(-EPROTO));
 	}
 
-	fid = (struct lu_fid *)update_param_buf(update, 1, &size);
+	fid = (struct lu_fid *)object_update_param_get(update, 1, &size);
 	if (fid == NULL || size != sizeof(*fid)) {
 		CERROR("%s: invalid fid: rc = %d\n",
 		       tgt_name(tsi->tsi_tgt), -EPROTO);
@@ -1059,7 +1069,7 @@ static int out_index_delete(struct tgt_session_info *tsi)
 	if (!lu_object_exists(&obj->do_lu))
 		RETURN(-ENOENT);
 
-	name = (char *)update_param_buf(update, 0, NULL);
+	name = (char *)object_update_param_get(update, 0, NULL);
 	if (name == NULL) {
 		CERROR("%s: empty name for index delete: rc = %d\n",
 		       tgt_name(tsi->tsi_tgt), -EPROTO);
@@ -1220,8 +1230,8 @@ int out_handle(struct tgt_session_info *tsi)
 	struct update_reply		*update_reply;
 	int				 bufsize;
 	int				 count;
-	int				 old_batchid = -1;
 	unsigned			 off;
+	int				 current_batchid = -1;
 	int				 i;
 	int				 rc = 0;
 	int				 rc1 = 0;
@@ -1273,12 +1283,9 @@ int out_handle(struct tgt_session_info *tsi)
 	update_init_reply_buf(update_reply, count);
 	tti->tti_u.update.tti_update_reply = update_reply;
 
-	rc = out_tx_start(env, dt, ta);
-	if (rc != 0)
-		RETURN(rc);
-
 	tti->tti_mult_trans = !req_is_replay(tgt_ses_req(tsi));
 
+	memset(ta, 0, sizeof(*ta));
 	/* Walk through updates in the request to execute them synchronously */
 	off = cfs_size_round(offsetof(struct update_buf, ub_bufs[0]));
 	for (i = 0; i < count; i++) {
@@ -1286,20 +1293,6 @@ int out_handle(struct tgt_session_info *tsi)
 		struct dt_object	*dt_obj;
 
 		update = (struct update *)((char *)ubuf + off);
-		if (old_batchid == -1) {
-			old_batchid = update->u_batchid;
-		} else if (old_batchid != update->u_batchid) {
-			/* Stop the current update transaction,
-			 * create a new one */
-			rc = out_tx_end(env, ta);
-			if (rc != 0)
-				RETURN(rc);
-
-			rc = out_tx_start(env, dt, ta);
-			if (rc != 0)
-				RETURN(rc);
-			old_batchid = update->u_batchid;
-		}
 
 		fid_le_to_cpu(&update->u_fid, &update->u_fid);
 		if (!fid_is_sane(&update->u_fid)) {
@@ -1318,25 +1311,51 @@ int out_handle(struct tgt_session_info *tsi)
 		tti->tti_u.update.tti_update_reply_index = i;
 
 		h = out_handler_find(update->u_type);
-		if (likely(h != NULL)) {
-			/* For real modification RPC, check if the update
-			 * has been executed */
-			if (h->th_flags & MUTABOR) {
-				struct ptlrpc_request *req = tgt_ses_req(tsi);
-
-				if (out_check_resent(env, dt, dt_obj, req,
-						     out_reconstruct,
-						     update_reply, i))
-					GOTO(next, rc);
-			}
-
-			rc = h->th_act(tsi);
-		} else {
-			CERROR("%s: The unsupported opc: 0x%x\n",
+		if (unlikely(h == NULL)) {
+			CERROR("%s: unsupported opc: 0x%x\n",
 			       tgt_name(tsi->tsi_tgt), update->u_type);
-			lu_object_put(env, &dt_obj->do_lu);
-			GOTO(out, rc = -ENOTSUPP);
+			GOTO(next, rc = -ENOTSUPP);
 		}
+
+		/* start transaction for modification RPC only */
+		if (h->th_flags & MUTABOR && current_batchid == -1) {
+			current_batchid = update->u_batchid;
+			rc = out_tx_start(env, dt, ta);
+			if (rc < 0)
+				GOTO(next, rc);
+		}
+
+		/* Stop the current update transaction,
+		 * if it meets a different batchid, or
+		 * it is read-only RPC */
+		if (((current_batchid != update->u_batchid) ||
+		     !(h->th_flags & MUTABOR)) && ta->ta_handle != NULL) {
+			rc = out_tx_end(env, ta);
+			current_batchid = -1;
+			if (rc != 0)
+				GOTO(next, rc);
+
+			/* start a new transaction if needed */
+			if (h->th_flags & MUTABOR) {
+				rc = out_tx_start(env, dt, ta);
+				if (rc != 0)
+					GOTO(next, rc);
+
+				current_batchid = update->u_batchid;
+			}
+		}
+
+		/* Check resend case only for modifying RPC */
+		if (h->th_flags & MUTABOR) {
+			struct ptlrpc_request *req = tgt_ses_req(tsi);
+
+			if (out_check_resent(env, dt, dt_obj, req,
+					     out_reconstruct, update_reply,
+					     i))
+				GOTO(next, rc);
+		}
+
+		rc = h->th_act(tsi);
 next:
 		lu_object_put(env, &dt_obj->do_lu);
 		if (rc < 0)
@@ -1344,9 +1363,12 @@ next:
 		off += cfs_size_round(update_size(update));
 	}
 out:
-	rc1 = out_tx_end(env, ta);
-	if (rc == 0)
-		rc = rc1;
+	if (current_batchid != -1) {
+		rc1 = out_tx_end(env, ta);
+		if (rc == 0)
+			rc = rc1;
+	}
+
 	RETURN(rc);
 }
 
