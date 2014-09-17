@@ -2382,6 +2382,66 @@ test_35() {
 }
 run_test 35 "usage is still accessible across reboot ============================"
 
+#MRP-1989
+test_36() {
+	local ret=0
+	local hangs=0
+	local at_saved
+
+	#This test uses ost with index 0
+	rm -rf $DIR/$tdir
+	mkdir $DIR/$tdir
+	chmod 0777 $DIR/$tdir
+
+	set_blk_tunesz 512
+	set_blk_unitsz 1024
+
+	$LFS setquota -u $TSTUSR -b 0 -B $((1024*1024)) -i 0 -I 0 $DIR/$tdir
+
+	#speedup request timeout
+	at_saved=$(at_max_get ost1)
+
+	at_max_set 1 ost1
+	$RUNAS $SETSTRIPE -c 1 -i 0 $DIR/$tdir
+	# Create part of a file on OST
+	$RUNAS dd if=/dev/zero of=$DIR/$tdir/$tfile bs=1M count=1 \
+						oflag=direct
+
+	do_facet $SINGLEMDS "$LCTL --device %$FSNAME-OST0000-osc-MDT0000 deactivate"
+	echo "device OST0000 was deactivated"
+
+	# Waiting while OST evict osc-mdt client, cause no ping
+	# from it(deactivated)
+	sleep $((3*TIMEOUT))
+	# This ost_brw_write should wait at quota_chk_acq_common()
+	# for quota master
+	$RUNAS dd if=/dev/zero of=$DIR/$tdir/$tfile bs=1M count=10 \
+						oflag=direct &
+	# One thread is sleeping at quota_chk_acq_common
+	# Wait while resends brw hangs at filter_preprw_write->....->__lock_page
+	sleep 60
+
+	ret=$(do_facet ost1 "grep quota_chk_acq_common /proc/*/task/*/stack")
+	hangs=$(do_facet ost1 "grep filter_preprw_write /proc/*/task/*/stack | wc -l")
+
+
+	echo $ret
+	echo "Hangs ll_ost_io $hangs"
+	do_facet $SINGLEMDS "$LCTL --device %$FSNAME-OST0000-osc-MDT0000 activate"
+	echo "device OST0000 was activated"
+
+	at_max_set $at_saved ost1
+	# l_wait_event checks condition periodic, so between this checks
+	# some resending brw could hangs(1 resend per 8sec), it is
+	# normal for at_max 1. The border of this hangs is 5
+	if [ -n "$ret" -a $hangs -gt 5 ]
+	then
+		error "ll_ost_io hangs without active quota master"
+	fi
+
+	return 0
+}
+run_test 36 "deactivate OST during io activity ======"
 
 # turn off quota
 quota_fini()
