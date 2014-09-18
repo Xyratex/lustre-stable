@@ -865,20 +865,7 @@ static int cml_name_insert(const struct lu_env *env, struct md_object *p,
 static int cmm_is_subdir(const struct lu_env *env, struct md_object *mo,
                          const struct lu_fid *fid, struct lu_fid *sfid)
 {
-        struct cmm_thread_info *cmi;
-        int rc;
-        ENTRY;
-
-        cmi = cmm_env_info(env);
-        rc = cmm_mode_get(env, md_obj2dev(mo), fid, &cmi->cmi_ma, NULL);
-        if (rc)
-                RETURN(rc);
-
-        if (!S_ISDIR(cmi->cmi_ma.ma_attr.la_mode))
-                RETURN(0);
-
-        rc = mdo_is_subdir(env, md_object_next(mo), fid, sfid);
-        RETURN(rc);
+        RETURN(mdo_is_subdir(env, md_object_next(mo), fid, sfid));
 }
 
 static const struct md_dir_operations cml_dir_ops = {
