@@ -3025,6 +3025,22 @@ test_92() {
 }
 run_test 92 "Check failback with errors=panic"
 
+test_93() {
+    cancel_lru_locks osc
+
+    $SETSTRIPE -i 0 -c 1 $DIR/$tfile
+    dd if=/dev/zero of=$DIR/$tfile bs=1024 count=1
+#define OBD_FAIL_TGT_REPLAY_RECONNECT     0x715
+    # We need to emulate a state that OST is waiting for other clients
+    # not completing the recovery. Final ping is queued, but reply will be sent
+    # on the recovery completion. It is done by sleep before processing final
+    # pings
+    do_facet ost1 "$LCTL set_param fail_val=40"
+    do_facet ost1 "$LCTL set_param fail_loc=0x715"
+    fail ost1
+}
+run_test 93 "replay + reconnect"
+
 
 complete $SECONDS
 check_and_cleanup_lustre
