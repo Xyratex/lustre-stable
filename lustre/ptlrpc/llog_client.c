@@ -191,6 +191,10 @@ static int llog_client_next_block(const struct lu_env *env,
         ENTRY;
 
         LLOG_CLIENT_ENTRY(loghandle->lgh_ctxt, imp);
+
+	if (OBD_FAIL_CHECK(OBD_FAIL_LLOG_CLIENT_NEXT_BLOCK))
+		GOTO(err_exit, rc =-EIO);
+
         req = ptlrpc_request_alloc_pack(imp, &RQF_LLOG_ORIGIN_HANDLE_NEXT_BLOCK,
                                         LUSTRE_LOG_VERSION,
                                         LLOG_ORIGIN_HANDLE_NEXT_BLOCK);

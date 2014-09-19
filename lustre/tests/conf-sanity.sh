@@ -4681,6 +4681,16 @@ test_80() {
 }
 run_test 80 "mgc import reconnect race"
 
+test_81() {
+	start_mds
+#define OBD_FAIL_LLOG_CLIENT_NEXT_BLOCK             0x1312
+	do_facet ost1 "lctl set_param fail_loc=0x1312"
+	start_ost
+	do_facet ost1 "lctl set_param fail_loc=0x0"
+	stopall
+}
+run_test 81 "EIO in remote config reading doesn't cause LBUG"
+
 if ! combined_mgs_mds ; then
 	stop mgs
 fi
