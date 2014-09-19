@@ -2072,6 +2072,7 @@ static int target_recovery_thread(void *arg)
          * The third stage: reply on final pings, at this moment all clients
          * must have request in final queue
          */
+	CFS_FAIL_TIMEOUT(OBD_FAIL_TGT_REPLAY_RECONNECT, cfs_fail_val);
         CDEBUG(D_INFO, "3: final stage - process recovery completion pings\n");
         /** Update server last boot epoch */
         lut_boot_epoch_update(lut);
