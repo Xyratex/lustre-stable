@@ -1088,6 +1088,7 @@ static int filter_read_group_internal(struct obd_device *obd, int group,
                                                               dir, 0700, 1);
                         if (IS_ERR(tmp_subdirs->dentry[i])) {
                                 rc = PTR_ERR(tmp_subdirs->dentry[i]);
+				tmp_subdirs->dentry[i] = NULL;
                                 CERROR("can't lookup/create O/%d/%s: rc = %d\n",
                                        group, dir, rc);
                                 GOTO(cleanup, rc);
