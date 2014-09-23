@@ -4737,6 +4737,15 @@ test_82() {
 }
 run_test 82 "ENOSPACE on OST doesn't cause message VFS: Busy inodes after unmount ..."
 
+test_83() {
+##define OBD_FAIL_OSD_OST_EA_FID_SET 0x197
+	do_facet ost1 "lctl set_param fail_loc=0x197"
+	start_ost
+	stop_ost
+	do_facet ost1 "lctl set_param fail_loc=0"
+}
+run_test 83 "osd_ost init: fail ea_fid_set"
+
 if ! combined_mgs_mds ; then
 	stop mgs
 fi
