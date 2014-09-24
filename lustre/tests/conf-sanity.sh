@@ -116,7 +116,7 @@ reformat_and_config() {
 }
 
 start_mgs () {
-	echo "start mgs"
+	echo "start mgs service on $(facet_active_host mgs)"
 	start mgs $MGSDEV $MGS_MOUNT_OPTS
 }
 
@@ -146,6 +146,19 @@ stop_mgs() {
        echo "stop mgs service on `facet_active_host mgs`"
        # These tests all use non-failover stop
        stop mgs -f  || return 97
+}
+
+stop_mgsmds_with_timeout() {
+	local timeout=${1:-0}
+	local facet
+	if ! combined_mgs_mds ; then
+		facet=mgs
+	else
+		facet=$SINGLEMDS
+	fi
+	echo stop $facet on $(facet_active_host $facet), \
+timeout $timeout seconds
+	stop_with_timeout $timeout $facet -f
 }
 
 start_ost() {
@@ -3069,6 +3082,47 @@ test_73() {
         stop_mds
 }
 run_test 73 "check recovery_hard_time"
+
+test_74()
+{
+	local mgsdev
+	reformat_and_config
+
+	if combined_mgs_mds ; then
+		mgsdev=$(mdsdevname 1)
+	else
+		mgsdev=$MGSDEV
+		stop mgs
+	fi
+
+	local mntdir=$(facet_mntpt mgs)
+	do_facet mgs "mount -t $FSTYPE $mgsdev $mntdir $MDS_MOUNT_OPTS"
+	#
+	# Incorrect llh_tgtuuid in log header is to cause lctl
+	# conf_param below to fail.
+	#
+	do_facet mgs "sed -i '1,/config_uuid/s/config_uuid/xxxxxx_xxxx/' \
+$mntdir/CONFIGS/$FSNAME-MDT0000"
+	do_facet mgs "umount $mgsdev"
+
+	if combined_mgs_mds ; then
+		start_mds
+	else
+		start_mgs
+	fi
+	do_facet mgs "$LCTL conf_param $FSNAME-MDT0000.mdd.atime_diff=65" && \
+	    error "conf_param should fail"
+	#
+	# "Mount still busy" from server_wait_finished() appears after
+	# 30 seconds waiting.
+	#
+	stop_mgsmds_with_timeout 40
+	do_facet mgs "dmesg | grep \\\"Mount still busy with\\\"" && \
+	    error "umount failed"
+
+	reformat_and_config
+}
+run_test 74 "test conf_param failure"
 
 if ! combined_mgs_mds ; then
 	stop mgs
