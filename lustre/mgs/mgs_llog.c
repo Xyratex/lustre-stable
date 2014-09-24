@@ -1416,18 +1416,20 @@ static int record_start_log(struct obd_device *obd,
 
         push_ctxt(&saved, &obd->obd_lvfs_ctxt, NULL);
         rc = llog_create(ctxt, llh, NULL, name, LLOG_CREATE_RW);
-        if (rc == 0)
+        if (rc == 0) {
                 rc = llog_init_handle(*llh, LLOG_F_IS_PLAIN, &cfg_uuid);
-        else
-                *llh = NULL;
+                if (rc) {
+                        llog_close(*llh);
+                        *llh = NULL;
+                }
+        }
 
         pop_ctxt(&saved, &obd->obd_lvfs_ctxt, NULL);
         llog_ctxt_put(ctxt);
 
 out:
-        if (rc) {
+        if (rc)
                 CERROR("Can't start log %s: %d\n", name, rc);
-        }
         RETURN(rc);
 }
 
@@ -1526,7 +1528,7 @@ int mgs_write_log_direct_all(struct obd_device *obd, struct fs_db *fsdb,
                 struct llog_handle *llh = NULL;
                 rc = record_start_log(obd, &llh, logname);
 		if (rc == 0)
-			record_end_log(obd, &llh);
+			rc = record_end_log(obd, &llh);
         }
         name_destroy(&logname);
         if (rc)
@@ -2164,7 +2166,7 @@ static int mgs_write_log_mdt0(struct obd_device *obd, struct fs_db *fsdb,
 	sprintf(uuid, "%s_UUID", log);
         rc = record_marker(obd, llh, fsdb, CM_START, log, "add mdt");
 	if (rc)
-		GOTO(out_lod, rc);
+		GOTO(out_end, rc);
         rc = record_attach(obd, llh, log, LUSTRE_MDT_NAME, uuid);
 	if (rc)
 		GOTO(out_end, rc);
