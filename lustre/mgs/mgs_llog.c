@@ -1375,18 +1375,20 @@ static int record_start_log(struct obd_device *obd,
 
         push_ctxt(&saved, &obd->obd_lvfs_ctxt, NULL);
         rc = llog_create(ctxt, llh, NULL, name, LLOG_CREATE_RW);
-        if (rc == 0)
+        if (rc == 0) {
                 rc = llog_init_handle(*llh, LLOG_F_IS_PLAIN, &cfg_uuid);
-        else
-                *llh = NULL;
+                if (rc) {
+                        llog_close(*llh);
+                        *llh = NULL;
+                }
+        }
 
         pop_ctxt(&saved, &obd->obd_lvfs_ctxt, NULL);
         llog_ctxt_put(ctxt);
 
 out:
-        if (rc) {
+        if (rc)
                 CERROR("Can't start log %s: %d\n", name, rc);
-        }
         RETURN(rc);
 }
 
@@ -1478,7 +1480,8 @@ int mgs_write_log_direct_all(struct obd_device *obd, struct fs_db *fsdb,
         if (mgs_log_is_empty(obd, logname)) {
                 struct llog_handle *llh = NULL;
                 rc = record_start_log(obd, &llh, logname);
-                record_end_log(obd, &llh);
+                if (rc == 0)
+                        rc = record_end_log(obd, &llh);
         }
         name_destroy(&logname);
         if (rc)
@@ -1584,6 +1587,8 @@ static int mgs_steal_llog_handler(struct llog_handle *llh,
                         strncpy(tmti->mti_svname, marker->cm_tgtname,
                                 sizeof(tmti->mti_svname));
                         rc = record_start_log(obd, &mdt_llh, mti->mti_svname);
+                        if (rc)
+                                RETURN(rc);
                         rc = record_marker(obd, mdt_llh, fsdb, CM_START,
                                            mti->mti_svname,"add osc(copied)");
                         rc = record_end_log(obd, &mdt_llh);
@@ -1596,6 +1601,8 @@ static int mgs_steal_llog_handler(struct llog_handle *llh,
                         last_step = -1;
                         got_an_osc_or_mdc = 0;
                         rc = record_start_log(obd, &mdt_llh, mti->mti_svname);
+                        if (rc)
+                                RETURN(rc);
                         rc = record_marker(obd, mdt_llh, fsdb, CM_END,
                                            mti->mti_svname,"add osc(copied)");
                         rc = record_end_log(obd, &mdt_llh);
@@ -1754,12 +1761,14 @@ static int mgs_write_log_lmv(struct obd_device *obd, struct fs_db *fsdb,
         uuid = (char *)lmvdesc->ld_uuid.uuid;
 
         rc = record_start_log(obd, &llh, logname);
+        if (rc)
+                GOTO(out, rc);
         rc = record_marker(obd, llh, fsdb, CM_START, lmvname, "lmv setup");
         rc = record_attach(obd, llh, lmvname, "lmv", uuid);
         rc = record_lmv_setup(obd, llh, lmvname, lmvdesc);
         rc = record_marker(obd, llh, fsdb, CM_END, lmvname, "lmv setup");
         rc = record_end_log(obd, &llh);
-
+out:
         OBD_FREE_PTR(lmvdesc);
         RETURN(rc);
 }
@@ -1887,6 +1896,8 @@ static int mgs_write_log_mdc_to_lmv(struct obd_device *obd, struct fs_db *fsdb,
         name_create(&lmvuuid, lmvname, "_UUID");
 
         rc = record_start_log(obd, &llh, logname);
+        if (rc)
+                GOTO(out, rc);
         rc = record_marker(obd, llh, fsdb, CM_START, mti->mti_svname,
                            "add mdc");
 
@@ -1906,7 +1917,7 @@ static int mgs_write_log_mdc_to_lmv(struct obd_device *obd, struct fs_db *fsdb,
         rc = record_marker(obd, llh, fsdb, CM_END, mti->mti_svname,
                            "add mdc");
         rc = record_end_log(obd, &llh);
-
+out:
         name_destroy(&lmvuuid);
         name_destroy(&mdcuuid);
         name_destroy(&mdcname);
@@ -1939,6 +1950,8 @@ static int mgs_write_log_mdc_to_mdt(struct obd_device *obd, struct fs_db *fsdb,
         name_create(&mdtuuid, logname, "_UUID");
 
         rc = record_start_log(obd, &llh, logname);
+        if (rc)
+                GOTO(out, rc);
         rc = record_marker(obd, llh, fsdb, CM_START, mti->mti_svname, "add mdc");
         for (i = 0; i < mti->mti_nid_count; i++) {
                 CDEBUG(D_MGS, "add nid %s for mdt\n",
@@ -1954,7 +1967,7 @@ static int mgs_write_log_mdc_to_mdt(struct obd_device *obd, struct fs_db *fsdb,
                             index, "1");
         rc = record_marker(obd, llh, fsdb, CM_END, mti->mti_svname, "add mdc");
         rc = record_end_log(obd, &llh);
-
+out:
         name_destroy(&mdcuuid);
         name_destroy(&mdcname);
         name_destroy(&nodeuuid);
@@ -2551,7 +2564,8 @@ static int mgs_srpc_set_param_disk(struct obd_device *obd,
 
         if (mgs_log_is_empty(obd, logname)) {
                 rc = record_start_log(obd, &llh, logname);
-                record_end_log(obd, &llh);
+                if (rc == 0)
+                        rc = record_end_log(obd, &llh);
                 if (rc)
                         GOTO(out, rc);
         }

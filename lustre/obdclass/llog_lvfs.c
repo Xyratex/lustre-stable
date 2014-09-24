@@ -686,8 +686,10 @@ static int llog_lvfs_create(struct llog_ctxt *ctxt, struct llog_handle **res,
 
         handle->lgh_ctxt = ctxt;
 out:
-        if (rc)
+        if (rc) {
+                *res = NULL;
                 llog_free_handle(handle);
+        }
 
         if (oa)
                 OBDO_FREE(oa);
