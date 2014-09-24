@@ -301,6 +301,7 @@ static void lcw_dispatch_start(void)
 	ENTRY;
 	LASSERT(lcw_refcount == 1);
 
+	lcw_flags = 0;
 	init_completion(&lcw_stop_completion);
 	init_completion(&lcw_start_completion);
 	init_waitqueue_head(&lcw_event_waitq);
