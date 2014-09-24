@@ -815,6 +815,27 @@ stop() {
     wait_exit_ST ${facet}
 }
 
+stop_with_timeout() {
+	local timeout=$1
+	shift
+	local running
+	local facet=$1
+	shift
+	local host=$(facet_active_host $facet)
+	[ -z $host ] && echo stop: no host for $facet && return 0
+
+	local mntpt=$(facet_mntpt $facet)
+	running=$(do_facet ${facet} "grep -c $mntpt' ' /proc/mounts") || true
+	if [ ${running} -ne 0 ]; then
+		echo "Stopping $mntpt (opts:$@) on $host with timeout $timeout seconds"
+		do_facet ${facet} timeout -s KILL $timeout umount -d $@ $mntpt
+	fi
+
+	# umount should block, but we should wait for unrelated obd's
+	# like the MGS or MGC to also stop.
+	wait_exit_ST ${facet}
+}
+
 # save quota version (both administrative and operational quotas)
 # add an additional parameter if mountpoint is ever different from $MOUNT
 quota_save_version() {
