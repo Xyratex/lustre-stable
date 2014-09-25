@@ -344,7 +344,7 @@ static int lfs_migrate(char *name, unsigned long long stripe_size,
 	void			*buf = NULL;
 	int			 rsize, wsize;
 	__u64			 rpos, wpos, bufoff;
-	int			 gid = 0;
+	int			 gid;
 	int			 have_gl = 0;
 	struct stat		 st, stv;
 
@@ -465,8 +465,8 @@ static int lfs_migrate(char *name, unsigned long long stripe_size,
 		 * be implemented (see LU-2919) */
 		/* group lock is taken after data version read because it
 		 * blocks data version call */
-		if (ioctl(fd, LL_IOC_GROUP_LOCK, gid) == -1) {
-			rc = -errno;
+		rc = llapi_group_lock(fd, gid);
+		if (rc < 0) {
 			fprintf(stderr, "cannot get group lock on %s (%s)\n",
 				name, strerror(-rc));
 			goto error;
@@ -513,11 +513,10 @@ static int lfs_migrate(char *name, unsigned long long stripe_size,
 
 	if (migration_flags & MIGRATION_BLOCKS) {
 		/* give back group lock */
-		if (ioctl(fd, LL_IOC_GROUP_UNLOCK, gid) == -1) {
-			rc = -errno;
+		rc = llapi_group_unlock(fd, gid);
+		if (rc < 0)
 			fprintf(stderr, "cannot put group lock on %s (%s)\n",
 				name, strerror(-rc));
-		}
 		have_gl = 0;
 	}
 
@@ -542,11 +541,14 @@ static int lfs_migrate(char *name, unsigned long long stripe_size,
 
 error:
 	/* give back group lock */
-	if ((migration_flags & MIGRATION_BLOCKS) && have_gl &&
-	    (ioctl(fd, LL_IOC_GROUP_UNLOCK, gid) == -1)) {
-		/* we keep in rc the original error */
-		fprintf(stderr, "cannot put group lock on %s (%s)\n",
-			name, strerror(-errno));
+	if ((migration_flags & MIGRATION_BLOCKS) && have_gl) {
+		int rc2;
+
+		/* we keep the original error in rc */
+		rc2 = llapi_group_unlock(fd, gid);
+		if (rc2 < 0)
+			fprintf(stderr, "cannot put group lock on %s (%s)\n",
+				name, strerror(-rc2));
 	}
 
 	close(fdv);
