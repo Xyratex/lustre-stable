@@ -560,6 +560,8 @@ run_test 17l "Ensure lgetxattr's returned xattr size is consistent ========"
 
 # LU-1540
 test_17m() {
+	remote_mds_nodsh && skip "remote MDS with nodsh" && return
+
 	local short_sym="0123456789"
 	local WDIR=$DIR/${tdir}m
 	local mds_index
@@ -676,6 +678,7 @@ test_17n() {
 run_test 17n "run e2fsck against master/slave MDT which contains remote dir"
 
 test_17o() {
+	remote_mds_nodsh && skip "remote MDS with nodsh" && return
 	[[ $(lustre_version_code $SINGLEMDS) -lt $(version_code 2.3.64) ]] &&
 		skip "Need MDS version at least 2.3.64" && return
 
@@ -6953,6 +6956,8 @@ run_test 116a "stripe QOS: free space balance ==================="
 
 test_116b() { # LU-2093
 	[ $PARALLEL == "yes" ] && skip "skip parallel run" && return
+	remote_mds_nodsh && skip "remote MDS with nodsh" && return
+
 #define OBD_FAIL_MDS_OSC_CREATE_FAIL     0x147
 	local old_rr
 	old_rr=$(do_facet $SINGLEMDS lctl get_param -n \
@@ -9815,6 +9820,7 @@ run_test 160b "Verify that very long rename doesn't crash in changelog"
 test_160c() {
 	local rc=0
 	[ $PARALLEL == "yes" ] && skip "skip parallel run" && return
+	remote_mds_nodsh && skip "remote MDS with nodsh" && return
 
 	# Registration step
 	local USER=$(do_facet $SINGLEMDS $LCTL --device $MDT0 \
@@ -9934,6 +9940,7 @@ run_test 161b "link ea sanity under remote directory"
 
 test_161c() {
 	[ $PARALLEL == "yes" ] && skip "skip parallel run" && return
+	remote_mds_nodsh && skip "remote MDS with nodsh" && return
 	[[ $(lustre_version_code $SINGLEMDS) -lt $(version_code 2.1.5) ]] &&
 		skip "Need MDS version at least 2.1.5" && return
 
@@ -11063,6 +11070,9 @@ jobstats_set() {
 
 test_205() { # Job stats
 	[ $PARALLEL == "yes" ] && skip "skip parallel run" && return
+	remote_mds_nodsh && skip "remote MDS with nodsh" && return
+	remote_ost_nodsh && skip "remote OST with nodsh" && return
+
 	[ -z "$(lctl get_param -n mdc.*.connect_flags | grep jobstats)" ] &&
 		skip "Server doesn't support jobstats" && return 0
 
@@ -11162,6 +11172,7 @@ test_208() {
 	# for now as only exclusive open is supported. After generic lease
 	# is done, this test suite should be revised. - Jinshan
 
+	remote_mds_nodsh && skip "remote MDS with nodsh" && return
 	[[ $(lustre_version_code $SINGLEMDS) -ge $(version_code 2.4.52) ]] ||
 		{ skip "Need MDS version at least 2.4.52"; return 0; }
 
@@ -11820,6 +11831,7 @@ run_test 228a "try to reuse idle OI blocks"
 
 test_228b() {
 	[ $PARALLEL == "yes" ] && skip "skip parallel run" && return
+	remote_mds_nodsh && skip "remote MDS with nodsh" && return
 	[ "$(facet_fstype $SINGLEMDS)" != "ldiskfs" ] &&
 		skip "non-ldiskfs backend" && return
 
@@ -11869,6 +11881,7 @@ run_test 228b "idle OI blocks can be reused after MDT restart"
 #LU-1881
 test_228c() {
 	[ $PARALLEL == "yes" ] && skip "skip parallel run" && return
+	remote_mds_nodsh && skip "remote MDS with nodsh" && return
 	[ "$(facet_fstype $SINGLEMDS)" != "ldiskfs" ] &&
 		skip "non-ldiskfs backend" && return
 
@@ -11972,6 +11985,7 @@ run_test 230a "Create remote directory and files under the remote directory"
 
 test_230b() {
 	[ $PARALLEL == "yes" ] && skip "skip parallel run" && return
+	remote_mds_nodsh && skip "remote MDS with nodsh" && return
 	[ $MDSCOUNT -lt 2 ] && skip "needs >= 2 MDTs" && return
 	local MDTIDX=1
 	local remote_dir=$DIR/$tdir/remote_dir
