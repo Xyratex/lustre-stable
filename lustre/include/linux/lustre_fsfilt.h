@@ -79,6 +79,7 @@ struct fsfilt_operations {
         int     (* fs_commit_async)(struct inode *inode, void *handle,
                                         void **wait_handle);
         int     (* fs_commit_wait)(struct inode *inode, void *handle);
+        int     (* fs_journal_flush)(struct inode *inode);
         int     (* fs_setattr)(struct dentry *dentry, void *handle,
                                struct iattr *iattr, int do_trunc);
         int     (* fs_iocontrol)(struct inode *inode, struct file *file,
@@ -318,6 +319,18 @@ static inline int fsfilt_commit_wait(struct obd_device *obd,
         int rc = obd->obd_fsops->fs_commit_wait(inode, handle);
         CDEBUG(D_INFO, "waiting for completion %p\n", handle);
         fsfilt_check_slow(obd, now, "journal start");
+        return rc;
+}
+
+static inline int fsfilt_journal_flush(struct obd_device *obd,
+                                       struct inode *inode)
+{
+        unsigned long now = jiffies;
+        int rc;
+
+        CDEBUG(D_INFO, "waiting for journal flush\n");
+        rc = obd->obd_fsops->fs_journal_flush(inode);
+        fsfilt_check_slow(obd, now, "journal flush");
         return rc;
 }
 
