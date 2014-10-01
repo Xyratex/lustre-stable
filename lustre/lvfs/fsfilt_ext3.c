@@ -107,6 +107,7 @@ extern int ext3_xattr_set_handle(handle_t *, struct inode *, int, const char *, 
 
 #define fsfilt_log_start_commit(journal, tid) jbd2_log_start_commit(journal, tid)
 #define fsfilt_log_wait_commit(journal, tid) jbd2_log_wait_commit(journal, tid)
+#define fsfilt_log_journal_flush(journal) jbd2_journal_flush(journal)
 
 static cfs_mem_cache_t *fcb_cache;
 
@@ -538,6 +539,13 @@ static int fsfilt_ext3_commit_wait(struct inode *inode, void *h)
         if (unlikely(is_journal_aborted(journal)))
                 return -EIO;
         return 0;
+}
+
+static int fsfilt_ext3_journal_flush(struct inode *inode)
+{
+        CDEBUG(D_INODE, "journal flush\n");
+
+        return fsfilt_log_journal_flush(EXT3_JOURNAL(inode));
 }
 
 static int fsfilt_ext3_setattr(struct dentry *dentry, void *handle,
@@ -2297,6 +2305,7 @@ static struct fsfilt_operations fsfilt_ext3_ops = {
         .fs_commit              = fsfilt_ext3_commit,
         .fs_commit_async        = fsfilt_ext3_commit_async,
         .fs_commit_wait         = fsfilt_ext3_commit_wait,
+        .fs_journal_flush       = fsfilt_ext3_journal_flush,
         .fs_setattr             = fsfilt_ext3_setattr,
         .fs_iocontrol           = fsfilt_ext3_iocontrol,
         .fs_set_md              = fsfilt_ext3_set_md,

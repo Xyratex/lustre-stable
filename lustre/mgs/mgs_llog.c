@@ -998,7 +998,7 @@ static int mgs_replace_nids_log(struct obd_device *obd, struct fs_db *fsdb,
 
         /* Write new log to a temp name, then vfs_rename over logname
            upon successful completion. */
-        OBD_ALLOC(temp_log, strlen(logname) + 1);
+        OBD_ALLOC(temp_log, strlen(logname) + 2);
         if (!temp_log)
                 RETURN(-ENOMEM);
         sprintf(temp_log, "%sT", logname);
@@ -1057,7 +1057,7 @@ out_closel:
         CDEBUG(D_MGS, "Modified log %s (%d)\n", logname, rc);
 
 out_free:
-        OBD_FREE(temp_log, strlen(logname) + 1);
+        OBD_FREE(temp_log, strlen(logname) + 2);
 
 out_pop:
         pop_ctxt(&saved, &obd->obd_lvfs_ctxt, NULL);
@@ -4062,11 +4062,27 @@ static int mgs_backup_llog(struct obd_device *obd, char* fsname)
                 GOTO(close1f, rc);
         }
 
-        while ((rc = lustre_fread(filp, buf, count, &soff)) > 0) {
-                rc = lustre_fwrite(bak_filp, buf, count, &doff);
-                break;
+        /* The copying is going to use page cache based file read,
+         * while the file to be copied was written via buffer heads
+         * and a transaction. The transaction needs to be flushed
+         * (checkpointed) so that file data can be read properly via
+         * page cache. */
+        rc = fsfilt_journal_flush(obd, filp->f_dentry->d_inode);
+        if (rc) {
+                CERROR("journal flush failed: %d\n", rc);
+                GOTO(close2f, rc);
         }
 
+        while ((rc = lustre_fread(filp, buf, count, &soff)) > 0) {
+                rc = lustre_fwrite(bak_filp, buf, rc, &doff);
+                if (soff != doff) {
+                        if (rc >= 0)
+                                rc = -EIO;
+                        break;
+                }
+        }
+
+close2f:
         filp_close(filp, 0);
 close1f:
         filp_close(bak_filp, 0);
