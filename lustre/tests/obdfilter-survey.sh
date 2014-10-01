@@ -44,18 +44,17 @@ get_targets () {
         local nid
         local oss
 
-        for oss in $(osts_nodes); do
-                devs=$(get_devs $oss)
-                nid=$(host_nids_address $oss $NETTYPE)
-                for d in $devs; do
-                        # if oss is local -- obdfilter-survey needs dev wo/ host
-                        target=$d
-                        [[ $oss = `hostname` && "$1" == "disk" ]] || target=$nid:$target
-                        targets="$targets $target"
-                done
+        oscdevs=$(lctl dl | awk '/-osc-/ {print $4}')
+        for osc in $oscdevs; do
+                nid=$(lctl get_param osc.$osc.import | grep current_connection: | \
+                        tr -d '[:blank:]' | cut -d: -f2 | cut -d@ -f1)
+                dev=$(echo $osc | sed -re 's/-osc.*//')
+                # if oss is local -- obdfilter-survey needs dev wo/ host
+                target=$dev
+                local_mode && [ "$1" == "disk" ] || target=$nid:$target
+                targets="$targets $target"
         done
-
-	echo $targets
+        echo $targets
 }
 
 obdflter_survey_targets () {
@@ -84,6 +83,7 @@ obdflter_survey_run () {
 	cat ${TMP}/obdfilter_survey*
 }
 test_1a () {
+	[ "$CLIENTONLY" ] && skip "CLIENTONLY mode" && return
 	obdflter_survey_run disk
 }
 run_test 1a "Object Storage Targets survey"
@@ -138,6 +138,7 @@ check_jbd_values_facets () {
 }
 
 test_1b () {
+	[ "$CLIENTONLY" ] && skip "CLIENTONLY mode" && return
 	local param_file=$TMP/$tfile-params
 
 	do_nodesv $(comma_list $(osts_nodes)) \
@@ -164,6 +165,7 @@ test_1b () {
 run_test 1b "Object Storage Targets survey, async journal"
 
 test_1c () {
+	[ "$CLIENTONLY" ] && skip "CLIENTONLY mode" && return
 	nobjlo=1 nobjhi=1 thrlo=128 thrhi=128 rszlo=1024 rszhi=1024 size=8192\
 	obdflter_survey_run disk
 }
@@ -175,6 +177,7 @@ test_2a () {
 run_test 2a "Stripe F/S over the Network"
 
 test_2b () {
+	[ "$CLIENTONLY" ] && skip "CLIENTONLY mode" && return
 	local param_file=$TMP/$tfile-params
 
 	do_nodesv $(comma_list $(osts_nodes)) \
@@ -202,6 +205,7 @@ run_test 2b "Stripe F/S over the Network, async journal"
 
 # README.obdfilter-survey: In network test only automated run is supported.
 test_3a () {
+	[ "$CLIENTONLY" ] && skip "CLIENTONLY mode" && return
 	remote_servers || { skip "Local servers" && return 0; }
 
 	# The Network survey test needs:
