@@ -1476,7 +1476,7 @@ void lustre_assert_wire_constants(void)
 		 (long long)(int)offsetof(struct lov_mds_md_v3, lmm_layout_gen));
 	LASSERTF((int)sizeof(((struct lov_mds_md_v3 *)0)->lmm_layout_gen) == 2, "found %lld\n",
 		 (long long)(int)sizeof(((struct lov_mds_md_v3 *)0)->lmm_layout_gen));
-	CLASSERT(LOV_MAXPOOLNAME == 16);
+	CLASSERT(LOV_MAXPOOLNAME == 15);
 	LASSERTF((int)offsetof(struct lov_mds_md_v3, lmm_pool_name[16]) == 48, "found %lld\n",
 		 (long long)(int)offsetof(struct lov_mds_md_v3, lmm_pool_name[16]));
 	LASSERTF((int)sizeof(((struct lov_mds_md_v3 *)0)->lmm_pool_name[16]) == 1, "found %lld\n",
@@ -2911,7 +2911,7 @@ void lustre_assert_wire_constants(void)
 		 (long long)(int)offsetof(struct lmv_stripe_md, mea_padding));
 	LASSERTF((int)sizeof(((struct lmv_stripe_md *)0)->mea_padding) == 4, "found %lld\n",
 		 (long long)(int)sizeof(((struct lmv_stripe_md *)0)->mea_padding));
-	CLASSERT(LOV_MAXPOOLNAME == 16);
+	CLASSERT(LOV_MAXPOOLNAME == 15);
 	LASSERTF((int)offsetof(struct lmv_stripe_md, mea_pool_name[16]) == 32, "found %lld\n",
 		 (long long)(int)offsetof(struct lmv_stripe_md, mea_pool_name[16]));
 	LASSERTF((int)sizeof(((struct lmv_stripe_md *)0)->mea_pool_name[16]) == 1, "found %lld\n",

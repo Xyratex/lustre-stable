@@ -655,6 +655,7 @@ int lod_store_def_striping(const struct lu_env *env, struct dt_object *dt,
 			OBD_FREE_PTR(v3);
 			RETURN(-E2BIG);
 		}
+		v3->lmm_pool_name[sizeof(v3->lmm_pool_name) - 1] = '\0';
 	}
 
 	info->lti_buf.lb_buf = v3;
