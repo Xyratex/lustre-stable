@@ -2352,6 +2352,7 @@ cleanup_echo_devs () {
 
 cleanupall() {
     nfs_client_mode && return
+    cifs_client_mode && return
 
     stopall $*
     cleanup_echo_devs
@@ -2529,6 +2530,7 @@ writeconf_all () {
 
 setupall() {
     nfs_client_mode && return
+    cifs_client_mode && return
 
     sanity_mount_check ||
         error "environments are insane!"
@@ -2749,6 +2751,11 @@ nfs_client_mode () {
     return 1
 }
 
+cifs_client_mode () {
+    [ x$CIFSCLIENT = xyes ] &&
+        echo "CIFSCLIENT=$CIFSCLIENT mode: setup, cleanup, check config skipped"
+}
+
 check_config_client () {
     local mntpt=$1
 
@@ -2796,6 +2803,7 @@ check_config_clients () {
 	local mntpt=$1
 
 	nfs_client_mode && return
+	cifs_client_mode && return
 
 	do_rpc_nodes "$clients" check_config_client $mntpt
 
@@ -2843,6 +2851,7 @@ is_empty_fs() {
 check_and_setup_lustre() {
 	validate_parameters
     nfs_client_mode && return
+    cifs_client_mode && return
 
     local MOUNTED=$(mounted_lustre_filesystems)
 
@@ -5732,4 +5741,13 @@ check_mds_journal_by_ost_nr() {
 		"$num_required_blocks" && return 1
 
 	return 0
+}
+
+killall_process () {
+	local clients=${1:-$(hostname)}
+	local name=$2
+	local signal=$3
+	local rc=0
+
+	do_nodes $clients "killall $signal $name"
 }

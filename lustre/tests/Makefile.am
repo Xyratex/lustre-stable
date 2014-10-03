@@ -32,6 +32,7 @@ noinst_SCRIPTS += sgpdd-survey.sh maloo_upload.sh auster setup-nfs.sh
 noinst_SCRIPTS += mds-survey.sh parallel-scale-nfs.sh large-lun.sh
 noinst_SCRIPTS += parallel-scale-nfsv3.sh parallel-scale-nfsv4.sh flock-nfs.sh
 noinst_SCRIPTS += posix.sh ha.sh
+noinst_SCRIPTS += setup-cifs.sh parallel-scale-cifs.sh
 noinst_SCRIPTS += resolveip
 nobase_noinst_SCRIPTS = cfg/local.sh
 nobase_noinst_SCRIPTS += test-groups/regression test-groups/regression-mpi

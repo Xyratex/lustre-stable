@@ -290,9 +290,11 @@ print_opts () {
 }
 
 run_compilebench() {
-	# Space estimation:
-	# compile dir kernel-0	~1GB
-	# required space	~1GB * cbench_IDIRS
+    # Space estimation:
+    # compile dir kernel-0	~1GB
+    # required space	~1GB * cbench_IDIRS
+
+    local dir=${1:-$DIR}
 
     cbench_DIR=${cbench_DIR:-""}
     cbench_IDIRS=${cbench_IDIRS:-2}
@@ -306,7 +308,7 @@ run_compilebench() {
     [ -e $cbench_DIR/compilebench ] || \
         { skip_env "No compilebench build" && return; }
 
-	local space=$(df -P $DIR | tail -n 1 | awk '{ print $4 }')
+	local space=$(df -P $dir | tail -n 1 | awk '{ print $4 }')
 	if [[ $space -le $((1024 * 1024 * cbench_IDIRS)) ]]; then
 		cbench_IDIRS=$((space / 1024 / 1024))
 		[[ $cbench_IDIRS -eq 0 ]] &&
@@ -320,7 +322,7 @@ run_compilebench() {
     # t-f _base needs to be modifyed to set properly tdir
     # for new "test_foo" functions names
     # local testdir=$DIR/$tdir
-    local testdir=$DIR/d0.compilebench
+    local testdir=$dir/d0.compilebench
     mkdir -p $testdir
 
     local savePWD=$PWD
