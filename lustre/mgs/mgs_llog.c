@@ -969,6 +969,7 @@ static int mgs_replace_nids_log(struct obd_device *obd, struct fs_db *fsdb,
         struct lvfs_run_ctxt saved;
         struct llog_ctxt *ctxt;
         struct mgs_replace_uuid_lookup *mrul;
+        static struct obd_uuid   cfg_uuid = { .uuid = "config_uuid" };
         int rc, rc2;
         ENTRY;
 
@@ -1001,7 +1002,7 @@ static int mgs_replace_nids_log(struct obd_device *obd, struct fs_db *fsdb,
         if (rc)
                 GOTO(out_free, rc);
 
-        rc = llog_init_handle(temp_llh, LLOG_F_IS_PLAIN, NULL);
+        rc = llog_init_handle(temp_llh, LLOG_F_IS_PLAIN, &cfg_uuid);
         if (rc)
                 GOTO(out_closel, rc);
 
