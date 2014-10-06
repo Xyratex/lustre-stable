@@ -41,7 +41,7 @@ static void errlog(const char *fmt, ...)
         openlog(progname, LOG_PERROR | LOG_PID, LOG_AUTHPRIV);
 
         va_start(args, fmt);
-        vsyslog(LOG_NOTICE, fmt, args);
+        vsyslog(LOG_WARNING, fmt, args);
         va_end(args);
 
         closelog();
