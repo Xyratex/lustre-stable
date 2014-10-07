@@ -16,3 +16,4 @@ lockd.patch
 export-2.6.32-lru_add_drain.patch
 quota-replace-dqptr-sem.patch
 quota-avoid-dqget-calls.patch
+rwsem.patch
