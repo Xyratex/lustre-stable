@@ -3046,11 +3046,24 @@ test_66() {
 	do_facet mgs $LCTL replace_nids $FSNAME-MDT0000 $MDS_NID ||
 		error "replace nids failed"
 
+	echo "conf_param after replace_nids"
+	do_facet mgs "$LCTL conf_param $FSNAME-MDT0000.mdd.atime_diff=65" ||
+		error "conf_param failed"
+
+        local mgsdev
 	if ! combined_mgs_mds ; then
+		mgsdev=$MGSDEV
 		stop_mgs
 	else
+		mgsdev=$(mdsdevname 1)
 		stop_mds
 	fi
+
+	echo "check llog backup"
+	do_facet mgs "$DEBUGFS -c -R \\\"dump CONFIGS/$FSNAME-MDT0000.bak \
+$TMP/mdt_conf.bak\\\" $mgsdev"
+	do_facet mgs "llog_reader $TMP/mdt_conf.bak > /dev/null" ||
+		error "llog_reader $TMP/mdt_conf.bak failed"
 
 	setup_noconfig
 	check_mount || error "error after nid replace"
