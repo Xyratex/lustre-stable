@@ -143,7 +143,6 @@ llog_reader_DEPENDENCIES := liblustreapi.la
 
 lr_reader_SOURCES = lr_reader.c
 
-if UTILS
 
 PLUGIN_LIB =
 if PLUGINS
@@ -239,8 +238,6 @@ wirecheck_SOURCES = wirecheck.c
 wirecheck_CPPFLAGS := -DCC="\"$(CC)\""
 
 wiretest_SOURCES = wiretest.c
-
-endif # UTILS
 
 EXTRA_DIST = llstat llobdstat plot-llstat ldlm_debug_upcall liblustreapi.map $(CONFDIR_DATA)
 
