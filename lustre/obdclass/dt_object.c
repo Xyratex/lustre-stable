@@ -653,18 +653,22 @@ static inline const struct dt_index_features *dt_index_feat_select(__u64 seq,
  * \param arg  - is a pointer to the idx_info structure
  */
 static int dt_index_page_build(const struct lu_env *env, union lu_page *lp,
-			       int nob, const struct dt_it_ops *iops,
+			       size_t nob, const struct dt_it_ops *iops,
 			       struct dt_it *it, __u32 attr, void *arg)
 {
 	struct idx_info		*ii = (struct idx_info *)arg;
 	struct lu_idxpage	*lip = &lp->lp_idx;
 	char			*entry;
-	int			 rc, size;
+	size_t			 size;
+	int			 rc;
 	ENTRY;
 
 	/* no support for variable key & record size for now */
 	LASSERT((ii->ii_flags & II_FL_VARKEY) == 0);
 	LASSERT((ii->ii_flags & II_FL_VARREC) == 0);
+
+	if (nob < LIP_HDR_SIZE)
+		return -EINVAL;
 
 	/* initialize the header of the new container */
 	memset(lip, 0, LIP_HDR_SIZE);
@@ -762,7 +766,7 @@ int dt_index_walk(const struct lu_env *env, struct dt_object *obj,
 {
 	struct dt_it		*it;
 	const struct dt_it_ops	*iops;
-	unsigned int		 pageidx, nob, nlupgs = 0;
+	size_t			 pageidx, nob, nlupgs = 0;
 	int			 rc;
 	ENTRY;
 
@@ -770,7 +774,7 @@ int dt_index_walk(const struct lu_env *env, struct dt_object *obj,
 	LASSERT(obj->do_index_ops != NULL);
 
 	nob = rdpg->rp_count;
-	if (nob <= 0)
+	if (nob == 0)
 		RETURN(-EFAULT);
 
 	/* Iterate through index and fill containers from @rdpg */
@@ -813,7 +817,7 @@ int dt_index_walk(const struct lu_env *env, struct dt_object *obj,
 
 		/* fill lu pages */
 		for (i = 0; i < LU_PAGE_COUNT; i++, lp++, nob -= LU_PAGE_SIZE) {
-			rc = filler(env, lp, min_t(int, nob, LU_PAGE_SIZE),
+			rc = filler(env, lp, min_t(size_t, nob, LU_PAGE_SIZE),
 				    iops, it, rdpg->rp_attrs, arg);
 			if (rc < 0)
 				break;
@@ -830,7 +834,7 @@ int dt_index_walk(const struct lu_env *env, struct dt_object *obj,
 	iops->fini(env, it);
 
 	if (rc >= 0)
-		rc = min_t(unsigned int, nlupgs * LU_PAGE_SIZE, rdpg->rp_count);
+		rc = min_t(size_t, nlupgs * LU_PAGE_SIZE, rdpg->rp_count);
 
 	RETURN(rc);
 }
