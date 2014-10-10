@@ -363,7 +363,7 @@ int lu_site_purge(const struct lu_env *env, struct lu_site *s, int nr)
          * the dispose list, removing them from LRU and hash table.
          */
         start = s->ls_purge_start;
-        bnr = (nr == ~0) ? -1 : nr / CFS_HASH_NBKT(s->ls_obj_hash) + 1;
+	bnr = (nr == ~0) ? -1 : nr / (int)CFS_HASH_NBKT(s->ls_obj_hash) + 1;
  again:
 	/*
 	 * It doesn't make any sense to make purge threads parallel, that can
@@ -950,10 +950,10 @@ EXPORT_SYMBOL(lu_site_print);
 /**
  * Return desired hash table order.
  */
-static int lu_htable_order(struct lu_device *top)
+static unsigned long lu_htable_order(struct lu_device *top)
 {
         unsigned long cache_size;
-        int bits;
+        unsigned long bits;
 
 	/*
 	 * For ZFS based OSDs the cache should be disabled by default.  This
@@ -1087,15 +1087,16 @@ int lu_site_init(struct lu_site *s, struct lu_device *top)
 	struct lu_site_bkt_data *bkt;
 	cfs_hash_bd_t bd;
 	char name[16];
-	int bits;
-	int i;
+	unsigned long bits;
+	unsigned int i;
 	ENTRY;
 
 	memset(s, 0, sizeof *s);
 	mutex_init(&s->ls_purge_mutex);
 	bits = lu_htable_order(top);
-	snprintf(name, 16, "lu_site_%s", top->ld_type->ldt_name);
-	for (bits = min(max(LU_SITE_BITS_MIN, bits), LU_SITE_BITS_MAX);
+	snprintf(name, sizeof(name), "lu_site_%s", top->ld_type->ldt_name);
+	for (bits = clamp_t(typeof(bits), bits,
+			    LU_SITE_BITS_MIN, LU_SITE_BITS_MAX);
 	     bits >= LU_SITE_BITS_MIN; bits--) {
 		s->ls_obj_hash = cfs_hash_create(name, bits, bits,
 						 bits - LU_SITE_BKT_BITS,
@@ -1111,7 +1112,7 @@ int lu_site_init(struct lu_site *s, struct lu_device *top)
 	}
 
 	if (s->ls_obj_hash == NULL) {
-		CERROR("failed to create lu_site hash with bits: %d\n", bits);
+		CERROR("failed to create lu_site hash with bits: %lu\n", bits);
 		return -ENOMEM;
 	}
 
