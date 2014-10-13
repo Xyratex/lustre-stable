@@ -284,6 +284,15 @@ Unregister an existing changelog user.  If the user's "clear" record number
 is the minimum for the device, changelog records will be purged until the
 next minimum.  
 .PP
+.SS Configuration logs
+.TP
+.BI clear_conf " <device|fsname>"
+This command runs on MGS node having MGS device mounted with -o
+nosvc. It cleanups configuration files (those which stored in
+CONFIGS/) of records marked SKIP-ed. If filesystem name is given, then
+all configation files are cleaned. Otherwise, specific log
+(ex. lustre-MDT0000) is handled.
+.PP
 .SS Debug
 .TP 
 .BI debug_daemon 
