@@ -871,6 +871,7 @@ int ldlm_server_blocking_ast(struct ldlm_lock *lock,
 		/* Do not resend after lock callback timeout */
 		req->rq_delay_limit = ldlm_bl_timeout(lock);
 		req->rq_resend_cb = ldlm_update_resend;
+		req->rq_queued_time = cfs_time_current();
 	}
 
         req->rq_send_state = LUSTRE_IMP_FULL;
@@ -981,6 +982,7 @@ int ldlm_server_completion_ast(struct ldlm_lock *lock, __u64 flags, void *data)
 			/* Do not resend after lock callback timeout */
 			req->rq_delay_limit = ldlm_bl_timeout(lock);
 			req->rq_resend_cb = ldlm_update_resend;
+			req->rq_queued_time = cfs_time_current();
                 }
         }
         unlock_res_and_lock(lock);
