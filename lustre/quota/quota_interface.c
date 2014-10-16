@@ -430,6 +430,11 @@ int quota_is_set(struct obd_device *obd, const unsigned int id[], int flag)
         return q_set;
 }
 
+static int export_check(struct obd_export *exp, __u32 count)
+{
+	return exp->exp_failed || exp->exp_conn_cnt > count;
+}
+
 static int quota_chk_acq_common(struct obd_device *obd, struct obd_export *exp,
                                 const unsigned int id[], int pending[],
                                 int count, quota_acquire acquire,
@@ -440,7 +445,7 @@ static int quota_chk_acq_common(struct obd_device *obd, struct obd_export *exp,
         struct timeval work_start;
         struct timeval work_end;
         long timediff;
-        struct l_wait_info lwi = { 0 };
+        struct l_wait_info lwi;
         int rc = 0, cycle = 0, count_err = 1;
         ENTRY;
 
@@ -475,20 +480,35 @@ static int quota_chk_acq_common(struct obd_device *obd, struct obd_export *exp,
 
                 cfs_spin_lock(&qctxt->lqc_lock);
                 if (!qctxt->lqc_import && oti) {
+			__u32 conn_cnt = exp->exp_conn_cnt;
+
                         cfs_spin_unlock(&qctxt->lqc_lock);
                         LASSERT(oti->oti_thread);
                         /* The recovery thread doesn't have watchdog
                          * attached. LU-369 */
-                        if (oti->oti_thread->t_watchdog)
-                                lc_watchdog_disable(oti->oti_thread->\
-                                                t_watchdog);
-                        CDEBUG(D_QUOTA, "sleep for quota master\n");
-                        l_wait_event(qctxt->lqc_wait_for_qmaster, check_qm(qctxt),
-                                     &lwi);
-                        CDEBUG(D_QUOTA, "wake up when quota master is back\n");
-                        if (oti->oti_thread->t_watchdog)
-                                lc_watchdog_touch(oti->oti_thread->t_watchdog,
-                                       CFS_GET_TIMEOUT(oti->oti_thread->t_svc));
+			if (oti->oti_thread->t_watchdog)
+				lc_watchdog_disable(oti->oti_thread->\
+						    t_watchdog);
+			lwi = LWI_TIMEOUT_INTERVAL(\
+				   cfs_time_seconds(RECONNECT_DELAY_MAX),
+				   cfs_time_seconds(1), NULL, NULL);
+
+			CDEBUG(D_QUOTA, "sleep for quota master\n");
+			/* If we are sleeping too long, the client could reconnect
+			 * after request timeout, and the brw will be resent */
+			l_wait_event(qctxt->lqc_wait_for_qmaster,
+				     export_check(exp, conn_cnt) ||
+				     check_qm(qctxt),
+				     &lwi);
+			if (oti->oti_thread->t_watchdog)
+				lc_watchdog_touch(oti->oti_thread->t_watchdog,
+					CFS_GET_TIMEOUT(oti->oti_thread->t_svc));
+			if (export_check(exp, conn_cnt)) {
+				CDEBUG(D_QUOTA, "wake up when client is lost\n");
+				rc = -ENOTCONN;
+				break;
+			}
+			CDEBUG(D_QUOTA, "wake up when quota master is back\n");
                 } else {
                         cfs_spin_unlock(&qctxt->lqc_lock);
                 }
@@ -528,7 +548,6 @@ static int quota_chk_acq_common(struct obd_device *obd, struct obd_export *exp,
                 /* -EBUSY and others, wait a second and try again */
                 if (rc < 0) {
                         cfs_waitq_t        waitq;
-                        struct l_wait_info lwi;
 
                         if (oti && oti->oti_thread && oti->oti_thread->t_watchdog)
                                 lc_watchdog_touch(oti->oti_thread->t_watchdog,
