@@ -8858,6 +8858,9 @@ test_133e() {
 run_test 133e "Verifying OST {read,write}_bytes nid stats ================="
 
 test_133f() {
+	remote_mds_nodsh && skip "remote MDS with nodsh" && return
+	remote_ost_nodsh && skip "remote OST with nodsh" && return
+
 	local proc_dirs="/proc/fs/lustre/ /proc/sys/lnet/ /proc/sys/lustre/"
 	local facet
 
@@ -8888,6 +8891,15 @@ test_133f() {
 run_test 133f "Check for LBUGs/Oopses/unreadable files in /proc"
 
 test_133g() {
+	remote_mds_nodsh && skip "remote MDS with nodsh" && return
+	remote_ost_nodsh && skip "remote OST with nodsh" && return
+
+	[ $(lustre_version_code $SINGLEMDS) -le $(version_code 2.5.54) ] &&
+		skip "Too old lustre on MDS" && return
+
+	[ $(lustre_version_code ost1) -le $(version_code 2.5.54) ] &&
+		skip "Too old lustre on ost1" && return
+
 	local proc_dirs="/proc/fs/lustre/ /proc/sys/lnet/ /proc/sys/lustre/"
 	local facet
 
@@ -8897,12 +8909,6 @@ test_133g() {
 		-not -name force_lbug \
 		-not -name changelog_mask \
 		-exec badarea_io '{}' \; > /dev/null
-
-	[ $(lustre_version_code $SINGLEMDS) -le $(version_code 2.5.54) ] &&
-		skip "Too old lustre on MDS"
-
-	[ $(lustre_version_code ost1) -le $(version_code 2.5.54) ] &&
-		skip "Too old lustre on ost1"
 
 	for facet in $SINGLEMDS ost1; do
 		do_facet $facet find $proc_dirs \
