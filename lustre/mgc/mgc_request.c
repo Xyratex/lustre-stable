@@ -536,6 +536,7 @@ static int mgc_requeue_thread(void *data)
         ENTRY;
 
         CDEBUG(D_MGC, "Starting requeue thread\n");
+	OBD_FAIL_TIMEOUT(OBD_FAIL_MGC_PAUSE_REQUEUE_T, 30);
 
         /* Keep trying failed locks periodically */
 	spin_lock(&config_list_lock);
@@ -853,14 +854,14 @@ static int mgc_precleanup(struct obd_device *obd, enum obd_cleanup_stage stage)
 		break;
 	case OBD_CLEANUP_EXPORTS:
 		if (atomic_dec_and_test(&mgc_count)) {
-			int running;
+			int stopped;
 			/* stop requeue thread */
 			spin_lock(&config_list_lock);
-			running = rq_state & RQ_RUNNING;
-			if (running)
+			stopped = rq_state & RQ_STOP;
+			if (!stopped)
 				rq_state |= RQ_STOP;
 			spin_unlock(&config_list_lock);
-			if (running) {
+			if (!stopped) {
 				wake_up(&rq_waitq);
 				wait_for_completion(&rq_exit);
 			}

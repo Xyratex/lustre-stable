@@ -4746,6 +4746,38 @@ test_83() {
 }
 run_test 83 "osd_ost init: fail ea_fid_set"
 
+test_84() {
+	local res
+	# Modules reloading is needed to remove thread
+	# ll_cfg_requeue. This will be created later during mount.
+	$LUSTRE_RMMOD ldiskfs || error "can't rmmod all modules"
+	load_modules_local
+
+	# Set pause into the start of ll_cfg_requeue.
+	# OBD_FAIL_MGC_PAUSE_REQUEUE_T    0x90f
+	$LCTL set_param fail_loc=0x90f
+
+	[ -d $MOUNT ] || mkdir -p $MOUNT
+	local oldfs="${FSNAME}"
+	FSNAME="wrong.${FSNAME}"
+	mount_client $MOUNT || :
+	# Try to unload all modules. At this point ll_cfg_requeue
+	# still sleeps. If it is possible to unload mgc, after
+	# timeout ll_cfg_requeue continues execution using code
+	# from the freed memory. This should cause kernel panic.
+	FSNAME=${oldfs}
+	$LUSTRE_RMMOD ldiskfs || error "Can't unload modules"
+	res=$(ps aux | grep "ll_cfg_requeue" | grep -v "grep")
+	if [ -n "$res" ]; then
+		echo "ll_cfg_requeue still exists: $res"
+		echo "Waiting 30 secs to get kernel panic"
+		sleep 30
+	fi
+
+	return 0
+}
+run_test 84 "rmmod mgc doesn't cause kernel panic"
+
 if ! combined_mgs_mds ; then
 	stop mgs
 fi
