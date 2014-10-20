@@ -48,6 +48,7 @@ rhel6.3/ext4-max-dir-size.patch
 rhel6.4/ext4-max-dir-size-options.patch
 rhel6.3/ext4-not-discard-preallocation-umount.patch
 rhel6.3/ext4-journal-path-opt.patch
+rhel6.3/ext4-drop-inode-from-orphan-list-if-ext4_delete_inode-fails.patch
 rhel6.3/ext4_export_mb_stream_allocator_variables.patch
 rhel6.5/ext4-dont-check-before-replay.patch
 rhel6.3/ext4-dont-check-in-ro.patch
