@@ -779,7 +779,7 @@ static int check_markers(struct lustre_cfg *lcfg,
                 /* Clean llog from records marked as CM_EXCLUDE.
                    CM_SKIP records are used for "active" command
                    and can be restored if needed */
-                if (marker->cm_flags & CM_EXCLUDE) {
+                if (marker->cm_flags & CM_SKIP) {
                         if (marker->cm_flags & CM_START) {
                                 mrd->skip_it = 1;
                                 return 1;
