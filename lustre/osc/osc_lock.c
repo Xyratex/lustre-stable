@@ -942,8 +942,14 @@ static unsigned long osc_lock_weight(const struct lu_env *env,
 					      weigh_cb, (void *)&npages);
 		if (result == CLP_GANG_ABORT)
 			break;
-		if (result == CLP_GANG_RESCHED)
-			cond_resched();
+		if (result == CLP_GANG_RESCHED) {
+			/* After a long period of time spent scanning
+			 * cached pages we consider this lock is heavy enough
+			 * to be replayed even we found no locked,
+			 * dirty or wb pages yet */
+			npages++;
+			break;
+		}
 	} while (result != CLP_GANG_OKAY);
 	cl_io_fini(env, io);
 
