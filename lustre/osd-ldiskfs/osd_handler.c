@@ -362,6 +362,8 @@ static struct inode *osd_iget_check(struct osd_thread_info *info,
 
 check_oi:
 	if (rc != 0) {
+		struct osd_inode_id saved_id = *id;
+
 		LASSERTF(rc == -ESTALE || rc == -ENOENT, "rc = %d\n", rc);
 
 		rc = osd_oi_lookup(info, dev, fid, id, OI_CHECK_FLD);
@@ -383,10 +385,22 @@ check_oi:
 		 *	to distinguish the 1st case from the 2nd case. */
 		if (rc == 0) {
 			if (!IS_ERR(inode) && inode->i_generation != 0 &&
-			    inode->i_generation == id->oii_gen)
+			    inode->i_generation == id->oii_gen) {
 				rc = -ENOENT;
-			else
+			} else {
+				__u32 level = D_LFSCK;
+
 				rc = -EREMCHG;
+				if (!thread_is_running(&dev->od_scrub.os_thread))
+					level |= D_CONSOLE;
+
+				CDEBUG(level, "%s: the OI mapping for the FID "
+				       DFID" become inconsistent, the given ID "
+				       "%u/%u, the ID in OI mapping %u/%u\n",
+				       osd_name(dev), PFID(fid),
+				       saved_id.oii_ino, saved_id.oii_gen,
+				       id->oii_ino, id->oii_ino);
+			}
 		}
 	} else {
 		if (id->oii_gen == OSD_OII_NOGEN)
@@ -521,6 +535,8 @@ static int osd_check_lma(const struct lu_env *env, struct osd_object *obj)
 	}
 
 	if (fid != NULL && unlikely(!lu_fid_eq(rfid, fid))) {
+		__u32 level = D_LFSCK;
+
 		if (fid_is_idif(rfid) && fid_is_idif(fid)) {
 			struct ost_id	*oi   = &info->oti_ostid;
 			struct lu_fid	*fid1 = &info->oti_fid3;
@@ -544,9 +560,13 @@ static int osd_check_lma(const struct lu_env *env, struct osd_object *obj)
 			}
 		}
 
-		CDEBUG(D_INODE, "%s: FID "DFID" != self_fid "DFID"\n",
-		       osd_name(osd), PFID(rfid), PFID(fid));
+
 		rc = -EREMCHG;
+		if (!thread_is_running(&osd->od_scrub.os_thread))
+			level |= D_CONSOLE;
+
+		CDEBUG(level, "%s: FID "DFID" != self_fid "DFID"\n",
+		       osd_name(osd), PFID(rfid), PFID(fid));
 	}
 
 	RETURN(rc);
@@ -647,9 +667,10 @@ trigger:
 				result = -EINPROGRESS;
 			} else if (!dev->od_noscrub) {
 				result = osd_scrub_start(dev);
-				LCONSOLE_WARN("%.16s: trigger OI scrub by RPC "
-					      "for "DFID", rc = %d [1]\n",
-					      osd_name(dev), PFID(fid), result);
+				CDEBUG(D_LFSCK | D_CONSOLE, "%.16s: trigger OI "
+				       "scrub by RPC for "DFID", rc = %d [1]\n",
+				       osd_name(dev), PFID(fid),result);
+
 				if (result == 0 || result == -EALREADY)
 					result = -EINPROGRESS;
 				else
@@ -4217,10 +4238,11 @@ again:
 
 	if (!dev->od_noscrub && ++once == 1) {
 		rc = osd_scrub_start(dev);
-		LCONSOLE_WARN("%.16s: trigger OI scrub by RPC for "DFID
-			      ", rc = %d [2]\n",
-			      LDISKFS_SB(osd_sb(dev))->s_es->s_volume_name,
-			      PFID(fid), rc);
+		CDEBUG(D_LFSCK | D_CONSOLE, "%.16s: trigger OI scrub by RPC "
+		       "for "DFID", rc = %d [2]\n",
+		       LDISKFS_SB(osd_sb(dev))->s_es->s_volume_name,
+		       PFID(fid), rc);
+
 		if (rc == 0)
 			goto again;
 	}
