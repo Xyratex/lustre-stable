@@ -395,8 +395,8 @@ test_9() {
 	dd if=/dev/zero of=$DIR/$tfile count=1 bs=1M > /dev/null ||
 		error "failed to write"
 	# failover, replay and resend replayed waiting request
-	#define OBD_FAIL_TGT_REPLAY_DELAY2       0x713
-	do_facet ost1 $LCTL set_param fail_loc=0x00000713
+	#define OBD_FAIL_TGT_REPLAY_DELAY2       0x714
+	do_facet ost1 $LCTL set_param fail_loc=0x00000714
 	do_facet ost1 $LCTL set_param fail_val=$TIMEOUT
 	fail ost1
 	do_facet ost1 $LCTL set_param fail_loc=0
