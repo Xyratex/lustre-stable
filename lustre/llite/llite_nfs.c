@@ -328,11 +328,11 @@ static struct dentry *ll_get_parent(struct dentry *dchild)
 	 * LU-3952: MDT may lost the FID of its parent, we should not crash
 	 * the NFS server, ll_iget_for_nfs() will handle the error.
 	 */
-	if (body->valid & OBD_MD_FLID) {
+	if (body->mbo_valid & OBD_MD_FLID) {
 		CDEBUG(D_INFO, "parent for "DFID" is "DFID"\n",
-		       PFID(ll_inode2fid(dir)), PFID(&body->fid1));
+		       PFID(ll_inode2fid(dir)), PFID(&body->mbo_fid1));
 	}
-	result = ll_iget_for_nfs(dir->i_sb, &body->fid1, NULL);
+	result = ll_iget_for_nfs(dir->i_sb, &body->mbo_fid1, NULL);
 
 	ptlrpc_req_finished(req);
 	RETURN(result);

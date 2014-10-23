@@ -73,11 +73,11 @@ static inline struct lmv_stripe_md *lmv_get_mea(struct ptlrpc_request *req)
 
         body = req_capsule_server_get(&req->rq_pill, &RMF_MDT_BODY);
 
-        if (!body || !S_ISDIR(body->mode) || !body->eadatasize)
+        if (!body || !S_ISDIR(body->mbo_mode) || !body->mbo_eadatasize)
                 return NULL;
 
         mea = req_capsule_server_sized_get(&req->rq_pill, &RMF_MDT_MD,
-                                           body->eadatasize);
+                                           body->mbo_eadatasize);
         LASSERT(mea != NULL);
 
         if (mea->mea_count == 0)
