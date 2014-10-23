@@ -1134,6 +1134,7 @@ int fsfilt_ext3_map_ext_inode_pages(struct inode *inode, struct page **page,
                                     int *created, int create)
 {
 	int bpp_bits = CFS_PAGE_SHIFT - inode->i_blkbits;
+	unsigned long maxbytes_bits = inode->i_sb->s_maxbytes >> CFS_PAGE_SHIFT;
 	int rc, i, nblocks;
 
 	ENTRY;
@@ -1150,6 +1151,9 @@ int fsfilt_ext3_map_ext_inode_pages(struct inode *inode, struct page **page,
 		for(i = 1; i < pages; i++)
 			if (page[i - 1]->index + 1 != page[i]->index)
 				break;
+
+		if (page[0]->index + i >= maxbytes_bits)
+			GOTO(cleanup, rc = -EFBIG);
 
 		/* number of blocks in the current extent */
 		nblocks = i << bpp_bits;
@@ -1179,10 +1183,17 @@ int fsfilt_ext3_map_bm_inode_pages(struct inode *inode, struct page **page,
                                    int *created, int create)
 {
         int blocks_per_page = CFS_PAGE_SIZE >> inode->i_blkbits;
+	unsigned long bitmap_maxbytes_bits;
         unsigned long *b;
         int rc = 0, i, *cr;
 
+	bitmap_maxbytes_bits = EXT3_SB(inode->i_sb)->s_bitmap_maxbytes >>
+			       CFS_PAGE_SHIFT;
         for (i = 0, cr = created, b = blocks; i < pages; i++, page++) {
+		if ((*page)->index + 1 >= bitmap_maxbytes_bits) {
+			rc = -EFBIG;
+			break;
+		}
                 rc = ext3_map_inode_page(inode, *page, b, cr, create);
                 if (rc) {
                         CERROR("ino %lu, blk %lu cr %u create %d: rc %d\n",
