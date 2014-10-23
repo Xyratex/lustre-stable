@@ -9329,6 +9329,15 @@ test_225b () {
 }
 run_test 225b "Metadata survey sanity with stripe_count = 1"
 
+test_250() {
+	$SETSTRIPE -c 1 $DIR/$tfile
+	truncate $DIR/$tfile 17592186040319
+	dd if=/dev/zero of=$DIR/$tfile bs=10 count=1 oflag=append \
+		conv=notrunc,fsync && error "write succeeded"
+	return 0
+}
+run_test 250 "Write above 16T limit"
+
 #
 # tests that do cleanup/setup should be run at the end
 #
