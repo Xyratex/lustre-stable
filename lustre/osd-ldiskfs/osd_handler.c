@@ -2943,8 +2943,10 @@ static int osd_declare_xattr_set(const struct lu_env *env,
 		struct super_block *sb = osd_sb(osd);
 		credits = osd_dto_credits_noquota[DTO_XATTR_SET];
 		if (buf && buf->lb_len > sb->s_blocksize) {
-			credits *= (buf->lb_len + sb->s_blocksize - 1) >>
-					sb->s_blocksize_bits;
+			credits += osd_calc_bkmap_credits(
+			    sb, NULL, 0, -1,
+			    (buf->lb_len + sb->s_blocksize - 1) >>
+			    sb->s_blocksize_bits);
 		}
 	}
 
