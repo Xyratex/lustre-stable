@@ -825,13 +825,22 @@ static ssize_t ll_file_io_generic(const struct lu_env *env,
                 struct vvp_io_args *args, struct file *file,
                 enum cl_io_type iot, loff_t *ppos, size_t count)
 {
-        struct ll_inode_info *lli = ll_i2info(file->f_dentry->d_inode);
+	struct inode *inode = file->f_dentry->d_inode;
+	struct ll_inode_info *lli = ll_i2info(inode);
+	loff_t               end;
         struct cl_io         *io;
         ssize_t               result;
         ENTRY;
 
         io = ccc_env_thread_io(env);
         ll_io_init(io, file, iot == CIT_WRITE);
+
+	end = (io->u.ci_wr.wr_append ? i_size_read(inode) : *ppos) + count;
+	if (end > ll_file_maxbytes(inode)) {
+		CDEBUG(D_INODE, "file "DFID" range is too large %llu > "LPU64
+		       "\n", PFID(&lli->lli_fid), end, ll_file_maxbytes(inode));
+		RETURN(-EFBIG);
+	}
 
         if (cl_io_rw_init(env, io, iot, *ppos, count) == 0) {
                 struct vvp_io *vio = vvp_env_io(env);
