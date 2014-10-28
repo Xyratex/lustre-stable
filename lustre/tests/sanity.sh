@@ -4605,6 +4605,8 @@ check_stripe_count() {
 }
 
 test_56w() {
+	[[ $OSTCOUNT -lt 2 ]] && skip_env "$OSTCOUNT < 2 OSTs -- skipping" &&
+		return
 	[ $PARALLEL == "yes" ] && skip "skip parallel run" && return
 	TDIR=$DIR/${tdir}w
 
