@@ -2488,7 +2488,7 @@ static void ost_thread_done(struct ptlrpc_thread *thread)
          */
         tls = thread->t_data;
         if (tls != NULL) {
-                OBD_FREE_PTR(tls);
+                OBD_FREE_LARGE(tls, sizeof(*tls));
                 thread->t_data = NULL;
         }
         EXIT;
@@ -2505,9 +2505,9 @@ static int ost_thread_init(struct ptlrpc_thread *thread)
 
         LASSERT(thread != NULL);
         LASSERT(thread->t_data == NULL);
-        LASSERTF(thread->t_id <= OSS_THREADS_MAX, "%u\n", thread->t_id);
+	LASSERTF(thread->t_svc->srv_threads_running <= OSS_THREADS_MAX, "%u\n", thread->t_id);
 
-        OBD_ALLOC_PTR(tls);
+	OBD_ALLOC_LARGE(tls, sizeof(*tls));
         if (tls == NULL)
                 RETURN(-ENOMEM);
         thread->t_data = tls;
