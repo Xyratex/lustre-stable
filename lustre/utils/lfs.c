@@ -3050,7 +3050,7 @@ static int lfs_changelog(int argc, char **argv)
 		if (!fid_is_zero(&rec->cr_sfid))
 			printf(" s="DFID" sp="DFID" %.*s",
 				PFID(&rec->cr_sfid), PFID(&rec->cr_spfid),
-				changelog_rec_snamelen(rec),
+				(int)changelog_rec_snamelen(rec),
 				changelog_rec_sname(rec));
 		printf("\n");
 
