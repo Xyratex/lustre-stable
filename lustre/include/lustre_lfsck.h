@@ -52,9 +52,10 @@ int lfsck_start(const struct lu_env *env, struct dt_device *key,
 int lfsck_stop(const struct lu_env *env, struct dt_device *key,
 	       bool pause);
 
-int lfsck_get_speed(struct dt_device *key, void *buf, int len);
+int lfsck_get_speed(struct seq_file *m, struct dt_device *key);
 int lfsck_set_speed(struct dt_device *key, int val);
 
-int lfsck_dump(struct dt_device *key, void *buf, int len, __u16 type);
+int lfsck_dump(struct seq_file *m, struct dt_device *key, enum lfsck_type type);
+
 
 #endif /* _LUSTRE_LFSCK_H */
