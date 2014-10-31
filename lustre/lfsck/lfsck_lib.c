@@ -304,7 +304,7 @@ int lfsck_pos_dump(struct seq_file *m, struct lfsck_position *pos,
 			seq_printf(m, "%s: "LPU64", N/A, N/A\n",
 				   prefix, pos->lp_oit_cookie);
 	} else {
-		seq_printf(m, "%s: "LPU64", "DFID", "LPU64"\n",
+		seq_printf(m, "%s: "LPU64", "DFID", "LPX64"\n",
 			   prefix, pos->lp_oit_cookie,
 			   PFID(&pos->lp_dir_parent), pos->lp_dir_cookie);
 	}

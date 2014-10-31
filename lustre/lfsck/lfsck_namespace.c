@@ -138,17 +138,17 @@ static int lfsck_namespace_load(const struct lu_env *env,
 		lfsck_namespace_le_to_cpu(ns,
 				(struct lfsck_namespace *)com->lc_file_disk);
 		if (ns->ln_magic != LFSCK_NAMESPACE_MAGIC) {
-			CWARN("%.16s: invalid lfsck_namespace magic "
-			      "0x%x != 0x%x\n",
-			      lfsck_lfsck2name(com->lc_lfsck),
-			      ns->ln_magic, LFSCK_NAMESPACE_MAGIC);
+			CDEBUG(D_LFSCK, "%s: invalid lfsck_namespace magic "
+			       "%#x != %#x\n", lfsck_lfsck2name(com->lc_lfsck),
+			       ns->ln_magic, LFSCK_NAMESPACE_MAGIC);
 			rc = 1;
 		} else {
 			rc = 0;
 		}
 	} else if (rc != -ENODATA) {
-		CERROR("%.16s: fail to load lfsck_namespace, expected = %d, "
-		       "rc = %d\n", lfsck_lfsck2name(com->lc_lfsck), len, rc);
+		CDEBUG(D_LFSCK, "%s: fail to load lfsck_namespace, "
+		       "expected = %d: rc = %d\n",
+		       lfsck_lfsck2name(com->lc_lfsck), len, rc);
 		if (rc >= 0)
 			rc = 1;
 	}
@@ -168,42 +168,33 @@ static int lfsck_namespace_store(const struct lu_env *env,
 	lfsck_namespace_cpu_to_le((struct lfsck_namespace *)com->lc_file_disk,
 				  (struct lfsck_namespace *)com->lc_file_ram);
 	handle = dt_trans_create(env, lfsck->li_bottom);
-	if (IS_ERR(handle)) {
-		rc = PTR_ERR(handle);
-		CERROR("%.16s: fail to create trans for storing "
-		       "lfsck_namespace: %d\n,", lfsck_lfsck2name(lfsck), rc);
-		RETURN(rc);
-	}
+	if (IS_ERR(handle))
+		GOTO(log, rc = PTR_ERR(handle));
 
 	rc = dt_declare_xattr_set(env, obj,
 				  lfsck_buf_get(env, com->lc_file_disk, len),
 				  XATTR_NAME_LFSCK_NAMESPACE, 0, handle);
-	if (rc != 0) {
-		CERROR("%.16s: fail to declare trans for storing "
-		       "lfsck_namespace: %d\n,", lfsck_lfsck2name(lfsck), rc);
+	if (rc != 0)
 		GOTO(out, rc);
-	}
 
 	rc = dt_trans_start_local(env, lfsck->li_bottom, handle);
-	if (rc != 0) {
-		CERROR("%.16s: fail to start trans for storing "
-		       "lfsck_namespace: %d\n,", lfsck_lfsck2name(lfsck), rc);
+	if (rc != 0)
 		GOTO(out, rc);
-	}
 
 	rc = dt_xattr_set(env, obj,
 			  lfsck_buf_get(env, com->lc_file_disk, len),
 			  XATTR_NAME_LFSCK_NAMESPACE,
 			  init ? LU_XATTR_CREATE : LU_XATTR_REPLACE,
 			  handle, BYPASS_CAPA);
-	if (rc != 0)
-		CERROR("%.16s: fail to store lfsck_namespace, len = %d, "
-		       "rc = %d\n", lfsck_lfsck2name(lfsck), len, rc);
-
 	GOTO(out, rc);
 
 out:
 	dt_trans_stop(env, lfsck->li_bottom, handle);
+
+log:
+	if (rc != 0)
+		CDEBUG(D_LFSCK, "%s: fail to store lfsck_namespace: rc = %d\n",
+		       lfsck_lfsck2name(lfsck), rc);
 	return rc;
 }
 
@@ -319,11 +310,8 @@ static int lfsck_namespace_update(const struct lu_env *env,
 	if (exist) {
 		rc = dt_delete(env, obj, (const struct dt_key *)key, handle,
 			       BYPASS_CAPA);
-		if (rc != 0) {
-			CERROR("%s: fail to insert "DFID", rc = %d\n",
-			       lfsck_lfsck2name(com->lc_lfsck), PFID(fid), rc);
+		if (rc != 0)
 			GOTO(out, rc);
-		}
 	}
 
 	rc = dt_insert(env, obj, (const struct dt_rec *)&flags,
@@ -602,9 +590,11 @@ shrink:
 		if (bk->lb_param & LPF_DRYRUN)
 			RETURN(1);
 
-		CDEBUG(D_LFSCK, "Remove linkEA: "DFID"[%.*s], "DFID"\n",
-		       PFID(lfsck_dto2fid(child)), cname->ln_namelen, cname->ln_name,
-		       PFID(pfid));
+		CDEBUG(D_LFSCK, "%s: namespace LFSCK remove invalid linkEA "
+		      "for the object: "DFID", parent "DFID", name %.*s\n",
+		      lfsck_lfsck2name(lfsck), PFID(lfsck_dto2fid(child)),
+		      PFID(pfid), cname->ln_namelen, cname->ln_name);
+
 		linkea_del_buf(&ldata, cname);
 		update = true;
 	}
@@ -629,10 +619,10 @@ stop:
 		if (rc == 0 && !lfsck_is_dead_obj(child) &&
 		    ldata.ld_leh != NULL &&
 		    ldata.ld_leh->leh_reccount != la->la_nlink)
-			CWARN("%.16s: the object "DFID" linkEA entry count %u "
-			      "may not match its hardlink count %u\n",
-			      lfsck_lfsck2name(lfsck), PFID(cfid),
-			      ldata.ld_leh->leh_reccount, la->la_nlink);
+			CDEBUG(D_LFSCK, "%s: the object "DFID" linkEA entry "
+			       "count %u may not match its hardlink count %u\n",
+			       lfsck_lfsck2name(lfsck), PFID(cfid),
+			       ldata.ld_leh->leh_reccount, la->la_nlink);
 
 		dt_write_unlock(env, child);
 	}
@@ -663,9 +653,10 @@ static int lfsck_namespace_reset(const struct lu_env *env,
 
 	root = dt_locate(env, lfsck->li_bottom, &lfsck->li_local_root_fid);
 	if (IS_ERR(root))
-		RETURN(PTR_ERR(root));
+		GOTO(log, rc = PTR_ERR(root));
 
-	dt_try_as_dir(env, root);
+	if (unlikely(!dt_try_as_dir(env, root)))
+		GOTO(put, rc = -ENOTDIR);
 
 	down_write(&com->lc_sem);
 	if (init) {
@@ -706,7 +697,12 @@ static int lfsck_namespace_reset(const struct lu_env *env,
 
 out:
 	up_write(&com->lc_sem);
+
+put:
 	lu_object_put(env, &root->do_lu);
+log:
+	CDEBUG(D_LFSCK, "%s: namespace LFSCK reset: rc = %d\n",
+	       lfsck_lfsck2name(lfsck), rc);
 	return rc;
 }
 
@@ -720,9 +716,17 @@ lfsck_namespace_fail(const struct lu_env *env, struct lfsck_component *com,
 	if (new_checked)
 		com->lc_new_checked++;
 	ns->ln_items_failed++;
-	if (lfsck_pos_is_zero(&ns->ln_pos_first_inconsistent))
+	if (lfsck_pos_is_zero(&ns->ln_pos_first_inconsistent)) {
 		lfsck_pos_fill(env, com->lc_lfsck,
 			       &ns->ln_pos_first_inconsistent, false);
+
+		CDEBUG(D_LFSCK, "%s: namespace LFSCK hit first non-repaired "
+		       "inconsistency at the pos ["LPU64", "DFID", "LPX64"]\n",
+		       lfsck_lfsck2name(com->lc_lfsck),
+		       ns->ln_pos_first_inconsistent.lp_oit_cookie,
+		       PFID(&ns->ln_pos_first_inconsistent.lp_dir_parent),
+		       ns->ln_pos_first_inconsistent.lp_dir_cookie);
+	}
 	up_write(&com->lc_sem);
 }
 
@@ -738,7 +742,6 @@ static int lfsck_namespace_checkpoint(const struct lu_env *env,
 		return 0;
 
 	down_write(&com->lc_sem);
-
 	if (init) {
 		ns->ln_pos_latest_start = lfsck->li_pos_current;
 	} else {
@@ -751,8 +754,14 @@ static int lfsck_namespace_checkpoint(const struct lu_env *env,
 	}
 
 	rc = lfsck_namespace_store(env, com, false);
-
 	up_write(&com->lc_sem);
+
+	CDEBUG(D_LFSCK, "%s: namespace LFSCK checkpoint at the pos ["LPU64
+	       ", "DFID", "LPX64"]: rc = %d\n", lfsck_lfsck2name(lfsck),
+	       lfsck->li_pos_current.lp_oit_cookie,
+	       PFID(&lfsck->li_pos_current.lp_dir_parent),
+	       lfsck->li_pos_current.lp_dir_cookie, rc);
+
 	return rc;
 }
 
@@ -768,12 +777,16 @@ static int lfsck_namespace_prep(const struct lu_env *env,
 		int rc;
 
 		rc = lfsck_namespace_reset(env, com, false);
-		if (rc != 0)
+
+		if (rc != 0) {
+			CDEBUG(D_LFSCK, "%s: namespace LFSCK prep failed: "
+			       "rc = %d\n", lfsck_lfsck2name(lfsck), rc);
+
 			return rc;
+		}
 	}
 
 	down_write(&com->lc_sem);
-
 	ns->ln_time_latest_start = cfs_time_current_sec();
 
 	spin_lock(&lfsck->li_lock);
@@ -821,8 +834,12 @@ static int lfsck_namespace_prep(const struct lu_env *env,
 		}
 	}
 	spin_unlock(&lfsck->li_lock);
-
 	up_write(&com->lc_sem);
+
+	CDEBUG(D_LFSCK, "%s: namespace LFSCK prep done, start pos ["LPU64", "
+	       DFID", "LPX64"]\n", lfsck_lfsck2name(lfsck), pos->lp_oit_cookie,
+	       PFID(&pos->lp_dir_parent), pos->lp_dir_cookie);
+
 	return 0;
 }
 
@@ -859,6 +876,7 @@ static int lfsck_namespace_exec_dir(const struct lu_env *env,
 	bool			    locked   = false;
 	bool			    remove;
 	bool			    newdata;
+	bool			    log      = false;
 	int			    count    = 0;
 	int			    rc;
 	ENTRY;
@@ -947,6 +965,7 @@ again:
 nodata:
 		if (bk->lb_param & LPF_DRYRUN) {
 			ns->ln_linkea_repaired++;
+			log = true;
 			repaired = true;
 			goto record;
 		}
@@ -980,6 +999,7 @@ nodata:
 
 		count = ldata.ld_leh->leh_reccount;
 		ns->ln_linkea_repaired++;
+		log = true;
 		repaired = true;
 	} else {
 		GOTO(stop, rc);
@@ -1006,6 +1026,13 @@ record:
 
 		dt_trans_stop(env, lfsck->li_next, handle);
 		handle = NULL;
+
+		if (log)
+			CDEBUG(D_LFSCK, "%s: namespace LFSCK repaired "
+			      "linkEA for the object: "DFID", parent "
+			      DFID", name %.*s\n",
+			      lfsck_lfsck2name(lfsck), PFID(cfid), PFID(pfid),
+			      ent->lde_namelen, ent->lde_name);
 	}
 
 	ns->ln_mlinked_checked++;
@@ -1023,6 +1050,11 @@ stop:
 
 out:
 	if (rc < 0) {
+		CDEBUG(D_LFSCK, "%s: namespace LFSCK exec_dir failed, "
+		       "parent "DFID", child name %.*s, child FID "DFID
+		       ": rc = %d\n", lfsck_lfsck2name(lfsck), PFID(pfid),
+		       ent->lde_namelen, ent->lde_name, PFID(cfid), rc);
+
 		ns->ln_items_failed++;
 		if (lfsck_pos_is_zero(&ns->ln_pos_first_inconsistent))
 			lfsck_pos_fill(env, lfsck,
@@ -1056,7 +1088,6 @@ static int lfsck_namespace_post(const struct lu_env *env,
 	int			 rc;
 
 	down_write(&com->lc_sem);
-
 	spin_lock(&lfsck->li_lock);
 	if (!init)
 		ns->ln_pos_last_checkpoint = lfsck->li_pos_current;
@@ -1093,8 +1124,11 @@ static int lfsck_namespace_post(const struct lu_env *env,
 	}
 
 	rc = lfsck_namespace_store(env, com, false);
-
 	up_write(&com->lc_sem);
+
+	CDEBUG(D_LFSCK, "%s: namespace LFSCK post done: rc = %d\n",
+	       lfsck_lfsck2name(lfsck), rc);
+
 	return rc;
 }
 
@@ -1588,7 +1622,7 @@ int lfsck_namespace_setup(const struct lu_env *env,
 		cfs_list_add_tail(&com->lc_link, &lfsck->li_list_idle);
 		break;
 	default:
-		CERROR("%s: unknown lfsck_namespace status: %u\n",
+		CERROR("%s: unknown lfsck_namespace status %d\n",
 		       lfsck_lfsck2name(lfsck), ns->ln_status);
 		/* fall through */
 	case LS_SCANNING_PHASE1:
@@ -1610,7 +1644,10 @@ int lfsck_namespace_setup(const struct lu_env *env,
 out:
 	if (root != NULL && !IS_ERR(root))
 		lu_object_put(env, &root->do_lu);
-	if (rc != 0)
+	if (rc != 0) {
 		lfsck_component_cleanup(env, com);
+		CERROR("%s: fail to init namespace LFSCK component: rc = %d\n",
+		       lfsck_lfsck2name(lfsck), rc);
+	}
 	return rc;
 }

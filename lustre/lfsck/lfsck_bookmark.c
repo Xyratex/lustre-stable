@@ -74,9 +74,9 @@ static int lfsck_bookmark_load(const struct lu_env *env,
 
 		lfsck_bookmark_le_to_cpu(bm, &lfsck->li_bookmark_disk);
 		if (bm->lb_magic != LFSCK_BOOKMARK_MAGIC) {
-			CWARN("%.16s: invalid lfsck_bookmark magic "
-			      "0x%x != 0x%x\n", lfsck_lfsck2name(lfsck),
-			      bm->lb_magic, LFSCK_BOOKMARK_MAGIC);
+			CDEBUG(D_LFSCK, "%s: invalid lfsck_bookmark magic "
+			       "%#x != %#x\n", lfsck_lfsck2name(lfsck),
+			       bm->lb_magic, LFSCK_BOOKMARK_MAGIC);
 			/* Process it as new lfsck_bookmark. */
 			rc = -ENODATA;
 		}
@@ -85,7 +85,7 @@ static int lfsck_bookmark_load(const struct lu_env *env,
 			/* return -ENODATA for empty lfsck_bookmark. */
 			rc = -ENODATA;
 		else
-			CERROR("%.16s: fail to load lfsck_bookmark, "
+			CDEBUG(D_LFSCK, "%.16s: fail to load lfsck_bookmark, "
 			       "expected = %d, rc = %d\n",
 			       lfsck_lfsck2name(lfsck), len, rc);
 	}
@@ -104,38 +104,29 @@ int lfsck_bookmark_store(const struct lu_env *env, struct lfsck_instance *lfsck)
 	lfsck_bookmark_cpu_to_le(&lfsck->li_bookmark_disk,
 				 &lfsck->li_bookmark_ram);
 	handle = dt_trans_create(env, lfsck->li_bottom);
-	if (IS_ERR(handle)) {
-		rc = PTR_ERR(handle);
-		CERROR("%.16s: fail to create trans for storing "
-		       "lfsck_bookmark: %d\n,", lfsck_lfsck2name(lfsck), rc);
-		RETURN(rc);
-	}
+	if (IS_ERR(handle))
+		GOTO(log, rc = PTR_ERR(handle));
 
 	rc = dt_declare_record_write(env, obj, len, 0, handle);
-	if (rc != 0) {
-		CERROR("%.16s: fail to declare trans for storing "
-		       "lfsck_bookmark: %d\n,", lfsck_lfsck2name(lfsck), rc);
+	if (rc != 0)
 		GOTO(out, rc);
-	}
 
 	rc = dt_trans_start_local(env, lfsck->li_bottom, handle);
-	if (rc != 0) {
-		CERROR("%.16s: fail to start trans for storing "
-		       "lfsck_bookmark: %d\n,", lfsck_lfsck2name(lfsck), rc);
+	if (rc != 0)
 		GOTO(out, rc);
-	}
 
 	rc = dt_record_write(env, obj,
 			     lfsck_buf_get(env, &lfsck->li_bookmark_disk, len),
 			     &pos, handle);
-	if (rc != 0)
-		CERROR("%.16s: fail to store lfsck_bookmark, expected = %d, "
-		       "rc = %d\n", lfsck_lfsck2name(lfsck), len, rc);
-
 	GOTO(out, rc);
 
 out:
 	dt_trans_stop(env, lfsck->li_bottom, handle);
+
+log:
+	if (rc != 0)
+		CDEBUG(D_LFSCK, "%s: fail to store lfsck_bookmark: rc = %d\n",
+		       lfsck_lfsck2name(lfsck), rc);
 	return rc;
 }
 
