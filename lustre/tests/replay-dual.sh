@@ -554,6 +554,23 @@ test_21b() {
 }
 run_test 21b "commit on sharing, two clients"
 
+test_24 () {
+	touch $MOUNT/$tfile
+	stat $MOUNT/$tfile >&/dev/null
+	# OBD_FAIL_MDS_REINT_NET_REP
+	do_facet $SINGLEMDS $LCTL set_param fail_loc=0x119
+	$TRUNCATE $MOUNT/$tfile 100 &
+	PID=$!
+	sleep 1
+	do_facet $SINGLEMDS lctl set_param fail_loc=0
+	# sync to release rep-ack lock quickly
+	do_nodes $(comma_list $(mdts_nodes)) \
+		"lctl set_param -n osd*.*MDT*.force_sync 1"
+	rm $MOUNT2/$tfile
+	wait
+}
+run_test 24 "reconstruct on non-existing object"
+
 # end commit on sharing tests 
 
 test_24() {
