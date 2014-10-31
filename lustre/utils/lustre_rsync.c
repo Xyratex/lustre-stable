@@ -1112,24 +1112,28 @@ int lr_setxattr(struct lr_info *info)
 int lr_parse_line(void *priv, struct lr_info *info)
 {
 	struct changelog_ext_rec *rec;
+	size_t				 namelen;
+	size_t				 copylen;
 
-        if (llapi_changelog_recv(priv, &rec) != 0)
-                return -1;
+	if (llapi_changelog_recv(priv, &rec) != 0)
+		return -1;
 
 	info->is_extended = CHANGELOG_REC_EXTENDED(rec);
-        info->recno = rec->cr_index;
-        info->type = rec->cr_type;
-        sprintf(info->tfid, DFID, PFID(&rec->cr_tfid));
-        sprintf(info->pfid, DFID, PFID(&rec->cr_pfid));
-	strncpy(info->name, rec->cr_name, rec->cr_namelen);
-	info->name[rec->cr_namelen] = '\0';
+	info->recno = rec->cr_index;
+	info->type = rec->cr_type;
+	snprintf(info->tfid, sizeof(info->tfid), DFID, PFID(&rec->cr_tfid));
+	snprintf(info->pfid, sizeof(info->pfid), DFID, PFID(&rec->cr_pfid));
+
+	namelen = strnlen(rec->cr_name, rec->cr_namelen);
+	copylen = min(sizeof(info->name), namelen + 1);
+	strlcpy(info->name, rec->cr_name, copylen);
 
 	if (fid_is_sane(&rec->cr_sfid)) {
 		sprintf(info->sfid, DFID, PFID(&rec->cr_sfid));
 		sprintf(info->spfid, DFID, PFID(&rec->cr_spfid));
-		strncpy(info->sname, changelog_rec_sname(rec),
-			changelog_rec_snamelen(rec));
-		info->sname[changelog_rec_snamelen(rec)] = '\0';
+		namelen = changelog_rec_snamelen(rec);
+		copylen = min(sizeof(info->sname), namelen + 1);
+		strlcpy(info->sname, changelog_rec_sname(rec), copylen);
 
 		if (verbose > 1)
 			printf("Rec %lld: %d %s %s\n", info->recno, info->type,
