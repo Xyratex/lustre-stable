@@ -370,7 +370,7 @@ void ptlrpc_invalidate_import(struct obd_import *imp)
                                 }
 
 				CERROR("%s: RPCs in \"%s\" phase found (%d). "
-				       "Network is sluggish? Waiting them "
+				       "Network is sluggish? Waiting for them "
 				       "to error out.\n", cli_tgt,
 				       ptlrpc_phase2str(RQ_PHASE_UNREGISTERING),
 				       atomic_read(&imp->imp_unregistering));
