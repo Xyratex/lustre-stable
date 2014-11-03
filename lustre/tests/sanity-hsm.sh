@@ -322,7 +322,7 @@ make_archive() {
 	local file=$HSM_ARCHIVE/$1
 	do_facet $SINGLEAGT mkdir -p $(dirname $file)
 	do_facet $SINGLEAGT dd if=/dev/urandom of=$file count=32 bs=1000000 ||
-		error "cannot create $file"
+		file_creation_failure dd $file $?
 }
 
 copy2archive() {
@@ -549,6 +549,15 @@ check_hsm_flags_user() {
 	[[ $st == $fl ]] || error "hsm flags on $f are $st != $fl"
 }
 
+file_creation_failure() {
+	local cmd=$1
+	local f=$2
+	local err=$3
+
+	df $MOUNT $MOUNT2
+	error "cannot create $f with $cmd, status=$err"
+}
+
 copy_file() {
 	local f=
 
@@ -562,20 +571,22 @@ copy_file() {
 		f=${f/$DIR/$DIR2}
 	fi
 	rm -f $f
-	cp $1 $f || error "cannot copy $1 to $f"
+	cp $1 $f || file_creation_failure cp $f $?
+
 	path2fid $f || error "cannot get fid on $f"
 }
 
 make_small() {
         local file2=${1/$DIR/$DIR2}
         dd if=/dev/urandom of=$file2 count=2 bs=1M conv=fsync ||
-		error "cannot create $file2"
+		file_creation_failure dd $file2 $?
+
         path2fid $1 || error "cannot get fid on $1"
 }
 
 make_small_sync() {
 	dd if=/dev/urandom of=$1 count=1 bs=1M conv=sync ||
-		error "cannot create $1"
+		file_creation_failure dd $1 $?
 	path2fid $1 || error "cannot get fid on $1"
 }
 
@@ -604,7 +615,8 @@ make_large_for_striping() {
 	[ $? != 0 ] && return $?
 
 	dd if=/dev/urandom of=$file2 count=5 bs=$sz conv=fsync ||
-		error "cannot create $file2"
+		file_creation_failure dd $file2 $?
+
 	path2fid $1 || error "cannot get fid on $1"
 }
 
@@ -621,7 +633,8 @@ make_large_for_progress() {
 	# size is not a multiple of 1M to avoid stripe
 	# aligment
 	dd if=/dev/urandom of=$file2 count=39 bs=1000000 conv=fsync ||
-		error "cannot create $file2"
+		file_creation_failure dd $file2 $?
+
 	path2fid $1 || error "cannot get fid on $1"
 }
 
@@ -638,7 +651,7 @@ make_large_for_progress_aligned() {
 	# size is a multiple of 1M to have stripe
 	# aligment
 	dd if=/dev/urandom of=$file2 count=33 bs=1M conv=fsync ||
-		error "cannot create $file2"
+		file_creation_failure dd $file2 $?
 	path2fid $1 || error "cannot get fid on $1"
 }
 
@@ -652,7 +665,7 @@ make_large_for_cancel() {
 
 	# Copy timeout is 100s. 105MB => 105s
 	dd if=/dev/urandom of=$file2 count=103 bs=1M conv=fsync ||
-		error "cannot create $file2"
+		file_creation_failure dd $file2 $?
 	path2fid $1 || error "cannot get fid on $1"
 }
 
@@ -837,7 +850,7 @@ test_3() {
 		error "user could not change hsm flags"
 	dd if=/etc/passwd of=$f.append bs=1 count=3\
 	   conv=notrunc oflag=append status=noxfer ||
-		error "could not append to test file"
+		file_creation_failure dd $f.append $?
 	check_hsm_flags $f.append "0x00000003"
 
 	# Modify a file sets it dirty
@@ -846,7 +859,7 @@ test_3() {
 		error "user could not change hsm flags"
 	dd if=/dev/zero of=$f.modify bs=1 count=3\
 	   conv=notrunc status=noxfer ||
-		error "could not modify test file"
+		file_creation_failure dd $f.modify $?
 	check_hsm_flags $f.modify "0x00000003"
 
 	# Open O_TRUNC sets dirty
