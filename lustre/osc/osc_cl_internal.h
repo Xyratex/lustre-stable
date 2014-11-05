@@ -74,7 +74,7 @@ struct osc_io {
 	 * page writeback from happening. */
 	struct osc_extent *oi_trunc;
 
-	int oi_lru_reserved;
+	unsigned long oi_lru_reserved;
 
 	struct obd_info    oi_info;
 	struct obdo        oi_oa;
