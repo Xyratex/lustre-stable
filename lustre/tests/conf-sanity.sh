@@ -3277,7 +3277,7 @@ run_test 74 "test conf_param failure"
 #
 # set number of permanent parameters
 #
-test_75_set_params() {
+test_87_set_params() {
 	local fsname=$1
 
 	set_conf_param_and_check mds				    \
@@ -3308,7 +3308,7 @@ test_75_set_params() {
 #
 # check permanent parameters
 #
-test_75_test_params() {
+test_87_test_params() {
 	local fsname=$1
 
 	local atime_diff=$(do_facet mds $LCTL \
@@ -3325,7 +3325,7 @@ pool_list $fsname.pool1 | grep -v "^Pool:" | sed 's/_UUID//')
 #
 # run lctl clear_conf, store CONFIGS before and after that
 #
-test_75_clear_conf()
+test_87_clear_conf()
 {
 	local clear_conf_arg=$1
 	local mgsdev
@@ -3357,7 +3357,7 @@ $DEBUGFS -c -R \\\"rdump CONFIGS $TMP/conf1\\\" $mgsdev"
 $DEBUGFS -c -R \\\"rdump CONFIGS $TMP/conf2\\\" $mgsdev"
 }
 
-test_75_file_shortened() {
+test_87_file_shortened() {
 	local file=$1
 	local sizes=($(do_facet mgs stat -c %s $TMP/conf1/CONFIGS/$file \
 $TMP/conf2/CONFIGS/$file))
@@ -3365,7 +3365,7 @@ $TMP/conf2/CONFIGS/$file))
 	return 1
 }
 
-test_75a()
+test_87a()
 {
 	reformat
 	setup_noconfig
@@ -3374,33 +3374,33 @@ test_75a()
 	#
 	# set number of permanent parameters
 	#
-	test_75_set_params $FSNAME
+	test_87_set_params $FSNAME
 
 	umount_client $MOUNT || error "umount_client failed"
 	stop_ost || error "stop_ost failed"
 	stop_mds || error "stop_mds failed"
 
-	test_75_clear_conf $FSNAME
+	test_87_clear_conf $FSNAME
 	#
 	# make sure that all configs are cleared
 	#
-	test_75_file_shortened $FSNAME-MDT0000 || error "faled to clear MDT0000"
-	test_75_file_shortened $FSNAME-client || error "failed to clear client"
-	test_75_file_shortened $FSNAME-params || error "failed to clear params"
+	test_87_file_shortened $FSNAME-MDT0000 || error "faled to clear MDT0000"
+	test_87_file_shortened $FSNAME-client || error "failed to clear client"
+	test_87_file_shortened $FSNAME-params || error "failed to clear params"
 
 	setup_noconfig
 
 	#
 	# check that configurations is intact
 	#
-	test_75_test_params $FSNAME
+	test_87_test_params $FSNAME
 
 	cleanup
 	reformat
 }
-run_test 75a "test lctl clear_conf fsname"
+run_test 87a "test lctl clear_conf fsname"
 
-test_75b()
+test_87b()
 {
 	reformat
 	setup_noconfig
@@ -3409,31 +3409,31 @@ test_75b()
 	#
 	# set number of permanent parameters
 	#
-	test_75_set_params $FSNAME
+	test_87_set_params $FSNAME
 
 	umount_client $MOUNT || error "umount_client failed"
 	stop_ost || error "stop_ost failed"
 	stop_mds || error "stop_mds failed"
 
-	test_75_clear_conf $FSNAME-MDT0000
+	test_87_clear_conf $FSNAME-MDT0000
 	#
 	# make sure that only one config is cleared
 	#
-	test_75_file_shortened $FSNAME-MDT0000 || error "faled to clear MDT0000"
-	test_75_file_shortened $FSNAME-client && error "client cleared"
-	test_75_file_shortened $FSNAME-params && error "params cleared"
+	test_87_file_shortened $FSNAME-MDT0000 || error "faled to clear MDT0000"
+	test_87_file_shortened $FSNAME-client && error "client cleared"
+	test_87_file_shortened $FSNAME-params && error "params cleared"
 
 	setup_noconfig
 
 	#
 	# check that configurations is intact
 	#
-	test_75_test_params $FSNAME
+	test_87_test_params $FSNAME
 
 	cleanup
 	reformat
 }
-run_test 75b "test lctl clear_conf one config"
+run_test 87b "test lctl clear_conf one config"
 
 if ! combined_mgs_mds ; then
 	stop mgs
