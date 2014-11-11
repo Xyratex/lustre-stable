@@ -68,6 +68,9 @@ extern int failover;
 #define MAX_LOOP_DEVICES	16
 #define INDEX_UNASSIGNED	0xFFFF
 
+/* Maximum length of on-disk parameters in the form key=<value>. */
+#define PARAM_MAX		256
+
 /* used to describe the options to format the lustre disk, not persistent */
 struct mkfs_opts {
 	struct lustre_disk_data	mo_ldd; /* to be written in MOUNT_DATA_FILE */

@@ -108,11 +108,13 @@ int add_param(char *buf, char *key, char *val)
 {
 	int end = sizeof(((struct lustre_disk_data *)0)->ldd_params);
 	int start = strlen(buf);
+	int vallen = strlen(val);
 	int keylen = 0;
 
 	if (key)
 		keylen = strlen(key);
-	if (start + 1 + keylen + strlen(val) >= end) {
+	if (start + 1 + keylen + vallen >= end ||
+	    keylen + vallen > PARAM_MAX) {
 		fprintf(stderr, "%s: params are too long-\n%s %s%s\n",
 			progname, buf, key ? key : "", val);
 		return 1;

@@ -154,6 +154,7 @@ void usage(FILE *out)
 		"\t\t--replace: replace an old target with the same index\n"
 		"\t\t--stripe-count-hint=#N: for optimizing MDT inode size\n"
 #else
+		"\t\t--erase-param <key>: erase all instances of a parameter\n"
 		"\t\t--erase-params: erase all old parameter settings\n"
 		"\t\t--nomgs: turn off MGS service on this MDT\n"
 		"\t\t--writeconf: erase all config logs for this fs.\n"
@@ -224,6 +225,142 @@ static inline void badopt(const char *opt, char *type)
         usage(stderr);
 }
 
+#ifdef TUNEFS
+/**
+ * Removes all existing instances of the parameter passed in \a param, that are
+ * in the form of "key=<value>", from the character buffer at \a buf.
+ *
+ * The parameter in \a param can be either in the form of "key" when the call is
+ * made from \a parse_opts() while handling an "--erase-param" option, or in the
+ * form of "key=<value>" when the call is made from \a parse_opts() while
+ * handling a "--param" option.
+ *
+ * \param buf the buffer holding on-disk server parameters.
+ * \param param the parameter whose instances are to be removed from \a buf.
+ * \param withval when true \a param includes a value, e.g. when handling a
+ *		  "--param p=<val>" option; when false \a param only includes
+ *		  the parameter key, without a value, e.g. when handling an
+ *		  "--erase-param p" option.
+ *
+ * \retval 0 success; parameter was erased, or not found.
+ * \retval EINVAL failure, invalid input parameter.
+ */
+static int erase_param(const char *const buf, const char *const param,
+                       bool withval)
+{
+        char	search[PARAM_MAX + 1];
+
+        if (strlen(param) > PARAM_MAX) {
+                fprintf(stderr, "%s: param to erase is too long-\n%s\n",
+                        progname, param);
+                return EINVAL;
+        }
+
+	/**
+	 * \a add_param() writes a space as the first character in \a ldd_params
+	 */
+        search[0] = ' ';
+
+        /** Populate the rest of the 'search' array depending on what type of
+         * option is being handled in parse_opts().
+         */
+        if (withval) {
+                char *keyend;
+
+                keyend = strchr(param, '=');
+                if (keyend == NULL)
+                        return EINVAL;
+                strncpy(&search[1], param, keyend - param + 1);
+                search[keyend - param + 2] = '\0';
+        } else {
+                strcpy(&search[1], param);
+                strcat(search, "=");
+        }
+
+        while (1) {
+		char	*found;
+		char	*space;
+
+                found = strstr(buf, search);
+                if (found == NULL)
+                        return 0;
+                space = strchr(found + 1, ' ');
+                if (space != NULL) {
+                        memmove(found, space, strlen(space) + 1);
+                } else {
+                        /* Reached the end of the string at buf; parameter at
+                         * found is the last one.
+                         */
+                        *found = '\0';
+                        return 0;
+                }
+        }
+}
+
+/**
+ * Checks whether the parameter at \a param, given in the form of "key=<value>"
+ * is the first instance of this parameter type specified in the command line.
+ *
+ * \param argv array of program argument strings from \a main().
+ * \param argvidx index in \a argv of the parameter currently being handled in
+ * \a parse_opts().
+ * \param param the parameter to be searched, in the form of
+ * \a "key=<value>".
+ *
+ * \retval 0 parameter instance is not the first parameter instance of this
+ * type specified in the command line.
+ * \retval 1 parameter instance is the first parameter instance of this
+ * type specified in the command line.
+ * \retval EINVAL invalid input parameter.
+ *
+ * N.B.: this function will not work if the short option '-p' is used for
+ *	 --param
+ */
+static int param_is_first(char *const argv[], const int argvidx,
+                          const char *const param)
+{
+        int	i;
+        char   *keyend;
+        size_t	keylen;
+        size_t	longkeylen;
+        char	key[PARAM_MAX - 1];
+        char	longkey[PARAM_MAX + 9];
+
+        if (strlen(param) > PARAM_MAX) {
+                fprintf(stderr, "%s: param to erase is too long-\n%s\n",
+                        progname, param);
+                return EINVAL;
+        }
+
+        keyend = strchr(param, '=');
+
+        /* All parameters handled by tunefs.lustre are of the form "key=value".
+         */
+        if (keyend == NULL)
+                return EINVAL;
+
+        /* Get the parameter key. */
+        strncpy(key, param, keyend - param + 1);
+        key[keyend - param + 1] = '\0';
+        keylen = strlen(key);
+
+        /* Command line options can be given either in the form
+         * "--param key=<value>", or in the form "--param=key=value"; in the
+         * latter case, the string in argv will also contain the "--param="
+         * substring; produce a longkey to cover the latter case.
+         */
+        strcpy(longkey, "--param=");
+        strcat(longkey, key);
+        longkeylen = strlen(longkey);
+
+        for (i = argvidx - 1; i > 0; i--)
+                if (strncmp(argv[i], key, keylen) == 0 ||
+                    strncmp(argv[i], longkey, longkeylen) == 0)
+                        return 0;
+        return 1;
+}
+#endif
+
 /* from mount_lustre */
 /* Get rid of symbolic hostnames for tcp, since kernel can't do lookups */
 #define MAXNIDSTR 1024
@@ -282,6 +419,7 @@ int parse_opts(int argc, char *const argv[], struct mkfs_opts *mop,
 		{ "configdev",		required_argument,	NULL, 'C' },
 		{ "device-size",	required_argument,	NULL, 'd' },
 		{ "dryrun",		no_argument,		NULL, 'n' },
+		{ "erase-param",	required_argument,	NULL, 'E' },
 		{ "erase-params",	no_argument,		NULL, 'e' },
 		{ "failnode",		required_argument,	NULL, 'f' },
 		{ "failover",		required_argument,	NULL, 'f' },
@@ -310,7 +448,7 @@ int parse_opts(int argc, char *const argv[], struct mkfs_opts *mop,
 		{ "writeconf",		no_argument,		NULL, 'w' },
 		{ 0,			0,			NULL,  0  }
 	};
-	char *optstring = "b:c:C:d:ef:Ghi:k:L:m:MnNo:Op:PqrRs:t:Uu:vVw";
+	char *optstring = "b:c:C:d:E:ef:Ghi:k:L:m:MnNo:Op:PqrRs:t:Uu:vVw";
 	int opt;
 	int rc, longidx;
 	int failnode_set = 0, servicenode_set = 0;
@@ -356,6 +494,15 @@ int parse_opts(int argc, char *const argv[], struct mkfs_opts *mop,
 		case 'd':
 			mop->mo_device_kb = atol(optarg);
 			break;
+#ifdef TUNEFS
+		case 'E':
+			rc = erase_param(mop->mo_ldd.ldd_params, optarg, false);
+			if (rc != 0)
+				return rc;
+			/* Must update the mgs logs */
+			mop->mo_ldd.ldd_flags |= LDD_F_UPDATE;
+			break;
+#endif
                 case 'e':
                         mop->mo_ldd.ldd_params[0] = '\0';
                         /* Must update the mgs logs */
@@ -466,8 +613,27 @@ int parse_opts(int argc, char *const argv[], struct mkfs_opts *mop,
                         mop->mo_ldd.ldd_flags |= LDD_F_SV_TYPE_OST;
                         break;
                 case 'p':
+#ifdef TUNEFS
+                        /* Erase all stored instances of the parameter, when the
+                         * first parameter instance in the command line is
+                         * handled.
+                         */
+                        rc = param_is_first(argv, optind - 1, optarg);
+                        if (rc == EINVAL)
+                                return rc;
+                        if (rc == 1) {
+                                rc = erase_param(mop->mo_ldd.ldd_params, optarg,
+						 true);
+                                if (rc != 0)
+                                        return rc;
+				/* Update the mgs logs, in case add_param()
+				 * below fails, but erase_param() altered
+				 * the disk data */
+				mop->mo_ldd.ldd_flags |= LDD_F_UPDATE;
+                        }
+#endif
                         rc = add_param(mop->mo_ldd.ldd_params, NULL, optarg);
-                        if (rc)
+                        if (rc != 0)
                                 return rc;
                         /* Must update the mgs logs */
                         mop->mo_ldd.ldd_flags |= LDD_F_UPDATE;
