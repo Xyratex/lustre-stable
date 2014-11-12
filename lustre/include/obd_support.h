@@ -449,6 +449,7 @@ int obd_alloc_fail(const void *ptr, const char *name, const char *type,
 #define OBD_FAIL_LOCK_STATE_WAIT_INTR               0x1402
 #define OBD_FAIL_LLITE_XATTR_ENOMEM                 0x1403
 #define OBD_FAIL_LLITE_FLOCK_UNLOCK_RACE            0x1404
+#define OBD_FAIL_LLITE_FLOCK_BL_GRANT_RACE	    0x1407
 
 /* Assign references to moved code to reduce code changes */
 #define OBD_FAIL_PRECHECK(id)                   CFS_FAIL_PRECHECK(id)

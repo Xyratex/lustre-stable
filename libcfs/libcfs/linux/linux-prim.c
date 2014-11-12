@@ -164,8 +164,10 @@ EXPORT_SYMBOL(cfs_waitq_timedwait);
 void
 cfs_schedule_timeout_and_set_state(cfs_task_state_t state, int64_t timeout)
 {
-        set_current_state(state);
-        schedule_timeout(timeout);
+	while (timeout) {
+		set_current_state(state);
+		timeout = schedule_timeout(timeout);
+	}
 }
 EXPORT_SYMBOL(cfs_schedule_timeout_and_set_state);
 
