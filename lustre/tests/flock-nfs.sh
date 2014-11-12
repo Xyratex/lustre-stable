@@ -170,6 +170,24 @@ test_4() {
 }
 run_test 4 "kernel flock unlock race"
 
+test_5() {
+	nfs_start || return 1
+	do_node $lustre_client \
+		"flocks_test 5 set write sleep 10 $LUSTRE_MNT/$LOCKF" &
+	sleep 1
+#define OBD_FAIL_LLITE_FLOCK_BL_GRANT_RACE     0x1407
+	do_node $lustre_client "lctl set_param fail_loc=0x1407"
+	do_node $NFS_CLIENT "flocks_test 5 set write sleep 5 $LUSTRE_MNT/$LOCKF"
+	wait
+	do_node $lustre_client "lctl set_param fail_loc=0"
+	nfs_stop
+	do_node $lustre_client "umount $LUSTRE_MNT" || error "umount failed"
+	stopall -f || error "cleanup failed"
+	check_and_setup_lustre
+}
+run_test 5 "flock grant blocked race"
+
+
 do_node $lustre_client "umount -f $LUSTRE_MNT || true"
 restore_mount $MOUNT
 

@@ -685,6 +685,11 @@ int ldlm_cli_enqueue_fini(struct obd_export *exp, struct ptlrpc_request *req,
         }
 
         if (!is_replay) {
+		if (lock->l_resource->lr_type == LDLM_FLOCK &&
+		    lock->l_req_mode != LCK_NL)
+			OBD_FAIL_TIMEOUT(OBD_FAIL_LLITE_FLOCK_BL_GRANT_RACE,
+					 10);
+
                 rc = ldlm_lock_enqueue(ns, &lock, NULL, flags);
                 if (lock->l_completion_ast != NULL) {
                         int err = lock->l_completion_ast(lock, *flags, NULL);

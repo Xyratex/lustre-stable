@@ -148,8 +148,11 @@ static inline void __add_wait_queue_exclusive(wait_queue_head_t *q,
 
 #define schedule_timeout_and_set_state(state, timeout)			\
 {									\
-	set_current_state(state);					\
-	schedule_timeout(timeout);					\
+	long tout = timeout;						\
+	while (tout) {							\
+		set_current_state(state);				\
+		tout = schedule_timeout(tout);				\
+	}								\
 }
 
 /* deschedule for a bit... */
