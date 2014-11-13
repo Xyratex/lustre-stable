@@ -2065,28 +2065,29 @@ static void ll_file_flock_async_cb(struct ldlm_flock_info *args, int err)
 	EXIT;
 }
 
-static void ll_flock_run_flock_cb(struct ldlm_lock *lock, int err)
+static void ll_flock_run_flock_cb(struct ldlm_flock_info *args)
 {
-	struct ldlm_flock_info *args;
-
-	lock_res_and_lock(lock);
-	args = lock->l_ast_data;
-	lock->l_ast_data = NULL;
-	unlock_res_and_lock(lock);
-
 	if (args) {
-		ll_file_flock_async_cb(args, err);
+		ll_file_flock_async_cb(args, args->fa_err);
 		OBD_FREE_PTR(args);
 	}
 }
 
 static int ll_flock_upcall(void *cookie, int err)
 {
+	struct ldlm_flock_info *args;
 	struct ldlm_lock *lock = cookie;
 
 	if (err) {
 		CERROR("ldlm_cli_enqueue_fini: %d lock=%p\n", err, lock);
-		ll_flock_run_flock_cb(lock, err);
+
+		lock_res_and_lock(lock);
+		args = lock->l_ast_data;
+		lock->l_ast_data = NULL;
+		args->fa_err = err;
+		unlock_res_and_lock(lock);
+
+		ll_flock_run_flock_cb(args);
 	}
 
 	return 0;
@@ -2095,7 +2096,7 @@ static int ll_flock_upcall(void *cookie, int err)
 int
 ll_flock_completion_ast_async(struct ldlm_lock *lock, __u64 flags, void *data)
 {
-	int rc;
+	struct ldlm_flock_info *args;
 	ENTRY;
 
 	if (flags & LDLM_FL_BLOCKED_MASK) {
@@ -2103,8 +2104,8 @@ ll_flock_completion_ast_async(struct ldlm_lock *lock, __u64 flags, void *data)
 		RETURN(0);
 	}
 
-	rc = ldlm_flock_completion_ast_async(lock, flags, data);
-	ll_flock_run_flock_cb(lock, rc);
+	args = ldlm_flock_completion_ast_async(lock, flags, data);
+	ll_flock_run_flock_cb(args);
 
 	RETURN(0);
 }
