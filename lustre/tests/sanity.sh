@@ -12572,6 +12572,13 @@ test_242() {
 }
 run_test 242 "Check that watchdog causes kernel log dump"
 
+test_243()
+{
+	test_mkdir -p $DIR/$tdir
+	group_lock_test -d $DIR/$tdir || error "A group lock test failed"
+}
+run_test 243 "various group lock tests"
+
 test_250() {
 	[ "$(facet_fstype ost$(($($GETSTRIPE -i $DIR/$tfile) + 1)))" = "zfs" ] \
 	 && skip "no 16TB file size limit on ZFS" && return
