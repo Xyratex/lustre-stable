@@ -1070,6 +1070,7 @@ struct ldlm_flock_info {
 	int fa_flags;
 	int fa_mode;
 	int (*fa_notify)(struct file_lock *, struct file_lock *, int);
+	int fa_err;
 };
 
 extern struct obd_ops ldlm_obd_ops;
@@ -1164,8 +1165,9 @@ int ldlm_replay_locks(struct obd_import *imp);
 
 /* ldlm_flock.c */
 int ldlm_flock_completion_ast(struct ldlm_lock *lock, __u64 flags, void *data);
-int ldlm_flock_completion_ast_async(struct ldlm_lock *lock, __u64 flags,
-				    void *data);
+struct ldlm_flock_info*
+ldlm_flock_completion_ast_async(struct ldlm_lock *lock, __u64 flags,
+				void *data);
 
 /* ldlm_extent.c */
 __u64 ldlm_extent_shift_kms(struct ldlm_lock *lock, __u64 old_kms);
