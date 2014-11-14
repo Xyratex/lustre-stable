@@ -1019,19 +1019,18 @@ int ll_fill_super(struct super_block *sb, struct vfsmount *mnt)
 
         CDEBUG(D_VFSTRACE, "VFS Op: sb %p\n", sb);
 
-        OBD_ALLOC_PTR(cfg);
-        if (cfg == NULL)
-                RETURN(-ENOMEM);
-
 	try_module_get(THIS_MODULE);
+
+        OBD_ALLOC_PTR(cfg);
+	if (cfg == NULL) {
+		ll_put_super(sb);
+		RETURN(-ENOMEM);
+	}
 
 	/* client additional sb info */
 	lsi->lsi_llsbi = sbi = ll_init_sbi();
-	if (!sbi) {
-		module_put(THIS_MODULE);
-		OBD_FREE_PTR(cfg);
-		RETURN(-ENOMEM);
-	}
+	if (!sbi)
+		GOTO(out_free, err = -ENOMEM);
 
         err = ll_options(lsi->lsi_lmd->lmd_opts, &sbi->ll_flags);
         if (err)

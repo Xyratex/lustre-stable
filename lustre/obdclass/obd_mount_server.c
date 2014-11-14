@@ -1681,8 +1681,10 @@ int server_fill_super(struct super_block *sb)
 	ENTRY;
 
 	rc = lsi_prepare(lsi);
-	if (rc)
+	if (rc) {
+		lustre_put_lsi(sb);
 		RETURN(rc);
+	}
 
 	/* Start low level OSD */
 	rc = osd_start(lsi, sb->s_flags);
