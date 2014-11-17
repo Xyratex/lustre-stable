@@ -899,9 +899,10 @@ test_25() {
 	drop_ldlm_cancel "multiop $DIR2/$tfile Ow512" &
 	sleep 1
 
-#define OBD_FAIL_OST_LDLM_REPLY_NET      0x213
 	# failover, replay and resend replayed waiting locks
-	do_facet ost1 lctl set_param fail_loc=0x80000213
+	#define OBD_FAIL_LDLM_SRV_CP_AST      0x325
+	do_facet ost1 lctl set_param fail_loc=0x80000325
+
 	fail ost1
 
 	# multiop does not finish because CP AST is skipped;

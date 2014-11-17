@@ -1032,9 +1032,9 @@ test_27c() {
 	else
 		start_mds
 	fi
-# first OBD_FAIL_MGC_FAIL_NET            0x90d used to hit
-#       OBD_FAIL_MGC_FS_CLEANUP_RACE     0x90e
-	$LCTL set_param fail_loc=0x90d
+# first OBD_FAIL_MGC_FAIL_NET            0x90e used to hit
+#       OBD_FAIL_MGC_FS_CLEANUP_RACE     0x90f
+	$LCTL set_param fail_loc=0x90e
 	start_ost
 	cleanup
 }
@@ -4946,8 +4946,8 @@ test_84() {
 	load_modules_local
 
 	# Set pause into the start of ll_cfg_requeue.
-	# OBD_FAIL_MGC_PAUSE_REQUEUE_T    0x90f
-	$LCTL set_param fail_loc=0x90f
+	# OBD_FAIL_MGC_PAUSE_REQUEUE_T    0x91f
+	$LCTL set_param fail_loc=0x91f
 
 	[ -d $MOUNT ] || mkdir -p $MOUNT
 	local oldfs="${FSNAME}"
