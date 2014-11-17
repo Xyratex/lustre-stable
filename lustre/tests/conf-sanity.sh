@@ -4055,6 +4055,11 @@ test_66() {
 	local OST1_NID=$(do_facet ost1 $LCTL list_nids | head -1)
 	local MDS_NID=$(do_facet $SINGLEMDS $LCTL list_nids | head -1)
 
+	set_conf_param_and_check mds				     \
+	    "$LCTL get_param -n osc.$FSNAME-OST0000-osc-MDT*.active" \
+	    "$FSNAME-OST0000.osc.active"			     \
+	    "0"
+
 	echo "replace_nids should fail if MDS, OSTs and clients are UP"
 	do_facet mgs $LCTL replace_nids $FSNAME-OST0000 $OST1_NID &&
 		error "replace_nids fail"
@@ -4110,7 +4115,14 @@ test_66() {
 		stop_mds
 	fi
 
-	setup_noconfig
+	start_mgsmds || error "start mgsmds failed"
+	set_conf_param_and_check mds				     \
+	    "$LCTL get_param -n osc.$FSNAME-OST0000-osc-MDT*.active" \
+	    "$FSNAME-OST0000.osc.active"			     \
+	    "1"
+
+	start_ost
+	mount_client $MOUNT
 	check_mount || error "error after nid replace"
 	cleanup || error "cleanup failed"
 	reformat
