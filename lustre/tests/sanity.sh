@@ -12343,6 +12343,26 @@ test_238() {
 }
 run_test 238 "Verify linkea consistency"
 
+test_240() {
+	[ $MDSCOUNT -lt 2 ] && skip "needs >= 2 MDTs" && return
+
+	mkdir -p $DIR/$tdir
+
+	$LFS mkdir -i 0 $DIR/$tdir/d0 ||
+		error "failed to mkdir $DIR/$tdir/d0 on MDT0"
+	$LFS mkdir -i 1 $DIR/$tdir/d0/d1 ||
+		error "failed to mkdir $DIR/$tdir/d0/d1 on MDT1"
+
+	umount_client $MOUNT || error "umount failed"
+	#define OBD_FAIL_TGT_DELAY_CONDITIONAL	 0x713
+	do_facet mds2 lctl set_param fail_loc=0x713 fail_val=1
+	mount_client $MOUNT || error "failed to mount client"
+
+	echo "stat $DIR/$tdir/d0/d1, should not fail/ASSERT"
+	stat $DIR/$tdir/d0/d1 || error "fail to stat $DIR/$tdir/d0/d1"
+}
+run_test 240 "race between ldlm enqueue and the connection RPC (no ASSERT)"
+
 test_241_bio() {
 	for LOOP in $(seq $1); do
 		dd if=$DIR/$tfile of=/dev/null bs=40960 count=1 2>/dev/null

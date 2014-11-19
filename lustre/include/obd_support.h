@@ -428,6 +428,7 @@ int obd_alloc_fail(const void *ptr, const char *name, const char *type,
 #define OBD_FAIL_TGT_LAST_REPLAY         0x710
 #define OBD_FAIL_TGT_CLIENT_ADD          0x711
 #define OBD_FAIL_TGT_RCVG_FLAG           0x712
+#define OBD_FAIL_TGT_DELAY_CONDITIONAL	 0x713
 #define OBD_FAIL_TGT_REPLAY_DELAY2       0x714
 #define OBD_FAIL_TGT_REPLAY_RECONNECT    0x715
 
