@@ -433,6 +433,11 @@ reprocess:
         list_for_remaining_safe(ownlocks, tmp, &res->lr_granted) {
                 lock = cfs_list_entry(ownlocks, struct ldlm_lock, l_res_link);
 
+		/* lock was granted by ldlm_lock_enqueue()
+		 * but not processed yet */
+		if (*flags == LDLM_FL_WAIT_NOREPROC && lock->l_ast_data != NULL)
+			continue;
+
                 if (!ldlm_same_flock_owner(lock, new))
                         break;
 
