@@ -193,24 +193,29 @@ kiblnd_post_rx (kib_rx_t *rx, int credit)
 	 * to post the message to device to receive data. */
 	kiblnd_dma_sync_single_for_device(conn->ibc_hdev->ibh_ibdev,
 		rx->rx_msgaddr, IBLND_MSG_SIZE, DMA_FROM_DEVICE);
-        rc = ib_post_recv(conn->ibc_cmid->qp, &rx->rx_wrq, &bad_wrq);
-        if (rc != 0) {
-                CERROR("Can't post rx for %s: %d, bad_wrq: %p\n",
-                       libcfs_nid2str(conn->ibc_peer->ibp_nid), rc, bad_wrq);
-                rx->rx_nob = 0;
-        }
 
-        if (conn->ibc_state < IBLND_CONN_ESTABLISHED) /* Initial post */
-                return rc;
+	/* NB: need an extra reference after ib_post_recv because we don't
+	 * own this rx (and rx::rx_conn) anymore, LU-5678.
+	 */
+	kiblnd_conn_addref(conn);
+	rc = ib_post_recv(conn->ibc_cmid->qp, &rx->rx_wrq, &bad_wrq);
+	if (unlikely(rc != 0)) {
+		CERROR("Can't post rx for %s: %d, bad_wrq: %p\n",
+		       libcfs_nid2str(conn->ibc_peer->ibp_nid), rc, bad_wrq);
+		rx->rx_nob = 0;
+	}
 
-        if (rc != 0) {
-                kiblnd_close_conn(conn, rc);
-                kiblnd_drop_rx(rx);             /* No more posts for this rx */
-                return rc;
-        }
+	if (conn->ibc_state < IBLND_CONN_ESTABLISHED) /* Initial post */
+		goto out;
 
-        if (credit == IBLND_POSTRX_NO_CREDIT)
-                return 0;
+	if (unlikely(rc != 0)) {
+		kiblnd_close_conn(conn, rc);
+		kiblnd_drop_rx(rx);	/* No more posts for this rx */
+		goto out;
+	}
+
+	if (credit == IBLND_POSTRX_NO_CREDIT)
+		goto out;
 
 	spin_lock(&conn->ibc_lock);
 	if (credit == IBLND_POSTRX_PEER_CREDIT)
@@ -220,7 +225,9 @@ kiblnd_post_rx (kib_rx_t *rx, int credit)
 	spin_unlock(&conn->ibc_lock);
 
 	kiblnd_check_sends(conn);
-	return 0;
+out:
+	kiblnd_conn_decref(conn);
+	return rc;
 }
 
 static kib_tx_t *
