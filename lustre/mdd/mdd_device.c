@@ -119,8 +119,13 @@ static int mdd_init0(const struct lu_env *env, struct mdd_device *mdd,
 		struct lu_device_type *t, struct lustre_cfg *lcfg)
 {
 	int rc;
+	const char *dev;
 	ENTRY;
 
+	dev = lustre_cfg_string(lcfg, 0);
+	LASSERT(dev);
+	mdd->mdd_md_dev.md_lu_dev.ld_obd = class_name2obd(dev);
+	LASSERT(mdd->mdd_md_dev.md_lu_dev.ld_obd);
 	mdd->mdd_md_dev.md_lu_dev.ld_ops = &mdd_lu_ops;
 	mdd->mdd_md_dev.md_ops = &mdd_ops;
 
