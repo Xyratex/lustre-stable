@@ -2902,13 +2902,13 @@ static int ll_file_flc2policy(struct file_lock *file_lock, int cmd,
 	flock->l_flock.pid = file_lock->fl_pid;
 
 	/* Somewhat ugly workaround for svc lockd.
-	 * lockd installs custom fl_lmops->fl_compare_owner that checks
+	 * lockd installs custom fl_lmops->lm_compare_owner that checks
 	 * for the fl_owner to be the same (which it always is on local node
 	 * I guess between lockd processes) and then compares pid.
 	 * As such we assign pid to the owner field to make it all work,
 	 * conflict with normal locks is unlikely since pid space and
 	 * pointer space for current->files are not intersecting */
-	if (file_lock->fl_lmops && file_lock->fl_lmops->fl_compare_owner)
+	if (file_lock->fl_lmops && file_lock->fl_lmops->lm_compare_owner)
 		flock->l_flock.owner = (unsigned long)file_lock->fl_pid;
 
 	RETURN(0);
@@ -3164,11 +3164,11 @@ ll_file_flock(struct file *file, int cmd, struct file_lock *file_lock)
 		cb_data->fa_flags |= FA_FL_CANCEL_RQST;
 	einfo.ei_cbdata = cb_data;
 
-	if (file_lock->fl_lmops && file_lock->fl_lmops->fl_grant &&
+	if (file_lock->fl_lmops && file_lock->fl_lmops->lm_grant &&
 	    file_lock->fl_type != F_UNLCK &&
 	    flags == LDLM_FL_BLOCK_NOWAIT /* F_SETLK/F_SETLK64 */) {
 
-		cb_data->fa_notify = file_lock->fl_lmops->fl_grant;
+		cb_data->fa_notify = file_lock->fl_lmops->lm_grant;
 		flags = (file_lock->fl_flags & FL_SLEEP) ?
 			0 : LDLM_FL_BLOCK_NOWAIT;
 		einfo.ei_cb_cp = ll_flock_completion_ast_async;

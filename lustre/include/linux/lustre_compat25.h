@@ -270,6 +270,7 @@ unsigned int ll_crypto_tfm_alg_min_keysize(struct crypto_blkcipher *tfm)
 
 #ifndef HAVE_LM_XXX_LOCK_MANAGER_OPS
 # define lm_compare_owner	fl_compare_owner
+# define lm_grant		fl_grant
 #endif
 
 /*
