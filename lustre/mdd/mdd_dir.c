@@ -1282,11 +1282,6 @@ static int mdd_link(const struct lu_env *env, struct md_object *tgt_obj,
 	LASSERT(ma->ma_attr.la_valid & LA_CTIME);
 	la->la_ctime = la->la_mtime = ma->ma_attr.la_ctime;
 
-	/* have to know linkea buffer size to estimate transaction size */
-	rc = mdd_links_read(env, mdd_sobj, ldata);
-	if  (rc != 0 && rc != -ENODATA)
-		GOTO(stop, rc);
-
 	rc = mdd_declare_link(env, mdd, mdd_tobj, mdd_sobj, lname, handle,
 			      la, ldata);
         if (rc)
