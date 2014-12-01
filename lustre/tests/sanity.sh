@@ -6698,6 +6698,14 @@ test_102p() { # LU-4703 setxattr did not check ownership
 }
 run_test 102p "check setxattr(2) correctly fails without permission"
 
+test_102r() {
+	touch $DIR/$tfile || error "touch"
+	setfattr -n user.$(basename $tfile) $DIR/$tfile || error "setfattr"
+	getfattr -n user.$(basename $tfile) $DIR/$tfile || error "getfattr"
+	rm $DIR/$tfile || error "rm"
+}
+run_test 102r "set EAs with empty values"
+
 run_acl_subtest()
 {
     $LUSTRE/tests/acl/run $LUSTRE/tests/acl/$1.test
