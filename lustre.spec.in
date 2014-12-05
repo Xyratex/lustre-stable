@@ -213,6 +213,18 @@ Lustre sources for further development
 # below) until it's clear that they resolve more confusion than they
 # add.
 
+%package devel
+Summary: Lustre include headers
+Group: Development/Kernel
+# N.B. this package will always be called lustre-devel.
+Provides: lustre-devel = %{version}
+Obsoletes: %{name}-headers
+Requires: %{name} = %{version}, %{name}-modules = %{version}
+
+%description devel
+This package contains the headers required to build ancillary
+kernel modules that work closely with the standard lustre modules.
+
 %package deps-sles
 Summary: Lustre dependencies meta-package for SLES
 Group: Utilities/System
@@ -378,6 +390,40 @@ CONFIGURE_ARGS="$CONFIGURE_ARGS  --with-kmp-moddir=%{kmoddir}/%{name}"
 make %{?_smp_mflags} -s %{?make_args}
 
 %install
+add_hdr_file() {
+    declare destfil= destdir= f=
+
+    # mirror all lustre headers from
+    #   lustre-source/lustre-%v/{libsysio,lustre,libcfs,lnet}/include/
+    # into
+    #   /usr/src/lustre-%v-headers/{libsysio,lustre,libcfs,lnet}/include/
+    #
+    # for example:
+    #   lustre-source/lustre-%v/libcfs/include/libcfs/bitmap.h
+    # is installed as
+    #   /usr/src/lustre-%v-headers/libcfs/include/libcfs/bitmap.h
+
+    while read f
+    do
+        destfil=/usr/src/$(echo $f | \
+            sed 's@^lustre-source/\(lustre-%{version}\)/@\1-headers/@')
+        destdir=$RPM_BUILD_ROOT/$(dirname $destfil)
+        test -d ${destdir} || mkdir -p ${destdir}
+        cp $f ${destdir}/.
+        echo "%attr(-, root, root) ${destfil}"
+    done
+
+    f=$RPM_BUILD_DIR/lustre-%{version}/config.h
+    destfil=usr/src/lustre-%{version}-headers/config.h
+    cp $f $RPM_BUILD_ROOT/$destfil
+    echo "%attr(-, root, root) /${destfil}"
+
+    f=$RPM_BUILD_DIR/lustre-%{version}/Module.symvers
+    destfil=usr/src/lustre-%{version}-headers/Module.symvers
+    cp $f $RPM_BUILD_ROOT/${destfil}
+    echo "%attr(-, root, root) /${destfil}"
+}
+
 make install DESTDIR=$RPM_BUILD_ROOT
 
 :> lustre.files
@@ -409,6 +455,10 @@ make distdir distdir=lustre-source/lustre-%{version}
 chmod -R go-w lustre-source/lustre-%{version}
 # fc18 needs 'x' permission for library files
 find $RPM_BUILD_ROOT -name '*.so' | xargs chmod +x
+
+find lustre-source/lustre-%{version} -type f -name '*.h' | \
+    fgrep /include/ | \
+    add_hdr_file > lustre-devel.files
 
 if [ -f $RPM_BUILD_ROOT%{_libdir}/libiam.a ] ; then
   echo '%{_libdir}/libiam.a' >>lustre.files
@@ -512,6 +562,8 @@ find $RPM_BUILD_ROOT%{?rootdir}/lib/modules/%{kversion}/%{kmoddir} -name "*.ko" 
 %files source
 %defattr(-,root,root)
 %{_prefix}/src/lustre-%{version}
+
+%files devel -f lustre-devel.files
 
 # uncomment these lines to enable deps packages
 # %files deps-sles
