@@ -1070,12 +1070,6 @@ static const int osd_dto_credits_noquota[DTO_NR] = {
          * 3(inode bits, groups, GDT)
          */
         [DTO_OBJECT_CREATE] = 25,
-        /*
-         * Rename an object. Same as rename in EXT3 filesystem.
-         * 2 * DATA_TRANS_BLOCKS(12) +
-         * INDEX_EXTRA_TRANS_BLOCKS(8) + 2
-         */
-        [DTO_OBJECT_RENAME] = 32,
         /**
          * Unused now
          */
@@ -1092,6 +1086,7 @@ static const int osd_dto_credits_noquota[DTO_NR] = {
          * are also counted in. Do not know why?
          */
         [DTO_XATTR_SET]     = 14,
+        [DTO_LOG_REC]       = 14,
         /**
          * creadits for inode change during write.
          */
@@ -1137,12 +1132,6 @@ static const int osd_dto_credits_quota[DTO_NR] = {
          */
         [DTO_OBJECT_CREATE] = 77,
         /*
-         * Rename an object. Same as rename in EXT3 filesystem.
-         * 2 * DATA_TRANS_BLOCKS(16) +
-         * INDEX_EXTRA_TRANS_BLOCKS(8) + 2
-         */
-        [DTO_OBJECT_RENAME] = 42,
-        /*
          * Unused now.
          * DATA_TRANS_BLOCKS(16) +
          * INDEX_EXTRA_BLOCKS(8) +
@@ -1162,6 +1151,7 @@ static const int osd_dto_credits_quota[DTO_NR] = {
          *           also counted in. Do not know why?
          */
         [DTO_XATTR_SET]     = 16,
+        [DTO_LOG_REC]       = 16,
         /**
          * creadits for inode change during write.
          */

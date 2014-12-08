@@ -104,10 +104,8 @@ void mdd_txn_param_build(const struct lu_env *env, struct mdd_device *mdd,
         txn_param_init(&mdd_env_info(env)->mti_param,
                        mdd->mdd_tod[op].mod_credits);
         if (changelog_cnt > 0) {
-		op = MDD_TXN_CHANGELOG_OP;
-		txn_param_credit_add(&mdd_env_info(env)->mti_param,
-				     changelog_cnt *
-				     mdd->mdd_tod[op].mod_credits);
+                txn_param_credit_add(&mdd_env_info(env)->mti_param,
+                                  changelog_cnt * dto_txn_credits[DTO_LOG_REC]);
         }
 }
 
@@ -292,14 +290,6 @@ int mdd_txn_init_credits(const struct lu_env *env, struct mdd_device *mdd)
                                      2 * dt[DTO_INDEX_DELETE] +
                                      dt[DTO_XATTR_SET];
                                 break;
-			case MDD_TXN_CHANGELOG_OP:
-				/* adding changelog record may require
-				 * object creation, rename and adding
-				 * 4 records 2 blocks max each */
-				*c = dt[DTO_OBJECT_CREATE] +
-					dt[DTO_OBJECT_RENAME] +
-					dt[DTO_WRITE_BLOCK] * 8;
-				break;
                         default:
                                 CERROR("Invalid op %d init its credit\n", op);
                                 LBUG();

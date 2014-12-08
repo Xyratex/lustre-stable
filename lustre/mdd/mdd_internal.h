@@ -90,7 +90,6 @@ enum mdd_txn_op {
         MDD_TXN_CLOSE_OP,
 	MDD_TXN_NOP = MDD_TXN_CLOSE_OP,
         MDD_TXN_REBUILD_OP,
-	MDD_TXN_CHANGELOG_OP,
         MDD_TXN_LAST_OP
 };
 
