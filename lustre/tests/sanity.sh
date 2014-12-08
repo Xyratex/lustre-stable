@@ -9770,24 +9770,6 @@ test_231b() {
 }
 run_test 231b "must not assert on fully utilized OST request buffer"
 
-test_233a() {
-	local fid=$($LFS path2fid $MOUNT)
-	stat $MOUNT/.lustre/fid/$fid > /dev/null ||
-		error "cannot access $MOUNT using its FID '$fid'"
-}
-run_test 233a "checking that OBF of the FS root succeeds"
-
-test_233b() {
-	local fid=$($LFS path2fid $MOUNT/.lustre)
-	stat $MOUNT/.lustre/fid/$fid > /dev/null ||
-		error "cannot access $MOUNT/.lustre using its FID '$fid'"
-
-	fid=$($LFS path2fid $MOUNT/.lustre/fid)
-	stat $MOUNT/.lustre/fid/$fid > /dev/null ||
-		error "cannot access $MOUNT/.lustre/fid using its FID '$fid'"
-}
-run_test 233b "checking that OBF of the FS .lustre succeeds"
-
 test_226() {
 	flock_deadlock $DIR/$tfile
 	local RC=$?
@@ -9810,6 +9792,13 @@ test_250() {
 	return 0
 }
 run_test 250 "Write above 16T limit"
+
+test_233() {
+	local fid=$($LFS path2fid $MOUNT)
+	stat $MOUNT/.lustre/fid/$fid > /dev/null ||
+		error "cannot access $MOUNT using its FID '$fid'"
+}
+run_test 233 "checking that OBF of the FS root succeeds"
 
 #
 # tests that do cleanup/setup should be run at the end
