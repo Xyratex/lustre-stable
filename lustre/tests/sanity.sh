@@ -9349,24 +9349,6 @@ test_225b () {
 }
 run_test 225b "Metadata survey sanity with stripe_count = 1"
 
-test_233a() {
-	local fid=$($LFS path2fid $MOUNT)
-	stat $MOUNT/.lustre/fid/$fid > /dev/null ||
-		error "cannot access $MOUNT using its FID '$fid'"
-}
-run_test 233a "checking that OBF of the FS root succeeds"
-
-test_233b() {
-	local fid=$($LFS path2fid $MOUNT/.lustre)
-	stat $MOUNT/.lustre/fid/$fid > /dev/null ||
-		error "cannot access $MOUNT/.lustre using its FID '$fid'"
-
-	fid=$($LFS path2fid $MOUNT/.lustre/fid)
-	stat $MOUNT/.lustre/fid/$fid > /dev/null ||
-		error "cannot access $MOUNT/.lustre/fid using its FID '$fid'"
-}
-run_test 233b "checking that OBF of the FS .lustre succeeds"
-
 test_250() {
 	$SETSTRIPE -c 1 $DIR/$tfile
 	truncate $DIR/$tfile 17592186040319
@@ -9375,6 +9357,13 @@ test_250() {
 	return 0
 }
 run_test 250 "Write above 16T limit"
+
+test_233() {
+	local fid=$($LFS path2fid $MOUNT)
+	stat $MOUNT/.lustre/fid/$fid > /dev/null ||
+		error "cannot access $MOUNT using its FID '$fid'"
+}
+run_test 233 "checking that OBF of the FS root succeeds"
 
 #
 # tests that do cleanup/setup should be run at the end
