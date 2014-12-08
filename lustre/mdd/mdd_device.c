@@ -906,8 +906,7 @@ static int obf_lookup(const struct lu_env *env, struct md_object *p,
                 GOTO(out, rc = -EINVAL);
         }
 
-	if (!fid_is_norm(f) && !fid_is_root(f) &&
-	    !fid_seq_is_dot(f->f_seq)) {
+	if (!fid_is_norm(f) && !fid_is_root(f)) {
 		CWARN("%s: "DFID" is invalid, sequence should be "
 		      ">= "LPX64"\n", mdd->mdd_obd_dev->obd_name, PFID(f),
 		      (__u64)FID_SEQ_NORMAL);
