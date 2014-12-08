@@ -108,10 +108,10 @@ enum dt_txn_op {
         DTO_INDEX_DELETE,
         DTO_IDNEX_UPDATE,
         DTO_OBJECT_CREATE,
-        DTO_OBJECT_RENAME,
         DTO_OBJECT_DELETE,
         DTO_ATTR_SET_BASE,
         DTO_XATTR_SET,
+        DTO_LOG_REC, /**< XXX temporary: dt layer knows nothing about llog. */
         DTO_WRITE_BASE,
         DTO_WRITE_BLOCK,
         DTO_ATTR_SET_CHOWN,
