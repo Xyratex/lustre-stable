@@ -8258,6 +8258,11 @@ test_154() {
 	mrename $DIR/$tdir $DIR/.lustre/fid &&
 		error "rename to $DIR/.lustre/fid should fail."
 
+	echo "rename .lustre to itself"
+	fid=$($LFS path2fid $DIR)
+	mrename $DIR/.lustre $DIR/.lustre/fid/$fid/.lustre &&
+		error "rename .lustre to itself should fail."
+
 	$OPENFILE -f O_LOV_DELAY_CREATE:O_CREAT $DIR/$tfile-2
 	fid=$($LFS path2fid $DIR/$tfile-2)
 	echo "cp /etc/passwd $DIR/.lustre/fid/$fid"
@@ -10240,13 +10245,6 @@ test_250() {
 	return 0
 }
 run_test 250 "Write above 16T limit"
-
-test_233() {
-	local fid=$($LFS path2fid $MOUNT)
-	stat $MOUNT/.lustre/fid/$fid > /dev/null ||
-		error "cannot access $MOUNT using its FID '$fid'"
-}
-run_test 233 "checking that OBF of the FS root succeeds"
 
 #
 # tests that do cleanup/setup should be run at the end
