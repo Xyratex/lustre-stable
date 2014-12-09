@@ -343,7 +343,7 @@ static int lfs_migrate(char *name, unsigned long long stripe_size,
 	void			*buf = NULL;
 	int			 rsize, wsize;
 	__u64			 rpos, wpos, bufoff;
-	int			 gid = 0, sz;
+	int			 gid = 0;
 	int			 have_gl = 0;
 	struct stat		 st, stv;
 
@@ -368,26 +368,6 @@ static int lfs_migrate(char *name, unsigned long long stripe_size,
 	if (rc != 0) {
 		rc = -rc;
 		goto free;
-	}
-
-	if (migration_flags & MIGRATION_BLOCKS) {
-		/* generate a random id for the grouplock */
-		fd = open("/dev/urandom", O_RDONLY);
-		if (fd == -1) {
-			rc = -errno;
-			fprintf(stderr, "cannot open /dev/urandom (%s)\n",
-				strerror(-rc));
-			goto free;
-		}
-		sz = sizeof(gid);
-		rc = read(fd, &gid, sz);
-		close(fd);
-		if (rc < sz) {
-			rc = -errno;
-			fprintf(stderr, "cannot read %d bytes from"
-				" /dev/urandom (%s)\n", sz, strerror(-rc));
-			goto free;
-		}
 	}
 
 	/* search for file directory pathname */
@@ -475,6 +455,9 @@ static int lfs_migrate(char *name, unsigned long long stripe_size,
 		goto error;
 	}
 
+	do
+		gid = random();
+	while (gid == 0);
 	if (migration_flags & MIGRATION_BLOCKS) {
 		/* take group lock to limit concurent access
 		 * this will be no more needed when exclusive access will
@@ -3770,6 +3753,10 @@ static int lfs_swap_layouts(int argc, char **argv)
 int main(int argc, char **argv)
 {
         int rc;
+
+	/* Ensure that liblustreapi constructor has run */
+	if (!liblustreapi_initialized)
+		fprintf(stderr, "liblustreapi was not properly initialized\n");
 
         setlinebuf(stdout);
 
