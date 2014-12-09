@@ -2743,7 +2743,13 @@ test_60() {
 
 	local finish_at=$(date +%s)
 	local elapsed=$((finish_at - start_at))
-
+	# "let elapsed=elapsed+1" is added to cover boundary condition
+	# Ex:  Suppose the operation completes in the 5th second but
+	# (4-5) our elapsed time calculation does not take fractions of
+	# 5th sec to consideration, so elapsed will be rounded off to 4
+	# So we can add 1 to elapsed time to consider fraction case
+	# and which will be rounded off to 5.
+	let elapsed=elapsed+1
 	# Ensure that the progress update occurred within the expected window.
 	if [ $elapsed -lt $interval ]; then
 		error "Expected progress update after at least $interval seconds"
