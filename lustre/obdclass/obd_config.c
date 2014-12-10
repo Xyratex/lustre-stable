@@ -1660,7 +1660,7 @@ int class_manual_cleanup(struct obd_device *obd)
                 RETURN(-ENOMEM);
 
         rc = class_process_config(lcfg);
-        if (rc) {
+	if (rc !=0 && rc != -ENODEV) {
                 CERROR("cleanup failed %d: %s\n", rc, obd->obd_name);
                 GOTO(out, rc);
         }
