@@ -327,11 +327,11 @@ directory which is likely in ${O2IBPATH%-*}
 				. "$O2IBPATH/ofed_patch.mk"
 			fi
 		else
-			if test x$RHEL_KERNEL = xyes; then
-				case $RHEL_KERNEL_VERSION in
-					2.6.32-358*)
-						EXTRA_OFED_INCLUDE="$EXTRA_OFED_INCLUDE -DCONFIG_COMPAT_RHEL_6_4";;
-					2.6.32-431*)
+			if test "x$RHEL_KERNEL" = xyes; then
+				case "$RHEL_RELEASE_NO" in
+					64)
+						EXTRA_OFED_INCLUDE="$EXTRA_OFED_INCLUDE -DCONFIG_COMPAT_RHEL_6_4" ;;
+					65)
 						EXTRA_OFED_INCLUDE="$EXTRA_OFED_INCLUDE -DCONFIG_COMPAT_RHEL_6_4 -DCONFIG_COMPAT_RHEL_6_5" ;;
 				esac
 			elif test x$SUSE_KERNEL = xyes; then
