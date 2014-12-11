@@ -839,6 +839,11 @@ typedef struct
 	/* test protocol compatibility flags */
 	int				ln_testprotocompat;
 
+	/* waitq for router checker.  As long as there are no routes in
+	 * the list, the router checker will sleep on this queue.  when
+	 * routes are added the thread will wake up */
+	wait_queue_head_t		ln_rc_waitq;
+
 #ifndef __KERNEL__
 	/* Temporary workaround to allow uOSS and test programs force
 	 * server mode in userspace. The only place where we use it is
