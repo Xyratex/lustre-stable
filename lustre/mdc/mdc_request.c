@@ -2227,13 +2227,10 @@ int mdc_get_info(const struct lu_env *env, struct obd_export *exp,
 		*default_easize = exp->exp_obd->u.cli.cl_default_mds_easize;
 		RETURN(0);
 	} else if (KEY_IS(KEY_MAX_COOKIESIZE)) {
-		__u32 mdsize, *max_cookiesize;
+		__u32 *max_cookiesize;
 
 		if (*vallen != sizeof(int))
 			RETURN(-EINVAL);
-		mdsize = *(int *)val;
-		if (mdsize > exp->exp_obd->u.cli.cl_max_mds_cookiesize)
-			exp->exp_obd->u.cli.cl_max_mds_cookiesize = mdsize;
 		max_cookiesize = val;
 		*max_cookiesize = exp->exp_obd->u.cli.cl_max_mds_cookiesize;
 		RETURN(0);
