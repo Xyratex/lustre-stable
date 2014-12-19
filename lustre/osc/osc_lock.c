@@ -799,6 +799,7 @@ static int osc_ldlm_completion_ast(struct ldlm_lock *dlmlock,
         if (!IS_ERR(env)) {
                 olck = osc_ast_data_get(dlmlock);
                 if (olck != NULL) {
+                        result = 0;
                         lock = olck->ols_cl.cls_lock;
                         cl_lock_mutex_get(env, lock);
                         /*
@@ -809,6 +810,11 @@ static int osc_ldlm_completion_ast(struct ldlm_lock *dlmlock,
                         lock_res_and_lock(dlmlock);
                         olck->ols_lvb = *(struct ost_lvb *)dlmlock->l_lvb_data;
                         if (olck->ols_lock == NULL) {
+				spin_lock(&osc_ast_guard);
+				/* Check if osc_lock_detach happened already */
+				result = dlmlock->l_ast_data == NULL ?
+					-ELDLM_NO_LOCK_DATA : 0;
+				spin_unlock(&osc_ast_guard);
                                 /*
                                  * upcall (osc_lock_upcall()) hasn't yet been
                                  * called. Do nothing now, upcall will bind
@@ -831,9 +837,11 @@ static int osc_ldlm_completion_ast(struct ldlm_lock *dlmlock,
                         }
                         cl_lock_mutex_put(env, lock);
                         osc_ast_data_put(env, olck);
-                        result = 0;
-                } else
-                        result = -ELDLM_NO_LOCK_DATA;
+		} else
+			result = -ELDLM_NO_LOCK_DATA;
+
+		if (result == -ELDLM_NO_LOCK_DATA)
+			ldlm_lock_fail_match(dlmlock);
                 cl_env_nested_put(&nest, env);
         } else
                 result = PTR_ERR(env);
