@@ -504,6 +504,7 @@ needclients() {
 
 path2fid() {
 	$LFS path2fid $1 | tr -d '[]'
+	return ${PIPESTATUS[0]}
 }
 
 get_hsm_flags() {
@@ -554,7 +555,7 @@ file_creation_failure() {
 	local f=$2
 	local err=$3
 
-	df $MOUNT $MOUNT2
+	df $MOUNT $MOUNT2 >&2
 	error "cannot create $f with $cmd, status=$err"
 }
 
