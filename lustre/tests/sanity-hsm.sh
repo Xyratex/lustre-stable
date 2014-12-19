@@ -510,12 +510,13 @@ path2fid() {
 get_hsm_flags() {
 	local f=$1
 	local u=$2
+	local st
 
 	if [[ $u == "user" ]]; then
-		local st=$($RUNAS $LFS hsm_state $f)
+		st=$($RUNAS $LFS hsm_state $f)
 	else
-		local st=$($LFS hsm_state $f)
 		u=root
+		st=$($LFS hsm_state $f)
 	fi
 
 	[[ $? == 0 ]] || error "$LFS hsm_state $f failed (run as $u)"
@@ -526,7 +527,8 @@ get_hsm_flags() {
 
 get_hsm_archive_id() {
 	local f=$1
-	local st=$($LFS hsm_state $f)
+	local st
+	st=$($LFS hsm_state $f)
 	[[ $? == 0 ]] || error "$LFS hsm_state $f failed"
 
 	local ar=$(echo $st | grep "archive_id" | cut -f5 -d" " |
@@ -1146,7 +1148,8 @@ test_12c() {
 	mkdir -p $DIR/$tdir
 	local f=$DIR/$tdir/$tfile
 	$LFS setstripe -c 2 $f
-	local fid=$(make_large_for_striping $f)
+	local fid
+	fid=$(make_large_for_striping $f)
 	[ $? != 0 ] && skip "not enough free space" && return
 
 	local FILE_CRC=$(md5sum $f)
@@ -2023,7 +2026,8 @@ test_26() {
 
 	mkdir -p $DIR/$tdir
 	local f=$DIR/$tdir/$tfile
-	local fid=$(make_large_for_progress $f)
+	local fid
+	fid=$(make_large_for_progress $f)
 	[ $? != 0 ] && skip "not enough free space" && return
 
 	$LFS hsm_archive --archive $HSM_ARCHIVE_NUMBER $f
@@ -2062,7 +2066,8 @@ test_27b() {
 
 	mkdir -p $DIR/$tdir
 	local f=$DIR/$tdir/$tfile
-	local fid=$(make_large_for_progress $f)
+	local fid
+	fid=$(make_large_for_progress $f)
 	[ $? != 0 ] && skip "not enough free space" && return
 
 	$LFS hsm_archive --archive $HSM_ARCHIVE_NUMBER $f
@@ -2083,7 +2088,8 @@ test_28() {
 
 	mkdir -p $DIR/$tdir
 	local f=$DIR/$tdir/$tfile
-	local fid=$(make_large_for_progress $f)
+	local fid
+	fid=$(make_large_for_progress $f)
 	[ $? != 0 ] && skip "not enough free space" && return
 
 	$LFS hsm_archive --archive $HSM_ARCHIVE_NUMBER $f
@@ -2263,7 +2269,8 @@ test_31b() {
 	mkdir -p $DIR/$tdir
 
 	local f=$DIR/$tdir/$tfile
-	local fid=$(make_large_for_progress $f)
+	local fid
+	fid=$(make_large_for_progress $f)
 	[ $? != 0 ] && skip "not enough free space" && return
 
 	$LFS hsm_archive --archive $HSM_ARCHIVE_NUMBER $f
@@ -2286,7 +2293,8 @@ test_31c() {
 	mkdir -p $DIR/$tdir
 
 	local f=$DIR/$tdir/$tfile
-	local fid=$(make_large_for_progress_aligned $f)
+	local fid
+	fid=$(make_large_for_progress_aligned $f)
 	[ $? != 0 ] && skip "not enough free space" && return
 
 	$LFS hsm_archive --archive $HSM_ARCHIVE_NUMBER $f
@@ -2309,7 +2317,8 @@ test_33() {
 	mkdir -p $DIR/$tdir
 
 	local f=$DIR/$tdir/$tfile
-	local fid=$(make_large_for_progress $f)
+	local fid
+	fid=$(make_large_for_progress $f)
 	[ $? != 0 ] && skip "not enough free space" && return
 
 	$LFS hsm_archive --archive $HSM_ARCHIVE_NUMBER $f
@@ -2375,7 +2384,8 @@ test_34() {
 	mkdir -p $DIR/$tdir
 
 	local f=$DIR/$tdir/$tfile
-	local fid=$(make_large_for_progress $f)
+	local fid
+	fid=$(make_large_for_progress $f)
 	[ $? != 0 ] && skip "not enough free space" && return
 
 	$LFS hsm_archive --archive $HSM_ARCHIVE_NUMBER $f
@@ -2410,7 +2420,8 @@ test_35() {
 
 	local f=$DIR/$tdir/$tfile
 	local f1=$DIR/$tdir/$tfile-1
-	local fid=$(make_large_for_progress $f)
+	local fid
+	fid=$(make_large_for_progress $f)
 	[ $? != 0 ] && skip "not enough free space" && return
 
 	local fid1=$(copy_file /etc/passwd $f1)
@@ -2448,7 +2459,8 @@ test_36() {
 	mkdir -p $DIR/$tdir
 
 	local f=$DIR/$tdir/$tfile
-	local fid=$(make_large_for_progress $f)
+	local fid
+	fid=$(make_large_for_progress $f)
 	[ $? != 0 ] && skip "not enough free space" && return
 
 	$LFS hsm_archive --archive $HSM_ARCHIVE_NUMBER $f
@@ -2643,7 +2655,8 @@ test_56() {
 
 	mkdir -p $DIR/$tdir
 	local f=$DIR/$tdir/$tfile
-	local fid=$(make_large_for_progress $f)
+	local fid
+	fid=$(make_large_for_progress $f)
 	[ $? != 0 ] && skip "not enough free space" && return
 
 	$LFS hsm_archive --archive $HSM_ARCHIVE_NUMBER $f ||
@@ -2766,7 +2779,8 @@ test_60() {
 
 	mkdir -p $DIR/$tdir
 	local f=$DIR/$tdir/$tfile
-	local fid=$(make_large_for_progress $f)
+	local fid
+	fid=$(make_large_for_progress $f)
 	[ $? != 0 ] && skip "not enough free space" && return
 
 	local mdtidx=0
@@ -2889,7 +2903,8 @@ test_71() {
 
 	mkdir -p $DIR/$tdir
 	local f=$DIR/$tdir/$tfile
-	local fid=$(make_large_for_progress $f)
+	local fid
+	fid=$(make_large_for_progress $f)
 	[ $? != 0 ] && skip "not enough free space" && return
 
 	$LFS hsm_archive --archive $HSM_ARCHIVE_NUMBER $f ||
@@ -3166,7 +3181,8 @@ test_104() {
 
 	mkdir -p $DIR/$tdir
 	local f=$DIR/$tdir/$tfile
-	local fid=$(make_large_for_progress $f)
+	local fid
+	fid=$(make_large_for_progress $f)
 	[ $? != 0 ] && skip "not enough free space" && return
 
 	# if cdt is on, it can serve too quickly the request
@@ -3479,7 +3495,8 @@ test_200() {
 
 	mkdir -p $DIR/$tdir
 	local f=$DIR/$tdir/$tfile
-	local fid=$(make_large_for_cancel $f)
+	local fid
+	fid=$(make_large_for_cancel $f)
 	[ $? != 0 ] && skip "not enough free space" && return
 
 	# test with cdt on is made in test_221
@@ -3522,7 +3539,8 @@ test_202() {
 
 	mkdir -p $DIR/$tdir
 	local f=$DIR/$tdir/$tfile
-	local fid=$(make_large_for_progress $f)
+	local fid
+	fid=$(make_large_for_progress $f)
 	[ $? != 0 ] && skip "not enough free space" && return
 
 	$LFS hsm_archive --archive $HSM_ARCHIVE_NUMBER $f
@@ -3569,7 +3587,8 @@ test_221() {
 	mkdir -p $DIR/$tdir
 
 	local f=$DIR/$tdir/$tfile
-	local fid=$(make_large_for_cancel $f)
+	local fid
+	fid=$(make_large_for_cancel $f)
 	[ $? != 0 ] && skip "not enough free space" && return
 
 	changelog_setup
@@ -3677,7 +3696,8 @@ test_223b() {
 	mkdir -p $DIR/$tdir
 
 	local f=$DIR/$tdir/$tfile
-	local fid=$(make_large_for_progress $f)
+	local fid
+	fid=$(make_large_for_progress $f)
 	[ $? != 0 ] && skip "not enough free space" && return
 
 	changelog_setup
@@ -3738,7 +3758,8 @@ test_225() {
 
 	mkdir -p $DIR/$tdir
 	local f=$DIR/$tdir/$tfile
-	local fid=$(make_large_for_progress $f)
+	local fid
+	fid=$(make_large_for_progress $f)
 	[ $? != 0 ] && skip "not enough free space" && return
 
 	changelog_setup
@@ -3942,7 +3963,8 @@ test_251() {
 
 	mkdir -p $DIR/$tdir
 	local f=$DIR/$tdir/$tfile
-	local fid=$(make_large_for_cancel $f)
+	local fid
+	fid=$(make_large_for_cancel $f)
 	[ $? != 0 ] && skip "not enough free space" && return
 
 	cdt_disable
