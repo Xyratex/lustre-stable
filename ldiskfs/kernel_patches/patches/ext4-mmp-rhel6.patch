@@ -156,7 +156,7 @@ Index: linux-stage/fs/ext4/mmp.c
 ===================================================================
 --- /dev/null
 +++ linux-stage/fs/ext4/mmp.c
-@@ -0,0 +1,351 @@
+@@ -0,0 +1,353 @@
 +#include <linux/fs.h>
 +#include <linux/random.h>
 +#include <linux/buffer_head.h>
@@ -326,6 +326,7 @@ Index: linux-stage/fs/ext4/mmp.c
 +                                          retval);
 +
 +                               EXT4_SB(sb)->s_mmp_tsk = NULL;
++			       brelse(bh_check);
 +                               goto failed;
 +                       }
 +
@@ -338,6 +339,7 @@ Index: linux-stage/fs/ext4/mmp.c
 +                                            "The filesystem seems to have been"
 +                                            " multiply mounted.");
 +                               ext4_error(sb, "abort");
++			       put_bh(bh_check);
 +                               goto failed;
 +                       }
 +                       put_bh(bh_check);
@@ -507,7 +509,6 @@ Index: linux-stage/fs/ext4/mmp.c
 +       brelse(bh);
 +       return 1;
 +}
-+
 +
 Index: linux-stage/fs/ext4/super.c
 ===================================================================
