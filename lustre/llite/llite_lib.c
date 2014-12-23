@@ -2226,6 +2226,9 @@ int ll_prep_inode(struct inode **inode, struct ptlrpc_request *req,
 			conf.coc_lock = lock;
 			conf.u.coc_md = &md;
 			(void)ll_layout_conf(*inode, &conf);
+		} else {
+			ll_i2info(*inode)->lli_has_smd =
+				lsm_has_objects(md.lsm);
 		}
 		LDLM_LOCK_PUT(lock);
 	}
