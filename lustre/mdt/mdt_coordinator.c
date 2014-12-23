@@ -775,16 +775,28 @@ int cdt_restore_handle_add(struct mdt_thread_info *mti, struct coordinator *cdt,
 	 */
 	crh->crh_extent.start = 0;
 	crh->crh_extent.end = he->length;
-	/* get the layout lock */
+	/* flush UPDATE lock so that the restore state can
+	 * surely be seen by copy tool. See LU-4727. */
 	mdt_lock_reg_init(&crh->crh_lh, LCK_EX);
 	obj = mdt_object_find_lock(mti, &crh->crh_fid, &crh->crh_lh,
-				   MDS_INODELOCK_LAYOUT);
+				   MDS_INODELOCK_UPDATE);
 	if (IS_ERR(obj))
 		GOTO(out_crh, rc = PTR_ERR(obj));
+
+	/* release UPDATE lock */
+	mdt_object_unlock(mti, obj, &crh->crh_lh, 1);
+
+	/* take LAYOUT lock so that accessing the layout will
+	 * be blocked until the restore is finished */
+	mdt_lock_reg_init(&crh->crh_lh, LCK_EX);
+	rc = mdt_object_lock(mti, obj, &crh->crh_lh,
+			     MDS_INODELOCK_LAYOUT);
 
 	/* We do not keep a reference on the object during the restore
 	 * which can be very long. */
 	mdt_object_put(mti->mti_env, obj);
+	if (rc)
+		GOTO(out_crh, rc);
 
 	mutex_lock(&cdt->cdt_restore_lock);
 	if (unlikely(cdt->cdt_state == CDT_STOPPED ||
