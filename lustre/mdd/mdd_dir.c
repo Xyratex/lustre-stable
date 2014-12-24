@@ -1615,6 +1615,7 @@ static int mdd_rename(const struct lu_env *env,
         const struct lu_fid *spobj_fid = mdo2fid(mdd_spobj);
         int is_dir;
         int rc, rc2;
+	int rename_order;
 
 #ifdef HAVE_QUOTA_SUPPORT
         struct obd_device *obd = mdd->mdd_obd_dev;
@@ -1660,6 +1661,11 @@ static int mdd_rename(const struct lu_env *env,
                 }
         }
 #endif
+	/* FIXME: Should consider tobj and sobj too in rename_lock. */
+	rename_order = mdd_rename_order(env, mdd, mdd_spobj, mdd_tpobj);
+	if (rename_order < 0)
+		GOTO(out_pending, rc = rename_order);
+
         if (tobj && mdd_object_exists(mdd_tobj))
                 mdd_log_txn_param_build(env, tobj, ma, MDD_TXN_RENAME_OP, 2);
         else
@@ -1668,13 +1674,8 @@ static int mdd_rename(const struct lu_env *env,
         if (IS_ERR(handle))
                 GOTO(out_pending, rc = PTR_ERR(handle));
 
-        /* FIXME: Should consider tobj and sobj too in rename_lock. */
-        rc = mdd_rename_order(env, mdd, mdd_spobj, mdd_tpobj);
-        if (rc < 0)
-                GOTO(cleanup_unlocked, rc);
-
         /* Get locks in determined order */
-        if (rc == MDD_RN_SAME) {
+	if (rename_order == MDD_RN_SAME) {
                 sdlh = mdd_pdo_write_lock(env, mdd_spobj,
                                           sname, MOR_SRC_PARENT);
                 /* check hashes to determine do we need one lock or two */
@@ -1683,7 +1684,7 @@ static int mdd_rename(const struct lu_env *env,
                                 MOR_TGT_PARENT);
                 else
                         tdlh = sdlh;
-        } else if (rc == MDD_RN_SRCTGT) {
+	} else if (rename_order == MDD_RN_SRCTGT) {
                 sdlh = mdd_pdo_write_lock(env, mdd_spobj, sname,MOR_SRC_PARENT);
                 tdlh = mdd_pdo_write_lock(env, mdd_tpobj, tname,MOR_TGT_PARENT);
         } else {
@@ -1863,7 +1864,6 @@ cleanup:
                 mdd_pdo_write_unlock(env, mdd_tpobj, tdlh);
         if (likely(sdlh))
                 mdd_pdo_write_unlock(env, mdd_spobj, sdlh);
-cleanup_unlocked:
         if (rc == 0)
                 rc = mdd_changelog_ns_store(env, mdd, CL_RENAME, 0, mdd_tobj,
                                             mdd_spobj, lf, lsname, handle);
