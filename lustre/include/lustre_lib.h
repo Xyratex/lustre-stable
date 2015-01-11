@@ -110,8 +110,10 @@ void statfs_pack(struct obd_statfs *osfs, struct kstatfs *sfs);
 void statfs_unpack(struct kstatfs *sfs, struct obd_statfs *osfs);
 
 /* Special values for remove LOV EA from disk */
-#define LOVEA_DELETE_VALUES(size, count, offset) (size == 0 && count == 0 && \
-                                                 offset == (typeof(offset))(-1))
+#define LOVEA_DELETE_VALUES(size, count, offset, pool)			\
+	((size) == 0 && (count) == 0 &&					\
+	 (offset) == (typeof(offset))(-1) && (pool) == NULL)
+
 
 /* #define POISON_BULK 0 */
 
