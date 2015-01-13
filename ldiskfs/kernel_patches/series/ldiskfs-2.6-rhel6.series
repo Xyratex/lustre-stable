@@ -46,3 +46,6 @@ ext4-fix-ext4_mb_add_n_trim.patch
 ext4-not-discard-preallocation-umount.patch
 ext4-journal-path-opt.patch
 ext4-init-statfs-after-journal.patch
+ext4-bh_leak.patch
+ext4-memleak_in_xattr.patch
+ext4-bh_leak_ext4_expand_extra_isize_ea.patch

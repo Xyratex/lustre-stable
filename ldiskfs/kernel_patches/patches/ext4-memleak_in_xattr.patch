@@ -1,0 +1,36 @@
+commit 6e4ea8e33b2057b85d75175dd89b93f5e26de3bc
+Author: Dave Jones <davej@redhat.com>
+Date:   Thu Oct 10 20:05:35 2013 -0400
+
+    ext4: fix memory leak in xattr
+    
+    If we take the 2nd retry path in ext4_expand_extra_isize_ea, we
+    potentionally return from the function without having freed these
+    allocations.  If we don't do the return, we over-write the previous
+    allocation pointers, so we leak either way.
+    
+    Spotted with Coverity.
+    
+    [ Fixed by tytso to set is and bs to NULL after freeing these
+      pointers, in case in the retry loop we later end up triggering an
+      error causing a jump to cleanup, at which point we could have a double
+      free bug. -- Ted ]
+    
+    Signed-off-by: Dave Jones <davej@fedoraproject.org>
+    Signed-off-by: "Theodore Ts'o" <tytso@mit.edu>
+    Reviewed-by: Eric Sandeen <sandeen@redhat.com>
+    Cc: stable@vger.kernel.org
+
+diff --git a/fs/ext4/xattr.c b/fs/ext4/xattr.c
+index c081e34..03e9beb 100644
+--- a/fs/ext4/xattr.c
++++ b/fs/ext4/xattr.c
+@@ -1350,6 +1350,8 @@ retry:
+ 				    s_min_extra_isize) {
+ 					tried_min_extra_isize++;
+ 					new_extra_isize = s_min_extra_isize;
++					kfree(is); is = NULL;
++					kfree(bs); bs = NULL;
+ 					goto retry;
+ 				}
+ 				error = -1;

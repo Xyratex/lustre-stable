@@ -1,0 +1,22 @@
+commit dcb9917ba041866686fe152850364826c4622a36
+Author: Theodore Ts'o <tytso@mit.edu>
+Date:   Thu Oct 31 23:00:24 2013 -0400
+
+    ext4: avoid bh leak in retry path of ext4_expand_extra_isize_ea()
+    
+    Reported-by: Dave Jones <davej@redhat.com>
+    Signed-off-by: "Theodore Ts'o" <tytso@mit.edu>
+    Cc: stable@vger.kernel.org
+
+diff --git a/fs/ext4/xattr.c b/fs/ext4/xattr.c
+index 03e9beb..1423c48 100644
+--- a/fs/ext4/xattr.c
++++ b/fs/ext4/xattr.c
+@@ -1352,6 +1352,7 @@ retry:
+ 					new_extra_isize = s_min_extra_isize;
+ 					kfree(is); is = NULL;
+ 					kfree(bs); bs = NULL;
++					brelse(bh);
+ 					goto retry;
+ 				}
+ 				error = -1;

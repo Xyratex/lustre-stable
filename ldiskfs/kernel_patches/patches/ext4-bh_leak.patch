@@ -1,0 +1,43 @@
+commit adaf14bef627b08726d0f91aeff2594e21451010
+Author: Curt Wohlgemuth <curtw@google.com>
+Date:   Sun May 30 22:49:41 2010 -0400
+
+    ext4: Fix buffer head leaks after calls to ext4_get_inode_loc()
+    
+    commit fd2dd9fbaf9e498ec63eef298921e36556f7214c upstream (as of v2.6.34-rc6)
+    
+    Calls to ext4_get_inode_loc() returns with a reference to a buffer
+    head in iloc->bh.  The callers of this function in ext4_write_inode()
+    when in no journal mode and in ext4_xattr_fiemap() don't release the
+    buffer head after using it.
+    
+    Addresses-Google-Bug: #2548165
+    
+    Signed-off-by: Curt Wohlgemuth <curtw@google.com>
+    Signed-off-by: "Theodore Ts'o" <tytso@mit.edu>
+    Signed-off-by: Greg Kroah-Hartman <gregkh@suse.de>
+
+diff --git a/fs/ext4/extents.c b/fs/ext4/extents.c
+index f47a7c1..4378941 100644
+--- a/fs/ext4/extents.c
++++ b/fs/ext4/extents.c
+@@ -3778,6 +3778,7 @@ static int ext4_xattr_fiemap(struct inode *inode,
+ 		physical += offset;
+ 		length = EXT4_SB(inode->i_sb)->s_inode_size - offset;
+ 		flags |= FIEMAP_EXTENT_DATA_INLINE;
++		brelse(iloc.bh);
+ 	} else { /* external block */
+ 		physical = EXT4_I(inode)->i_file_acl << blockbits;
+ 		length = inode->i_sb->s_blocksize;
+diff --git a/fs/ext4/inode.c b/fs/ext4/inode.c
+index f81025f..45e6961 100644
+--- a/fs/ext4/inode.c
++++ b/fs/ext4/inode.c
+@@ -5273,6 +5273,7 @@ int ext4_write_inode(struct inode *inode, int wait)
+ 				   (unsigned long long)iloc.bh->b_blocknr);
+ 			err = -EIO;
+ 		}
++		brelse(iloc.bh);
+ 	}
+ 	return err;
+ }
