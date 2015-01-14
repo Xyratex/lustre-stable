@@ -506,16 +506,6 @@ static void ldlm_res_hop_get_locked(cfs_hash_t *hs, cfs_hlist_node_t *hnode)
         LDLM_RESOURCE_ADDREF(res);
 }
 
-static void ldlm_res_hop_put_locked(cfs_hash_t *hs, cfs_hlist_node_t *hnode)
-{
-        struct ldlm_resource *res;
-
-        res = cfs_hlist_entry(hnode, struct ldlm_resource, lr_hash);
-        /* cfs_hash_for_each_nolock is the only chance we call it */
-        LDLM_RESOURCE_DELREF(res);
-        ldlm_resource_putref_locked(res);
-}
-
 static void ldlm_res_hop_put(cfs_hash_t *hs, cfs_hlist_node_t *hnode)
 {
         struct ldlm_resource *res;
@@ -532,7 +522,6 @@ cfs_hash_ops_t ldlm_ns_hash_ops = {
         .hs_keycpy      = NULL,
         .hs_object      = ldlm_res_hop_object,
         .hs_get         = ldlm_res_hop_get_locked,
-        .hs_put_locked  = ldlm_res_hop_put_locked,
         .hs_put         = ldlm_res_hop_put
 };
 
@@ -543,7 +532,6 @@ cfs_hash_ops_t ldlm_ns_fid_hash_ops = {
         .hs_keycpy      = NULL,
         .hs_object      = ldlm_res_hop_object,
         .hs_get         = ldlm_res_hop_get_locked,
-        .hs_put_locked  = ldlm_res_hop_put_locked,
         .hs_put         = ldlm_res_hop_put
 };
 
@@ -1278,37 +1266,6 @@ int ldlm_resource_putref(struct ldlm_resource *res)
         return 0;
 }
 EXPORT_SYMBOL(ldlm_resource_putref);
-
-/* Returns 1 if the resource was freed, 0 if it remains. */
-int ldlm_resource_putref_locked(struct ldlm_resource *res)
-{
-        struct ldlm_namespace *ns = ldlm_res_to_ns(res);
-
-        LASSERT_ATOMIC_GT_LT(&res->lr_refcount, 0, LI_POISON);
-        CDEBUG(D_INFO, "putref res: %p count: %d\n",
-               res, cfs_atomic_read(&res->lr_refcount) - 1);
-
-        if (cfs_atomic_dec_and_test(&res->lr_refcount)) {
-                cfs_hash_bd_t bd;
-
-                cfs_hash_bd_get(ldlm_res_to_ns(res)->ns_rs_hash,
-                                &res->lr_name, &bd);
-                __ldlm_resource_putref_final(&bd, res);
-                cfs_hash_bd_unlock(ns->ns_rs_hash, &bd, 1);
-                /* NB: ns_rs_hash is created with CFS_HASH_NO_ITEMREF,
-                 * so we should never be here while calling cfs_hash_del,
-                 * cfs_hash_for_each_nolock is the only case we can get
-                 * here, which is safe to release cfs_hash_bd_lock.
-                 */
-                if (ns->ns_lvbo && ns->ns_lvbo->lvbo_free)
-                        ns->ns_lvbo->lvbo_free(res);
-                OBD_SLAB_FREE(res, ldlm_resource_slab, sizeof *res);
-
-                cfs_hash_bd_lock(ns->ns_rs_hash, &bd, 1);
-                return 1;
-        }
-        return 0;
-}
 
 void ldlm_resource_add_lock(struct ldlm_resource *res, cfs_list_t *head,
                             struct ldlm_lock *lock)
