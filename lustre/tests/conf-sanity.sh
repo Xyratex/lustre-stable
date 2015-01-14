@@ -2366,9 +2366,9 @@ test_36() { # 12743
         [ "$ost_HOST" = "`hostname`" -o "$ost1_HOST" = "`hostname`" ] || \
 		{ skip "remote OST" && return 0; }
 
-        local rc=0
-        local FSNAME2=test1234
-        local MDSDEV=$(mdsdevname ${SINGLEMDS//mds/})
+	local rc=0
+	local FSNAME2=test1234
+	local MDSDEV=$(mdsdevname ${SINGLEMDS//mds/})
 
         [ -n "$ost1_HOST" ] && fs2ost_HOST=$ost1_HOST && fs3ost_HOST=$ost1_HOST
 
