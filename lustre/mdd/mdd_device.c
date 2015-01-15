@@ -92,6 +92,9 @@ static int mdd_device_init(const struct lu_env *env, struct lu_device *d,
         mdd->mdd_txn_cb.dtc_cookie = mdd;
         mdd->mdd_txn_cb.dtc_tag = LCT_MD_THREAD;
         CFS_INIT_LIST_HEAD(&mdd->mdd_txn_cb.dtc_linkage);
+
+	dt_txn_callback_add(mdd->mdd_child, &mdd->mdd_txn_cb);
+
         mdd->mdd_atime_diff = MAX_ATIME_DIFF;
         /* sync permission changes */
         mdd->mdd_sync_permission = 1;
@@ -2057,7 +2060,6 @@ static int mdd_prepare(const struct lu_env *env,
         if (rc)
                 GOTO(out, rc);
 
-        dt_txn_callback_add(mdd->mdd_child, &mdd->mdd_txn_cb);
         root = dt_store_open(env, mdd->mdd_child, "", mdd_root_dir_name,
                              &mdd->mdd_root_fid);
         if (!IS_ERR(root)) {
