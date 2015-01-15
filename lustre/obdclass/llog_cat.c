@@ -547,9 +547,10 @@ int llog_cat_process_cb(const struct lu_env *env, struct llog_handle *cat_llh,
 	}
 
 	/* clean old empty llogs, do not consider current llog in use */
+	/* ignore remote (lgh_obj=NULL) llogs */
 	hdr = llh->lgh_hdr;
 	if ((hdr->llh_flags & LLOG_F_ZAP_WHEN_EMPTY) &&
-	    hdr->llh_count == 1 &&
+	    hdr->llh_count == 1 && cat_llh->lgh_obj != NULL &&
 	    llh != cat_llh->u.chd.chd_current_log) {
 		rc = llog_destroy(env, llh);
 		if (rc)
