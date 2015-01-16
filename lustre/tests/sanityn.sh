@@ -19,6 +19,7 @@ PATH=$PWD/$SRCDIR:$SRCDIR:$SRCDIR/../utils:$PATH
 
 SIZE=${SIZE:-40960}
 CHECKSTAT=${CHECKSTAT:-"checkstat -v"}
+MCREATE=${MCREATE:-mcreate}
 OPENFILE=${OPENFILE:-openfile}
 OPENUNLINK=${OPENUNLINK:-openunlink}
 export MULTIOP=${MULTIOP:-multiop}

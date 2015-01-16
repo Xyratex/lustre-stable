@@ -19,6 +19,7 @@ init_logging
 
 require_dsh_mds || exit 0
 
+MCREATE=${MCREATE:-mcreate}
 SAVED_MDSSIZE=${MDSSIZE}
 SAVED_OSTSIZE=${OSTSIZE}
 SAVED_OSTCOUNT=${OSTCOUNT}

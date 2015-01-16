@@ -34,35 +34,27 @@
  * Lustre is a trademark of Sun Microsystems, Inc.
  */
 
-#include <errno.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
-#include <sys/types.h>
+#include <stdio.h>
+#include <errno.h>
+#include <string.h>
+#include <stdlib.h>
 
 int main(int argc, char **argv)
 {
-	const char *path;
-	off_t length;
-	int rc;
+        unsigned long long off;
+        int err;
 
-	if (argc != 3) {
-		fprintf(stderr, "Usage: %s PATH LENGTH\n",
-			program_invocation_short_name);
-		exit(EXIT_FAILURE);
-	}
+        if (argc != 3) {
+                printf("usage %s file bytes\n", argv[0]);
+                return 1;
+        }
 
-	path = argv[1];
-	length = strtoull(argv[2], NULL, 0);
+        off = strtoull(argv[2], NULL, 0);
+        err = truncate64(argv[1], off);
+        if (err)
+                printf("Error truncating %s to %lld: %s\n", argv[1], off,
+                       strerror(errno));
 
-	rc = truncate(path, length);
-	if (rc < 0) {
-		fprintf(stderr, "%s: cannot truncate '%s' to length %lld: %s\n",
-			program_invocation_short_name, path, (long long)length,
-			strerror(errno));
-		exit(EXIT_FAILURE);
-	}
-
-	exit(EXIT_SUCCESS);
+        return err;
 }
