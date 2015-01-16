@@ -1679,7 +1679,13 @@ LNetCtl(unsigned int cmd, void *arg)
         case IOC_LIBCFS_ADD_ROUTE:
 		rc = lnet_add_route(data->ioc_net, data->ioc_count,
 				    data->ioc_nid, data->ioc_priority);
-                return (rc != 0) ? rc : lnet_check_routes();
+		if (rc == 0) {
+			rc = lnet_check_routes();
+			if (rc != 0)
+				lnet_del_route(data->ioc_net,
+					       data->ioc_nid);
+		}
+                return rc;
 
         case IOC_LIBCFS_DEL_ROUTE:
                 return lnet_del_route(data->ioc_net, data->ioc_nid);
