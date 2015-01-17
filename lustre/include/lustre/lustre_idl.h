@@ -474,6 +474,12 @@ enum dot_lustre_oid {
         FID_OID_DOT_LUSTRE_OBF = 2UL,
 };
 
+/** OID for FID_SEQ_ROOT */
+enum root_oid {
+	FID_OID_ROOT		= 1UL,
+	FID_OID_ECHO_ROOT	= 2UL,
+};
+
 static inline bool fid_seq_is_mdt0(obd_seq seq)
 {
 	return seq == FID_SEQ_OST_MDT0;
@@ -544,7 +550,14 @@ static inline bool fid_is_mdt0(const struct lu_fid *fid)
 static inline void lu_root_fid(struct lu_fid *fid)
 {
 	fid->f_seq = FID_SEQ_ROOT;
-	fid->f_oid = 1;
+	fid->f_oid = FID_OID_ROOT;
+	fid->f_ver = 0;
+}
+
+static inline void lu_echo_root_fid(struct lu_fid *fid)
+{
+	fid->f_seq = FID_SEQ_ROOT;
+	fid->f_oid = FID_OID_ECHO_ROOT;
 	fid->f_ver = 0;
 }
 
