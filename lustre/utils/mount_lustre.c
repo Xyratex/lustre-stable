@@ -381,6 +381,7 @@ static int parse_ldd(char *source, struct mount_opts *mop, char *options)
 {
 	struct lustre_disk_data *ldd = &mop->mo_ldd;
 	char *cur, *start;
+	char *temp_options;
 	int rc;
 
 	rc = osd_is_lustre(source, &ldd->ldd_mount_type);
@@ -429,11 +430,19 @@ static int parse_ldd(char *source, struct mount_opts *mop, char *options)
 		ldd->ldd_flags |= LDD_F_WRITECONF;
 	}
 
+	/* This is to make sure default options go first */
+	temp_options = strdup(options);
+	if (temp_options == NULL) {
+		fprintf(stderr, "can't allocate memory for temp_options\n");
+		return ENOMEM;
+	}
+	strcpy(options, ldd->ldd_mount_opts);
+	append_option(options, temp_options);
+	free(temp_options);
+
 	/* backend osd type */
 	append_option(options, "osd=");
 	strcat(options, mt_type(ldd->ldd_mount_type));
-
-	append_option(options, ldd->ldd_mount_opts);
 
 	if (!mop->mo_have_mgsnid) {
 		/* Only use disk data if mount -o mgsnode=nid wasn't
