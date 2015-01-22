@@ -11,7 +11,7 @@ concat(){
 
 }
 
-while /bin/true ; do 
+while /bin/true ; do
     file=$((RANDOM % MAX))
     new_file=$((RANDOM % MAX))
     concat 2> /dev/null
