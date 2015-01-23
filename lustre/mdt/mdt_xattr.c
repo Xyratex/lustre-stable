@@ -180,9 +180,9 @@ static int mdt_getxattr_all(struct mdt_thread_info *info,
 	eadatahead = buf->lb_buf;
 
 	/* Fill out EADATA first */
-	eadatasize = mo_xattr_list(env, next, buf);
-	if (eadatasize < 0)
-		GOTO(out, rc = eadatasize);
+	rc = eadatasize = mo_xattr_list(env, next, buf);
+	if (rc < 0)
+		GOTO(out_shrink, rc);
 
 	eadatatail = eadatahead + eadatasize;
 
@@ -195,13 +195,19 @@ static int mdt_getxattr_all(struct mdt_thread_info *info,
 		buf->lb_len = reqbody->mbo_eadatasize - eavallen;
 		rc = mdt_getxattr_one(info, b, next, buf, med, uc);
 		if (rc < 0)
-			GOTO(out, rc);
+			GOTO(out_shrink, rc);
 
 		sizes[eavallens] = rc;
 		eavallens++;
 		eavallen += rc;
 	}
 
+out_shrink:
+	if (rc < 0) {
+		eadatasize = 0;
+		eavallens = 0;
+		eavallen = 0;
+	}
 	repbody->mbo_aclsize = eavallen;
 	repbody->mbo_max_mdsize = eavallens;
 
@@ -210,8 +216,8 @@ static int mdt_getxattr_all(struct mdt_thread_info *info,
 			   eavallens * sizeof(__u32), RCL_SERVER);
 	req_capsule_shrink(info->mti_pill, &RMF_EADATA, eadatasize, RCL_SERVER);
 
-	GOTO(out, rc = eadatasize);
-out:
+	if (rc >= 0)
+		RETURN(eadatasize);
 	return rc;
 }
 
