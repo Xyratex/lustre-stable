@@ -641,6 +641,8 @@ static int lov_add_target(struct obd_device *obd, struct obd_uuid *uuidp,
                 index, tgt->ltd_gen, lov->desc.ld_tgt_count);
 
         rc = obd_notify(obd, tgt_obd, OBD_NOTIFY_CREATE, &index);
+	if (rc)
+		GOTO(out, rc);
 
         if (lov->lov_connects == 0) {
                 /* lov_connect hasn't been called yet. We'll do the
@@ -648,8 +650,6 @@ static int lov_add_target(struct obd_device *obd, struct obd_uuid *uuidp,
                    because we don't know the connect flags yet. */
                 RETURN(0);
         }
-
-        obd_getref(obd);
 
         rc = lov_connect_obd(obd, index, active, &lov->lov_ocd);
         if (rc)
@@ -669,7 +669,6 @@ out:
                        obd_uuid2str(&tgt->ltd_uuid));
                 lov_del_target(obd, index, 0, 0);
         }
-        obd_putref(obd);
         RETURN(rc);
 }
 
@@ -726,7 +725,7 @@ static void __lov_del_obd(struct obd_device *obd, struct lov_tgt_desc *tgt)
         LASSERT(tgt);
         LASSERT(tgt->ltd_reap);
 
-        osc_obd = class_exp2obd(tgt->ltd_exp);
+	osc_obd = tgt->ltd_obd;
 
         CDEBUG(D_CONFIG, "Removing tgt %s : %s\n",
                tgt->ltd_uuid.uuid,
@@ -740,8 +739,11 @@ static void __lov_del_obd(struct obd_device *obd, struct lov_tgt_desc *tgt)
         /* Manual cleanup - no cleanup logs to clean up the osc's.  We must
            do it ourselves. And we can't do it from lov_cleanup,
            because we just lost our only reference to it. */
-        if (osc_obd)
-                class_manual_cleanup(osc_obd);
+	if (osc_obd) {
+		osc_obd->obd_force = obd->obd_force;
+		osc_obd->obd_fail = obd->obd_fail;
+		class_manual_cleanup(osc_obd);
+	}
 }
 
 void lov_fix_desc_stripe_size(__u64 *val)
