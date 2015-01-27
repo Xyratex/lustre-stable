@@ -3583,6 +3583,17 @@ test_87b()
 }
 run_test 87b "test lctl clear_conf one config"
 
+test_88()
+{
+	#define OBD_FAIL_MDS_NOTIFY_CREATE       0x157
+	do_facet $SINGLEMDS lctl set_param fail_loc=0x80000157
+	start_mds
+	start_ost
+	mount_client $MOUNT && error "client start should fail"
+	cleanup
+}
+run_test 88 "test mds_notify failure"
+
 if ! combined_mgs_mds ; then
 	stop mgs
 fi

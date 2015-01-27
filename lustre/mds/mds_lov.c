@@ -942,6 +942,10 @@ int mds_notify(struct obd_device *obd, struct obd_device *watched,
 
         CDEBUG(D_CONFIG, "notify %s ev=%d\n", watched->obd_name, ev);
 
+	if (ev == OBD_NOTIFY_CREATE &&
+	    OBD_FAIL_CHECK(OBD_FAIL_MDS_NOTIFY_CREATE))
+		RETURN(-EINVAL);
+
         if (strcmp(watched->obd_type->typ_name, LUSTRE_OSC_NAME) != 0) {
                 CERROR("unexpected notification of %s %s!\n",
                        watched->obd_type->typ_name, watched->obd_name);
