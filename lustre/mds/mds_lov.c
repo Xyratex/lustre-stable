@@ -956,10 +956,12 @@ int mds_notify(struct obd_device *obd, struct obd_device *watched,
          * must non block!
          */
         if (obd->obd_upcall.onu_owner) {
-                 LASSERT(obd->obd_upcall.onu_upcall != NULL);
-                 rc = obd->obd_upcall.onu_upcall(obd, NULL, ev,
-                                                 obd->obd_upcall.onu_owner,
-                                                 &mds->mds_obt.obt_mount_count);
+		LASSERT(obd->obd_upcall.onu_upcall != NULL);
+		rc = obd->obd_upcall.onu_upcall(obd, NULL, ev,
+						obd->obd_upcall.onu_owner,
+						&mds->mds_obt.obt_mount_count);
+		if (rc)
+			RETURN(rc);
         }
 
         switch (ev) {

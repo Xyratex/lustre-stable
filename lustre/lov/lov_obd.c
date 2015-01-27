@@ -634,6 +634,7 @@ static int lov_add_target(struct obd_device *obd, struct obd_uuid *uuidp,
         lov->lov_tgts[index] = tgt;
         if (index >= lov->desc.ld_tgt_count)
                 lov->desc.ld_tgt_count = index + 1;
+	lov->desc.ld_real_tgt_count ++;
 
         cfs_mutex_unlock(&lov->lov_lock);
 
@@ -668,6 +669,11 @@ out:
                 CERROR("add failed (%d), deleting %s\n", rc,
                        obd_uuid2str(&tgt->ltd_uuid));
                 lov_del_target(obd, index, 0, 0);
+		if (rc == -EFBIG)
+			/* EFBIG indicates that adding the target
+			 * would make max txn size insane, safe to
+			 * ignore */
+			rc = 0;
         }
         RETURN(rc);
 }
@@ -710,6 +716,7 @@ int lov_del_target(struct obd_device *obd, __u32 index,
 
         lov->lov_tgts[index]->ltd_reap = 1;
         lov->lov_death_row++;
+	lov->desc.ld_real_tgt_count --;
         /* we really delete it from obd_putref */
 out:
         obd_putref(obd);

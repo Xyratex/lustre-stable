@@ -606,7 +606,7 @@ struct lov_io_sub    *lov_page_subio    (const struct lu_env *env,
 
 
 #define lov_foreach_target(lov, var)                    \
-        for (var = 0; var < lov_targets_nr(lov); ++var)
+	for (var = 0; var < lov_targets_nr(lov); ++var)
 
 /*****************************************************************************
  *
@@ -779,7 +779,7 @@ static inline struct lov_io *cl2lov_io(const struct lu_env *env,
 
 static inline int lov_targets_nr(const struct lov_device *lov)
 {
-        return lov->ld_lov->desc.ld_tgt_count;
+	return lov->ld_target_nr;
 }
 
 static inline struct lov_thread_info *lov_env_info(const struct lu_env *env)

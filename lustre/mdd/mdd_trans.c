@@ -54,16 +54,67 @@
 
 static int dto_txn_credits[DTO_NR];
 
+static int changelog_credits(const struct mdd_device *mdd, int tgt_count)
+{
+	return (tgt_count + 2) * dto_txn_credits[DTO_LOG_REC];
+}
+
+/**
+ * This is called to check whether mdd's max transaction size remains
+ * safe for certain amount of ost targets.
+ *
+ * \param[in] mdd        device to check
+ * \param[in] tgt_count  number of targets to check max txn size against
+ *
+ * \retval 0      success, max transaction size is safe
+ * \retval -EFBIG ignorable error, new target will not be added
+ * \retval        other error
+ */
+int mdd_txn_credits_are_sane(struct mdd_device *mdd, int tgt_count)
+{
+	struct thandle *th;
+	struct lu_env env;
+	int rc;
+	struct txn_param *param;
+
+	rc = lu_env_init(&env, LCT_MD_THREAD);
+	if (rc) {
+		CERROR("lu_env_init failed %d\n", rc);
+		return rc;
+	}
+	param = &mdd_env_info(&env)->mti_param;
+	txn_param_init(param, mdd->mdd_max_txn_credits +
+		       changelog_credits(mdd, tgt_count));
+	param->tp_cookie = tgt_count;
+	th = mdd_trans_start(&env, mdd);
+	if (IS_ERR(th)) {
+		if (th == ERR_PTR(-EFBIG))
+			CERROR("%s: journal is too small for %d targets mdd, "
+			       "increase to at least %d blocks\n",
+			       mdd2obd_dev(mdd)->obd_name,
+			       tgt_count, param->tp_credits * 4);
+		lu_env_fini(&env);
+		return PTR_ERR(th);
+	}
+	mdd_trans_stop(&env, mdd, 0, th);
+	lu_env_fini(&env);
+	return 0;
+}
+
 int mdd_txn_start_cb(const struct lu_env *env, struct txn_param *param,
                      void *cookie)
 {
         struct mdd_device *mdd = cookie;
-        struct obd_device *obd = mdd2obd_dev(mdd);
+	struct obd_device *obd = mdd2obd_dev(mdd);
+	int tgt_count;
         /* Each transaction updates lov objids, the credits should be added for
          * this */
-        int blk, shift = mdd->mdd_dt_conf.ddp_block_shift;
-        blk = ((obd->u.mds.mds_lov_desc.ld_tgt_count * sizeof(obd_id) +
-               (1 << shift) - 1) >> shift) + 1;
+	int blk, shift = mdd->mdd_dt_conf.ddp_block_shift;
+	if (param->tp_cookie)
+		tgt_count = (int)param->tp_cookie;
+	else
+		tgt_count = obd->u.mds.mds_lov_desc.ld_real_tgt_count;
+	blk = ((tgt_count * sizeof(obd_id) + (1 << shift) - 1) >> shift) + 1;
 
         /* add lov objids credits */
         param->tp_credits += blk * dto_txn_credits[DTO_WRITE_BLOCK] +
@@ -148,7 +199,7 @@ int mdd_log_txn_param_build(const struct lu_env *env, struct md_object *obj,
                  "%08x", le32_to_cpu(ma->ma_lmm->lmm_magic));
 
         if ((int)le32_to_cpu(ma->ma_lmm->lmm_stripe_count) < 0)
-                stripe = mdd2obd_dev(mdd)->u.mds.mds_lov_desc.ld_tgt_count;
+		stripe = mdd2obd_dev(mdd)->u.mds.mds_lov_desc.ld_real_tgt_count;
         else
                 stripe = le32_to_cpu(ma->ma_lmm->lmm_stripe_count);
 
@@ -191,6 +242,7 @@ int mdd_txn_init_credits(const struct lu_env *env, struct mdd_device *mdd)
         mdd_txn_init_dto_credits(env, mdd, dto_txn_credits);
 
         /* Calculate the mdd credits. */
+	mdd->mdd_max_txn_credits = 0;
         for (op = MDD_TXN_OBJECT_DESTROY_OP; op < MDD_TXN_LAST_OP; op++) {
                 int *c = &mdd->mdd_tod[op].mod_credits;
                 int *dt = dto_txn_credits;
@@ -273,8 +325,12 @@ int mdd_txn_init_credits(const struct lu_env *env, struct mdd_device *mdd)
                                 CERROR("Invalid op %d init its credit\n", op);
                                 LBUG();
                 }
+		if (mdd->mdd_max_txn_credits < *c)
+			mdd->mdd_max_txn_credits = *c;
         }
-        RETURN(0);
+
+	RETURN(mdd_txn_credits_are_sane(mdd,
+		mdd2obd_dev(mdd)->u.mds.mds_lov_desc.ld_real_tgt_count));
 }
 
 struct thandle* mdd_trans_start(const struct lu_env *env,

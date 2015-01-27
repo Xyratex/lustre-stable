@@ -586,6 +586,7 @@ static inline int dt_object_exists(const struct dt_object *dt)
 struct txn_param {
         /** number of blocks this transaction will modify */
         unsigned int tp_credits;
+	unsigned int tp_cookie;
 };
 
 static inline void txn_param_init(struct txn_param *p, unsigned int credits)

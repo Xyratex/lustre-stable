@@ -67,7 +67,12 @@ static int mdd_notify(struct obd_device *host, struct obd_device *watched,
         LASSERT(owner != NULL);
         switch (ev)
         {
-                case OBD_NOTIFY_ACTIVE:
+		case OBD_NOTIFY_CREATE:
+			rc = mdd_txn_credits_are_sane(mdd,
+				mdd2obd_dev(mdd)->
+				u.mds.mds_lov_desc.ld_real_tgt_count + 1);
+			break;
+		case OBD_NOTIFY_ACTIVE:
                 case OBD_NOTIFY_SYNC:
                 case OBD_NOTIFY_SYNC_NONBLOCK:
                         rc = md_do_upcall(NULL, &mdd->mdd_md_dev,

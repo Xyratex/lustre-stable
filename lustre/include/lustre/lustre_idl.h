@@ -2290,13 +2290,13 @@ enum seq_op {
 
 /* LOV settings descriptor (should only contain static info) */
 struct lov_desc {
-        __u32 ld_tgt_count;                /* how many OBD's */
+        __u32 ld_tgt_count;                /* max OBD's target index + 1 */
         __u32 ld_active_tgt_count;         /* how many active */
         __u32 ld_default_stripe_count;     /* how many objects are used */
         __u32 ld_pattern;                  /* default PATTERN_RAID0 */
         __u64 ld_default_stripe_size;      /* in bytes */
         __u64 ld_default_stripe_offset;    /* in bytes */
-        __u32 ld_padding_0;                /* unused */
+        __u32 ld_padding_0;                /* number of targets, see below */
         __u32 ld_qos_maxage;               /* in second */
         __u32 ld_padding_1;                /* also fix lustre_swab_lov_desc */
         __u32 ld_padding_2;                /* also fix lustre_swab_lov_desc */
@@ -2304,6 +2304,7 @@ struct lov_desc {
 };
 
 #define ld_magic ld_active_tgt_count       /* for swabbing from llogs */
+#define ld_real_tgt_count ld_padding_0     /* number of targets */
 
 extern void lustre_swab_lov_desc (struct lov_desc *ld);
 

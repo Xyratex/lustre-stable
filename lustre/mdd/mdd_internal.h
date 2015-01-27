@@ -142,6 +142,7 @@ struct mdd_device {
         struct mdd_object               *mdd_dot_lustre;
         struct mdd_dot_lustre_objs       mdd_dot_lustre_objs;
         unsigned int                     mdd_sync_permission;
+	int				 mdd_max_txn_credits;
 };
 
 enum mod_flags {
@@ -485,6 +486,8 @@ int mdd_txn_start_cb(const struct lu_env *env, struct txn_param *param,
 
 int mdd_txn_stop_cb(const struct lu_env *env, struct thandle *txn,
                     void *cookie);
+
+int mdd_txn_credits_are_sane(struct mdd_device *mdd, int tgt_count);
 
 /* mdd_device.c */
 struct lu_object *mdd_object_alloc(const struct lu_env *env,

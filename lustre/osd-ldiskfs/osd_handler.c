@@ -735,7 +735,7 @@ static struct thandle *osd_trans_start(const struct lu_env *env,
                         th = ERR_PTR(-ENOMEM);
         } else {
                 CERROR("Invalid transaction parameters\n");
-                th = ERR_PTR(-EINVAL);
+                th = ERR_PTR(-EFBIG);
         }
 
         RETURN(th);
