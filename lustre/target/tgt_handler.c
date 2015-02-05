@@ -2041,13 +2041,7 @@ out_lock:
 out:
 	if (likely(no_reply == 0))
 		no_reply = !target_committed_to_req(req) && trans_info.oti_wait;
-	if (!no_reply) {
-		req->rq_status = rc;
-		if (rc == 0)
-			ptlrpc_reply(req);
-		else
-			ptlrpc_error(req);
-	} else {
+	if (unlikely(no_reply)) {
 		req->rq_no_reply = 1;
 		/* reply out callback would free */
 		ptlrpc_req_drop_rs(req);
