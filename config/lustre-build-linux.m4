@@ -109,19 +109,19 @@ AC_MSG_CHECKING([for Linux kernel module package directory])
 AC_ARG_WITH([kmp-moddir],
 	AC_HELP_STRING([--with-kmp-moddir=string],
 		[set the kmod updates or extra directory]),
-	[KMP_MODDIR=$withval
-	 IN_KERNEL=''],[
-	AS_IF([test x$RHEL_KERNEL = xyes], [KMP_MODDIR="extra/kernel"],
-	      [test x$SUSE_KERNEL = xyes], [KMP_MODDIR="updates/kernel"])
-	IN_KERNEL="${PACKAGE}"])
+	[KMP_MODDIR=$withval],[
+	AS_IF([test x$RHEL_KERNEL = xyes], [KMP_MODDIR="extra"],
+	      [test x$SUSE_KERNEL = xyes], [KMP_MODDIR="updates"])])
 AC_MSG_RESULT($KMP_MODDIR)
+AC_SUBST(KMP_MODDIR)
 
-moduledir="${CROSS_PATH}/lib/modules/${LINUXRELEASE}/${KMP_MODDIR}"
+moduledir='$(CROSS_PATH)/lib/modules/$(LINUXRELEASE)/$(KMP_MODDIR)/kernel'
+AC_SUBST(moduledir)
 
-modulefsdir="${moduledir}/fs/${IN_KERNEL}"
+modulefsdir='$(moduledir)/fs/$(PACKAGE)'
 AC_SUBST(modulefsdir)
 
-modulenetdir="${moduledir}/net/${IN_KERNEL}"
+modulenetdir='$(moduledir)/net/$(PACKAGE)'
 AC_SUBST(modulenetdir)
 ])
 
