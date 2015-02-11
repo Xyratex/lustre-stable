@@ -57,6 +57,7 @@ void request_out_callback(lnet_event_t *ev)
 {
         struct ptlrpc_cb_id   *cbid = ev->md.user_ptr;
         struct ptlrpc_request *req = cbid->cbid_arg;
+	int                    wakeup = 0;
         ENTRY;
 
         LASSERT (ev->type == LNET_EVENT_SEND ||
@@ -72,13 +73,20 @@ void request_out_callback(lnet_event_t *ev)
 		req->rq_req_unlink = 0;
         req->rq_real_sent = cfs_time_current_sec();
 
+	/* request callback may be called after reply callback due network resends
+	   where an ACK delivery notification is lost, but server has accepted the
+	   request and processed it. So it's a good reason to check the network. */
+	if (!req->rq_reply_unlink)
+               wakeup = 1;
         if (ev->type == LNET_EVENT_UNLINK || ev->status != 0) {
 
                 /* Failed send: make it seem like the reply timed out, just
                  * like failing sends in client.c does currently...  */
                 req->rq_net_err = 1;
-                ptlrpc_client_wake_req(req);
+		wakeup = 1;
         }
+	if (wakeup)
+		ptlrpc_client_wake_req(req);
 	cfs_spin_unlock(&req->rq_lock);
 
         ptlrpc_req_finished(req);
