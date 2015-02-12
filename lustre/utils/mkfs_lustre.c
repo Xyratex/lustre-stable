@@ -567,7 +567,6 @@ int parse_opts(int argc, char *const argv[], struct mkfs_opts *mop,
                                 sizeof(mop->mo_mkfsopts));
                         break;
                 case 'L': {
-                        char *tmp;
                         if (!(mop->mo_flags & MO_FORCEFORMAT) &&
                             (!(mop->mo_ldd.ldd_flags &
                                (LDD_F_UPGRADE14 | LDD_F_VIRGIN |
@@ -576,16 +575,19 @@ int parse_opts(int argc, char *const argv[], struct mkfs_opts *mop,
                                         " a registered target\n", progname);
                                 return 1;
                         }
-                        if ((strlen(optarg) < 1) || (strlen(optarg) > 8)) {
-                                fprintf(stderr, "%s: filesystem name must be "
-                                        "1-8 chars\n", progname);
-                                return 1;
-                        }
-                        if ((tmp = strpbrk(optarg, "/:"))) {
-                                fprintf(stderr, "%s: char '%c' not allowed in "
-                                        "filesystem name\n", progname, *tmp);
-                                return 1;
-                        }
+			rc = lustre_is_fsname_valid(optarg, 1,
+						    LUSTRE_MAXFSNAME);
+			if (rc < 0) {
+				fprintf(stderr, "%s: filesystem name must be "
+					"1-%d chars\n", progname,
+					LUSTRE_MAXFSNAME);
+				return 1;
+			} else if (rc > 0) {
+				fprintf(stderr, "%s: char '%c' not allowed in "
+					"filesystem name\n", progname, rc);
+				return 1;
+			}
+
                         strscpy(mop->mo_ldd.ldd_fsname, optarg,
                                 sizeof(mop->mo_ldd.ldd_fsname));
                         break;
