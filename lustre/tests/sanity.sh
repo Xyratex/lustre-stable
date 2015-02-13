@@ -12516,6 +12516,20 @@ test_242() {
 }
 run_test 242 "Check that watchdog causes kernel log dump"
 
+test_250() {
+	[ "$(facet_fstype ost$(($($GETSTRIPE -i $DIR/$tfile) + 1)))" = "zfs" ] \
+	 && skip "no 16TB file size limit on ZFS" && return
+
+	$SETSTRIPE -c 1 $DIR/$tfile
+	# ldiskfs extent file size limit is (16TB - 4KB - 1) bytes
+	local size=$((16 * 1024 * 1024 * 1024 * 1024 - 4096 - 1))
+	$TRUNCATE $DIR/$tfile $size || error "truncate $tfile to $size failed"
+	dd if=/dev/zero of=$DIR/$tfile bs=10 count=1 oflag=append \
+		conv=notrunc,fsync && error "append succeeded"
+	return 0
+}
+run_test 250 "Write above 16T limit"
+
 test_400a() { # LU-1606, was conf-sanity test_74
 	local extra_flags=''
 	local out=$TMP/$tfile
