@@ -379,6 +379,7 @@ void server_bulk_callback (lnet_event_t *ev)
 {
 	struct ptlrpc_cb_id     *cbid = ev->md.user_ptr;
 	struct ptlrpc_bulk_desc *desc = cbid->cbid_arg;
+	struct ptlrpc_request   *req  = desc->bd_req;
 	ENTRY;
 
 	LASSERT(ev->type == LNET_EVENT_SEND ||
@@ -388,9 +389,9 @@ void server_bulk_callback (lnet_event_t *ev)
 		(desc->bd_type == BULK_GET_SINK &&
 		 ev->type == LNET_EVENT_REPLY));
 
-        CDEBUG((ev->status == 0) ? D_NET : D_ERROR,
-               "event type %d, status %d, desc %p\n",
-               ev->type, ev->status, desc);
+	CDEBUG((ev->status == 0) ? D_NET : D_ERROR,
+		"event type %d, status %d, desc %p req@%p x"LPU64" bd_md_count %d\n",
+		ev->type, ev->status, desc, req, req->rq_xid, desc->bd_md_count);
 
         cfs_spin_lock(&desc->bd_lock);
 
