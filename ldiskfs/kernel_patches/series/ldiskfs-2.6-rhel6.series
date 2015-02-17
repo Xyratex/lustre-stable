@@ -51,3 +51,4 @@ rhel6.3/ext4-dont-check-before-replay.patch
 rhel6.3/ext4-dont-check-in-ro.patch
 rhel6.3/ext4-bitmap-hold.patch
 rhel6.3/ext4-recalc-percpu-counters-after-journal.patch
+rhel6.3/ext4-speed-up-releasing-blocks-on-commit.patch
