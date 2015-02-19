@@ -1742,6 +1742,9 @@ static int osd_punch(const struct lu_env *env, struct dt_object *dt,
 	oh = container_of(th, struct osd_thandle, ot_super);
 	LASSERT(oh->ot_handle->h_transaction != NULL);
 
+	if (i_size_read(inode) == start)
+		RETURN(0);
+
 	osd_trans_exec_op(env, th, OSD_OT_PUNCH);
 
 	tid = oh->ot_handle->h_transaction->t_tid;
