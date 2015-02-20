@@ -2490,49 +2490,43 @@ static int cb_find_init(char *path, DIR *parent, DIR *dir,
         if (param->have_fileinfo == 0 && decision == 0) {
                 ret = get_lmd_info(path, parent, dir, param->lmd,
                                    param->lumlen);
-                if (ret == 0) {
-                        if (dir) {
-                                ret = llapi_file_fget_mdtidx(dirfd(dir),
-                                                     &param->file_mdtindex);
-                        } else {
-                                int fd;
-                                lstat_t tmp_st;
+		if (ret == 0 && param->mdtuuid != NULL) {
+			if (dir != NULL) {
+				ret = llapi_file_fget_mdtidx(dirfd(dir),
+						     &param->file_mdtindex);
+			} else if (S_ISREG(st->st_mode)) {
+				int fd;
 
-                                ret = lstat_f(path, &tmp_st);
-                                if (ret) {
-                                        ret = -errno;
-                                        llapi_error(LLAPI_MSG_ERROR, ret,
-                                                    "error: %s: lstat failed"
-                                                    "for %s", __func__, path);
-                                        return ret;
-                                }
-                                if (S_ISREG(tmp_st.st_mode)) {
-                                        fd = open(path, O_RDONLY);
-                                        if (fd > 0) {
-                                                ret = llapi_file_fget_mdtidx(fd,
-                                                         &param->file_mdtindex);
-                                                close(fd);
-                                        } else {
-                                                ret = fd;
-                                        }
-                                } else {
-                                        /* For special inode, it assumes to
-                                         * reside on the same MDT with the
-                                         * parent */
-                                        fd = dirfd(parent);
-                                        ret = llapi_file_fget_mdtidx(fd,
-                                                        &param->file_mdtindex);
-                                }
-                        }
-                }
-                if (ret) {
-                        if (ret == -ENOTTY)
-                                lustre_fs = 0;
-                        if (ret == -ENOENT)
-                                goto decided;
-                        return ret;
-                }
-        }
+				/* FIXME: we could get the MDT index from the
+				 * file's FID in lmd->lmd_lmm.lmm_oi without
+				 * opening the file, once we are sure that
+				 * LFSCK2 (2.6) has fixed up pre-2.0 LOV EAs.
+				 * That would still be an ioctl() to map the
+				 * FID to the MDT, but not an open RPC. */
+				fd = open(path, O_RDONLY);
+				if (fd > 0) {
+					ret = llapi_file_fget_mdtidx(fd,
+						     &param->file_mdtindex);
+					close(fd);
+				} else {
+					ret = -errno;
+				}
+			} else {
+				/* For a special file, we assume it resides on
+				 * the same MDT as the parent directory. */
+				ret = llapi_file_fget_mdtidx(dirfd(parent),
+						     &param->file_mdtindex);
+			}
+		}
+		if (ret != 0) {
+			if (ret == -ENOTTY)
+				lustre_fs = 0;
+			if (ret == -ENOENT)
+				goto decided;
+
+			return ret;
+		}
+	}
 
         if (param->type && !checked_type) {
                 if ((st->st_mode & S_IFMT) == param->type) {
@@ -2760,63 +2754,57 @@ int llapi_file_fget_mdtidx(int fd, int *mdtidx)
 static int cb_get_mdt_index(char *path, DIR *parent, DIR *d, void *data,
                             cfs_dirent_t *de)
 {
-        struct find_param *param = (struct find_param *)data;
-        int ret = 0;
-        int mdtidx;
+	struct find_param *param = (struct find_param *)data;
+	int ret;
+	int mdtidx;
 
-        LASSERT(parent != NULL || d != NULL);
+	LASSERT(parent != NULL || d != NULL);
 
-        if (d) {
-                ret = llapi_file_fget_mdtidx(dirfd(d), &mdtidx);
-        } else if (parent) {
-                int fd;
+	if (d != NULL) {
+		ret = llapi_file_fget_mdtidx(dirfd(d), &mdtidx);
+	} else /* if (parent) */ {
+		int fd;
 
-                fd = open(path, O_RDONLY);
-                if (fd > 0) {
-                        ret = llapi_file_fget_mdtidx(fd, &mdtidx);
-                        close(fd);
-                } else {
-                        ret = -errno;
-                }
-        }
+		fd = open(path, O_RDONLY | O_NOCTTY);
+		if (fd > 0) {
+			ret = llapi_file_fget_mdtidx(fd, &mdtidx);
+			close(fd);
+		} else {
+			ret = -errno;
+		}
+	}
 
-        if (ret) {
-                if (ret == -ENODATA) {
-                        if (!param->obduuid)
-                                llapi_printf(LLAPI_MSG_NORMAL,
-                                             "%s has no stripe info\n", path);
-                        goto out;
-                } else if (ret == -ENOENT) {
-                        llapi_error(LLAPI_MSG_WARN, ret,
-                                    "warning: %s: %s does not exist",
-                                    __func__, path);
-                        goto out;
-                } else if (ret == -ENOTTY) {
-                        llapi_error(LLAPI_MSG_ERROR, ret,
-                                    "%s: '%s' not on a Lustre fs?",
-                                    __func__, path);
-                } else {
-                        llapi_error(LLAPI_MSG_ERROR, ret,
-                                    "error: %s: LL_IOC_GET_MDTIDX failed for %s",
-                                    __func__, path);
-                }
-                return ret;
-        }
+	if (ret != 0) {
+		if (ret == -ENODATA) {
+			if (!param->obduuid)
+				llapi_printf(LLAPI_MSG_NORMAL,
+					     "'%s' has no stripe info\n", path);
+			goto out;
+		} else if (ret == -ENOENT) {
+			llapi_error(LLAPI_MSG_WARN, ret,
+				    "warning: %s: '%s' does not exist",
+				    __func__, path);
+			goto out;
+		} else if (ret == -ENOTTY) {
+			llapi_error(LLAPI_MSG_ERROR, ret,
+				    "%s: '%s' not on a Lustre fs",
+				    __func__, path);
+		} else {
+			llapi_error(LLAPI_MSG_ERROR, ret,
+				    "error: %s: '%s' failed get_mdtidx",
+				    __func__, path);
+		}
+		return ret;
+	}
 
-	/* The 'LASSERT(parent != NULL || d != NULL);' guarantees
-	 * that either 'd' or 'parent' is not null.
-	 * So in all cases llapi_file_fget_mdtidx() is called,
-	 * thus initializing 'mdtidx'. */
-        if (param->quiet || !(param->verbose & VERBOSE_DETAIL))
-		/* coverity[uninit_use_in_call] */
-                llapi_printf(LLAPI_MSG_NORMAL, "%d\n", mdtidx);
-        else
-		/* coverity[uninit_use_in_call] */
-                llapi_printf(LLAPI_MSG_NORMAL, "%s\nmdt_index:\t%d\n",
-                             path, mdtidx);
+	if (param->quiet || !(param->verbose & VERBOSE_DETAIL))
+		llapi_printf(LLAPI_MSG_NORMAL, "%d\n", mdtidx);
+	else
+		llapi_printf(LLAPI_MSG_NORMAL, "%s\nmdt_index:\t%d\n",
+			     path, mdtidx);
 
 out:
-        /* Do not get down anymore? */
+	/* Do not go down anymore? */
         if (param->depth == param->maxdepth)
                 return 1;
 
