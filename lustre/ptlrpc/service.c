@@ -2889,6 +2889,7 @@ int ptlrpc_hr_init(void)
 	int				rc;
 	int				i;
 	int				j;
+	int				weight;
 	ENTRY;
 
 	memset(&ptlrpc_hr, 0, sizeof(ptlrpc_hr));
@@ -2901,6 +2902,8 @@ int ptlrpc_hr_init(void)
 
 	init_waitqueue_head(&ptlrpc_hr.hr_waitq);
 
+	weight = cfs_cpu_ht_nsiblings(0);
+
 	cfs_percpt_for_each(hrp, i, ptlrpc_hr.hr_partitions) {
 		hrp->hrp_cpt = i;
 
@@ -2908,7 +2911,7 @@ int ptlrpc_hr_init(void)
 		atomic_set(&hrp->hrp_nstopped, 0);
 
 		hrp->hrp_nthrs = cfs_cpt_weight(ptlrpc_hr.hr_cpt_table, i);
-		hrp->hrp_nthrs /= cfs_cpu_ht_nsiblings(0);
+		hrp->hrp_nthrs /= weight;
 
 		LASSERT(hrp->hrp_nthrs > 0);
 		OBD_CPT_ALLOC(hrp->hrp_thrs, ptlrpc_hr.hr_cpt_table, i,
