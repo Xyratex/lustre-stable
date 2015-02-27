@@ -584,15 +584,17 @@ static inline void obd_pages_sub(int order)
 #if defined(LUSTRE_UTILS) /* this version is for utils only */
 #define OBD_ALLOC_GFP(ptr, size, gfp_mask)                                    \
 do {                                                                          \
-        (ptr) = cfs_alloc(size, (gfp_mask));                                  \
-        if (unlikely((ptr) == NULL)) {                                        \
+	void *p;							      \
+	p = cfs_alloc(size, (gfp_mask));                                      \
+	if (unlikely(p == NULL)) {                                            \
                 CERROR("kmalloc of '" #ptr "' (%d bytes) failed at %s:%d\n",  \
                        (int)(size), __FILE__, __LINE__);                      \
         } else {                                                              \
-                memset(ptr, 0, size);                                         \
+		memset(p, 0, size);                                           \
                 CDEBUG(D_MALLOC, "kmalloced '" #ptr "': %d at %p\n",          \
-                       (int)(size), ptr);                                     \
+		       (int)(size), p);                                       \
         }                                                                     \
+	(ptr) = p;							      \
 } while (0)
 #else /* this version is for the kernel and liblustre */
 #define OBD_FREE_RTN0(ptr)                                                    \
@@ -603,15 +605,18 @@ do {                                                                          \
 })
 #define OBD_ALLOC_GFP(ptr, size, gfp_mask)                                    \
 do {                                                                          \
-        (ptr) = cfs_alloc(size, (gfp_mask));                                  \
-        if (likely((ptr) != NULL &&                                           \
-                   (!HAS_FAIL_ALLOC_FLAG || obd_alloc_fail_rate == 0 ||       \
-                    !obd_alloc_fail(ptr, #ptr, "km", size,                    \
+	void *p;							      \
+	p = cfs_alloc(size, (gfp_mask));                                      \
+	if (likely(p != NULL &&                                               \
+		    (!HAS_FAIL_ALLOC_FLAG || obd_alloc_fail_rate == 0 ||      \
+		    !obd_alloc_fail(p, #ptr, "km", size,                      \
                                     __FILE__, __LINE__) ||                    \
-                    OBD_FREE_RTN0(ptr)))){                                    \
-                memset(ptr, 0, size);                                         \
-                OBD_ALLOC_POST(ptr, size, "kmalloced");                       \
-        }                                                                     \
+		    OBD_FREE_RTN0(p)))) {                                     \
+		memset(p, 0, size);                                           \
+		(ptr) = p;						      \
+		OBD_ALLOC_POST(ptr, size, "kmalloced");                       \
+	} else                                                                \
+		(ptr) = NULL;						      \
 } while (0)
 #endif
 
@@ -626,14 +631,17 @@ do {                                                                          \
 
 # define OBD_VMALLOC(ptr, size)                                               \
 do {                                                                          \
-        (ptr) = cfs_alloc_large(size);                                        \
-        if (unlikely((ptr) == NULL)) {                                        \
+	void *p;							      \
+	p = cfs_alloc_large(size);                                            \
+	if (unlikely(p == NULL)) {                                            \
                 CERROR("vmalloc of '" #ptr "' (%d bytes) failed\n",           \
                        (int)(size));                                          \
                 CERROR(LPU64" total bytes allocated by Lustre, %d by LNET\n", \
                        obd_memory_sum(), cfs_atomic_read(&libcfs_kmemory));   \
+		(ptr) = NULL;						      \
         } else {                                                              \
-                memset(ptr, 0, size);                                         \
+		memset(p, 0, size);                                           \
+		(ptr) = p;						      \
                 OBD_ALLOC_POST(ptr, size, "vmalloced");                       \
         }                                                                     \
 } while(0)
@@ -727,16 +735,19 @@ do {									      \
 })
 #define OBD_SLAB_ALLOC(ptr, slab, type, size)                                 \
 do {                                                                          \
+	void *p;							      \
         LASSERT(ergo((type) != CFS_ALLOC_ATOMIC, !cfs_in_interrupt()));         \
-        (ptr) = cfs_mem_cache_alloc(slab, (type));                            \
-        if (likely((ptr) != NULL &&                                           \
-                   (!HAS_FAIL_ALLOC_FLAG || obd_alloc_fail_rate == 0 ||       \
-                    !obd_alloc_fail(ptr, #ptr, "slab-", size,                 \
+	p = cfs_mem_cache_alloc(slab, (type));                                \
+	if (likely(p != NULL &&                                               \
+		    (!HAS_FAIL_ALLOC_FLAG || obd_alloc_fail_rate == 0 ||      \
+		    !obd_alloc_fail(p, #ptr, "slab-", size,                   \
                                     __FILE__, __LINE__) ||                    \
-                    OBD_SLAB_FREE_RTN0(ptr, slab)))) {                        \
-                memset(ptr, 0, size);                                         \
-                OBD_ALLOC_POST(ptr, size, "slab-alloced");                    \
-        }                                                                     \
+		    OBD_SLAB_FREE_RTN0(p, slab)))) {                          \
+		memset(p, 0, size);                                           \
+		(ptr) = p;						      \
+		OBD_ALLOC_POST(ptr, size, "slab-alloced");                    \
+	} else 								      \
+		(ptr) = NULL;						      \
 } while(0)
 
 #define OBD_FREE_PTR(ptr) OBD_FREE(ptr, sizeof *(ptr))
