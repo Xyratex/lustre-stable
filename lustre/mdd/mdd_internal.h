@@ -488,7 +488,8 @@ int mdd_txn_start_cb(const struct lu_env *env, struct txn_param *param,
 int mdd_txn_stop_cb(const struct lu_env *env, struct thandle *txn,
                     void *cookie);
 
-int mdd_txn_credits_are_sane(struct mdd_device *mdd, int tgt_count);
+int mdd_txn_credits_are_sane(struct mdd_device *mdd, int tgt_count,
+			     int *max_txn_size);
 
 /* mdd_device.c */
 struct lu_object *mdd_object_alloc(const struct lu_env *env,

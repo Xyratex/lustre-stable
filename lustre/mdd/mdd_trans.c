@@ -64,14 +64,16 @@ static int changelog_credits(const struct mdd_device *mdd, int tgt_count)
  * This is called to check whether mdd's max transaction size remains
  * safe for certain amount of ost targets.
  *
- * \param[in] mdd        device to check
- * \param[in] tgt_count  number of targets to check max txn size against
+ * \param[in] mdd          device to check
+ * \param[in] tgt_count    number of targets to check max txn size against
+ * \param[in] max_txn_size return max txn size if it is not NULL
  *
  * \retval 0      success, max transaction size is safe
  * \retval -EFBIG ignorable error, new target will not be added
  * \retval        other error
  */
-int mdd_txn_credits_are_sane(struct mdd_device *mdd, int tgt_count)
+int mdd_txn_credits_are_sane(struct mdd_device *mdd, int tgt_count,
+			     int *max_txn_size)
 {
 	struct thandle *th;
 	struct lu_env env;
@@ -88,6 +90,8 @@ int mdd_txn_credits_are_sane(struct mdd_device *mdd, int tgt_count)
 		       changelog_credits(mdd, tgt_count));
 	param->tp_cookie = tgt_count;
 	th = mdd_trans_start(&env, mdd);
+	if (max_txn_size)
+		*max_txn_size = param->tp_credits;
 	if (IS_ERR(th)) {
 		if (th == ERR_PTR(-EFBIG))
 			CERROR("%s: journal is too small for %d targets mdd, "
@@ -341,7 +345,8 @@ int mdd_txn_init_credits(const struct lu_env *env, struct mdd_device *mdd)
         }
 
 	RETURN(mdd_txn_credits_are_sane(mdd,
-		mdd2obd_dev(mdd)->u.mds.mds_lov_desc.ld_real_tgt_count));
+		mdd2obd_dev(mdd)->u.mds.mds_lov_desc.ld_real_tgt_count,
+		NULL));
 }
 
 struct thandle* mdd_trans_start(const struct lu_env *env,

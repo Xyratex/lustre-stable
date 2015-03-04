@@ -219,6 +219,14 @@ setup() {
 	client_up || error "client_up failed"
 }
 
+setup2() {
+	start_mds || error "MDT start failed"
+	start_ost || error "OST1 start failed"
+	start_ost2 || error "OST2 start failed"
+	mount_client $MOUNT || error "client start failed"
+	client_up || error "client_up failed"
+}
+
 setup_noconfig() {
 	if ! combined_mgs_mds ; then
 		start_mgs
@@ -3594,6 +3602,93 @@ test_88()
 }
 run_test 88 "test mds_notify failure"
 
+change_dev_journal()
+{
+	local facet=$1
+	local dev=$2
+	local journal_size=$3
+	do_facet $facet "$TUNE2FS -O ^has_journal $dev" ||
+		error "journal removal failed"
+	do_facet $facet "$TUNE2FS -J size=$journal_size $dev" ||
+		error "journal size change failed"
+}
+
+test_89()
+{
+	local mdsdev=$(mdsdevname 1)
+	local journal_size
+
+	reformat
+	add ost2 $(mkfs_opts ost2) --index=10000 --reformat $(ostdevname 2) ||
+		error "add ost2 failed"
+
+	#
+	# get mdd txn size for 0 and 2 osts
+	#
+	start_mds || error "MDT start failed"
+	declare -a mdd_txn_size0=( $(do_facet $SINGLEMDS $LCTL \
+get_param -n mdd.$FSNAME-MDT0000.txn_max_size) )
+
+	start_ost || error "OST start failed"
+	start_ost2 || error "OST2 start failed"
+
+	stopall
+
+	start_mds || error "MDT start failed"
+
+	declare -a mdd_txn_size2=( $(do_facet $SINGLEMDS $LCTL \
+get_param -n mdd.$FSNAME-MDT0000.txn_max_size) )
+
+	[ ${mdd_txn_size2[0]} -eq 2 -a ${mdd_txn_size0[0]} -eq 0 ] ||
+	    error "failed to get max txn size for 0 or for 2 osts"
+
+	stopall
+
+	#
+	# make mds journal too small even for 0 osts
+	# mdd_txn_size0[1] is in 4k blocks, journal_size in mb
+	#
+	journal_size=$((((mdd_txn_size0[1] * 4 + 255) >> 8) - 2))
+	change_dev_journal $SINGLEMDS $mdsdev $journal_size
+
+	#
+	# mds should fail to start with journal of this size
+	#
+	start_mds && error "start_mds should fail"
+
+	#
+	# make mds journal insufficiently big for 2 osts
+	# mdd_txn_size2[1] is in 4k blocks, journal_size in mb
+	#
+	journal_size=$((((mdd_txn_size2[1] * 4 + 255) >> 8) - 1))
+	change_dev_journal $SINGLEMDS $mdsdev $journal_size
+
+	setup2
+
+	#
+	# only one ost should be functioning
+	#
+	$SETSTRIPE -c 2  $MOUNT/$tfile-1 || error "setstripe failed"
+	[ $($GETSTRIPE -c $MOUNT/$tfile-1) -eq 1 ] ||
+		error "incorrectly striped $MOUNT/$tfile-1"
+	stopall
+
+	#
+	# make mds journal big enough for 2 osts
+	#
+	journal_size=$(((mdd_txn_size2[1] * 4 + 255) >> 8))
+	change_dev_journal $SINGLEMDS $mdsdev $journal_size
+
+	setup2
+
+	$SETSTRIPE -c 2 $MOUNT/$tfile-2 || error "setstripe failed"
+	[ $($GETSTRIPE -c $MOUNT/$tfile-2) -eq 2 ] ||
+		error "incorrectly striped $MOUNT/$tfile-2"
+	stopall
+	reformat
+}
+run_test 89 "mdd txn size"
+
 if ! combined_mgs_mds ; then
 	stop mgs
 fi
@@ -3604,7 +3699,7 @@ cleanup_gss
 for facet in MGS MDS OST; do
     opts=SAVED_${facet}_MKFS_OPTS
     if [[ -n ${!opts} ]]; then
-        eval ${facet}_MKFS_OPTS=\"${!opts}\"
+        eval ${facet}_MKFS_OPTS='${!opts}'
     fi
 done
 

@@ -5618,3 +5618,14 @@ free_fd()
         [ $fd -lt $max_fd ] || error "finding free file descriptor failed"
         echo $fd
 }
+
+# Get the jounnal size of the filesystem.
+get_journal_size() {
+    local facet=$1
+    local device=$2
+    local size
+
+    size=$(do_facet $facet "$DUMPE2FS -h $device 2>&1" |
+           awk '/^Journal size:/ {print $3}')
+    echo $size
+}

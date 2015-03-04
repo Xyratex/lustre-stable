@@ -352,6 +352,26 @@ static int lprocfs_rd_percpu_rebuild(char *page, char **start, off_t off,
         return len;
 }
 
+static int mdd_max_txn_size(struct mdd_device *mdd)
+{
+	int txn_size = 0;
+	mdd_txn_credits_are_sane(mdd,
+		mdd2obd_dev(mdd)->u.mds.mds_lov_desc.ld_real_tgt_count,
+		&txn_size);
+	return txn_size;
+}
+
+static int lprocfs_rd_txn_max_size(char *page, char **start, off_t off,
+				   int count, int *eof, void *data)
+{
+	struct mdd_device *mdd = data;
+	int tgt_count = mdd2obd_dev(mdd)->u.mds.mds_lov_desc.ld_real_tgt_count;
+
+	*eof = 1;
+	return snprintf(page, count, "%d %d\n", tgt_count,
+			mdd_max_txn_size(mdd));
+}
+
 static struct lprocfs_vars lprocfs_mdd_obd_vars[] = {
         { "atime_diff",      lprocfs_rd_atime_diff, lprocfs_wr_atime_diff, 0 },
         { "changelog_mask",  lprocfs_rd_changelog_mask,
@@ -363,6 +383,7 @@ static struct lprocfs_vars lprocfs_mdd_obd_vars[] = {
 #endif
         { "sync_permission", lprocfs_rd_sync_perm, lprocfs_wr_sync_perm, 0 },
         { "per_cpu_rebuild", lprocfs_rd_percpu_rebuild, 0, 0 },
+	{ "txn_max_size",    lprocfs_rd_txn_max_size, 0, 0 },
         { 0 }
 };
 
