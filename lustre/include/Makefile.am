@@ -74,6 +74,10 @@ EXTRA_DIST = \
 	lustre_mdc.h \
 	lustre_mds.h \
 	lustre_net.h \
+	lustre_nrs.h \
+	lustre_nrs_crr.h \
+	lustre_nrs_fifo.h \
+	lustre_nrs_orr.h \
 	lustre_nrs_tbf.h \
 	lustre_param.h \
 	lustre_quota.h \
