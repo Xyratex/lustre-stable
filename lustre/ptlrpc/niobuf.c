@@ -266,7 +266,7 @@ void ptlrpc_abort_bulk(struct ptlrpc_bulk_desc *desc)
 	 * one.  If it fails, it must be because completion just happened,
 	 * but we must still l_wait_event() in this case, to give liblustre
 	 * a chance to run server_bulk_callback()*/
-	mdunlink_iterate_helper(desc->bd_mds, desc->bd_md_count);
+	mdunlink_iterate_helper(desc->bd_mds, desc->bd_md_max_brw);
 
 	for (;;) {
 		/* Network access will complete in finite time but the HUGE
