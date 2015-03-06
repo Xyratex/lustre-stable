@@ -342,6 +342,17 @@ static int cml_open(const struct lu_env *env, struct md_object *mo,
         RETURN(rc);
 }
 
+static inline int cml_close_get_req_sz(const struct lu_env *env,
+				      struct md_object *mo,
+				      int *md_size, int *logcookies_size)
+{
+	int rc;
+	ENTRY;
+	rc = mo_close_get_req_sz(env, md_object_next(mo), md_size,
+					 logcookies_size);
+	RETURN(rc);
+}
+
 static int cml_close(const struct lu_env *env, struct md_object *mo,
                      struct md_attr *ma, int mode)
 {
@@ -429,6 +440,7 @@ static const struct md_object_operations cml_mo_ops = {
         .moo_ref_add       = cml_ref_add,
         .moo_ref_del       = cml_ref_del,
         .moo_open          = cml_open,
+	.moo_close_get_sz  = cml_close_get_req_sz,
         .moo_close         = cml_close,
         .moo_readpage      = cml_readpage,
         .moo_readlink      = cml_readlink,

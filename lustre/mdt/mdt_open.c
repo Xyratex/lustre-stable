@@ -1677,6 +1677,40 @@ int mdt_mfd_close(struct mdt_thread_info *info, struct mdt_file_data *mfd)
         RETURN(rc ? rc : ret);
 }
 
+static int mdt_close_alloc_req_buffers(struct mdt_thread_info *info,
+				       struct mdt_object *obj)
+{
+	const struct lu_env *env = info->mti_env;
+	struct md_attr *ma = &info->mti_attr;
+	int md_size = 0;
+	int logcookies_size = 0;
+	int rc;
+
+	/* Read the actual EA size from disk */
+	if (obj != NULL)
+		rc = mo_close_get_req_sz(env, mdt_object_child(obj), &md_size,
+					 &logcookies_size);
+
+	req_capsule_set_size(info->mti_pill, &RMF_MDT_MD, RCL_SERVER, md_size);
+	req_capsule_set_size(info->mti_pill, &RMF_LOGCOOKIES, RCL_SERVER,
+			     logcookies_size);
+	rc = req_capsule_server_pack(info->mti_pill);
+	if (rc == 0) {
+		ma->ma_lmm = req_capsule_server_get(info->mti_pill,
+						    &RMF_MDT_MD);
+		ma->ma_lmm_size = req_capsule_get_size(info->mti_pill,
+						       &RMF_MDT_MD,
+						       RCL_SERVER);
+		ma->ma_cookie = req_capsule_server_get(info->mti_pill,
+						       &RMF_LOGCOOKIES);
+		ma->ma_cookie_size = req_capsule_get_size(info->mti_pill,
+							  &RMF_LOGCOOKIES,
+							  RCL_SERVER);
+	}
+
+	return rc;
+}
+
 int mdt_close(struct mdt_thread_info *info)
 {
         struct mdt_export_data *med;
@@ -1696,37 +1730,17 @@ int mdt_close(struct mdt_thread_info *info)
 
         LASSERT(info->mti_ioepoch);
 
-        req_capsule_set_size(info->mti_pill, &RMF_MDT_MD, RCL_SERVER,
-                             info->mti_mdt->mdt_max_mdsize);
-        req_capsule_set_size(info->mti_pill, &RMF_LOGCOOKIES, RCL_SERVER,
-                             info->mti_mdt->mdt_max_cookiesize);
-        rc = req_capsule_server_pack(info->mti_pill);
-        if (mdt_check_resent(info, mdt_reconstruct_generic, NULL)) {
-                if (rc == 0)
-                        mdt_fix_reply(info);
-                mdt_exit_ucred(info);
-                RETURN(lustre_msg_get_status(req->rq_repmsg));
-        }
-
-        /* Continue to close handle even if we can not pack reply */
-        if (rc == 0) {
-                repbody = req_capsule_server_get(info->mti_pill,
-                                                 &RMF_MDT_BODY);
-                ma->ma_lmm = req_capsule_server_get(info->mti_pill,
-                                                    &RMF_MDT_MD);
-                ma->ma_lmm_size = req_capsule_get_size(info->mti_pill,
-                                                       &RMF_MDT_MD,
-                                                       RCL_SERVER);
-                ma->ma_cookie = req_capsule_server_get(info->mti_pill,
-                                                       &RMF_LOGCOOKIES);
-                ma->ma_cookie_size = req_capsule_get_size(info->mti_pill,
-                                                          &RMF_LOGCOOKIES,
-                                                          RCL_SERVER);
-                ma->ma_need = MA_INODE | MA_LOV | MA_COOKIE;
-                repbody->eadatasize = 0;
-                repbody->aclsize = 0;
-        } else {
-                rc = err_serious(rc);
+	if (lustre_msg_get_flags(req->rq_reqmsg) & MSG_RESENT) {
+		if (req_xid_is_last(req)) {
+			rc = mdt_close_alloc_req_buffers(info, NULL);
+			if (rc == 0)
+				repbody = req_capsule_server_get(info->mti_pill,
+							 &RMF_MDT_BODY);
+			mdt_reconstruct_generic(info, NULL);
+			GOTO(out, rc = lustre_msg_get_status(req->rq_repmsg));
+		}
+		DEBUG_REQ(D_HA, req, "no reply for RESENT req (have "LPD64")",
+			req->rq_export->exp_target_data.ted_lcd->lcd_last_xid);
         }
 
         med = &req->rq_export->exp_mdt_data;
@@ -1738,8 +1752,12 @@ int mdt_close(struct mdt_thread_info *info)
                 CDEBUG(D_INODE, "no handle for file close: fid = "DFID
                        ": cookie = "LPX64"\n", PFID(info->mti_rr.rr_fid1),
                        info->mti_ioepoch->handle.cookie);
+		rc = mdt_close_alloc_req_buffers(info, NULL);
+		if (rc == 0)
+			repbody = req_capsule_server_get(info->mti_pill,
+							 &RMF_MDT_BODY);
                 /** not serious error since bug 3633 */
-                rc = -ESTALE;
+		GOTO(out, rc = -ESTALE);
         } else {
                 class_handle_unhash(&mfd->mfd_handle);
                 cfs_list_del_init(&mfd->mfd_list);
@@ -1748,12 +1766,24 @@ int mdt_close(struct mdt_thread_info *info)
                 /* Do not lose object before last unlink. */
                 o = mfd->mfd_object;
                 mdt_object_get(info->mti_env, o);
+		rc = mdt_close_alloc_req_buffers(info, o);
+		/* Continue to close handle even if we can not pack reply */
+		if (rc == 0) {
+			repbody = req_capsule_server_get(info->mti_pill,
+							 &RMF_MDT_BODY);
+			ma->ma_need = MA_INODE | MA_LOV | MA_COOKIE;
+			repbody->eadatasize = 0;
+			repbody->aclsize = 0;
+		} else {
+			rc = err_serious(rc);
+		}
                 ret = mdt_mfd_close(info, mfd);
                 if (repbody != NULL)
                         rc = mdt_handle_last_unlink(info, o, ma);
                 mdt_empty_transno(info, rc);
                 mdt_object_put(info->mti_env, o);
         }
+out:
         if (repbody != NULL)
                 rc = mdt_fix_reply(info);
 

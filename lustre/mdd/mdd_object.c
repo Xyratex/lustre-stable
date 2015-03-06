@@ -1983,6 +1983,30 @@ int mdd_object_kill(const struct lu_env *env, struct mdd_object *obj,
         RETURN(rc);
 }
 
+static int mdd_close_get_req_buffers_size(const struct lu_env *env,
+					  struct md_object *obj,
+					  int *md_size, int *logcookies_size)
+{
+	int rc = 0;
+
+	/* Read the actual EA size from disk */
+	if (obj != NULL) {
+		rc = mo_xattr_get(env, obj, &LU_BUF_NULL, XATTR_NAME_LOV);
+
+		if (rc == -ENODATA)
+			rc = 0;
+
+		if (rc < 0)
+			return rc;
+	}
+
+	*md_size = rc;
+	*logcookies_size = *md_size == 0 ? 0 : sizeof(struct llog_cookie) *
+			  (*md_size - sizeof(struct lov_mds_md)) /
+			  sizeof(struct lov_ost_data);
+	return 0;
+}
+
 /*
  * No permission check is needed.
  */
@@ -2424,6 +2448,7 @@ const struct md_object_operations mdd_obj_ops = {
         .moo_xattr_list    = mdd_xattr_list,
         .moo_xattr_del     = mdd_xattr_del,
         .moo_open          = mdd_open,
+	.moo_close_get_sz  = mdd_close_get_req_buffers_size,
         .moo_close         = mdd_close,
         .moo_readpage      = mdd_readpage,
         .moo_readlink      = mdd_readlink,

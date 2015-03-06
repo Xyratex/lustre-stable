@@ -572,6 +572,17 @@ static int dot_lustre_mdd_open(const struct lu_env *env, struct md_object *obj,
         return 0;
 }
 
+static inline int dot_lustre_mdd_close_get_req_sz(const struct lu_env *env,
+						  struct md_object *mo,
+						  int *md_size,
+						  int *logcookies_size)
+{
+	*md_size = 0;
+	*logcookies_size = 0;
+
+	return 0;
+}
+
 static int dot_lustre_mdd_close(const struct lu_env *env, struct md_object *obj,
                                 struct md_attr *ma, int mode)
 {
@@ -636,6 +647,7 @@ static struct md_object_operations mdd_dot_lustre_obj_ops = {
         .moo_ref_add       = dot_lustre_mdd_ref_add,
         .moo_ref_del       = dot_lustre_mdd_ref_del,
         .moo_open          = dot_lustre_mdd_open,
+	.moo_close_get_sz  = dot_lustre_mdd_close_get_req_sz,
         .moo_close         = dot_lustre_mdd_close,
         .moo_capa_get      = mdd_capa_get,
         .moo_object_sync   = dot_lustre_mdd_object_sync,
@@ -844,6 +856,16 @@ static int obf_mdd_open(const struct lu_env *env, struct md_object *obj,
         return 0;
 }
 
+static inline int obf_mdd_close_get_req_sz(const struct lu_env *env,
+					   struct md_object *mo,
+					   int *md_size, int *logcookies_size)
+{
+	*md_size = 0;
+	*logcookies_size = 0;
+
+	return 0;
+}
+
 static int obf_mdd_close(const struct lu_env *env, struct md_object *obj,
                          struct md_attr *ma, int mode)
 {
@@ -877,6 +899,7 @@ static struct md_object_operations mdd_obf_obj_ops = {
 	.moo_xattr_set   = obf_xattr_set,
 	.moo_xattr_del   = obf_xattr_del,
 	.moo_open        = obf_mdd_open,
+	.moo_close_get_sz= obf_mdd_close_get_req_sz,
 	.moo_close       = obf_mdd_close,
 	.moo_readpage    = obf_mdd_readpage,
 	.moo_path        = obf_path

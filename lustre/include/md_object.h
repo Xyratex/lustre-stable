@@ -232,6 +232,10 @@ struct md_object_operations {
         int (*moo_open)(const struct lu_env *env,
                         struct md_object *obj, int flag);
 
+	int (*moo_close_get_sz)(const struct lu_env *env,
+				struct md_object *obj,
+				int *md_size, int *logcookies_size);
+
         int (*moo_close)(const struct lu_env *env, struct md_object *obj,
                          struct md_attr *ma, int mode);
 
@@ -653,6 +657,14 @@ static inline int mo_open(const struct lu_env *env,
 {
         LASSERT(m->mo_ops->moo_open);
         return m->mo_ops->moo_open(env, m, flags);
+}
+
+static inline int mo_close_get_req_sz(const struct lu_env *env,
+				      struct md_object *m,
+				      int *md_size, int *logcookies_size)
+{
+	LASSERT(m->mo_ops->moo_close_get_sz);
+	return m->mo_ops->moo_close_get_sz(env, m, md_size, logcookies_size);
 }
 
 static inline int mo_close(const struct lu_env *env,
