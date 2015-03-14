@@ -41,6 +41,7 @@
 #define DEBUG_SUBSYSTEM S_LNET
 
 #include <lnet/lib-lnet.h>
+#include <lustre_lib.h>
 
 /** lnet message has credit and can be submitted to lnd for send/receive */
 #define LNET_CREDIT_OK		0
@@ -2416,7 +2417,11 @@ LNetGet(lnet_nid_t self, lnet_handle_md_t mdh,
 
 	lnet_build_msg_event(msg, LNET_EVENT_SEND);
 
-	rc = lnet_send(self, msg, LNET_NID_ANY);
+	if (OBD_FAIL_CHECK_ORSET(OBD_FAIL_PTLRPC_OST_BULK_CB2,
+				 CFS_FAIL_ONCE))
+		rc = -EIO;
+	else
+		rc = lnet_send(self, msg, LNET_NID_ANY);
 	if (rc < 0) {
 		CNETERR("Error sending GET to %s: %d\n",
 			libcfs_id2str(target), rc);

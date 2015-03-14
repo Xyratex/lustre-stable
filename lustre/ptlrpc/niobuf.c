@@ -202,6 +202,12 @@ int ptlrpc_start_bulk_transfer(struct ptlrpc_bulk_desc *desc)
 			}
 			break;
 		}
+
+		/* sanity.sh 224c: lets skip last md */
+		if (posted_md == desc->bd_md_max_brw - 1)
+			OBD_FAIL_CHECK_RESET(OBD_FAIL_PTLRPC_OST_BULK_CB1,
+					     OBD_FAIL_PTLRPC_OST_BULK_CB2);
+
 		/* Network is about to get at the memory */
 		if (desc->bd_type == BULK_PUT_SOURCE)
 			rc = LNetPut(conn->c_self, desc->bd_mds[posted_md],

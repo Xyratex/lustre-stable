@@ -9754,6 +9754,13 @@ test_155a() {
 }
 run_test 155a "Verify small file correctness: read cache:on write_cache:on"
 
+save_writethrough() {
+	local facets=$(get_facets OST)
+
+	save_lustre_params $facets "obdfilter.*.writethrough_cache_enable" > $1
+	save_lustre_params $facets "osd-*.*.writethrough_cache_enable" >> $1
+}
+
 test_155b() {
 	[ $PARALLEL == "yes" ] && skip "skip parallel run" && return
 	set_cache read on
@@ -11977,6 +11984,36 @@ test_224b() { # LU-1039, MRP-303
         df $DIR
 }
 run_test 224b "Don't panic on bulk IO failure"
+
+test_224c() { # MRP-2472
+	[ $PARALLEL == "yes" ] && skip "skip parallel run" && return
+
+	local p="$TMP/$TESTSUITE-$TESTNAME.parameters"
+	save_writethrough $p
+
+	set_cache writethrough on
+
+	local pages_per_rpc=$($LCTL get_param osc.*.max_pages_per_rpc)
+	local at_max=$(do_facet mgs "$LCTL get_param -n at_max")
+	local timeout=$(do_facet mgs "$LCTL get_param -n timeout")
+
+	$LCTL set_param -n osc.*.max_pages_per_rpc=1024
+	do_facet mgs "$LCTL conf_param $FSNAME.sys.at_max=0"
+	do_facet mgs "$LCTL conf_param $FSNAME.sys.timeout=5"
+
+	#define OBD_FAIL_PTLRPC_OST_BULK_CB1   0x520
+	do_facet ost1 "$LCTL set_param fail_loc=0x00000520"
+
+	dd if=/dev/zero of=$DIR/$tfile bs=8MB count=1 conv=fsync
+	sync
+	do_facet ost1 "$LCTL set_param fail_loc=0"
+
+	do_facet mgs "$LCTL conf_param $FSNAME.sys.at_max=$at_max"
+	do_facet mgs "$LCTL conf_param $FSNAME.sys.timeout=$timeout"
+	$LCTL set_param -n $pages_per_rpc
+	restore_lustre_params < $p
+}
+run_test 224c "Don't hang if one of md lost during large bulk RPC"
 
 MDSSURVEY=${MDSSURVEY:-$(which mds-survey 2>/dev/null || true)}
 test_225a () {
