@@ -2362,8 +2362,8 @@ int osc_enqueue_base(struct obd_export *exp, struct ldlm_res_id *res_id,
 		if (req == NULL)
 			RETURN(-ENOMEM);
 
-		rc = ptlrpc_request_pack(req, LUSTRE_DLM_VERSION, LDLM_ENQUEUE);
-		if (rc < 0) {
+		rc = ldlm_prep_enqueue_req(exp, req, NULL, 0);
+		if (rc) {
                         ptlrpc_request_free(req);
                         RETURN(rc);
                 }
