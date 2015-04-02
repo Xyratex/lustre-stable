@@ -794,13 +794,15 @@ static int mdd_link(const struct lu_env *env, struct md_object *tgt_obj,
         if (rc)
                 GOTO(out_unlock, rc);
 
+	__mdd_ref_add(env, mdd_sobj, handle);
+
         rc = __mdd_index_insert_only(env, mdd_tobj, mdo2fid(mdd_sobj),
                                      name, handle,
                                      mdd_object_capa(env, mdd_tobj));
-        if (rc)
-                GOTO(out_unlock, rc);
-
-        __mdd_ref_add(env, mdd_sobj, handle);
+	if (rc) {
+		__mdd_ref_del(env, mdd_sobj, handle, 0);
+		GOTO(out_unlock, rc);
+	}
 
         LASSERT(ma->ma_attr.la_valid & LA_CTIME);
         la->la_ctime = la->la_mtime = ma->ma_attr.la_ctime;
