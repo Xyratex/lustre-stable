@@ -64,6 +64,7 @@
 #include <linux/sched.h> /* THREAD_SIZE */
 #include <linux/rbtree.h>
 #include <linux/bitops.h>
+#include <linux/capability.h>
 
 #if !defined(__x86_64__)
 # ifdef  __ia64__
@@ -111,7 +112,17 @@ do {                                                                    \
  */
 #define CFS_CURPROC_COMM_MAX (sizeof ((struct task_struct *)0)->comm)
 
-#include <linux/capability.h>
+#ifndef HAVE_KSTRTOUL
+static inline int kstrtoul(const char *s, unsigned int base, unsigned long *res)
+{
+	char *end = (char *)s;
+
+	*res = simple_strtoul(s, &end, base);
+	if (end - s == 0)
+		return -EINVAL;
+	return 0;
+}
+#endif /* !HAVE_KSTRTOUL */
 
 /*
  * No stack-back-tracing in Linux for now.
