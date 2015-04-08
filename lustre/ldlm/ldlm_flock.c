@@ -961,7 +961,7 @@ ldlm_flock_completion_ast_async(struct ldlm_lock *lock, __u64 flags, void *data)
 		GOTO(out, rc);
 
 	if (lock->l_granted_mode != LCK_NL) {
-		if (data == NULL && args == NULL) {
+		if (args == NULL) {
 			LDLM_DEBUG(lock, "client-side lock is already granted "
 					 "in a race\n");
 			LASSERT(lock->l_granted_mode == lock->l_req_mode);
@@ -969,7 +969,6 @@ ldlm_flock_completion_ast_async(struct ldlm_lock *lock, __u64 flags, void *data)
 			GOTO(out, rc = 0);
 		}
 
-		LASSERT(args != NULL);
 		if (args->fa_flags & FA_FL_CANCELED ||
 		    lock->l_granted_mode == LCK_MINMODE) {
 			LDLM_DEBUG(lock, "client-side granted canceled lock");
