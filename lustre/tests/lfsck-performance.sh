@@ -130,10 +130,7 @@ test_0() {
 
 	stopall
 	do_rpc_nodes $(facet_active_host $SINGLEMDS) load_modules_local
-	reformat_external_journal
-	add ${SINGLEMDS} $(mkfs_opts ${SINGLEMDS} ${MDT_DEVNAME}) --backfstype \
-		$(facet_fstype ${SINGLEMDS}) --reformat ${MDT_DEVNAME} \
-		$(mdsvdevname 1) >/dev/null || error "Fail to reformat the MDS!"
+	format_mdt $(facet_number $SINGLEMDS)
 
 	for ((i = $MINCOUNT; i <= $MAXCOUNT; i = $((i * FACTOR)))); do
 		local nfiles=$((i - BCOUNT))
@@ -175,10 +172,7 @@ test_1() {
 
 	stopall
 	do_rpc_nodes $(facet_active_host $SINGLEMDS) load_modules_local
-	reformat_external_journal
-	add ${SINGLEMDS} $(mkfs_opts ${SINGLEMDS} ${MDT_DEVNAME}) --backfstype \
-		$(facet_fstype ${SINGLEMDS}) --reformat ${MDT_DEVNAME} \
-		$(mdsvdevname 1) > /dev/null || error "Fail to reformat the MDS"
+	reformat_mdt $(facet_number $SINGLEMDS)
 
 	for ((i = $MINCOUNT_REPAIR; i <= $MAXCOUNT_REPAIR;
 	      i = $((i * FACTOR)))); do
@@ -229,11 +223,7 @@ test_2() {
 	      i = $((i * FACTOR)))); do
 		stopall
 		do_rpc_nodes $(facet_active_host $SINGLEMDS) load_modules_local
-		reformat_external_journal
-		add ${SINGLEMDS} $(mkfs_opts ${SINGLEMDS} ${MDT_DEVNAME}) \
-			--backfstype $(facet_fstype ${SINGLEMDS}) --reformat \
-			${MDT_DEVNAME} $(mdsvdevname 1) > /dev/null ||
-			error "Fail to reformat the MDS!"
+		format_mdt $(facet_number $SINGLEMDS)
 
 		echo "+++ start to create for ${i} files set at: $(date) +++"
 		lfsck_create_nfiles ${i} 0 ${NTHREADS} 1 ||
@@ -275,10 +265,7 @@ test_3() {
 
 	stopall
 	do_rpc_nodes $(facet_active_host $SINGLEMDS) load_modules_local
-	reformat_external_journal
-	add ${SINGLEMDS} $(mkfs_opts ${SINGLEMDS} ${MDT_DEVNAME}) --backfstype \
-		$(facet_fstype ${SINGLEMDS}) --reformat ${MDT_DEVNAME} \
-		$(mdsvdevname 1) > /dev/null || error "Fail to reformat the MDS"
+	format_mdt $(facet_number $SINGLEMDS)
 
 	for ((i = $inc_count; i <= $BASE_COUNT; i = $((i + inc_count)))); do
 		local nfiles=$((i - BCOUNT))

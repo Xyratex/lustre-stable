@@ -47,6 +47,7 @@ OST_MOUNT_OPTS=${OST_MOUNT_OPTS:-}
 # OSTDEV1="/dev/sda"
 # on specific hosts with
 # ost1_HOST="uml2"
+# ost1_JRN="/dev/sdb1"
 #
 # For ZFS, ost devices can be specified via either or both of the following:
 # OSTZFSDEV1="${FSNAME}-ost1/ost1"
