@@ -46,11 +46,12 @@
 #define LOV_USES_DEFAULT_STRIPE         1
 
 struct lod_qos_rr {
-	__u32			 lqr_start_idx;	/* start index of new inode */
-	__u32			 lqr_offset_idx; /* aliasing for start_idx */
-	int			 lqr_start_count; /* reseed counter */
-	struct ost_pool		 lqr_pool;	/* round-robin optimized list */
-	unsigned long		 lqr_dirty:1;	/* recalc round-robin list */
+	spinlock_t		 lqr_alloc;		/* protect allocation index */
+	__u32			 lqr_start_idx;		/* start index of new inode */
+	__u32			 lqr_offset_idx;	/* aliasing for start_idx */
+	int			 lqr_start_count;	/* reseed counter */
+	struct ost_pool		 lqr_pool;		/* round-robin optimized list */
+	unsigned long		 lqr_dirty:1;		/* recalc round-robin list */
 };
 
 struct pool_desc {
@@ -373,6 +374,7 @@ int lod_qos_prep_create(const struct lu_env *env, struct lod_object *lo,
 			struct thandle *th);
 int qos_add_tgt(struct lod_device*, struct lod_tgt_desc *);
 int qos_del_tgt(struct lod_device *, struct lod_tgt_desc *);
+void lod_qos_rr_init(struct lod_qos_rr *lqr);
 
 /* lproc_lod.c */
 int lod_procfs_init(struct lod_device *lod);
