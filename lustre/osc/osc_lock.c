@@ -145,12 +145,13 @@ static int osc_lock_invariant(struct osc_lock *ols)
 static void osc_lock_detach(const struct lu_env *env, struct osc_lock *olck)
 {
 	struct ldlm_lock *dlmlock;
+	ENTRY;
 
 	spin_lock(&osc_ast_guard);
 	dlmlock = olck->ols_lock;
 	if (dlmlock == NULL) {
 		spin_unlock(&osc_ast_guard);
-                return;
+                RETURN_EXIT;
         }
 
         olck->ols_lock = NULL;
@@ -183,6 +184,8 @@ static void osc_lock_detach(const struct lu_env *env, struct osc_lock *olck)
         lu_ref_del(&dlmlock->l_reference, "osc_lock", olck);
         LDLM_LOCK_RELEASE(dlmlock);
         olck->ols_has_ref = 0;
+
+	EXIT;
 }
 
 static int osc_lock_unhold(struct osc_lock *ols)
@@ -191,8 +194,7 @@ static int osc_lock_unhold(struct osc_lock *ols)
 
         if (ols->ols_hold) {
                 ols->ols_hold = 0;
-                result = osc_cancel_base(&ols->ols_handle,
-                                         ols->ols_einfo.ei_mode);
+		ldlm_lock_decref(&ols->ols_handle, ols->ols_einfo.ei_mode);
         }
         return result;
 }
@@ -221,7 +223,7 @@ static int osc_lock_unuse(const struct lu_env *env,
                 LASSERT(ols->ols_hold);
                 /*
                  * Move lock into OLS_RELEASED state before calling
-                 * osc_cancel_base() so that possible synchronous cancellation
+                 * ldlm_lock_decref() so that possible synchronous cancellation
                  * (that always happens e.g., for liblustre) sees that lock is
                  * released.
                  */
