@@ -1126,7 +1126,7 @@ test_7c() {
 
 	# wait longer than usual to make sure the reintegration
 	# is triggered by quota wb thread.
-	wait_ost_reint "ug" 200 || error "reintegration failed"
+	wait_ost_reint "ug" 240 || error "reintegration failed"
 
 	# hardlimit should have been fetched by slave during global
 	# reintegration, write will exceed quota
