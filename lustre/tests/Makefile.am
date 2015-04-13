@@ -76,7 +76,7 @@ noinst_PROGRAMS += mmap_sanity writemany reads flocks_test flock_deadlock
 noinst_PROGRAMS += write_time_limit rwv lgetxattr_size_check checkfiemap
 noinst_PROGRAMS += listxattr_size_check check_fhandle_syscalls badarea_io
 noinst_PROGRAMS += llapi_hsm_test
-noinst_PROGRAMS += group_lock_test llapi_fid_test
+noinst_PROGRAMS += group_lock_test llapi_fid_test sendfile_grouplock
 
 bin_PROGRAMS = mcreate munlink
 testdir = $(libdir)/lustre/tests
@@ -93,6 +93,7 @@ multiop_LDADD=$(LIBLUSTREAPI) $(PTHREAD_LIBS) $(LIBCFS)
 llapi_hsm_test_LDADD=$(LIBLUSTREAPI)
 group_lock_test_LDADD=$(LIBLUSTREAPI)
 llapi_fid_test_LDADD=$(LIBLUSTREAPI)
+sendfile_grouplock_LDADD=$(LIBLUSTREAPI)
 it_test_LDADD=$(LIBCFS)
 rwv_LDADD=$(LIBCFS)
 
