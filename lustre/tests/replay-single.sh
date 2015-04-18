@@ -1447,24 +1447,28 @@ test_58b() {
     rm -f $DIR/$tdir/$tfile
     rmdir $DIR/$tdir
     cleanup_58
+    wait_clients_import_state ${CLIENTS:-$HOSTNAME} "mgs" FULL
 }
 run_test 58b "test replay of setxattr op"
 
 test_58c() { # bug 16570
-    local orig
-    local orig1
-    local new
+	local orig
+	local orig1
+	local new
 
-    trap cleanup_58 EXIT
+	trap cleanup_58 EXIT
 
-    if large_xattr_enabled; then
-        local xattr_size=$(max_xattr_size)
-        orig="$(generate_string $((xattr_size / 2)))"
-        orig1="$(generate_string $xattr_size)"
-    else
-        orig="bar"
-        orig1="bar1"
-    fi
+	if large_xattr_enabled; then
+		local xattr_size=$(max_xattr_size)
+		orig="$(generate_string $((xattr_size / 2)))"
+		orig1="$(generate_string $xattr_size)"
+	else
+		orig="bar"
+		orig1="bar1"
+	fi
+
+	# PING_INTERVAL max(obd_timeout / 4, 1U)
+	sleep $((TIMEOUT / 4))
 
     mount_client $MOUNT2
     mkdir -p $DIR/$tdir
