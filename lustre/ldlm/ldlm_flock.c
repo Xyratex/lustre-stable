@@ -107,7 +107,7 @@ static inline void ldlm_flock_blocking_link(struct ldlm_lock *req,
                 lock->l_policy_data.l_flock.owner;
         req->l_policy_data.l_flock.blocking_export =
                 lock->l_export;
-        req->l_policy_data.l_flock.blocking_refs = 0;
+	cfs_atomic_set(&req->l_policy_data.l_flock.blocking_refs, 0);
 
         cfs_hash_add(req->l_export->exp_flock_hash,
                      &req->l_policy_data.l_flock.owner,
@@ -1040,7 +1040,7 @@ ldlm_export_flock_get(cfs_hash_t *hs, cfs_hlist_node_t *hnode)
         flock = &lock->l_policy_data.l_flock;
         LASSERT(flock->blocking_export != NULL);
         class_export_get(flock->blocking_export);
-        flock->blocking_refs++;
+	cfs_atomic_inc(&flock->blocking_refs);
 }
 
 static void
@@ -1050,15 +1050,16 @@ ldlm_export_flock_put(cfs_hash_t *hs, cfs_hlist_node_t *hnode)
         struct ldlm_flock *flock;
 
         lock = cfs_hlist_entry(hnode, struct ldlm_lock, l_exp_flock_hash);
-        LDLM_LOCK_RELEASE(lock);
 
         flock = &lock->l_policy_data.l_flock;
         LASSERT(flock->blocking_export != NULL);
+
         class_export_put(flock->blocking_export);
-        if (--flock->blocking_refs == 0) {
+	if (cfs_atomic_dec_and_test(&flock->blocking_refs)) {
                 flock->blocking_owner = 0;
                 flock->blocking_export = NULL;
         }
+	LDLM_LOCK_RELEASE(lock);
 }
 
 static cfs_hash_ops_t ldlm_export_flock_ops = {
