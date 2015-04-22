@@ -2459,6 +2459,60 @@ test_36() {
 }
 run_test 36 "deactivate OST during io activity ======"
 
+#MRP-2588
+test_37() {
+	local ret=0
+	local pid
+	local at_saved
+
+	#This test uses ost with index 0
+	rm -rf $DIR/$tdir
+	mkdir $DIR/$tdir
+	chmod 0777 $DIR/$tdir
+
+	set_blk_tunesz 512
+	set_blk_unitsz 1024
+
+	$LFS setquota -u $TSTUSR -b 0 -B $((1024*1024)) -i 0 -I 0 $DIR/$tdir
+
+	#speedup request timeout
+	at_saved=$(at_max_get ost1)
+
+	at_max_set 1 ost1
+	$RUNAS $SETSTRIPE -c 1 -i 0 $DIR/$tdir
+	# Create part of a file on OST
+	$RUNAS dd if=/dev/zero of=$DIR/$tdir/$tfile bs=1M count=1 oflag=direct
+
+	do_facet $SINGLEMDS "$LCTL --device %$FSNAME-OST0000-osc-MDT0000 deactivate"
+	echo "device OST0000 was deactivated"
+
+	do_facet $SINGLEMDS "$LCTL --device %$FSNAME-OST0000-osc-MDT0000 activate"
+	echo "device OST0000 was activated"
+
+
+	# Waiting while OST evict osc-mdt client, cause no ping
+	# from it(deactivated)
+	sleep $((3*TIMEOUT))
+	# This ost_brw_write should wait at quota_chk_acq_common()
+	# for quota master
+	$RUNAS dd if=/dev/zero of=$DIR/$tdir/$tfile bs=1M count=10 \
+						oflag=direct &
+	pid=$!
+	sleep $((TIMEOUT))
+
+	kill -9 $pid  > /dev/null 2>&1
+
+	at_max_set $at_saved ost1
+
+	ret=$(do_facet ost1 "dmesg | tail -n 200 | grep IMP_CLOSED")
+	if [ -n "$ret" ]
+	then
+		error "Import was closed during recconection."
+	fi
+	return 0
+}
+run_test 37 "reconnect MDS does not close import"
+
 # turn off quota
 quota_fini()
 {
