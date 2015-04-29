@@ -95,6 +95,9 @@ command_t cmdlist[] = {
 	{"replace_nids", jt_replace_nids, 0,
 	 "replace primary NIDs for a device\n"
 	 "usage: replace_nids <device> <nid1>[,nid2,nid3]"},
+	{"clear_conf", jt_clear_configs, 0,
+	 "clear config logs for a device or filesystem\n"
+	 "usage: clear_conf <device|fsname>"},
         {"interface_list", jt_ptl_print_interfaces,0,"print interface entries\n"
          "usage: interface_list"},
         {"peer_list", jt_ptl_print_peers, 0, "print peer entries\n"

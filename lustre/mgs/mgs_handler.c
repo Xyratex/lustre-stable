@@ -766,7 +766,7 @@ out_free:
 			break;
 		}
 
-		if (data->ioc_plen1 > MTI_NAME_MAXLEN) {
+		if (data->ioc_inllen1 > MTI_NAME_MAXLEN) {
 			CERROR("Device name is too long\n");
 			rc = -EOVERFLOW;
 			break;
@@ -790,6 +790,30 @@ out_free:
 		if (rc)
 			CERROR("%s: error replacing nids: rc = %d\n",
 			       exp->exp_obd->obd_name, rc);
+
+		break;
+	}
+
+	case OBD_IOC_CLEAR_CONFIGS: {
+		if (!data->ioc_inllen1 || !data->ioc_inlbuf1) {
+			CERROR("No device or fs name specified!\n");
+			rc = -EINVAL;
+		}
+
+		if (data->ioc_inlbuf1[data->ioc_inllen1 - 1] != 0) {
+			CERROR("Device or fs name is not NUL terminated!\n");
+			rc = -EINVAL;
+		}
+
+		if (data->ioc_inllen1 > MTI_NAME_MAXLEN) {
+			CERROR("Device or fs name is too long\n");
+			rc = -EOVERFLOW;
+		}
+
+		/* remove records marked SKIP from config logs */
+		rc = mgs_clear_configs(&env, mgs, data->ioc_inlbuf1);
+		if (rc)
+			CERROR("error %d clearing config log\n", rc);
 
 		break;
 	}

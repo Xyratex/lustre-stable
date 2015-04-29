@@ -56,16 +56,6 @@ Print all Network Identifiers on the local node. LNET must be running.
 From a list of nids for a remote node, show which interface communication
 will take place on.
 .TP
-.BI replace_nids " <devicename> <nid1>[,nid2,nid3 ...]"
-Replace the LNET Network Identifiers for a given device,
-as when the server's IP address has changed.
-This command must be run on the MGS node.
-Only MGS server should be started (command execution returns error
-in another cases). To start the MGS service only:
-mount -t lustre <MDT partition> -o nosvc <mount point>
-Note the replace_nids command skips any invalidated records in the configuration log.
-The previous log is backed up with the suffix '.bak'.
-.TP
 .BI ping " <nid> "
 Check LNET connectivity via an LNET ping. This will use the fabric
 appropriate to the specified NID.
@@ -294,6 +284,25 @@ will not be purged beyond any registered users' set point. (See lfs changelog_cl
 Unregister an existing changelog user.  If the user's "clear" record number
 is the minimum for the device, changelog records will be purged until the
 next minimum.  
+.PP
+.SS Configuration logs
+.TP
+.BI replace_nids " <devicename> <nid1>[,nid2,nid3 ...]"
+Replace the LNET Network Identifiers for a given device,
+as when the server's IP address has changed.
+This command must be run on the MGS node.
+Only MGS server should be started (command execution returns error
+in another cases). To start the MGS service only:
+mount -t lustre <MDT partition> -o nosvc <mount point>
+Note the replace_nids command skips any invalidated records in the configuration log.
+The previous log is backed up with the suffix '.bak'.
+.TP
+.BI clear_conf " <device|fsname>"
+This command runs on MGS node having MGS device mounted with -o
+nosvc. It cleanups configuration files (those which stored in
+CONFIGS/) of records marked SKIP-ed. If filesystem name is given, then
+all configation files are cleaned. Otherwise, specific log
+(ex. lustre-MDT0000) is handled.
 .PP
 .SS LFSCK
 An on-line Lustre consistency check and repair tool.
