@@ -4600,7 +4600,6 @@ static int filter_set_info_async(struct obd_export *exp, __u32 keylen,
 
         if (KEY_IS(KEY_REVIMP_UPD)) {
                 filter_revimp_update(exp);
-                lquota_clearinfo(filter_quota_interface_ref, exp, exp->exp_obd);
                 RETURN(0);
         }
 

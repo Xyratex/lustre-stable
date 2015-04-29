@@ -1253,6 +1253,8 @@ void class_destroy_import(struct obd_import *import)
         class_handle_unhash(&import->imp_handle);
 
         cfs_spin_lock(&import->imp_lock);
+	LASSERT(import->imp_state == LUSTRE_IMP_CLOSED ||
+		import->imp_state == LUSTRE_IMP_NEW);
         import->imp_generation++;
         cfs_spin_unlock(&import->imp_lock);
         class_import_put(import);

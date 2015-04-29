@@ -147,7 +147,6 @@ static int filter_quota_clearinfo(struct obd_export *exp, struct obd_device *obd
                 cfs_spin_unlock(&qctxt->lqc_lock);
                 CDEBUG(D_QUOTA, "%s: lqc_import(%p) of obd(%p) is invalid now.\n",
                        obd->obd_name, imp, obd);
-                ptlrpc_cleanup_imp(imp);
                 dqacq_interrupt(qctxt);
         } else {
                 cfs_spin_unlock(&qctxt->lqc_lock);
@@ -458,7 +457,7 @@ static int quota_chk_acq_common(struct obd_device *obd, struct obd_export *exp,
                  * abort the request immediately */
                 RETURN(-ENOTCONN);
 
-	/* Since we are doing req replay, we must have done the quota check 
+	/* Since we are doing req replay, we must have done the quota check
 	 * already the first time we handled this req. Also, quota master is
 	 * not ready yet at this stage of recovery. So skip it. */
 	if (exp->exp_in_recovery) {
