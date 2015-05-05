@@ -578,8 +578,6 @@ int ll_xattr_cache_get(struct inode *inode,
 		ll_xattr_cache_list(&lli->lli_xattrs, ll_xattr_list, &xdata);
 		if (xdata.xld_size < 0)
 			rc = -ERANGE;
-		else if (xdata.xld_tail == 0)
-			rc = -ENODATA;
 		else
 			rc = xdata.xld_tail;
 	}
