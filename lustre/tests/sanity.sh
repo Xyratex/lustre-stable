@@ -8168,7 +8168,7 @@ test_154A() {
 }
 run_test 154A "lfs path2fid and fid2path basic checks"
 
-test_154() {
+test_154a() {
 	cp /etc/hosts $DIR/$tfile
 
 	fid=$($LFS path2fid $DIR/$tfile)
@@ -8276,7 +8276,7 @@ test_154() {
 
 	echo "Open-by-FID succeeded"
 }
-run_test 154 "Open-by-FID"
+run_test 154a "Open-by-FID"
 
 test_154c() {
 	[[ $(lustre_version_code $SINGLEMDS) -lt $(version_code 2.4.1) ]] &&
