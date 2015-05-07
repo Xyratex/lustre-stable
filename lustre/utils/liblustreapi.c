@@ -4479,3 +4479,28 @@ out_close:
 out:
 	return rc;
 }
+
+/**
+ * Attempt to open a file with Lustre file identifier \a fid
+ * and return an open file descriptor.
+ *
+ * \param[in] lustre_dir       path within Lustre filesystem containing \a fid
+ * \param[in] fid              Lustre file identifier of file to open
+ * \param[in] flags            open() flags
+ *
+ * \retval                     non-negative file descriptor on successful open
+ * \retval                     -1 if an error occurred
+ */
+int llapi_open_by_fid(const char *lustre_dir, const lustre_fid *fid, int flags)
+{
+       char mntdir[PATH_MAX];
+       char path[PATH_MAX];
+       int rc;
+
+       rc = llapi_search_mounts(lustre_dir, 0, mntdir, NULL);
+       if (rc != 0)
+               return -1;
+
+       snprintf(path, sizeof(path), "%s/.lustre/fid/"DFID, mntdir, PFID(fid));
+       return open(path, flags);
+}

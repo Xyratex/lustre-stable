@@ -274,6 +274,8 @@ extern int llapi_fd2parent(int fd, unsigned int linkno,
 			   size_t name_size);
 extern int llapi_chomp_string(char *buf);
 
+extern int llapi_open_by_fid(const char *dir, const lustre_fid *fid,
+                            int open_flags);
 extern int llapi_get_version(char *buffer, int buffer_size, char **version);
 extern int llapi_get_data_version(int fd, __u64 *data_version, __u64 flags);
 extern int llapi_hsm_state_get_fd(int fd, struct hsm_user_state *hus);

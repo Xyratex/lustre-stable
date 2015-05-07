@@ -9642,6 +9642,13 @@ test_154f() {
 }
 run_test 154f "get parent fids by reading link ea"
 
+test_154g()
+{
+	mkdir -p $DIR/$tdir
+	llapi_fid_test -d $DIR/$tdir
+}
+run_test 154g "various llapi FID tests"
+
 test_155_small_load() {
     local temp=$TMP/$tfile
     local file=$DIR/$tfile
