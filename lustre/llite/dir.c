@@ -1820,6 +1820,8 @@ out_rmdir:
                 RETURN(rc);
         case OBD_IOC_FID2PATH:
 		RETURN(ll_fid2path(inode, (void *)arg));
+	case LL_IOC_GETPARENT:
+		RETURN(ll_getparent(file, (void __user *)arg));
 	case LL_IOC_HSM_REQUEST: {
 		struct hsm_user_request	*hur;
 		ssize_t			 totalsize;
