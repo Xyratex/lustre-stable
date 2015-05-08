@@ -211,8 +211,10 @@ static void config_llog_lvfs_init(struct obd_device *obd,
 static void config_llog_lvfs_fini(struct config_llog_data *cld)
 {
 	mntput(cld->cld_cfg.cfg_lvfs.pwdmnt);
+	OBD_FAIL_TIMEOUT(OBD_FAIL_MGC_PAUSE_PROCESS_LOG, 1);
 	cld->cld_cfg.cfg_lvfs.pwdmnt = NULL;
 	l_dput(cld->cld_cfg.cfg_lvfs.pwd);
+	OBD_FAIL_TIMEOUT(OBD_FAIL_MGC_PAUSE_PROCESS_LOG, 1);
 	cld->cld_cfg.cfg_lvfs.pwd = NULL;
 }
 

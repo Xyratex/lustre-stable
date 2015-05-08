@@ -3689,6 +3689,30 @@ get_param -n mdd.$FSNAME-MDT0000.txn_max_size) )
 }
 run_test 89 "mdd txn size"
 
+test_90()
+{
+	# this test needs 2 osts on one node separate from mds
+	[ "$OSTCOUNT" -lt "2" ] && skip "2 osts are needed" && return 0
+	[ $(facet_host ost1) != $(facet_host ost2) ] &&
+		skip "osts on different nodes" && return 0
+	[ $(facet_host $SINGLEMDS) == $(facet_host ost1) ] &&
+		skip "osts and mds are to be on different nodes" && return 0
+
+	start_mds || error "mds start failed"
+	start_ost || error "ost1 start failed"
+	start_ost2 || error "ost2 start failed"
+
+#define OBD_FAIL_MGC_PAUSE_PROCESS_LOG   0x903
+	do_facet ost1 "lctl set_param fail_loc=0x903"
+	stop_ost &
+	stop_ost2 &
+	wait
+	do_facet ost1 "lctl set_param fail_loc=0"
+	stop_mds || error "mds stop failed"
+	unload_modules_conf
+}
+run_test 90 "test umount race"
+
 if ! combined_mgs_mds ; then
 	stop mgs
 fi
