@@ -433,7 +433,9 @@ static int config_log_end(char *logname, struct config_llog_instance *cfg)
         cfs_spin_unlock(&config_list_lock);
 
 	if (cld_sptlrpc) {
+		cfs_mutex_lock(&cld_sptlrpc->cld_lock);
 		config_llog_lvfs_fini(cld_sptlrpc);
+		cfs_mutex_unlock(&cld_sptlrpc->cld_lock);
                 config_log_put(cld_sptlrpc);
 	}
 
