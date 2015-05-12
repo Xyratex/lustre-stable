@@ -9764,8 +9764,12 @@ save_writethrough() {
 test_155b() {
 	[ $PARALLEL == "yes" ] && skip "skip parallel run" && return
 	set_cache read on
+	local p="$TMP/$TESTSUITE-$TESTNAME.parameters"
+	save_writethrough $p
+
 	set_cache writethrough off
 	test_155_small_load
+	restore_lustre_params < $p
 }
 run_test 155b "Verify small file correctness: read cache:on write_cache:off"
 
@@ -9780,8 +9784,12 @@ run_test 155c "Verify small file correctness: read cache:off write_cache:on"
 test_155d() {
 	[ $PARALLEL == "yes" ] && skip "skip parallel run" && return
 	set_cache read off
+	local p="$TMP/$TESTSUITE-$TESTNAME.parameters"
+	save_writethrough $p
+
 	set_cache writethrough off
 	test_155_small_load
+	restore_lustre_params < $p
 }
 run_test 155d "Verify small file correctness: read cache:off write_cache:off"
 
@@ -9796,8 +9804,12 @@ run_test 155e "Verify big file correctness: read cache:on write_cache:on"
 test_155f() {
 	[ $PARALLEL == "yes" ] && skip "skip parallel run" && return
 	set_cache read on
+	local p="$TMP/$TESTSUITE-$TESTNAME.parameters"
+	save_writethrough $p
+
 	set_cache writethrough off
 	test_155_big_load
+	restore_lustre_params < $p
 }
 run_test 155f "Verify big file correctness: read cache:on write_cache:off"
 
@@ -9812,8 +9824,12 @@ run_test 155g "Verify big file correctness: read cache:off write_cache:on"
 test_155h() {
 	[ $PARALLEL == "yes" ] && skip "skip parallel run" && return
 	set_cache read off
+	local p="$TMP/$TESTSUITE-$TESTNAME.parameters"
+	save_writethrough $p
+
 	set_cache writethrough off
 	test_155_big_load
+	restore_lustre_params < $p
 }
 run_test 155h "Verify big file correctness: read cache:off write_cache:off"
 
@@ -9824,6 +9840,8 @@ test_156() {
 	local BEFORE
 	local AFTER
 	local file="$DIR/$tfile"
+	local p="$TMP/$TESTSUITE-$TESTNAME.parameters"
+	save_writethrough $p
 
 	[ "$(facet_fstype ost1)" = "zfs" ] &&
 		skip "LU-1956/LU-2261: stats unimplemented on OSD ZFS" &&
@@ -9959,6 +9977,7 @@ test_156() {
 	fi
 
 	rm -f $file
+	restore_lustre_params < $p
 }
 run_test 156 "Verification of tunables ============================"
 
@@ -11786,7 +11805,7 @@ test_216() { # bug 20317
         dd if=/dev/zero of=$DIR/$tfile count=0
         $CHECKSTAT -s 0 $DIR/$tfile
 
-        restore_lustre_params <$p
+        restore_lustre_params < $p
         rm -f $p
         rm $DIR/$tfile
 }
