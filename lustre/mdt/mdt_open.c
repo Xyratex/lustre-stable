@@ -1358,19 +1358,14 @@ int mdt_reint_open(struct mdt_thread_info *info, struct mdt_lock_handle *lhc)
 		    (create_flags & MDS_OPEN_LOCK)) ||
 		   (create_flags & MDS_OPEN_BY_FID)) {
 		result = mdt_open_by_fid_lock(info, ldlm_rep, lhc);
-		/* If result is 0 then open by FID has found the file
-		 * and there is nothing left for us to do here.  More
-		 * generally if it is anything other than -ENOENT or
-		 * -EREMOTE then we return that now.  If -ENOENT and
-		 * MDS_OPEN_CREAT is set then we must create the file
-		 * below.  If -EREMOTE then we need to return a LOOKUP
-		 * lock to the client, which we do below.  Hence this
-		 * odd looking condition.  See LU-2523. */
-		if (!(result == -ENOENT && (create_flags & MDS_OPEN_CREAT)) &&
-		    result != -EREMOTE)
-			GOTO(out, result);
 
-		CDEBUG(D_INFO, "No object(2), continue as regular open.\n");
+		/* This return protects us from a bad clients and generally
+		 * the error should not happened, because it breaks POSIX.
+		 * More details at MRP-2396. */
+		if (result < 0)
+			CDEBUG(D_INFO, "no object for "DFID": %d\n",
+			       PFID(rr->rr_fid2), result);
+		GOTO(out, result);
 	}
 
         if (OBD_FAIL_CHECK(OBD_FAIL_MDS_OPEN_PACK))
