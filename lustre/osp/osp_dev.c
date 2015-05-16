@@ -1158,47 +1158,18 @@ static int osp_obd_connect(const struct lu_env *env, struct obd_export **exp,
 			   struct obd_connect_data *data, void *localdata)
 {
 	struct osp_device       *osp = lu2osp_dev(obd->obd_lu_dev);
-	struct obd_connect_data *ocd;
-	struct obd_import       *imp;
-	struct lustre_handle     conn;
 	int                      rc;
 
 	ENTRY;
 
-	CDEBUG(D_CONFIG, "connect #%d\n", osp->opd_connects);
-
-	rc = class_connect(&conn, obd, cluuid);
-	if (rc)
-		RETURN(rc);
-
-	*exp = class_conn2export(&conn);
-	/* Why should there ever be more than 1 connect? */
-	osp->opd_connects++;
-	LASSERT(osp->opd_connects == 1);
-
-	osp->opd_exp = *exp;
-
-	imp = osp->opd_obd->u.cli.cl_import;
-	imp->imp_dlm_handle = conn;
-
 	LASSERT(data != NULL);
 	LASSERT(data->ocd_connect_flags & OBD_CONNECT_INDEX);
-	ocd = &imp->imp_connect_data;
-	*ocd = *data;
 
-	imp->imp_connect_flags_orig = ocd->ocd_connect_flags;
-
-	ocd->ocd_version = LUSTRE_VERSION_CODE;
-	ocd->ocd_index = data->ocd_index;
-	imp->imp_connect_flags_orig = ocd->ocd_connect_flags;
-
-	rc = ptlrpc_connect_import(imp);
-	if (rc) {
-		CERROR("%s: can't connect obd: rc = %d\n", obd->obd_name, rc);
+	rc = client_connect_import(env, &osp->opd_exp, obd, cluuid, data, localdata);
+	if (rc != 0)
 		GOTO(out, rc);
-	}
 
-	ptlrpc_pinger_add_import(imp);
+	*exp = osp->opd_exp;
 
 	if (osp->opd_connect_mdt && data->ocd_index == 0) {
 		/* set seq controller export for MDC0 if exists */
@@ -1227,13 +1198,8 @@ out:
 static int osp_obd_disconnect(struct obd_export *exp)
 {
 	struct obd_device *obd = exp->exp_obd;
-	struct osp_device *osp = lu2osp_dev(obd->obd_lu_dev);
 	int                rc;
 	ENTRY;
-
-	/* Only disconnect the underlying layers on the final disconnect. */
-	LASSERT(osp->opd_connects == 1);
-	osp->opd_connects--;
 
 	rc = class_disconnect(exp);
 	if (rc) {

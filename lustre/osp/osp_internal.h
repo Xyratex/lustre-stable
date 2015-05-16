@@ -90,7 +90,6 @@ struct osp_device {
 	struct obd_export		*opd_exp;
 	struct obd_uuid			 opd_cluuid;
 	struct obd_connect_data		*opd_connect_data;
-	int				 opd_connects;
 	struct proc_dir_entry		*opd_proc_entry;
 	struct lprocfs_stats		*opd_stats;
 	/* connection status. */
