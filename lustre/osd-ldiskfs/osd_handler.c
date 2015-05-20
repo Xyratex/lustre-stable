@@ -3441,6 +3441,7 @@ struct osd_object *osd_object_find(const struct lu_env *env,
                                 child = ERR_PTR(-ENOENT);
                         }
                 } else {
+			lu_object_put(env, luch);
                         LU_OBJECT_DEBUG(D_ERROR, env, luch,
                                         "lu_object does not exists "DFID"\n",
                                         PFID(fid));
