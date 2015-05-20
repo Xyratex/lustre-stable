@@ -1225,7 +1225,7 @@ stop() {
     [ -z $HOST ] && echo stop: no host for $facet && return 0
 
     local mntpt=$(facet_mntpt $facet)
-    running=$(do_facet ${facet} "grep -c $mntpt' ' /proc/mounts") || true
+	running=$(do_facet ${facet} "grep -c $mntpt' ' /proc/mounts || true")
     if [ ${running} -ne 0 ]; then
         echo "Stopping $mntpt (opts:$@) on $HOST"
         do_facet ${facet} umount -d $@ $mntpt
