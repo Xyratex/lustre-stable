@@ -743,7 +743,7 @@ void *cfs_hash_lookup(cfs_hash_t *hs, const void *key);
 void cfs_hash_for_each(cfs_hash_t *hs, cfs_hash_for_each_cb_t, void *data);
 void cfs_hash_for_each_safe(cfs_hash_t *hs, cfs_hash_for_each_cb_t, void *data);
 int  cfs_hash_for_each_nolock(cfs_hash_t *hs, cfs_hash_for_each_cb_t,
-				void *data);
+				void *data, int start);
 int  cfs_hash_for_each_empty(cfs_hash_t *hs, cfs_hash_for_each_cb_t,
 				void *data);
 void cfs_hash_for_each_key(cfs_hash_t *hs, const void *key,
