@@ -1,0 +1,64 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!--
+Pattern DB for syslog-ng to convert Lustre syslog messages to Seagate RAS format
+
+IEM Format:
+“IEC: EVENT_CODE: EVENT_STRING: JSON DATA”
+
+EVENT CODE An IEC event code, for example: “001002003” **Does not contain a colon**
+001 - Application ID
+002 - Sub-system ID
+003 - Specific error ID
+
+Application ID for Lustre is 26.
+
+Specific error ID should be unique for each sub-system and incremented throught <ruleset> for that sub-system in the list below (csv tag).
+
+Special script is used to convert that to CSV file for Documentation purposes.
+<csv>
+#Application name, Application id, Subsystem name, Subsystem id, Event description, Event id
+"Lustre", "026", "General", "000", "Data corruption - RAM or NET issues", "001"
+</csv>
+
+-->
+<patterndb version='4' pub_date='2015-05-22'>
+	<ruleset name='bad_write_checksum' id="FCBE293E-6EDE-4E26-89A1-4A13869B543D">
+		<description>
+			Data corruption - RAM or NET issues
+		</description>
+		<rules>
+			<rule provider="lustre" id="CFA86040-7130-43DF-91EB-0D79BCF7B93" class="system">
+				<patterns>
+					<pattern>LustreError: @ESTRING:id_cksm::@ BAD WRITE CHECKSUM: @ANYSTRING:data@</pattern>
+				</patterns>
+				<examples>
+            		<example>
+                		<test_message program='patternize'>LustreError: 168-f: BAD WRITE CHECKSUM: changed in transit before arrival at OST from 12345-10.22.70.237@o2ib1 inode [0x200001080000386:0x0:0x0] object 7288406/0 extent [0-400511]</test_message>
+                		<test_values>
+              				<test_value name="id_cksm">168-f</test_value>
+              				<test_value name="data">changed in transit before arrival at OST from 12345-10.22.70.237@o2ib1 inode [0x200001080000386:0x0:0x0] object 7288406/0 extent [0-400511]</test_value>
+            			</test_values>
+            		</example>
+        		</examples>
+				<tags>
+					<tag>bad_write_checksum</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+					<!-- commenting out this tag as current version of syslog-ng crashes with it
+						and it seems unnecessary due to https://github.com/balabit/syslog-ng/issues/147
+						<message>
+					-->
+							<values>
+								<value name="MESSAGE">IEC: 026000001: BAD WRITE CHECKSUM: { "node": "$HOST_FROM", "id_cksm": "$id_cksm", "data": "$data" }</value>
+							</values>
+					<!--
+						</message>
+					-->
+					</action>
+				</actions>
+			</rule>
+		</rules>
+	</ruleset>
+</patterndb>
