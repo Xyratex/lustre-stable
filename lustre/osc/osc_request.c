@@ -3931,7 +3931,7 @@ static int osc_statfs_interpret(const struct lu_env *env,
 {
         struct client_obd *cli = &req->rq_import->imp_obd->u.cli;
         struct obd_statfs *msfs;
-        __u64 used;
+	__u64 available;
         ENTRY;
 
         if (rc == -EBADR)
@@ -3968,34 +3968,36 @@ static int osc_statfs_interpret(const struct lu_env *env,
         else if (unlikely(cli->cl_oscc.oscc_flags & OSCC_FLAG_RDONLY))
                 cli->cl_oscc.oscc_flags &= ~OSCC_FLAG_RDONLY;
 
-        /* Add a bit of hysteresis so this flag isn't continually flapping,
-         * and ensure that new files don't get extremely fragmented due to
-         * only a small amount of available space in the filesystem.
-         * We want to set the NOSPC flag when there is less than ~0.1% free
-         * and clear it when there is at least ~0.2% free space, so:
-         *                   avail < ~0.1% max          max = avail + used
-         *            1025 * avail < avail + used       used = blocks - free
-         *            1024 * avail < used
-         *            1024 * avail < blocks - free
-         *                   avail < ((blocks - free) >> 10)
-         *
-         * On very large disk, say 16TB 0.1% will be 16 GB. We don't want to
-         * lose that amount of space so in those cases we report no space left
-         * if their is less than 1 GB left.                             */
-        used = min_t(__u64,(msfs->os_blocks - msfs->os_bfree) >> 10, 1 << 30);
-        if (unlikely(((cli->cl_oscc.oscc_flags & OSCC_FLAG_NOSPC) == 0) &&
-                     ((msfs->os_ffree < 32) || (msfs->os_bavail < used))))
-                cli->cl_oscc.oscc_flags |= OSCC_FLAG_NOSPC;
-        else if (unlikely(((cli->cl_oscc.oscc_flags & OSCC_FLAG_NOSPC) != 0) &&
-                          (msfs->os_ffree > 64) &&
-                          (msfs->os_bavail > (used << 1)))) {
-                cli->cl_oscc.oscc_flags &= ~(OSCC_FLAG_NOSPC |
-                                             OSCC_FLAG_NOSPC_BLK);
-        }
+	/* Add a bit of hysteresis so this flag isn't continually flapping,
+	 * and ensure that new files don't get extremely fragmented due to
+	 * only a small amount of available space in the filesystem.
+	 * We want to set the NOSPC flag when there is less than reserved size
+	 * free and clear it when there is at least 2*reserved size free space.
+	 */
+	if (unlikely(cli->cl_oscc.oscc_flags & OSCC_FLAG_NOWATERMARKS)) {
+		/* Use ~0.1% by default to disable object allocation,
+		 * and ~0.2% to enable, size in MB, set both watermark */
+		cli->cl_oscc.oscc_reserved_size_h = ((msfs->os_bsize >> 10) *
+			msfs->os_blocks >> 10) >> 10;
+		cli->cl_oscc.oscc_reserved_size_n =
+			cli->cl_oscc.oscc_reserved_size_h << 1;
+		cli->cl_oscc.oscc_flags &= ~OSCC_FLAG_NOWATERMARKS;
+	}
+	available = (msfs->os_bavail * (msfs->os_bsize >> 10)) >> 10; /* in MB */
+	if (unlikely(((cli->cl_oscc.oscc_flags & OSCC_FLAG_NOSPC) == 0) &&
+		      ((msfs->os_ffree < 32) ||
+		      (available < cli->cl_oscc.oscc_reserved_size_h))))
+		cli->cl_oscc.oscc_flags |= OSCC_FLAG_NOSPC;
+	else if (unlikely(((cli->cl_oscc.oscc_flags & OSCC_FLAG_NOSPC) != 0) &&
+			  (msfs->os_ffree > 64) &&
+			  (available > (cli->cl_oscc.oscc_reserved_size_n)))) {
+		cli->cl_oscc.oscc_flags &= ~(OSCC_FLAG_NOSPC |
+					     OSCC_FLAG_NOSPC_BLK);
+	}
 
-        if (unlikely(((cli->cl_oscc.oscc_flags & OSCC_FLAG_NOSPC) != 0) &&
-                     (msfs->os_bavail < used)))
-                cli->cl_oscc.oscc_flags |= OSCC_FLAG_NOSPC_BLK;
+	if (unlikely(((cli->cl_oscc.oscc_flags & OSCC_FLAG_NOSPC) != 0) &&
+		     (available < cli->cl_oscc.oscc_reserved_size_h)))
+		cli->cl_oscc.oscc_flags |= OSCC_FLAG_NOSPC_BLK;
 
         cfs_spin_unlock(&cli->cl_oscc.oscc_lock);
 

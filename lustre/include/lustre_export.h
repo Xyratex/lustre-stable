@@ -96,6 +96,12 @@ struct osc_creator {
         struct obdo             oscc_oa;
         int                     oscc_flags;
         cfs_waitq_t             oscc_waitq; /* creating procs wait on this */
+	/**
+	 * Limit the object allocation using OSCC_NOSPC_FLAG
+	 * in MB. _h high watermark, _n normal watermark
+	 */
+	int			oscc_reserved_size_h;
+	int			oscc_reserved_size_n;
 };
 
 struct ec_export_data { /* echo client */

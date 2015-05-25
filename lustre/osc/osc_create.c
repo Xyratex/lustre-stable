@@ -137,7 +137,7 @@ static int osc_interpret_create(const struct lu_env *env,
         case -EROFS:
                 oscc->oscc_flags |= OSCC_FLAG_RDONLY;
         case -ENOSPC:
-        case -EFBIG: 
+        case -EFBIG:
                 if (rc != -EROFS) {
                         oscc->oscc_flags |= OSCC_FLAG_NOSPC;
                         if (body && rc == -ENOSPC) {
@@ -708,7 +708,7 @@ void oscc_init_obd(struct obd_device *obd)
 
         oscc->oscc_next_id = 2;
         oscc->oscc_last_id = 1;
-        oscc->oscc_flags |= OSCC_FLAG_RECOVERING;
+        oscc->oscc_flags |= OSCC_FLAG_RECOVERING | OSCC_FLAG_NOWATERMARKS;
 
         CFS_INIT_LIST_HEAD(&oscc->oscc_wait_create_list);
         CFS_INIT_LIST_HEAD(&oscc->oscc_create_list);

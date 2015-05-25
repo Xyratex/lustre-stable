@@ -564,6 +564,94 @@ static int osc_rd_destroys_in_flight(char *page, char **start, off_t off,
                         cfs_atomic_read(&obd->u.cli.cl_destroy_in_flight));
 }
 
+static int osc_rd_reserved_size_h(char *page, char **start, off_t off,
+				  int count, int *eof, void *data)
+{
+	struct obd_device *obd = data;
+
+	if (obd == NULL)
+		return 0;
+
+	return snprintf(page, count, "%d\n",
+			obd->u.cli.cl_oscc.oscc_reserved_size_h);
+}
+
+static int osc_wr_reserved_size_h(struct file *file, const char *buffer,
+				  unsigned long count, void *data)
+{
+	struct obd_device *obd = data;
+	int val, rc;
+
+	if (obd == NULL)
+		return 0;
+
+	rc = lprocfs_write_helper(buffer, count, &val);
+	if (rc)
+		return rc;
+
+	if (val < 0)
+		return -ERANGE;
+
+	cfs_spin_lock(&obd->u.cli.cl_oscc.oscc_lock);
+	obd->u.cli.cl_oscc.oscc_flags &= ~OSCC_FLAG_NOWATERMARKS;
+	obd->u.cli.cl_oscc.oscc_reserved_size_h = val;
+	if (val > obd->u.cli.cl_oscc.oscc_reserved_size_n)
+		obd->u.cli.cl_oscc.oscc_reserved_size_n = val + 1;
+	cfs_spin_unlock(&obd->u.cli.cl_oscc.oscc_lock);
+
+	return count;
+}
+
+static int osc_rd_reserved_size_n(char *page, char **start, off_t off,
+				  int count, int *eof, void *data)
+{
+	struct obd_device *obd = data;
+
+	if (obd == NULL)
+		return 0;
+
+	return snprintf(page, count, "%d\n",
+			obd->u.cli.cl_oscc.oscc_reserved_size_n);
+}
+
+static int osc_wr_reserved_size_n(struct file *file, const char *buffer,
+				  unsigned long count, void *data)
+{
+	struct obd_device *obd = data;
+	int val, rc;
+
+	if (obd == NULL)
+		return 0;
+
+	rc = lprocfs_write_helper(buffer, count, &val);
+	if (rc)
+		return rc;
+
+	if (val < 1)
+		return -ERANGE;
+
+	cfs_spin_lock(&obd->u.cli.cl_oscc.oscc_lock);
+	obd->u.cli.cl_oscc.oscc_flags &= ~OSCC_FLAG_NOWATERMARKS;
+	obd->u.cli.cl_oscc.oscc_reserved_size_n = val;
+	if (val < obd->u.cli.cl_oscc.oscc_reserved_size_h)
+		obd->u.cli.cl_oscc.oscc_reserved_size_h = val - 1;
+	cfs_spin_unlock(&obd->u.cli.cl_oscc.oscc_lock);
+
+	return count;
+}
+
+static int osc_rd_prealloc_status(char *page, char **start, off_t off,
+				  int count, int *eof, void *data)
+{
+	struct obd_device *obd = data;
+
+	if (obd == NULL)
+		return 0;
+
+	return snprintf(page, count, "%d\n",
+			obd->u.cli.cl_oscc.oscc_flags & OSCC_FLAG_NOSPC ? -ENOSPC : 0);
+}
+
 static struct lprocfs_vars lprocfs_osc_obd_vars[] = {
         { "uuid",            lprocfs_rd_uuid,        0, 0 },
         { "ping",            0, lprocfs_wr_ping,     0, 0, 0222 },
@@ -608,6 +696,9 @@ static struct lprocfs_vars lprocfs_osc_obd_vars[] = {
         { "state",           lprocfs_rd_state,         0, 0 },
         { "pinger_recov",    lprocfs_rd_pinger_recov,
                              lprocfs_wr_pinger_recov,  0, 0 },
+	{ "rsrvd_size_hwm_mb", osc_rd_reserved_size_h, osc_wr_reserved_size_h, 0},
+	{ "rsrvd_size_nwm_mb", osc_rd_reserved_size_n, osc_wr_reserved_size_n, 0},
+	{ "prealloc_status", osc_rd_prealloc_status, 0, 0},
         { 0 }
 };
 

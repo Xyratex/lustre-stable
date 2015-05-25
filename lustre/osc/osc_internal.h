@@ -105,6 +105,7 @@ struct osc_cache_waiter {
 #define OSCC_FLAG_DEGRADED           0x40
 #define OSCC_FLAG_RDONLY             0x80
 #define OSCC_FLAG_NOSPC_BLK          0x100 /* no more block space on OST */
+#define OSCC_FLAG_NOWATERMARKS	     0x200 /* not initialized watermarks */
 
 obd_precr_status_t osc_precreate(struct obd_export *exp);
 int osc_create(struct obd_export *exp, struct obdo *oa,
