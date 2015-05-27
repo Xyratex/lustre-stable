@@ -577,6 +577,7 @@ static int osp_object_init(const struct lu_env *env, struct lu_object *o,
 				LOHA_EXISTS | (la->la_mode & S_IFMT);
 		if (rc == -ENOENT)
 			rc = 0;
+		init_rwsem(&po->opo_sem);
 	}
 	RETURN(rc);
 }
