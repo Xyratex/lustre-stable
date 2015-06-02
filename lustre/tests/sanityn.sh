@@ -2849,6 +2849,32 @@ test_76() { #LU-946
 }
 run_test 76 "Verify open file for 2048 files"
 
+test_78() { #LU-6673
+	local rc
+
+	for i in $(seq 1 $OSTCOUNT)
+	do
+		do_facet ost"$i" lctl set_param \
+			ost.OSS.ost_io.nrs_policies="orr" &
+		do_facet ost"$i" lctl set_param \
+			ost.OSS.*.nrs_orr_quantum=1
+		rc=$?
+		[ $rc -eq 0 -o $rc -eq 11 ] ||
+			error "Expected set_param to return 0 or EAGAIN"
+	done
+
+	# Cleanup the ORR policy
+	for i in $(seq 1 $OSTCOUNT)
+	do
+		do_facet ost"$i" lctl set_param \
+			ost.OSS.ost_io.nrs_policies="fifo"
+		[ $? -ne 0 ] &&
+			error "failed to set policy back to fifo"
+	done
+	return 0
+}
+run_test 78 "Enable policy and specify tunings right away"
+
 test_79() {
 	remote_mds_nodsh && skip "remote MDS with nodsh" && return
 	test_mkdir -p $DIR/$tdir
