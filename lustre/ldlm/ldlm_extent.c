@@ -350,7 +350,8 @@ static enum interval_iter ldlm_extent_compat_cb(struct interval_node *n,
                          ldlm_lockname[mode],
                          ldlm_lockname[lock->l_granted_mode]);
                 count++;
-                if (lock->l_blocking_ast)
+		if (lock->l_blocking_ast &&
+		    lock->l_granted_mode != LCK_GROUP)
                         ldlm_add_ast_work_item(lock, enq, work_list);
         }
 
@@ -629,7 +630,8 @@ ldlm_extent_compat_queue(struct list_head *queue, struct ldlm_lock *req,
                         *contended_locks += check_contention;
 
                         compat = 0;
-                        if (lock->l_blocking_ast)
+			if (lock->l_blocking_ast &&
+			    lock->l_req_mode != LCK_GROUP)
                                 ldlm_add_ast_work_item(lock, req, work_list);
                 }
         }
