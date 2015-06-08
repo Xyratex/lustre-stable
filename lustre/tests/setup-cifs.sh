@@ -77,7 +77,7 @@ setup_cifs() {
 	do_nodesv $smbsrv "chmod a+xrw $parameter_path"
 	do_nodesv $smbsrv "ls -ald $parameter_path"
 
-	local cmd="mount -t cifs $smbsrv:/$smbshare $smbclimntpt -o user=$smbuser,pass=$smbpasswd"
+	local cmd="mount -t cifs //$smbsrv/$smbshare $smbclimntpt -o user=$smbuser,pass=$smbpasswd"
 	echo -e "\nMounting CIFS clients $smbclients : $cmd"
 	do_nodesv $smbclients "$cmd" || return 1
 	do_nodesv $smbclients mount | grep $smbclimntpt
