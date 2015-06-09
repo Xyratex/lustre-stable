@@ -1511,6 +1511,13 @@ test_27B() { # LU-2523
 }
 run_test 27B "call setstripe on open unlinked file/rename victim"
 
+test_27G() {
+	mkdir -p $DIR/$tdir || error "mkdir to $tdir failed"
+	$GETSTRIPE $DIR/$tdir || error "getstripe on $DIR/$tdir failed"
+	$GETSTRIPE $DIR/.lustre/fid
+}
+run_test 27G "Check for stripe info on .lustre/fid file"
+
 # createtest also checks that device nodes are created and
 # then visible correctly (#2091)
 test_28() { # bug 2091

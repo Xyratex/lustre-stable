@@ -822,14 +822,14 @@ static int obf_attr_set(const struct lu_env *env, struct md_object *obj,
 static int obf_xattr_list(const struct lu_env *env,
 			  struct md_object *obj, struct lu_buf *buf)
 {
-	return 0;
+	return -ENODATA;
 }
 
 static int obf_xattr_get(const struct lu_env *env,
                          struct md_object *obj, struct lu_buf *buf,
                          const char *name)
 {
-        return 0;
+	return -ENODATA;
 }
 
 static int obf_xattr_set(const struct lu_env *env,

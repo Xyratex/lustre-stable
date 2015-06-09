@@ -853,6 +853,10 @@ static int mdt_getattr(struct mdt_thread_info *info)
 	} else {
 		/* Read the actual EA size from disk */
 		rc = mdt_attr_get_eabuf_size(info, obj);
+		if (rc == 0)
+			rc = reqbody->eadatasize == 0 ?
+						info->mti_mdt->mdt_max_mdsize :
+						reqbody->eadatasize;
 	}
 
 	if (rc < 0)
