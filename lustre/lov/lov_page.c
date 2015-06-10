@@ -109,7 +109,25 @@ static int lov_raid0_page_print(const struct lu_env *env,
 	return (*printer)(env, cookie, LUSTRE_LOV_NAME"-page@%p, raid0\n", lp);
 }
 
+static void lov_raid0_page_assume(const struct lu_env *env,
+				  const struct cl_page_slice *slice,
+				  struct cl_io *io)
+{
+	struct lov_io     *lio = lov_env_io(env);
+	struct lov_io_sub *sub;
+	ENTRY;
+
+	sub = lov_page_subio(env, lio, slice);
+	if (!IS_ERR(sub)) {
+		lov_sub_put(sub);
+	} else
+		LBUG(); /* Arrgh */
+
+	EXIT;
+}
+
 static const struct cl_page_operations lov_raid0_page_ops = {
+	.cpo_assume = lov_raid0_page_assume,
 	.cpo_is_under_lock = lov_raid0_page_is_under_lock,
 	.cpo_print = lov_raid0_page_print
 };
