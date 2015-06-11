@@ -50,3 +50,4 @@ rhel6.5/ext4-dont-check-before-replay.patch
 rhel6.3/ext4-dont-check-in-ro.patch
 rhel6.5/ext4-bitmap-hold.patch
 rhel6.3/ext4-speed-up-releasing-blocks-on-commit.patch
+rhel6.3/ext4-notalloc_under_idatasem.patch
