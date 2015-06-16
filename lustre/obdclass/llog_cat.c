@@ -860,33 +860,39 @@ int llog_cat_reverse_process(const struct lu_env *env,
 }
 EXPORT_SYMBOL(llog_cat_reverse_process);
 
-int llog_cat_set_first_idx(struct llog_handle *cathandle, int index)
+int llog_cat_set_first_idx(struct llog_handle *cathandle, int idx)
 {
         struct llog_log_hdr *llh = cathandle->lgh_hdr;
-        int i, bitmap_size, idx;
+        int bitmap_size;
+
         ENTRY;
 
         bitmap_size = LLOG_BITMAP_SIZE(llh);
-        if (llh->llh_cat_idx == (index - 1)) {
-                idx = llh->llh_cat_idx + 1;
+	/*
+	 * The llh_cat_idx equals to the first used index minus 1
+	 * so if we canceled the first index then llh_cat_idx
+	 * must be renewed.
+	 */
+	if (llh->llh_cat_idx == (idx - 1)) {
                 llh->llh_cat_idx = idx;
-                if (idx == cathandle->lgh_last_idx)
-                        goto out;
-                for (i = (index + 1) % bitmap_size;
-                     i != cathandle->lgh_last_idx;
-                     i = (i + 1) % bitmap_size) {
-                        if (!ext2_test_bit(i, llh->llh_bitmap)) {
-                                idx = llh->llh_cat_idx + 1;
+		do {
+			idx = (idx + 1) % bitmap_size;
+			if (!ext2_test_bit(idx, llh->llh_bitmap)) {
+				/* update llh_cat_idx for each unset bit,
+				 * expecting the*/
                                 llh->llh_cat_idx = idx;
-                        } else if (i == 0) {
-                                llh->llh_cat_idx = 0;
-                        } else {
-                                break;
-                        }
-                }
-out:
-		CDEBUG(D_RPCTRACE, "set catlog "DOSTID" first idx %u\n",
-		       POSTID(&cathandle->lgh_id.lgl_oi), llh->llh_cat_idx);
+			} else if (idx == 0) {
+				/* skip header bit */
+				continue;
+			} else {
+				/* the first index is found */
+				break;
+			}
+		} while (idx != cathandle->lgh_last_idx);
+
+		CDEBUG(D_RPCTRACE, "Set catlog "DOSTID" first idx %u,"
+		       " (last_idx %u)\n", POSTID(&cathandle->lgh_id.lgl_oi),
+		       llh->llh_cat_idx, cathandle->lgh_last_idx);
 	}
 
 	RETURN(0);
