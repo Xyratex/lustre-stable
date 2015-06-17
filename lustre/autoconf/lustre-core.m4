@@ -357,6 +357,26 @@ AC_COMPILE_IFELSE([AC_LANG_SOURCE([
 AC_MSG_RESULT([$enable_ssk])
 ]) # LC_OPENSSL_SSK
 
+#
+# DSS (Differentiated Storage Services)
+#
+
+AC_DEFUN([LC_CONFIG_DSS],
+[AC_MSG_CHECKING([if kernel supports DSS])
+LB_LINUX_TRY_COMPILE([
+	#include <linux/dss_types.h>
+],[
+	int class = dss_tag_file_type(NULL);
+],[
+	AC_MSG_RESULT([yes])
+	AC_DEFINE(HAVE_DSS, 1,
+		  [kernel supports DSS.])
+],[
+	AC_MSG_RESULT([no])
+])
+])
+
+#
 # LC_INODE_PERMISION_2ARGS
 #
 # up to v2.6.27 had a 3 arg version (inode, mask, nameidata)
@@ -2745,6 +2765,7 @@ AC_DEFUN([LC_PROG_LINUX], [
 	LC_GLIBC_SUPPORT_FHANDLES
 	LC_CONFIG_GSS
 	LC_OPENSSL_SSK
+	LC_CONFIG_DSS
 
 	# 2.6.32
 	LC_BLK_QUEUE_MAX_SEGMENTS
