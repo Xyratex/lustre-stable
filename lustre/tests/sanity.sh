@@ -6222,6 +6222,35 @@ test_101f() {
 }
 run_test 101f "check read-ahead for max_read_ahead_whole_mb"
 
+test_101g() {
+	local rpcs
+	local p="$TMP/$TESTSUITE-$TESTNAME.parameters"
+
+	save_lustre_params client "osc.*.max_pages_per_rpc" > $p
+	save_lustre_params client "llite.*.read_ahead_step" >> $p
+
+	$LFS setstripe -c 1 $DIR/$tfile
+	# 100 Mb should be enough for the test
+	dd if=/dev/zero of=$DIR/$tfile bs=4M count=25
+	cancel_lru_locks osc
+	$LCTL set_param -n osc.*.max_pages_per_rpc 1024
+	$LCTL set_param -n llite.*.read_ahead_step 4
+	$LCTL set_param -n osc.*.rpc_stats 0
+
+	dd of=/dev/zero if=$DIR/$tfile bs=4M count=25
+	# calculate 4 Mb rpcs
+	rpcs=$(lctl get_param 'osc.*.rpc_stats' |
+		 sed -n '/pages per rpc/,/^$/p'   |
+		 awk 'BEGIN { sum = 0 }; /1024:/ { sum += $2 } ; END { print sum }')
+	echo $rpcs RPCS
+	[ "$rpcs" -eq 25 ] || error "not all rpcs are 4 Mb BRW rpcs"
+	rm -f $DIR/$tfile
+
+	restore_lustre_params < $p
+	rm -f $p
+}
+run_test 101g "4MB bulk readahead"
+
 setup_test102() {
 	test_mkdir -p $DIR/$tdir
 	chown $RUNAS_ID $DIR/$tdir

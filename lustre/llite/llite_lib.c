@@ -108,6 +108,7 @@ static struct ll_sb_info *ll_init_sbi(void)
 	sbi->ll_ra_info.ra_max_pages = sbi->ll_ra_info.ra_max_pages_per_file;
 	sbi->ll_ra_info.ra_max_read_ahead_whole_pages =
 					   SBI_DEFAULT_READAHEAD_WHOLE_MAX;
+	sbi->ll_ra_info.ra_increase_step = ONE_MB_BRW_SIZE >> PAGE_CACHE_SHIFT;
 	INIT_LIST_HEAD(&sbi->ll_conn_chain);
 	INIT_LIST_HEAD(&sbi->ll_orphan_dentry_list);
 

@@ -328,6 +328,7 @@ struct ll_ra_info {
 	unsigned long	ra_max_pages;
 	unsigned long	ra_max_pages_per_file;
 	unsigned long	ra_max_read_ahead_whole_pages;
+	unsigned int	ra_increase_step;
 };
 
 /* ra_io_arg will be filled in the beginning of ll_readahead with
