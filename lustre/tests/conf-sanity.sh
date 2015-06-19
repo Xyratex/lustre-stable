@@ -4955,6 +4955,7 @@ test_82() {
         dev=$(ostdevname 1)
         ostmnt=$(facet_mntpt ost1)
         fstype=$(facet_fstype ost1)
+	do_facet ost1 dmesg -c > /dev/null
 
         # Mount the OST as an ldiskfs filesystem.
         log "mount the OST $dev as a $fstype filesystem"
