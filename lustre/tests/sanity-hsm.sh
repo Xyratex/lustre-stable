@@ -27,6 +27,7 @@ OPENFILE=${OPENFILE:-openfile}
 MCREATE=${MCREATE:-mcreate}
 MOUNT_2=${MOUNT_2:-"yes"}
 FAIL_ON_ERROR=false
+CLIENT1=${CLIENT1:-$(hostname)}
 
 # script only handles up to 10 MDTs (because of MDT_PREFIX)
 [ $MDSCOUNT -gt 9 ] &&
@@ -82,6 +83,8 @@ init_agt_vars() {
 				agent=CLIENT2
 		fi
 		eval export agt${n}_HOST=\$\{agt${n}_HOST:-${!agent}\}
+		local var=agt${n}_HOST
+		[[ ! -z "${!var}" ]] || error "agt${n}_HOST is empty!"
 	done
 
 	export SINGLEAGT=${SINGLEAGT:-agt1}
