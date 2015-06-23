@@ -5061,26 +5061,20 @@ recovery_time_min() {
 }
 
 test_85() {
-	local facet=$SINGLEMDS
-	local num=$(echo $facet | tr -d "mds")
-	local dev=$(mdsdevname $num)
 	local time_min=$(recovery_time_min)
 	local recovery_duration
 	local completed_clients
 	local wrap_up=5
+	local saved_opts=$MDS_MOUNT_OPTS
+	# Clients + each MDS client in case of DNE
+	local client_num=$(($CLIENTCOUNT+$MDSCOUNT-1))
+	# One of clients should be evicted
+	local completed_num=$(($client_num-1))
+	MDS_MOUNT_OPTS="-o recovery_time_hard=$time_min,\
+recovery_time_soft=$time_min"
 
-	echo "start mds service on $(facet_active_host $facet)"
-	start $facet ${dev} $MDS_MOUNT_OPTS \
-	    "-o recovery_time_hard=$time_min,recovery_time_soft=$time_min" $@ ||
-		error "start MDS failed"
-
-	start_ost
-	start_ost2
-
+	setupall
 	echo "recovery_time=$time_min, timeout=$TIMEOUT, wrap_up=$wrap_up"
-
-	mount_client $MOUNT1 || error "mount failed"
-	mount_client $MOUNT2 || error "mount failed"
 
 	replay_barrier $SINGLEMDS
 	createmany -o $DIR1/$tfile-%d 1000
@@ -5088,7 +5082,13 @@ test_85() {
 	# We need to catch the end of recovery window to extend it.
 	# Skip 5 requests and add delay to request handling.
 	#define OBD_FAIL_TGT_REPLAY_DELAY  0x709 | FAIL_SKIP
-	do_facet $SINGLEMDS "lctl set_param fail_loc=0x20000709 fail_val=5"
+	if [ -z $mdsfailover_HOST ]; then
+		do_facet $SINGLEMDS \
+			"lctl set_param fail_loc=0x20000709 fail_val=5"
+	else
+		do_node $mdsfailover_HOST \
+			"lctl set_param fail_loc=0x20000709 fail_val=5"
+	fi
 
 	facet_failover $SINGLEMDS || error "failover: $?"
 	client_up
@@ -5105,16 +5105,12 @@ test_85() {
 	completed_clients=$(do_facet $SINGLEMDS \
 		"$LCTL get_param -n mdt.$FSNAME-MDT0000.recovery_status" |
 		awk '/completed_clients/ { print $2 }')
-	[ "$completed_clients" = "1/2" ] ||
-		error "completed_clients != 1/2: $completed_clients"
+	[ "$completed_clients" = "$completed_num/$client_num" ] || \
+		error "completed_clients $completed_clients != \
+$completed_num/$client_num"
 
-	do_facet $SINGLEMDS "lctl set_param fail_loc=0"
-	umount_client $MOUNT1
-	umount_client $MOUNT2
-
-	stop_ost
-	stop_ost2
-	stop_mds
+	stopall
+	MDS_MOUNT_OPTS=$saved_opts
 }
 run_test 85 "check recovery_time_hard"
 
