@@ -12634,6 +12634,89 @@ test_250() {
 }
 run_test 250 "Write above 16T limit"
 
+test_251() {
+	local ostidx=0
+	local rc=0
+
+	rm -rf $DIR/$tdir
+	mkdir $DIR/$tdir
+	local ost_name=$($LFS osts | grep ${ostidx}": " | \
+		awk '{print $2}' | sed -e 's/_UUID$//')
+
+	# on the mdt's osc
+	local mdtosc_proc1=$(get_mdtosc_proc_path $SINGLEMDS $ost_name)
+	local last_wm_h=$(do_facet $SINGLEMDS lctl get_param -n \
+			osp.$mdtosc_proc1.rsrvd_size_hwm_mb)
+	local last_wm_n=$(do_facet $SINGLEMDS lctl get_param -n \
+			osp.$mdtosc_proc1.rsrvd_size_nwm_mb)
+	echo "prev high watermark $last_wm_h, prev normal watermark $last_wm_n"
+
+	do_facet mgs $LCTL pool_new $FSNAME.$TESTNAME || return 1
+	do_facet mgs $LCTL pool_add $FSNAME.$TESTNAME $ost_name || return 2
+
+	$SETSTRIPE $DIR/$tdir -i $ostidx -c 1 -p $FSNAME.$TESTNAME
+
+	dd if=/dev/zero of=$DIR/$tdir/0 bs=1M count=10
+	local blocks=$($LFS df $MOUNT | grep $ost_name | awk '{ print $4 }')
+	echo "OST still has $(($blocks/1024)) mbytes free"
+
+	local new_hwm=$(($blocks/1024-10))
+	do_facet $SINGLEMDS lctl set_param \
+			osp.$mdtosc_proc1.rsrvd_size_nwm_mb $(($new_hwm+5))
+	do_facet $SINGLEMDS lctl set_param \
+			osp.$mdtosc_proc1.rsrvd_size_hwm_mb $new_hwm
+
+	dd if=/dev/zero of=$DIR/$tdir/1 bs=1M count=15
+	#Waiting statfs update at mds
+	sleep $TIMEOUT
+	local last_id=$(do_facet $SINGLEMDS lctl get_param -n \
+			osp.$mdtosc_proc1.prealloc_last_id)
+	local next_id=$(do_facet $SINGLEMDS lctl get_param -n \
+			osp.$mdtosc_proc1.prealloc_next_id)
+
+	echo "Spend $(($last_id-$next_id)) prealloc objects..."
+	#Spend all prealloc objects
+	for i in `seq 0 $(($last_id-$next_id))`; do
+		dd if=/dev/zero of=$DIR/$tdir/r$i bs=1K count=1 2>/dev/null || break;
+	done
+	blocks=$($LFS df $MOUNT | grep $ost_name | awk '{ print $4 }')
+	echo "OST still has $(($blocks/1024)) mbytes free"
+	local oa_status=$(do_facet $SINGLEMDS lctl get_param -n \
+			osp.$mdtosc_proc1.prealloc_status)
+	echo "prealloc_status $oa_status"
+	dd if=/dev/zero of=$DIR/$tdir/2 bs=1M count=1 && \
+		error "File creation should fail"
+	#object allocation was stopped, but we still able to append files
+	dd if=/dev/zero of=$DIR/$tdir/1 bs=1M seek=6 count=5 oflag=append || \
+		error "Append failed"
+	rm -rf $DIR/$tdir/1 $DIR/$tdir/0 $DIR/$tdir/r*
+	sleep $TIMEOUT
+	#The object allocation should work again
+	for i in `seq 10 12`; do
+		dd if=/dev/zero of=$DIR/$tdir/$i bs=1M count=1 2>/dev/null || \
+			error "File creation failed after rm";
+	done
+
+	oa_status=$(do_facet $SINGLEMDS lctl get_param -n \
+			osp.$mdtosc_proc1.prealloc_status)
+	echo "prealloc_status $oa_status"
+
+	if [ x$oa_status != "x0" ]; then
+		error "Object allocation still disable after rm"
+	fi
+	do_facet $SINGLEMDS lctl set_param \
+			osp.$mdtosc_proc1.rsrvd_size_hwm_mb $last_wm_h
+	do_facet $SINGLEMDS lctl set_param \
+			osp.$mdtosc_proc1.rsrvd_size_nwm_mb $last_wm_n
+
+
+	do_facet mgs $LCTL pool_remove $FSNAME.$TESTNAME $ost_name || return 4
+	do_facet mgs $LCTL pool_destroy $FSNAME.$TESTNAME || return 5
+
+	return 0
+}
+run_test 251 "Check object allocation limit"
+
 test_400a() { # LU-1606, was conf-sanity test_74
 	local extra_flags=''
 	local out=$TMP/$tfile

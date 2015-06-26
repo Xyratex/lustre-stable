@@ -179,6 +179,12 @@ struct osp_device {
 	int				 opd_statfs_maxage;
 
 	struct proc_dir_entry		*opd_symlink;
+	/**
+	 * Limit the object allocation using ENOSPC for opd_pre_status
+	 * in MB. _h high watermark, _n normal watermark
+	 */
+	int				opd_reserved_size_h;
+	int				opd_reserved_size_n;
 };
 
 extern struct kmem_cache *osp_object_kmem;

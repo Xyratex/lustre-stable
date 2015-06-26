@@ -639,6 +639,126 @@ LPROC_SEQ_FOPS_RO_TYPE(osp, timeouts);
 LPROC_SEQ_FOPS_RW_TYPE(osp, import);
 LPROC_SEQ_FOPS_RO_TYPE(osp, state);
 
+/**
+ * Show high watermark (in megabytes). If available free space at OST is less
+ * than high watermark, object allocation for OST is disabled.
+ *
+ * \param[in] m		seq_file handle
+ * \param[in] data	unused for single entry
+ * \retval		0 on success
+ * \retval		negative number on error
+ */
+static int osp_reserved_size_h_seq_show(struct seq_file *m, void *data)
+{
+	struct obd_device	*dev = m->private;
+	struct osp_device	*osp = lu2osp_dev(dev->obd_lu_dev);
+
+	if (osp == NULL)
+		return -EINVAL;
+
+	return seq_printf(m, "%u\n", osp->opd_reserved_size_h);
+}
+
+/**
+ * Change high watermark
+ *
+ * \param[in] file	proc file
+ * \param[in] buffer	string which represents new value (in megabytes)
+ * \param[in] count	\a buffer length
+ * \param[in] off	unused for single entry
+ * \retval		\a count on success
+ * \retval		negative number on error
+ */
+static ssize_t
+osp_reserved_size_h_seq_write(struct file *file, const char *buffer,
+			size_t count, loff_t *off)
+{
+	struct seq_file		*m = file->private_data;
+	struct obd_device	*dev = m->private;
+	struct osp_device	*osp = lu2osp_dev(dev->obd_lu_dev);
+	int			 val, rc;
+
+	if (osp == NULL)
+		return -EINVAL;
+
+	rc = lprocfs_write_helper(buffer, count, &val);
+	if (rc)
+		return rc;
+
+	if (val < 0)
+		return -ERANGE;
+
+	spin_lock(&osp->opd_pre_lock);
+	osp->opd_reserved_size_h = val;
+	if (val > osp->opd_reserved_size_n)
+		osp->opd_reserved_size_n = val + 1;
+	spin_unlock(&osp->opd_pre_lock);
+
+	return count;
+}
+LPROC_SEQ_FOPS(osp_reserved_size_h);
+
+/**
+ * Show normal watermark (in megabytes). If available free space at OST is greater
+ * than normal watermark and object allocation for OST is disabled, enable it.
+ *
+ * \param[in] m		seq_file handle
+ * \param[in] data	unused for single entry
+ * \retval		0 on success
+ * \retval		negative number on error
+ */
+static int osp_reserved_size_n_seq_show(struct seq_file *m, void *data)
+{
+	struct obd_device	*dev = m->private;
+	struct osp_device	*osp = lu2osp_dev(dev->obd_lu_dev);
+
+	if (osp == NULL)
+		return -EINVAL;
+
+	return seq_printf(m, "%u\n", osp->opd_reserved_size_n);
+}
+
+/**
+ * Change normal watermark
+ *
+ * \param[in] file	proc file
+ * \param[in] buffer	string which represents new value (in megabytes)
+ * \param[in] count	\a buffer length
+ * \param[in] off	unused for single entry
+ * \retval		\a count on success
+ * \retval		negative number on error
+ */
+static ssize_t
+osp_reserved_size_n_seq_write(struct file *file, const char *buffer,
+			size_t count, loff_t *off)
+{
+	struct seq_file		*m = file->private_data;
+	struct obd_device	*dev = m->private;
+	struct osp_device	*osp = lu2osp_dev(dev->obd_lu_dev);
+	int			 val, rc;
+
+	if (osp == NULL)
+		return -EINVAL;
+
+	rc = lprocfs_write_helper(buffer, count, &val);
+	if (rc)
+		return rc;
+
+	if (val < 1)
+		return -ERANGE;
+
+	spin_lock(&osp->opd_pre_lock);
+	osp->opd_reserved_size_n = val;
+	if (val < osp->opd_reserved_size_h)
+		osp->opd_reserved_size_h = val - 1;
+	spin_unlock(&osp->opd_pre_lock);
+
+	return count;
+}
+LPROC_SEQ_FOPS(osp_reserved_size_n);
+
+
+
 static struct lprocfs_seq_vars lprocfs_osp_obd_vars[] = {
 	{ .name =	"uuid",
 	  .fops =	&osp_uuid_fops			},
@@ -689,6 +809,10 @@ static struct lprocfs_seq_vars lprocfs_osp_obd_vars[] = {
 	  .fops =	&osp_syn_in_prog_fops		},
 	{ .name =	"old_sync_processed",
 	  .fops =	&osp_old_sync_processed_fops	},
+	{ .name =	"rsrvd_size_hwm_mb",
+	  .fops =	&osp_reserved_size_h_fops	},
+	{ .name =	"rsrvd_size_nwm_mb",
+	  .fops =	&osp_reserved_size_n_fops	},
 
 	/* for compatibility reasons */
 	{ .name =	"destroys_in_flight",
