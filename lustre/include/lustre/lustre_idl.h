@@ -460,6 +460,11 @@ static inline int fid_seq_is_rsvd(const __u64 seq)
         return seq <= FID_SEQ_RSVD;
 };
 
+static inline int fid_seq_is_dot(const __u64 seq)
+{
+		return seq == FID_SEQ_DOT_LUSTRE;
+}
+
 static inline int fid_is_mdt0(const struct lu_fid *fid)
 {
         return fid_seq_is_mdt0(fid_seq(fid));

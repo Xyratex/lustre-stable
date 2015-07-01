@@ -8265,11 +8265,6 @@ test_154a() {
 	mrename $DIR/$tdir $DIR/.lustre/fid &&
 		error "rename to $DIR/.lustre/fid should fail."
 
-	echo "rename .lustre to itself"
-	fid=$($LFS path2fid $DIR)
-	mrename $DIR/.lustre $DIR/.lustre/fid/$fid/.lustre &&
-		error "rename .lustre to itself should fail."
-
 	$OPENFILE -f O_LOV_DELAY_CREATE:O_CREAT $DIR/$tfile-2
 	fid=$($LFS path2fid $DIR/$tfile-2)
 	echo "cp /etc/passwd $DIR/.lustre/fid/$fid"
@@ -10193,6 +10188,24 @@ test_231b() {
 	sync
 }
 run_test 231b "must not assert on fully utilized OST request buffer"
+
+test_233a() {
+	local fid=$($LFS path2fid $MOUNT)
+	stat $MOUNT/.lustre/fid/$fid > /dev/null ||
+		error "cannot access $MOUNT using its FID '$fid'"
+}
+run_test 233a "checking that OBF of the FS root succeeds"
+
+test_233b() {
+	local fid=$($LFS path2fid $MOUNT/.lustre)
+	stat $MOUNT/.lustre/fid/$fid > /dev/null ||
+		error "cannot access $MOUNT/.lustre using its FID '$fid'"
+
+	fid=$($LFS path2fid $MOUNT/.lustre/fid)
+	stat $MOUNT/.lustre/fid/$fid > /dev/null ||
+		error "cannot access $MOUNT/.lustre/fid using its FID '$fid'"
+}
+run_test 233b "checking that OBF of the FS .lustre succeeds"
 
 test_234() {
 	local p="$TMP/$TESTSUITE-$TESTNAME.parameters"
