@@ -808,8 +808,13 @@ lnet_peer_is_alive(struct lnet_peer_ni *lp, time64_t now)
 {
 	int alive;
 	time64_t deadline;
+	ENTRY;
 
 	LASSERT (lnet_peer_aliveness_enabled(lp));
+
+	CDEBUG(D_NET, "lp 0x%p->%s alive %d count %d last_alive %llu stamp %llu\n",
+               lp, libcfs_nid2str(lp->lpni_nid), lp->lpni_alive,
+               lp->lpni_alive_count, lp->lpni_last_alive, lp->lpni_timestamp);
 
 	/*
 	 * Trust lnet_notify() if it has more recent aliveness news, but
@@ -819,7 +824,7 @@ lnet_peer_is_alive(struct lnet_peer_ni *lp, time64_t now)
 	if (!lp->lpni_alive && lp->lpni_alive_count > 0 &&
 	    lp->lpni_timestamp >= lp->lpni_last_alive) {
 		spin_unlock(&lp->lpni_lock);
-		return 0;
+                RETURN(0);
 	}
 
 	deadline = lp->lpni_last_alive +
@@ -839,7 +844,7 @@ lnet_peer_is_alive(struct lnet_peer_ni *lp, time64_t now)
 		spin_unlock(&lp->lpni_lock);
 	}
 
-	return alive;
+        RETURN(alive);
 }
 
 
