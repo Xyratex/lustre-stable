@@ -2726,6 +2726,8 @@ facet_failover_host() {
 
 detect_active() {
 	local facet=$1
+	[ "$CLIENTONLY" ] && echo $facet && return
+
 	local failover=$(facet_failover_host $facet)
 
 	# failover is not associated with all facet types:
