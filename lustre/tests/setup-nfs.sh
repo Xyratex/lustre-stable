@@ -7,6 +7,8 @@ setup_nfs() {
     local MNTPNT=${2}
     local LUSTRE_CLIENT=${3}
     local NFS_CLIENTS=${4}
+	local nfs_climntpt=${5:-$MNTPNT}
+
     local export_opts_v=$EXPORT_OPTS
 
     echo "Exporting Lustre filesystem..."
@@ -33,16 +35,17 @@ setup_nfs() {
 
     echo -e "\nMounting NFS clients (version $NFS_VER)..."
 
-    do_nodes $NFS_CLIENTS "mkdir -p $MNTPNT" || return 1
-    if [ "$NFS_VER" = "4" ]; then
-        do_nodes $NFS_CLIENTS \
-            "mount -t nfs$NFS_VER -o async $LUSTRE_CLIENT:/ $MNTPNT" || return 1
-    else
-        do_nodes $NFS_CLIENTS \
-            "mount -t nfs -o nfsvers=$NFS_VER,async \
-                $LUSTRE_CLIENT:$MNTPNT $MNTPNT" || return 1
-    fi
-    return 0
+	do_nodes $NFS_CLIENTS "mkdir -p $nfs_climntpt" || return 1
+	if [ "$NFS_VER" = "4" ]; then
+		do_nodes $NFS_CLIENTS \
+			"mount -t nfs$NFS_VER -o async \
+			$LUSTRE_CLIENT:/ $nfs_climntpt" || return 1
+	else
+		do_nodes $NFS_CLIENTS \
+			"mount -t nfs -o nfsvers=$NFS_VER,async \
+			$LUSTRE_CLIENT:$MNTPNT $nfs_climntpt" || return 1
+	fi
+	return 0
 }
 
 cleanup_nfs() {

@@ -54,8 +54,9 @@ zconf_mount $LUSTRE_CLIENT_NFSSRV $NFS_SRVMNTPT "$cl_mnt_opt" ||
     error "mount lustre on $LUSTRE_CLIENT_NFSSRV failed"
 
 # setup the nfs
-setup_nfs "$NFSVERSION" "$NFS_SRVMNTPT" "$LUSTRE_CLIENT_NFSSRV" "$NFS_CLIENTS" ||
-    error false "setup nfs failed!"
+setup_nfs "$NFSVERSION" "$NFS_SRVMNTPT" "$LUSTRE_CLIENT_NFSSRV" \
+		"$NFS_CLIENTS" "$NFS_CLIMNTPT" ||
+	error false "setup nfs failed!"
 
 NFSCLIENT=true
 FAIL_ON_ERROR=false
@@ -91,27 +92,27 @@ MPI_RUNAS=${MPI_RUNAS:-"runas -u $MPI_USER_UID -g $MPI_USER_GID"}
 $GSS_KRB5 && refresh_krb5_tgt $MPI_USER_UID $MPI_USER_GID $MPI_RUNAS
 
 test_compilebench() {
-    run_compilebench
+	run_compilebench $NFS_CLIMNTPT
 }
 run_test compilebench "compilebench"
 
 test_metabench() {
-    run_metabench
+	run_metabench $NFS_CLIMNTPT
 }
 run_test metabench "metabench"
 
 test_connectathon() {
-    run_connectathon
+	run_connectathon $NFS_CLIMNTPT
 }
 run_test connectathon "connectathon"
 
 test_iorssf() {
-    run_ior "ssf"
+	run_ior "ssf" $NFS_CLIMNTPT
 }
 run_test iorssf "iorssf"
 
 test_iorfpp() {
-    run_ior "fpp"
+	run_ior "fpp" $NFS_CLIMNTPT
 }
 run_test iorfpp "iorfpp"
 
