@@ -951,6 +951,12 @@ int tgt_clients_data_init(const struct lu_env *env, struct lu_target *tgt,
 		obd->obd_max_recoverable_clients++;
 		class_export_put(exp);
 
+		rc = rev_import_init(exp);
+		if (rc != 0) {
+			class_unlink_export(exp);
+			GOTO(err_out, rc);
+		}
+
 		/* Need to check last_rcvd even for duplicated exports. */
 		CDEBUG(D_OTHER, "client at idx %d has last_transno = "LPU64"\n",
 		       cl_idx, last_transno);
