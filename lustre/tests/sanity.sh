@@ -10349,7 +10349,7 @@ check_path() {
     echo "fid $fid resolves to path $path (expected $expected)"
 }
 
-test_162() {
+test_162a() { # was test 162
 	# Make changes to filesystem
 	[ $PARALLEL == "yes" ] && skip "skip parallel run" && return
 	test_mkdir -p $DIR/$tdir/d2
@@ -10394,7 +10394,7 @@ test_162() {
 
 	return 0
 }
-run_test 162 "path lookup sanity"
+run_test 162a "path lookup sanity"
 
 # LU-4239: Verify fid2path works with paths 100 or more directories deep
 test_162c() {
