@@ -980,10 +980,10 @@ int target_handle_connect(struct ptlrpc_request *req)
 		}
 	}
 
+	lw_client = (data->ocd_connect_flags & OBD_CONNECT_LIGHTWEIGHT) != 0;
+
 	if (lustre_msg_get_op_flags(req->rq_reqmsg) & MSG_CONNECT_INITIAL) {
 		mds_conn = (data->ocd_connect_flags & OBD_CONNECT_MDS) != 0;
-		lw_client = (data->ocd_connect_flags &
-			     OBD_CONNECT_LIGHTWEIGHT) != 0;
 	}
 
         /* lctl gets a backstage, all-access pass. */
