@@ -12870,6 +12870,44 @@ test_253() {
 }
 run_test 253 "Read 2 pages from differnt stripes (Lelus-291)"
 
+test_254() {
+	local cl_user
+
+	[ $PARALLEL == "yes" ] && skip "skip parallel run" && return
+
+	cl_user=$(do_facet mds1 $LCTL --device $MDT0 changelog_register -n)
+	echo "Registered as changelog user $cl_user"
+
+	$LFS changelog_clear $MDT0 $cl_user 0
+
+	local size1=$(do_facet mds1 \
+			$LCTL get_param -n mdd.$MDT0.changelog_size)
+	echo "Changelog size $size1"
+
+	rm -rf $DIR/$tdir
+	$LFS mkdir -i 0 $DIR/$tdir
+	# change something
+	mkdir -p $DIR/$tdir/pics/2008/zachy
+	touch $DIR/$tdir/pics/2008/zachy/timestamp
+	cp /etc/hosts $DIR/$tdir/pics/2008/zachy/pic1.jpg
+	mv $DIR/$tdir/pics/2008/zachy $DIR/$tdir/pics/zach
+	ln $DIR/$tdir/pics/zach/pic1.jpg $DIR/$tdir/pics/2008/portland.jpg
+	ln -s $DIR/$tdir/pics/2008/portland.jpg $DIR/$tdir/pics/desktop.jpg
+	rm $DIR/$tdir/pics/desktop.jpg
+
+	local size2=$(do_facet mds1 \
+			$LCTL get_param -n mdd.$MDT0.changelog_size)
+	echo "Changelog size after work $size2"
+
+	do_facet mds1 $LCTL --device $MDT0 changelog_deregister $cl_user
+
+	if (( size2 <= size1 )); then
+		error "Changelog size after work should be grater than original"
+	fi
+	return 0
+}
+run_test 254 "Check changelog size"
+
 test_400a() { # LU-1606, was conf-sanity test_74
 	local extra_flags=''
 	local out=$TMP/$tfile

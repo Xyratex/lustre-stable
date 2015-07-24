@@ -141,7 +141,7 @@ int llog_is_empty(const struct lu_env *env, struct llog_ctxt *ctxt,
 int llog_backup(const struct lu_env *env, struct obd_device *obd,
 		struct llog_ctxt *ctxt, struct llog_ctxt *bak_ctxt,
 		char *name, char *backup);
-
+__u64 llog_size(const struct lu_env *env, struct llog_handle *llh);
 /* llog_process flags */
 #define LLOG_FLAG_NODEAMON 0x0001
 
@@ -188,10 +188,12 @@ int llog_cat_cancel_records(const struct lu_env *env,
 			    struct llog_handle *cathandle, int count,
 			    struct llog_cookie *cookies);
 int llog_cat_process_or_fork(const struct lu_env *env,
-			     struct llog_handle *cat_llh, llog_cb_t cb,
-			     void *data, int startcat, int startidx, bool fork);
+			     struct llog_handle *cat_llh, llog_cb_t cat_cb,
+			     llog_cb_t cb, void *data, int startcat,
+			     int startidx, bool fork);
 int llog_cat_process(const struct lu_env *env, struct llog_handle *cat_llh,
 		     llog_cb_t cb, void *data, int startcat, int startidx);
+__u64 llog_cat_size(const struct lu_env *env, struct llog_handle *cat_llh);
 int llog_cat_reverse_process(const struct lu_env *env,
 			     struct llog_handle *cat_llh, llog_cb_t cb,
 			     void *data);
