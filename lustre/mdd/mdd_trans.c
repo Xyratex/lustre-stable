@@ -340,8 +340,10 @@ int mdd_txn_init_credits(const struct lu_env *env, struct mdd_device *mdd)
                                 CERROR("Invalid op %d init its credit\n", op);
                                 LBUG();
                 }
-		if (mdd->mdd_max_txn_credits < *c)
+		if (op != MDD_TXN_CHANGELOG_OP &&
+		    mdd->mdd_max_txn_credits < *c) {
 			mdd->mdd_max_txn_credits = *c;
+		}
         }
 
 	RETURN(mdd_txn_credits_are_sane(mdd,
