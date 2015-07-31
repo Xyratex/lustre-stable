@@ -1667,7 +1667,7 @@ again:
 		}
         }
 
-	if (start > 0 && rc != 0) {
+	if (start > 0 && rc == 0) {
 		end = start;
 		start = 0;
 		goto again;
