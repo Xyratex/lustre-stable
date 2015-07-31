@@ -8408,8 +8408,8 @@ test_130a() {
 		skip "ORI-366/LU-1941: FIEMAP unimplemented on ZFS" && return
 	[ $RC != 0 ] && error "filefrag $fm_file failed"
 
-	filefrag_op=$(filefrag -ve $fm_file | grep -A 100 "ext:" |
-		      grep -v "ext:" | grep -v "found")
+	filefrag_op=$(filefrag -ve $fm_file |
+			sed -n '/ext:/,/found/{/ext:/d; /found/d; p}')
 	lun=$($GETSTRIPE -i $fm_file)
 
 	start_blk=`echo $filefrag_op | cut -d: -f2 | cut -d. -f1`
@@ -8441,10 +8441,7 @@ run_test 130a "FIEMAP (1-stripe file)"
 
 test_130b() {
 	[ "$OSTCOUNT" -lt "2" ] &&
-		skip_env "skipping FIEMAP on 2-stripe file test" && return
-
-	[ "$OSTCOUNT" -ge "10" ] &&
-		skip_env "skipping FIEMAP with >= 10 OSTs" && return
+		skip_env "skipping FIEMAP on $OSTCOUNT-stripe file test" && return
 
 	local filefrag_op=$(filefrag -e 2>&1 | grep "invalid option")
 	[ -n "$filefrag_op" ] && skip_env "filefrag does not support FIEMAP" &&
@@ -8453,30 +8450,30 @@ test_130b() {
 	trap cleanup_130 EXIT RETURN
 
 	local fm_file=$DIR/$tfile
-	$SETSTRIPE -S 65536 -c 2 $fm_file || error "setstripe on $fm_file"
+	$SETSTRIPE -S 65536 -c $OSTCOUNT $fm_file || error "setstripe on $fm_file"
 	[ "$(facet_fstype ost$(($($GETSTRIPE -i $fm_file) + 1)))" = "zfs" ] &&
 		skip "ORI-366/LU-1941: FIEMAP unimplemented on ZFS" && return
 
-	dd if=/dev/zero of=$fm_file bs=1M count=2 ||
+	dd if=/dev/zero of=$fm_file bs=1M count=$OSTCOUNT ||
 		error "dd failed on $fm_file"
 
 	filefrag -ves $fm_file || error "filefrag $fm_file failed"
-	filefrag_op=$(filefrag -ve $fm_file | grep -A 100 "ext:" |
-		      grep -v "ext:" | grep -v "found")
+	filefrag_op=$(filefrag -ve $fm_file |
+			sed -n '/ext:/,/found/{/ext:/d; /found/d; p}')
 
-	last_lun=$(echo $filefrag_op | cut -d: -f5)
+	last_lun=$(echo $filefrag_op | cut -d: -f5 | sed -e 's/^[ \t]*//')
 
 	IFS=$'\n'
 	tot_len=0
 	num_luns=1
 	for line in $filefrag_op
 	do
-		frag_lun=`echo $line | cut -d: -f5`
-		ext_len=`echo $line | cut -d: -f4`
-		if (( $frag_lun != $last_lun )); then
+		frag_lun=$(echo $line | cut -d: -f5 | sed -e 's/^[ \t]*//')
+		ext_len=$(echo $line | cut -d: -f4)
+		if (( 0x$frag_lun != 0x$last_lun )); then
 			if (( tot_len != 1024 )); then
 				cleanup_130
-				error "FIEMAP on $fm_file failed; returned len $tot_len for OST $last_lun instead of 256"
+				error "FIEMAP on $fm_file failed; returned len $tot_len for OST $last_lun instead of 1024"
 				return
 			else
 				(( num_luns += 1 ))
@@ -8486,7 +8483,7 @@ test_130b() {
 		(( tot_len += ext_len ))
 		last_lun=$frag_lun
 	done
-	if (( num_luns != 2 || tot_len != 1024 )); then
+	if (( num_luns != $OSTCOUNT || tot_len != 1024 )); then
 		cleanup_130
 		error "FIEMAP on $fm_file failed; returned wrong number of luns or wrong len for OST $last_lun"
 		return
@@ -8494,16 +8491,13 @@ test_130b() {
 
 	cleanup_130
 
-	echo "FIEMAP on 2-stripe file succeeded"
+	echo "FIEMAP on $OSTCOUNT-stripe file succeeded"
 }
-run_test 130b "FIEMAP (2-stripe file)"
+run_test 130b "FIEMAP ($OSTCOUNT-stripe file)"
 
 test_130c() {
 	[ "$OSTCOUNT" -lt "2" ] &&
 		skip_env "skipping FIEMAP on 2-stripe file" && return
-
-	[ "$OSTCOUNT" -ge "10" ] &&
-		skip_env "skipping FIEMAP with >= 10 OSTs" && return
 
 	filefrag_op=$(filefrag -e 2>&1 | grep "invalid option")
 	[ -n "$filefrag_op" ] && skip "filefrag does not support FIEMAP" &&
@@ -8519,18 +8513,18 @@ test_130c() {
 	dd if=/dev/zero of=$fm_file seek=1 bs=1M count=1 || error "dd failed on $fm_file"
 
 	filefrag -ves $fm_file || error "filefrag $fm_file failed"
-	filefrag_op=`filefrag -ve $fm_file | grep -A 100 "ext:" | grep -v "ext:" | grep -v "found"`
+	filefrag_op=$(filefrag -ve $fm_file | sed -n '/ext:/,/found/{/ext:/d; /found/d; p}')
 
-	last_lun=`echo $filefrag_op | cut -d: -f5`
+	last_lun=$(echo $filefrag_op | cut -d: -f5 | sed -e 's/^[ \t]*//')
 
 	IFS=$'\n'
 	tot_len=0
 	num_luns=1
 	for line in $filefrag_op
 	do
-		frag_lun=`echo $line | cut -d: -f5`
-		ext_len=`echo $line | cut -d: -f4`
-		if (( $frag_lun != $last_lun )); then
+		frag_lun=$(echo $line | cut -d: -f5 | sed -e 's/^[ \t]*//')
+		ext_len=$(echo $line | cut -d: -f4)
+		if (( 0x$frag_lun != 0x$last_lun )); then
 			logical=`echo $line | cut -d: -f2 | cut -d. -f1`
 			if (( logical != 512 )); then
 				cleanup_130
@@ -8564,9 +8558,6 @@ run_test 130c "FIEMAP (2-stripe file with hole)"
 test_130d() {
 	[ "$OSTCOUNT" -lt "3" ] && skip_env "skipping FIEMAP on N-stripe file test" && return
 
-	[ "$OSTCOUNT" -ge "10" ] &&
-		skip_env "skipping FIEMAP with >= 10 OSTs" && return
-
 	filefrag_op=$(filefrag -e 2>&1 | grep "invalid option")
 	[ -n "$filefrag_op" ] && skip "filefrag does not support FIEMAP" && return
 
@@ -8582,19 +8573,19 @@ test_130d() {
 		error "dd failed on $fm_file"
 
 	filefrag -ves $fm_file || error "filefrag $fm_file failed"
-	filefrag_op=`filefrag -ve $fm_file | grep -A 100 "ext:" |
-		grep -v "ext:" | grep -v "found"`
+	filefrag_op=$(filefrag -ve $fm_file |
+			sed -n '/ext:/,/found/{/ext:/d; /found/d; p}')
 
-	last_lun=`echo $filefrag_op | cut -d: -f5`
+	last_lun=$(echo $filefrag_op | cut -d: -f5 | sed -e 's/^[ \t]*//')
 
 	IFS=$'\n'
 	tot_len=0
 	num_luns=1
 	for line in $filefrag_op
 	do
-		frag_lun=`echo $line | cut -d: -f5`
-		ext_len=`echo $line | cut -d: -f4`
-		if (( $frag_lun != $last_lun )); then
+		frag_lun=$(echo $line | cut -d: -f5 | sed -e 's/^[ \t]*//')
+		ext_len=$(echo $line | cut -d: -f4)
+		if (( 0x$frag_lun != 0x$last_lun )); then
 			if (( tot_len != 1024 )); then
 				cleanup_130
 				error "FIEMAP on $fm_file failed; returned len $tot_len for OST $last_lun instead of 1024"
@@ -8622,9 +8613,6 @@ run_test 130d "FIEMAP (N-stripe file)"
 test_130e() {
 	[ "$OSTCOUNT" -lt "2" ] && skip_env "skipping continuation FIEMAP test" && return
 
-	[ "$OSTCOUNT" -ge "10" ] &&
-		skip_env "skipping FIEMAP with >= 10 OSTs" && return
-
 	filefrag_op=$(filefrag -e 2>&1 | grep "invalid option")
 	[ -n "$filefrag_op" ] && skip "filefrag does not support FIEMAP" && return
 
@@ -8643,18 +8631,19 @@ test_130e() {
 	done
 
 	filefrag -ves $fm_file || error "filefrag $fm_file failed"
-	filefrag_op=`filefrag -ve $fm_file | grep -A 12000 "ext:" | grep -v "ext:" | grep -v "found"`
+	filefrag_op=$(filefrag -ve $fm_file |
+			sed -n '/ext:/,/found/{/ext:/d; /found/d; p}')
 
-	last_lun=`echo $filefrag_op | cut -d: -f5`
+	last_lun=$(echo $filefrag_op | cut -d: -f5 | sed -e 's/^[ \t]*//')
 
 	IFS=$'\n'
 	tot_len=0
 	num_luns=1
 	for line in $filefrag_op
 	do
-		frag_lun=`echo $line | cut -d: -f5`
-		ext_len=`echo $line | cut -d: -f4`
-		if (( $frag_lun != $last_lun )); then
+		frag_lun=$(echo $line | cut -d: -f5 | sed -e 's/^[ \t]*//')
+		ext_len=$(echo $line | cut -d: -f4)
+		if (( 0x$frag_lun != 0x$last_lun )); then
 			if (( tot_len != $EXPECTED_LEN )); then
 				cleanup_130
 				error "FIEMAP on $fm_file failed; returned len $tot_len for OST $last_lun instead of $EXPECTED_LEN"
