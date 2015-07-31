@@ -1355,6 +1355,8 @@ test_27l() {
 run_test 27l "check setstripe permissions (should return error)"
 
 test_27m() {
+	[ -n "$RCLIENTS" -o -n "$MOUNT_2" ] &&
+		skip_env "non-single client -- skipping" && return
 	[[ $OSTCOUNT -lt 2 ]] && skip_env "$OSTCOUNT < 2 OSTs -- skipping" &&
 		return
 	if [[ $ORIGFREE -gt $MAXFREE ]]; then
