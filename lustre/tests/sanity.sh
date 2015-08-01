@@ -10318,6 +10318,47 @@ test_251() {
 }
 run_test 251 "Check object allocation limit"
 
+test_254_sub()
+{
+	local pid
+	echo $1
+	dd if=/dev/zero of=$DIR/$tdir/$tfile bs=1M count=50 $1 \
+		2>/dev/null &
+	pid=$!
+	sleep 1
+	ost_evict_client
+	client_reconnect
+
+	wait $pid
+}
+test_254a() {
+	local pid
+
+	rm -rf $DIR/$tdir
+	mkdir $DIR/$tdir
+
+	for i in `seq 0 50`; do
+		echo 'Iteration '$i
+		test_254_sub oflag=direct
+	done
+	return 0
+}
+run_test 254a "DIO vs eviction race"
+
+test_254b() {
+	local pid
+
+	rm -rf $DIR/$tdir
+	mkdir $DIR/$tdir
+
+	for i in `seq 0 50`; do
+		echo 'Iteration '$i
+		test_254_sub
+	done
+	return 0
+}
+run_test 254b "Buffered vs eviction race"
+
 
 #
 # tests that do cleanup/setup should be run at the end
