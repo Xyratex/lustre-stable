@@ -1405,9 +1405,10 @@ static struct timespec *osd_inode_time(const struct lu_env *env,
 static void osd_inode_getattr(const struct lu_env *env,
                               struct inode *inode, struct lu_attr *attr)
 {
-        attr->la_valid      |= LA_ATIME | LA_MTIME | LA_CTIME | LA_MODE |
-                               LA_SIZE | LA_BLOCKS | LA_UID | LA_GID |
-                               LA_FLAGS | LA_NLINK | LA_RDEV | LA_BLKSIZE;
+	attr->la_valid	|= LA_ATIME | LA_MTIME | LA_CTIME | LA_MODE |
+				LA_SIZE | LA_BLOCKS | LA_UID | LA_GID |
+				LA_FLAGS | LA_NLINK | LA_RDEV | LA_BLKSIZE |
+				LA_TYPE;
 
         attr->la_atime      = LTIME_S(inode->i_atime);
         attr->la_mtime      = LTIME_S(inode->i_mtime);
