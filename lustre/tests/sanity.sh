@@ -7093,22 +7093,25 @@ test_78() { # bug 10901
 	[[ $F78SIZE -gt $MEMTOTAL ]] && F78SIZE=$MEMTOTAL
 	[[ $F78SIZE -gt 512 ]] && F78SIZE=512
 	[[ $F78SIZE -gt $((MAXFREE / 1024)) ]] && F78SIZE=$((MAXFREE / 1024))
-	SMALLESTOST=$($LFS df $DIR | grep OST | awk '{ print $4 }' | sort -n |
-		head -n1)
-	echo "Smallest OST: $SMALLESTOST"
-	[[ $SMALLESTOST -lt 10240 ]] &&
-		skip "too small OSTSIZE, useless to run large O_DIRECT test" && return 0
 
 	trap cleanup_test_78 EXIT
 
-	[[ $F78SIZE -gt $((SMALLESTOST * $OSTCOUNT / 1024 - 80)) ]] &&
-		F78SIZE=$((SMALLESTOST * $OSTCOUNT / 1024 - 80))
+	echo "Estimated file size for directio: $F78SIZE"
 
 	[ "$SLOW" = "no" ] && NSEQ=1 && [ $F78SIZE -gt 32 ] && F78SIZE=32
-	echo "File size: $F78SIZE"
+	# Probe to calculate the bytes written without direct I/O...
 	$SETSTRIPE -c $OSTCOUNT $DIR/$tfile || error "setstripe failed"
+	dd if=/dev/zero of=$DIR/$tfile bs=1M count=$F78SIZE &>/dev/null
+	F78SIZE=$(($(stat -c %s $DIR/$tfile) / 1048576))
+	# Droppig file pages explicitly before direct I/O...
+	cancel_lru_locks osc
+	echo "Actual file size for directio: $F78SIZE"
+
 	for i in $(seq 1 $NSEQ); do
 		FSIZE=$(($F78SIZE / ($NSEQ - $i + 1)))
+		# For avoiding directio failure when F78SIZE is less than NSEQ
+		# and FSIZE is calculated 0 in above line...
+		[ $FSIZE -gt 0 ] || continue
 		echo directIO rdwr round $i of $NSEQ
 		$DIRECTIO rdwr $DIR/$tfile 0 $FSIZE 1048576||error "rdwr failed"
 	done
