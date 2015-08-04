@@ -218,9 +218,9 @@ run_rmtacl_subtest() {
 test_2 () {
 	[ "$CLIENT_TYPE" = "local" ] && \
 		skip "remote_acl for remote client only" && return
-    	[ -z "$(lctl get_param -n mdc.*-mdc-*.connect_flags | grep ^acl)" ] && \
+	[ -z "$($LCTL get_param -n mdc.*-mdc-*.connect_flags | grep ^acl)" ] &&
 		skip "must have acl enabled" && return
-    	[ -z "$(which setfacl 2>/dev/null)" ] && \
+	[ -z "$(which setfacl 2>/dev/null)" ] && \
 		skip "could not find setfacl" && return
 	[ "$UID" != 0 ] && skip "must run as root" && return
 
@@ -232,30 +232,36 @@ test_2 () {
 	sec_login daemon daemon
 	sec_login games users
 
-    	SAVE_UMASK=`umask`
-    	umask 0022
-    	cd $DIR
+	SAVE_UMASK=`umask`
+	umask 0022
+	cd $DIR
 
-        echo "performing cp ..."
-        run_rmtacl_subtest cp || error "cp"
-    	echo "performing getfacl-noacl..."
-    	run_rmtacl_subtest getfacl-noacl || error "getfacl-noacl"
-    	echo "performing misc..."
-    	run_rmtacl_subtest misc || error "misc"
-    	echo "performing permissions..."
-    	run_rmtacl_subtest permissions || error "permissions"
-    	echo "performing setfacl..."
-    	run_rmtacl_subtest setfacl || error "setfacl"
+	echo "performing cp ..."
+	run_rmtacl_subtest cp || error "cp"
+	echo "performing getfacl-noacl..."
+	run_rmtacl_subtest getfacl-noacl || error "getfacl-noacl"
+	echo "performing misc..."
+	run_rmtacl_subtest misc || error "misc"
+	echo "performing permissions..."
+	run_rmtacl_subtest permissions || error "permissions"
+	if [ $(lustre_version_code $SINGLEMDS) -ge $(version_code 2.5.1) -a \
+	     $(lustre_version_code $SINGLEMDS) -lt $(version_code 2.6.0) ]; then
+		echo "performing permissions_xattr..."
+		run_rmtacl_subtest permissions_xattr ||
+		    error "permissions_xattr failed"
+	fi
+	echo "performing setfacl..."
+	run_rmtacl_subtest setfacl || error "setfacl"
 
-    	# inheritance test got from HP
-    	echo "performing inheritance..."
-    	cp $SAVE_PWD/rmtacl/make-tree .
-    	chmod +x make-tree
-    	run_rmtacl_subtest inheritance || error "inheritance"
-    	rm -f make-tree
+	# inheritance test got from HP
+	echo "performing inheritance..."
+	cp $SAVE_PWD/rmtacl/make-tree .
+	chmod +x make-tree
+	run_rmtacl_subtest inheritance || error "inheritance"
+	rm -f make-tree
 
-    	cd $SAVE_PWD
-    	umask $SAVE_UMASK
+	cd $SAVE_PWD
+	umask $SAVE_UMASK
 
 	do_facet $SINGLEMDS "rm -f $PERM_CONF"
 	do_facet $SINGLEMDS "lctl set_param -n $IDENTITY_FLUSH=-1"

@@ -137,15 +137,24 @@ int ll_setxattr_common(struct inode *inode, const char *name,
             (xattr_type == XATTR_LUSTRE_T && strcmp(name, "lustre.lov") == 0))
                 RETURN(0);
 
-        /* b15587: ignore security.capability xattr for now */
-        if ((xattr_type == XATTR_SECURITY_T &&
-            strcmp(name, "security.capability") == 0))
-                RETURN(0);
+	/* b15587: ignore security.capability xattr for now */
+	if ((xattr_type == XATTR_SECURITY_T &&
+	    strcmp(name, "security.capability") == 0))
+		RETURN(0);
 
-        /* LU-549:  Disable security.selinux when selinux is disabled */
-        if (xattr_type == XATTR_SECURITY_T && !selinux_is_enabled() &&
-            strcmp(name, "security.selinux") == 0)
-                RETURN(-EOPNOTSUPP);
+	/* LU-549:  Disable security.selinux when selinux is disabled */
+	if (xattr_type == XATTR_SECURITY_T && !selinux_is_enabled() &&
+	    strcmp(name, "security.selinux") == 0)
+		RETURN(-EOPNOTSUPP);
+
+	/*
+	 * In user.* namespace, only regular files and directories can have
+	 * extended attributes.
+	 */
+	if (xattr_type == XATTR_USER_T) {
+		if (!S_ISREG(inode->i_mode) && !S_ISDIR(inode->i_mode))
+			return -EPERM;
+	}
 
 #ifdef CONFIG_FS_POSIX_ACL
 	if (sbi->ll_flags & LL_SBI_RMT_CLIENT &&
