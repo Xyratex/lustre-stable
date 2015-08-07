@@ -1032,8 +1032,19 @@ ldlm_flock_completion_ast_async(struct ldlm_lock *lock, __u64 flags,
 				void *data);
 
 /* ldlm_extent.c */
-__u64 ldlm_extent_shift_kms(struct ldlm_lock *lock, __u64 old_kms);
+struct  prolong_args {
+	struct obd_export	*export;
+	struct ldlm_res_id	resid;
+	struct ldlm_extent	extent;
+	ldlm_mode_t		mode;
+	int			timeout;
+	int			locks_cnt;
+	int			blocks_cnt;
+};
 
+__u64 ldlm_extent_shift_kms(struct ldlm_lock *lock, __u64 old_kms);
+void ldlm_lock_prolong_one(struct ldlm_lock *lock, struct prolong_args *arg);
+void ldlm_resource_prolong(struct prolong_args *arg);
 
 /* ldlm_lockd.c */
 int ldlm_server_blocking_ast(struct ldlm_lock *, struct ldlm_lock_desc *,

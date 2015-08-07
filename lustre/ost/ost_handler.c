@@ -1900,109 +1900,51 @@ int ost_msg_check_version(struct lustre_msg *msg)
         return rc;
 }
 
-struct ost_prolong_data {
-        struct ptlrpc_request *opd_req;
-        struct obd_export     *opd_exp;
-        struct obdo           *opd_oa;
-        struct ldlm_res_id     opd_resid;
-        struct ldlm_extent     opd_extent;
-        ldlm_mode_t            opd_mode;
-        unsigned int           opd_locks;
-};
-
 /* prolong locks for the current service time of the corresponding
  * portal (= OST_IO_PORTAL)
  */
-static inline int prolong_timeout(struct ptlrpc_request *req,
-				  struct ldlm_lock *lock)
+static inline int prolong_timeout(struct ptlrpc_request *req)
 {
         struct ptlrpc_service *svc = req->rq_rqbd->rqbd_service;
 
         if (AT_OFF)
                 return obd_timeout / 2;
 
-	/* We are in the middle of the process - BL AST is sent, CANCEL
-	  is ahead. Take half of AT + IO process time. */
-	return at_est2timeout(at_get(&svc->srv_at_estimate)) +
-		(ldlm_bl_timeout(lock) >> 1);
+	return at_est2timeout(at_get(&svc->srv_at_estimate));
 }
 
-static void ost_prolong_lock_one(struct ost_prolong_data *opd,
-                                 struct ldlm_lock *lock)
+static void ost_prolong_locks(struct ptlrpc_request *req, struct obdo *oa,
+			      struct prolong_args *data)
 {
-	int timeout = prolong_timeout(opd->opd_req, lock);
-	LASSERT(lock->l_export == opd->opd_exp);
+	struct ldlm_lock  *lock;
+	ENTRY;
 
-	if (LDLM_IS(lock, DESTROYED)) /* lock already cancelled */
-		return;
+	data->timeout = prolong_timeout(req);
+	CDEBUG(D_RPCTRACE, "Prolong locks for req %p with x"LPU64
+			   " ext("LPU64"->"LPU64")\n", req,
+			   req->rq_xid, data->extent.start,
+			   data->extent.end);
+	if (oa->o_valid & OBD_MD_FLHANDLE) {
+		/* mostly a request should be covered by only one lock, try
+		 * fast path. */
+		lock = ldlm_handle2lock(&oa->o_handle);
+		if (lock != NULL) {
+			/* Fast path to check if the lock covers the whole IO
+			 * region exclusively. */
+			if (ldlm_extent_contain(&lock->l_policy_data.l_extent,
+						&data->extent)) {
+				/* bingo */
+				ldlm_lock_prolong_one(lock, data);
+				LDLM_LOCK_PUT(lock);
+				RETURN_EXIT;
+			}
+			LDLM_LOCK_PUT(lock);
+		}
+	}
 
-        /* XXX: never try to grab resource lock here because we're inside
-         * exp_bl_list_lock; in ldlm_lockd.c to handle waiting list we take
-         * res lock and then exp_bl_list_lock. */
+	ldlm_resource_prolong(data);
 
-        if (!(lock->l_flags & LDLM_FL_AST_SENT))
-                /* ignore locks not being cancelled */
-                return;
-
-        LDLM_DEBUG(lock,
-                   "refreshed for req x"LPU64" ext("LPU64"->"LPU64") to %ds.\n",
-                   opd->opd_req->rq_xid, opd->opd_extent.start,
-                   opd->opd_extent.end, timeout);
-
-        /* OK. this is a possible lock the user holds doing I/O
-         * let's refresh eviction timer for it */
-        ldlm_refresh_waiting_lock(lock, timeout);
-        ++opd->opd_locks;
-}
-
-static void ost_prolong_locks(struct ost_prolong_data *data)
-{
-        struct obd_export *exp = data->opd_exp;
-        struct obdo       *oa  = data->opd_oa;
-        struct ldlm_lock  *lock;
-        ENTRY;
-
-        if (oa->o_valid & OBD_MD_FLHANDLE) {
-                /* mostly a request should be covered by only one lock, try
-                 * fast path. */
-                lock = ldlm_handle2lock(&oa->o_handle);
-                if (lock != NULL) {
-                        /* Fast path to check if the lock covers the whole IO
-                         * region exclusively. */
-                        if (lock->l_granted_mode == LCK_PW &&
-                            ldlm_extent_contain(&lock->l_policy_data.l_extent,
-                                                &data->opd_extent)) {
-                                /* bingo */
-                                ost_prolong_lock_one(data, lock);
-                                LDLM_LOCK_PUT(lock);
-                                RETURN_EXIT;
-                        }
-                        LDLM_LOCK_PUT(lock);
-                }
-        }
-
-
-        cfs_spin_lock_bh(&exp->exp_bl_list_lock);
-        cfs_list_for_each_entry(lock, &exp->exp_bl_list, l_exp_list) {
-                LASSERT(lock->l_flags & LDLM_FL_AST_SENT);
-                LASSERT(lock->l_resource->lr_type == LDLM_EXTENT);
-
-		/* ignore waiting locks, no more granted locks in the list */
-		if (lock->l_granted_mode != lock->l_req_mode)
-			break;
-
-                if (!ldlm_res_eq(&data->opd_resid, &lock->l_resource->lr_name))
-                        continue;
-
-                if (!ldlm_extent_overlap(&lock->l_policy_data.l_extent,
-                                         &data->opd_extent))
-                        continue;
-
-                ost_prolong_lock_one(data, lock);
-        }
-        cfs_spin_unlock_bh(&exp->exp_bl_list_lock);
-
-        EXIT;
+	EXIT;
 }
 
 /**
@@ -2064,7 +2006,7 @@ static int ost_rw_hpreq_check(struct ptlrpc_request *req)
         struct ost_body *body;
         struct obd_ioobj *ioo;
         struct niobuf_remote *nb;
-        struct ost_prolong_data opd = { 0 };
+	struct prolong_args pa = { 0 };
         int mode, opc;
         ENTRY;
 
@@ -2085,31 +2027,32 @@ static int ost_rw_hpreq_check(struct ptlrpc_request *req)
         LASSERT(nb != NULL);
         LASSERT(!(nb->flags & OBD_BRW_SRVLOCK));
 
-        osc_build_res_name(ioo->ioo_id, ioo->ioo_seq, &opd.opd_resid);
+	osc_build_res_name(ioo->ioo_id, ioo->ioo_seq, &pa.resid);
 
-        opd.opd_req = req;
-        mode = LCK_PW;
-        if (opc == OST_READ)
-                mode |= LCK_PR;
-        opd.opd_mode = mode;
-        opd.opd_exp = req->rq_export;
-        opd.opd_oa  = &body->oa;
-        opd.opd_extent.start = nb->offset;
-        nb += ioo->ioo_bufcnt - 1;
-        opd.opd_extent.end = nb->offset + nb->len - 1;
+	mode = LCK_PW | LCK_GROUP;
+	if (opc == OST_READ)
+		mode |= LCK_PR;
+	pa.mode = mode;
+	pa.export = req->rq_export;
+	pa.extent.start = nb->offset;
+	nb += ioo->ioo_bufcnt - 1;
+	pa.extent.end = nb->offset + nb->len - 1;
 
-        DEBUG_REQ(D_RPCTRACE, req,
-               "%s %s: refresh rw locks: " LPU64"/"LPU64" ("LPU64"->"LPU64")\n",
-               obd->obd_name, cfs_current()->comm,
-               opd.opd_resid.name[0], opd.opd_resid.name[1],
-               opd.opd_extent.start, opd.opd_extent.end);
+	DEBUG_REQ(D_RPCTRACE, req,
+		"%s %s: refresh rw locks: " LPU64"/"LPU64
+		" ("LPU64"->"LPU64")\n", obd->obd_name, cfs_current()->comm,
+		pa.resid.name[0], pa.resid.name[1],
+		pa.extent.start, pa.extent.end);
 
-        ost_prolong_locks(&opd);
+	ost_prolong_locks(req, &body->oa, &pa);
 
-        CDEBUG(D_DLMTRACE, "%s: refreshed %u locks timeout for req %p.\n",
-               obd->obd_name, opd.opd_locks, req);
+	CDEBUG(D_DLMTRACE, "%s: refreshed %u locks timeout for req %p.\n",
+	       obd->obd_name, pa.blocks_cnt, req);
 
-        RETURN(opd.opd_locks > 0);
+	if (pa.blocks_cnt > 0)
+		RETURN(1);
+
+	RETURN(pa.locks_cnt > 0 ? 0 : -ESTALE);
 }
 
 static void ost_rw_hpreq_fini(struct ptlrpc_request *req)
@@ -2144,7 +2087,7 @@ static int ost_punch_hpreq_check(struct ptlrpc_request *req)
         struct obd_device *obd = req->rq_export->exp_obd;
         struct ost_body *body;
         struct obdo *oa;
-        struct ost_prolong_data opd = { 0 };
+	struct prolong_args pa = { 0 };
         __u64 start, end;
         ENTRY;
 
@@ -2158,29 +2101,30 @@ static int ost_punch_hpreq_check(struct ptlrpc_request *req)
         start = oa->o_size;
         end = start + oa->o_blocks;
 
-        opd.opd_req = req;
-        opd.opd_mode = LCK_PW;
-        opd.opd_exp = req->rq_export;
-        opd.opd_oa  = oa;
-        opd.opd_extent.start = start;
-        opd.opd_extent.end   = end;
-        if (oa->o_blocks == OBD_OBJECT_EOF)
-                opd.opd_extent.end = OBD_OBJECT_EOF;
+	pa.mode = LCK_PW | LCK_GROUP;
+	pa.export = req->rq_export;
+	pa.extent.start = start;
+	pa.extent.end   = end;
+	if (oa->o_blocks == OBD_OBJECT_EOF)
+		pa.extent.end = OBD_OBJECT_EOF;
 
-        osc_build_res_name(oa->o_id, oa->o_seq, &opd.opd_resid);
+	osc_build_res_name(oa->o_id, oa->o_seq, &pa.resid);
 
-        CDEBUG(D_DLMTRACE,
-               "%s: refresh locks: "LPU64"/"LPU64" ("LPU64"->"LPU64")\n",
-               obd->obd_name,
-               opd.opd_resid.name[0], opd.opd_resid.name[1],
-               opd.opd_extent.start, opd.opd_extent.end);
+	CDEBUG(D_DLMTRACE,
+	       "%s: refresh locks: "LPU64"/"LPU64" ("LPU64"->"LPU64")\n",
+	       obd->obd_name,
+	       pa.resid.name[0], pa.resid.name[1],
+	       pa.extent.start, pa.extent.end);
 
-        ost_prolong_locks(&opd);
+	ost_prolong_locks(req, oa, &pa);
 
-        CDEBUG(D_DLMTRACE, "%s: refreshed %u locks timeout for req %p.\n",
-               obd->obd_name, opd.opd_locks, req);
+	CDEBUG(D_DLMTRACE, "%s: refreshed %u locks timeout for req %p.\n",
+	       obd->obd_name, pa.blocks_cnt, req);
 
-        RETURN(opd.opd_locks > 0);
+	if (pa.blocks_cnt > 0)
+		RETURN(1);
+
+	RETURN(pa.locks_cnt > 0 ? 0 : -ESTALE);
 }
 
 static void ost_punch_hpreq_fini(struct ptlrpc_request *req)
@@ -2207,6 +2151,8 @@ static int ost_hpreq_handler(struct ptlrpc_request *req)
         if (req->rq_export) {
                 int opc = lustre_msg_get_opc(req->rq_reqmsg);
                 struct ost_body *body;
+		struct obd_connect_data *data =
+					&req->rq_export->exp_connect_data;
 
                 if (opc == OST_READ || opc == OST_WRITE) {
                         struct niobuf_remote *nb;
@@ -2283,7 +2229,10 @@ static int ost_hpreq_handler(struct ptlrpc_request *req)
                                 RETURN(-EFAULT);
                         }
 
-                        if (niocount == 0 || !(nb[0].flags & OBD_BRW_SRVLOCK))
+			if ((niocount == 0 ||
+			     !(nb[0].flags & OBD_BRW_SRVLOCK)) &&
+			   !(lustre_msg_get_flags(req->rq_reqmsg) &
+			     MSG_REPLAY))
                                 req->rq_ops = &ost_hpreq_rw;
                 } else if (opc == OST_PUNCH) {
                         req_capsule_init(&req->rq_pill, req, RCL_SERVER);
@@ -2296,8 +2245,11 @@ static int ost_hpreq_handler(struct ptlrpc_request *req)
                                 RETURN(-EFAULT);
                         }
 
-                        if (!(body->oa.o_valid & OBD_MD_FLFLAGS) ||
-                            !(body->oa.o_flags & OBD_FL_SRVLOCK))
+			if ((!(body->oa.o_valid & OBD_MD_FLFLAGS) ||
+			    !(body->oa.o_flags & OBD_FL_SRVLOCK)) &&
+			    !(data->ocd_connect_flags & OBD_CONNECT_MDS) &&
+			    !(lustre_msg_get_flags(req->rq_reqmsg) &
+			      MSG_REPLAY))
                                 req->rq_ops = &ost_hpreq_punch;
                 }
         }
