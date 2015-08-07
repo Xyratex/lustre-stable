@@ -1313,6 +1313,8 @@ static int osc_completion(const struct lu_env *env, struct osc_async_page *oap,
 	 */
 	lu_ref_del(&page->cp_reference, "transfer", page);
 
+	 if (OBD_FAIL_CHECK(OBD_FAIL_OSC_BRW_READ_BULK))
+		 rc = -EIO;
 	cl_page_completion(env, page, crt, rc);
 
 	RETURN(0);

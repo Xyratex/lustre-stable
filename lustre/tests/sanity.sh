@@ -12754,7 +12754,7 @@ test_250() {
 }
 run_test 250 "Write above 16T limit"
 
-test_251() {
+test_252() {
 	local ostidx=0
 	local rc=0
 
@@ -12835,7 +12835,35 @@ test_251() {
 
 	return 0
 }
-run_test 251 "Check object allocation limit"
+run_test 252 "Check object allocation limit"
+
+test_253() {
+	local file=$DIR/$tfile
+	local sz_MB=10
+
+	local free_MB=$(($(df -P $DIR | tail -n 1 | awk '{ print $4 }') / 1024))
+	[ $free_MB -lt $sz_MB ] &&
+		skip "Need free space ${sz_MB}M, have ${free_MB}M" && return
+
+	echo "Create test file $file size ${sz_MB}M, ${free_MB}M free"
+	$SETSTRIPE -c 2 $file || error "setstripe failed"
+
+	dd if=/dev/zero of=$file bs=1M count=$sz_MB || error "dd failed"
+	echo Cancel LRU locks on lustre client to flush the client cache
+	cancel_lru_locks osc
+
+	$LCTL mark "Read 2nd stripe"
+#define OBD_FAIL_OSC_BRW_READ_BULK       0x401
+	$LCTL set_param fail_loc=0x80000401
+
+	$MULTIOP $file oz1048576r4096c
+	$LCTL mark "Read 1nd+2nd stripe"
+	$MULTIOP $file oz1044480r8192c
+
+	rm -f $file
+	wait_delete_completed
+}
+run_test 253 "Read 2 pages from differnt stripes (Lelus-291)"
 
 test_400a() { # LU-1606, was conf-sanity test_74
 	local extra_flags=''
