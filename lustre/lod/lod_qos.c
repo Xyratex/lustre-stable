@@ -446,13 +446,6 @@ static int lod_qos_used(struct lod_device *lod, struct ost_pool *osts,
 	RETURN(0);
 }
 
-void lod_qos_rr_init(struct lod_qos_rr *lqr)
-{
-	spin_lock_init(&lqr->lqr_alloc);
-	lqr->lqr_dirty = 1;
-}
-
-
 #define LOV_QOS_EMPTY ((__u32)-1)
 /* compute optimal round-robin order, based on OSTs per OSS */
 static int lod_qos_calc_rr(struct lod_device *lod, struct ost_pool *src_pool,
@@ -611,34 +604,6 @@ out:
 	RETURN(dt);
 }
 
-static int lod_qos_declare_objects(const struct lu_env *env,
-				   struct lod_device *m,
-				   struct dt_object **stripe,
-				   __u32 stripe_idx,
-				   struct thandle *th)
-{
-	struct lod_thread_info *info = lod_env_info(env);
-	struct dt_object       *o;
-	int 		       *osts = info->lti_ea_store;
-	__u32 		       s_idx = 0;
-	int i;
-
-	for (i = 0; i < stripe_idx; i++) {
-		o = lod_qos_declare_object_on(env, m, osts[i], th);
-		if (IS_ERR(o)) {
-			CDEBUG(D_OTHER, "can't declare new object on #%u: %d\n",
-			       osts[i], (int) PTR_ERR(o));
-			continue;
-		}
-		/*
-		 * We've successfuly declared (reserved) an object
-		 */
-		stripe[s_idx++] = o;
-
-	}
-	return s_idx;
-}
-
 static int min_stripe_count(__u32 stripe_cnt, int flags)
 {
 	return (flags & LOV_USES_DEFAULT_STRIPE ?
@@ -710,11 +675,12 @@ static int lod_alloc_rr(const struct lu_env *env, struct lod_object *lo,
 	struct pool_desc  *pool = NULL;
 	struct ost_pool   *osts;
 	struct lod_qos_rr *lqr;
+	struct dt_object  *o;
 	unsigned int	   i, array_idx;
 	int		   rc;
 	__u32		   ost_start_idx_temp;
 	int		   speed = 0;
-	__u32		   stripe_idx = 0, s_idx = 0;
+	__u32		   stripe_idx = 0;
 	__u32		   stripe_cnt = lo->ldo_stripenr;
 	__u32		   stripe_cnt_min = min_stripe_count(stripe_cnt, flags);
 	__u32		   ost_idx;
@@ -740,8 +706,6 @@ static int lod_alloc_rr(const struct lu_env *env, struct lod_object *lo,
 	if (rc)
 		GOTO(out, rc);
 
-	down_read(&m->lod_qos.lq_rw_sem);
-	spin_lock(&lqr->lqr_alloc);
 	if (--lqr->lqr_start_count <= 0) {
 		lqr->lqr_start_idx = cfs_rand() % osts->op_count;
 		lqr->lqr_start_count =
@@ -756,6 +720,7 @@ static int lod_alloc_rr(const struct lu_env *env, struct lod_object *lo,
 		if (stripe_cnt > 1 && (osts->op_count % stripe_cnt) != 1)
 			++lqr->lqr_offset_idx;
 	}
+	down_read(&m->lod_qos.lq_rw_sem);
 	ost_start_idx_temp = lqr->lqr_start_idx;
 
 repeat_find:
@@ -824,7 +789,19 @@ repeat_find:
 		if (speed && lod_qos_is_ost_used(env, ost_idx, stripe_idx))
 			continue;
 
+		o = lod_qos_declare_object_on(env, m, ost_idx, th);
+		if (IS_ERR(o)) {
+			CDEBUG(D_OTHER, "can't declare new object on #%u: %d\n",
+			       ost_idx, (int) PTR_ERR(o));
+			rc = PTR_ERR(o);
+			continue;
+		}
+
+		/*
+		 * We've successfuly declared (reserved) an object
+		 */
 		lod_qos_ost_in_use(env, stripe_idx, ost_idx);
+		stripe[stripe_idx] = o;
 		stripe_idx++;
 
 	}
@@ -835,12 +812,10 @@ repeat_find:
 		goto repeat_find;
 	}
 
-	spin_unlock(&lqr->lqr_alloc);
 	up_read(&m->lod_qos.lq_rw_sem);
 
-	s_idx = lod_qos_declare_objects(env, m, stripe, stripe_idx, th);
-	if (s_idx) {
-		lo->ldo_stripenr = s_idx;
+	if (stripe_idx) {
+		lo->ldo_stripenr = stripe_idx;
 		/* at least one stripe is allocated */
 		rc = 0;
 	} else {
