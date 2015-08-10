@@ -215,6 +215,12 @@ struct osd_otable_it {
 				 ooi_waiting:1; /* it::next is waiting. */
 };
 
+struct osd_obj_orphan {
+	struct list_head oor_list;
+	struct lu_env	*oor_env; /* to identify "own" records */
+	__u32 oor_ino;
+};
+
 /*
  * osd device.
  */
@@ -274,6 +280,9 @@ struct osd_device {
 
 	/* quota slave instance */
 	struct qsd_instance      *od_quota_slave;
+
+	/* a list of orphaned agent inodes, protected with od_osfs_lock */
+	struct list_head	 od_orphan_list;
 };
 
 /* There are at most 10 uid/gids are affected in a transaction, and
@@ -315,6 +324,7 @@ struct osd_thandle {
         unsigned short          ot_credits;
         unsigned short          ot_id_cnt;
         unsigned short          ot_id_type;
+	int			ot_remove_agents:1;
         uid_t                   ot_id_array[OSD_MAX_UGID_CNT];
 	struct lquota_trans    *ot_quota_trans;
 #if OSD_THANDLE_STATS
