@@ -481,7 +481,8 @@ osd_scrub_check_update(struct osd_thread_info *info, struct osd_device *dev,
 			GOTO(out, rc);
 		}
 
-		sf->sf_flags |= SF_UPGRADE;
+		if (!(sf->sf_param & SP_DRYRUN))
+			sf->sf_flags |= SF_UPGRADE;
 		sf->sf_internal_flags &= ~SIF_NO_HANDLE_OLD_FID;
 		dev->od_check_ff = 1;
 		rc = osd_scrub_convert_ff(info, dev, inode, fid);
