@@ -5735,7 +5735,7 @@ static int osd_mount(const struct lu_env *env,
 	struct osd_thread_info	*info = osd_oti_get(env);
 	struct lu_fid		*fid = &info->oti_fid;
 	struct inode		*inode;
-	int			 rc = 0, force_over_128tb = 0;
+	int			 rc = 0, force_over_256tb = 0;
         ENTRY;
 
 	if (o->od_mnt != NULL)
@@ -5759,8 +5759,8 @@ static int osd_mount(const struct lu_env *env,
 		RETURN(-EINVAL);
 	}
 #endif
-	if (opts != NULL && strstr(opts, "force_over_128tb") != NULL)
-		force_over_128tb = 1;
+	if (opts != NULL && strstr(opts, "force_over_256tb") != NULL)
+		force_over_256tb = 1;
 
 	OBD_PAGE_ALLOC(__page, GFP_IOFS);
 	if (__page == NULL)
@@ -5779,7 +5779,7 @@ static int osd_mount(const struct lu_env *env,
 			"noextents",
 			/* strip out option we processed in osd */
 			"bigendian_extents",
-			"force_over_128tb",
+			"force_over_256tb",
 			NULL
 		};
 		strcat(options, opts);
@@ -5825,11 +5825,11 @@ static int osd_mount(const struct lu_env *env,
 		GOTO(out, rc);
 	}
 
-	if (ldiskfs_blocks_count(LDISKFS_SB(osd_sb(o))->s_es) > (8ULL << 32) &&
-	    force_over_128tb == 0) {
+	if (ldiskfs_blocks_count(LDISKFS_SB(osd_sb(o))->s_es) > (16ULL << 32) &&
+	    force_over_256tb == 0) {
 		CERROR("%s: device %s LDISKFS does not support filesystems "
-		       "greater than 128TB and can cause data corruption. "
-		       "Use \"force_over_128tb\" mount option to override.\n",
+		       "greater than 256TB and can cause data corruption. "
+		       "Use \"force_over_256tb\" mount option to override.\n",
 		       name, dev);
 		GOTO(out, rc = -EINVAL);
 	}
