@@ -5629,3 +5629,80 @@ get_journal_size() {
            awk '/^Journal size:/ {print $3}')
     echo $size
 }
+
+#
+# max mdd transaction size is sum of
+# 1. maximal number of credits for mdd operation
+#    MDD_TXN_RENAME_OP requires 168 credits, details in mdd_txn_init_credits()
+# 2. credits for adding changelog records, that depends on number of OSTs,
+#    details in changelog_credits()
+# 3. credits added by txn start hooks, details in mdt_txn_start_cb() and
+#    mdt_txn_start_cb()
+#
+mdd_max_txn_size_by_ost_nr()
+{
+	local tgt_count=$1
+
+	local max_op_credits=168
+	local changelog_credits=$(((tgt_count + 2) * 247))
+	local last_rcvd_update_credits=16
+	local lov_objids_credits=$((2 * 16 + 3))
+	echo $((max_op_credits + changelog_credits + last_rcvd_update_credits
+		+ lov_objids_credits))
+}
+
+#
+# set external journal
+#
+# Arguments: fs_device_name external_journal_file_name journal_size_in_blocks
+#
+# - disable internal journal on fs_device_name
+# - create external journal of specified size in file
+#   external_journal_file_name and attach loop device
+# - set external jounal for fs_device_name
+#
+set_external_journal() {
+	local fs_dev=$1
+	local journal_file=$2
+	local journal_size=$3
+	local block_size
+	local journal_dev
+
+	$E2FSCK $fs_dev -p
+	[ $? -eq 1 ] || error "e2fsck should have returned 1"
+	$TUNE2FS -O ^has_journal $fs_dev ||
+		error "tune2fs -O ^has_journal failed"
+	block_size=$(get_block_size client $fs_dev)
+	dd if=/dev/zero of=${journal_file} bs=${block_size} \
+	    count=${journal_size} || error "dd failed"
+	losetup -f ${journal_file} || error "losetup failed"
+	journal_dev=$(losetup -j ${journal_file} | sed 's/:.*$//' | tail -1)
+	$MKE2FS -O journal_dev -b ${block_size} ${journal_dev} ||
+		error "mke2fs -O journal_dev failed"
+	$TUNE2FS -O has_journal -J device=$journal_dev $fs_dev ||
+		error "tune2fs -O has_journal failed"
+}
+
+#
+# switch from external to internal journal
+#
+# Argument: fs_device_name external_journal_file_name
+#
+# - disable journal on fs_device_name
+# - enable internal journal on fs_device_name
+# - detach journal file from loop device and delete it
+#
+delete_external_journal() {
+	local fs_dev=$1
+	local journal_file=$2
+	local journal_dev
+
+	$TUNE2FS -O ^has_journal $fs_dev ||
+		error "tune2fs -O ^has_journal failed"
+	$TUNE2FS -O has_journal $fs_dev ||
+		error "tune2fs -O has_journal failed"
+
+	journal_dev=$(losetup -j ${journal_file} | sed 's/:.*$//' | tail -1)
+	losetup -d ${journal_dev}
+	rm ${journal_file}
+}

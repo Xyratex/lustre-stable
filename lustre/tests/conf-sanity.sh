@@ -1247,6 +1247,11 @@ test_32a() {
 	tar xjvf $DISK1_8 -C $tmpdir || \
 		{ skip_env "Cannot untar $DISK1_8" && return 0; }
 
+	# switch mds to external journal big enough for 1 ost
+	local journal_size=$(mdd_max_txn_size_by_ost_nr 1)
+	journal_size=$((journal_size * 4))
+	set_external_journal $tmpdir/mds $tmpdir/mds.journal ${journal_size}
+
 	load_modules
 	$LCTL set_param debug="$PTLDEBUG"
 
@@ -1297,6 +1302,7 @@ test_32a() {
 		trap cleanup_32 EXIT INT || return 12
 
 	cleanup_32
+	delete_external_journal $tmpdir/mds $tmpdir/mds.journal
 
 	rm -rf $tmpdir || true	# true is only for TMP on NFS
 }
@@ -1313,6 +1319,11 @@ test_32b() {
 	mkdir -p $tmpdir
 	tar xjvf $DISK1_8 -C $tmpdir || \
 		{ skip_env "Cannot untar $DISK1_8" && return ; }
+
+	# switch mds to external journal big enough for 1 ost
+	local journal_size=$(mdd_max_txn_size_by_ost_nr 1)
+	journal_size=$((journal_size * 4))
+	set_external_journal $tmpdir/mds $tmpdir/mds.journal ${journal_size}
 
 	load_modules
 	$LCTL set_param debug="+config"
@@ -1373,6 +1384,7 @@ test_32b() {
 	echo "ok."
 
 	cleanup_32
+	delete_external_journal $tmpdir/mds $tmpdir/mds.journal
 
 	rm -rf $tmpdir || true  # true is only for TMP on NFS
 }
