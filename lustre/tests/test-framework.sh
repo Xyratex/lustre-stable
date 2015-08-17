@@ -3516,7 +3516,7 @@ setupall() {
 
     load_modules
 
-    if [ -z "$CLIENTONLY" ]; then
+    if [[ -z "$CLIENTONLY" && -z "$NOSETUP" ]]; then
         echo Setup mgs, mdt, osts
         echo $WRITECONF | grep -q "writeconf" && \
             writeconf_all
