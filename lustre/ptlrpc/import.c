@@ -1412,7 +1412,12 @@ static int ptlrpc_invalidate_import_thread(void *data)
                imp->imp_obd->obd_name, obd2cli_tgt(imp->imp_obd),
                imp->imp_connection->c_remote_uuid.uuid);
 
-        ptlrpc_invalidate_import(imp);
+	if (obd_lbug_on_eviction) {
+		CERROR("LBUG upon eviction\n");
+		LBUG();
+	}
+
+	ptlrpc_invalidate_import(imp);
 
         if (obd_dump_on_eviction) {
                 CERROR("dump the log upon eviction\n");
