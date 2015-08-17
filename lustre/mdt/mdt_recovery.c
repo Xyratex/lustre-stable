@@ -205,7 +205,7 @@ __u64 mdt_req_from_lrd(struct ptlrpc_request *req,
 	lustre_msg_set_transno(req->rq_repmsg, req->rq_transno);
 	lustre_msg_set_status(req->rq_repmsg, req->rq_status);
 
-	DEBUG_REQ(D_RPCTRACE, req, "restoring transno %lld/status %d",
+	DEBUG_REQ(D_WARNING, req, "restoring transno %lld/status %d",
 		  req->rq_transno, req->rq_status);
 
 	mdt_steal_ack_locks(req);
