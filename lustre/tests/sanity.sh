@@ -4177,7 +4177,8 @@ test_56a() {	# was test_56
         OSTIDX=1
         OBDUUID=$(ostuuid_from_index $OSTIDX)
 	FILENUM=$($GETSTRIPE -ir $DIR/$tdir | grep "^$OSTIDX\$" | wc -l)
-	FOUND=$($GETSTRIPE -r --obd $OBDUUID $DIR/$tdir | grep obdidx | wc -l)
+	FOUND=$($GETSTRIPE -r --obd $OBDUUID $DIR/$tdir |
+		grep 'lmm_stripe_offset:'| grep $OSTIDX | wc -l)
 	[[ $FOUND -eq $FILENUM ]] ||
 		error "$GETSTRIPE --obd wrong: found $FOUND, expected $FILENUM"
 	[[ $($GETSTRIPE -r -v --obd $OBDUUID $DIR/$tdir |
