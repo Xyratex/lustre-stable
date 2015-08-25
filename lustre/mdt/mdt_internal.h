@@ -926,7 +926,7 @@ static inline int mdt_fail_write(const struct lu_env *env,
         if (OBD_FAIL_CHECK_ORSET(id, OBD_FAIL_ONCE)) {
                 CERROR(LUSTRE_MDT_NAME": cfs_fail_loc=%x, fail write ops\n",
                        id);
-                return dd->dd_ops->dt_ro(env, dd);
+		return dt_ro(env, dd);
                 /* We set FAIL_ONCE because we never "un-fail" a device */
         }
 
