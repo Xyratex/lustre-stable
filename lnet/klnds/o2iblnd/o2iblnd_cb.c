@@ -3279,8 +3279,11 @@ kiblnd_qp_event(struct ib_event *event, void *arg)
         case IB_EVENT_COMM_EST:
                 CDEBUG(D_NET, "%s established\n",
                        libcfs_nid2str(conn->ibc_peer->ibp_nid));
+		/* we are recv packet but connection don't established
+		 * so likely it say 3th handshake packet lost, so free to
+		 * force make connection established */
+		rdma_notify(conn->ibc_cmid, IB_EVENT_COMM_EST);
                 return;
-
         default:
                 CERROR("%s: Async QP event type %d\n",
                        libcfs_nid2str(conn->ibc_peer->ibp_nid), event->event);
