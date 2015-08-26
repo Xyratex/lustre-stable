@@ -12758,6 +12758,10 @@ test_252() {
 	local ostidx=0
 	local rc=0
 
+	[ $PARALLEL == "yes" ] && skip "skip parallel run" && return
+	remote_mds_nodsh && skip "remote MDS with nodsh" && return
+	remote_mgs_nodsh && skip "remote MGS with nodsh" && return
+
 	rm -rf $DIR/$tdir
 	mkdir $DIR/$tdir
 	local ost_name=$($LFS osts | grep ${ostidx}": " | \
