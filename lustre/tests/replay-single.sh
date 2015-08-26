@@ -2660,10 +2660,11 @@ test_85b() { #bug 16774
     done
 
     lov_id=`lctl dl | grep "clilov"`
-    addr=`echo $lov_id | awk '{print $4}' | awk -F '-' '{print $3}'`
-    count=`lctl get_param -n ldlm.namespaces.*OST0000*$addr.lock_unused_count`
-    echo "before recovery: unused locks count = $count"
-    [ $count != 0 ] || return 3
+	addr=$(echo $lov_id | awk '{print $4}' | awk -F '-' '{print $NF}')
+	count=$(lctl get_param -n \
+		ldlm.namespaces.*OST0000*$addr.lock_unused_count)
+	echo "before recovery: unused locks count = $count"
+	[ $count -ne 0 ] || return 3
 
     fail ost1
 
