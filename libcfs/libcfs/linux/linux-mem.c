@@ -66,11 +66,12 @@ cfs_cpt_vzalloc(struct cfs_cpt_table *cptab, int cpt, size_t nr_bytes)
 EXPORT_SYMBOL(cfs_cpt_vzalloc);
 
 struct page *
-cfs_page_cpt_alloc(struct cfs_cpt_table *cptab, int cpt, gfp_t flags)
+cfs_pages_cpt_alloc(struct cfs_cpt_table *cptab, int cpt, gfp_t flags,
+			unsigned order)
 {
-	return alloc_pages_node(cfs_cpt_spread_node(cptab, cpt), flags, 0);
+	return alloc_pages_node(cfs_cpt_spread_node(cptab, cpt), flags, order);
 }
-EXPORT_SYMBOL(cfs_page_cpt_alloc);
+EXPORT_SYMBOL(cfs_pages_cpt_alloc);
 
 void *
 cfs_mem_cache_cpt_alloc(struct kmem_cache *cachep, struct cfs_cpt_table *cptab,
