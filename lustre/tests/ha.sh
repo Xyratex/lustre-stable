@@ -54,9 +54,14 @@
 #   Each target has a failnode, so that workloads can continue after a power
 #   failure.
 #
+#   CRM could be configured by 2 ways:
+#   1.
 #   Targets are automatically failed back when their primary node is back.  This
 #   assumption avoids calling CRM-specific commands to trigger failbacks, making
 #   this script more CRM-neural.
+#   2.
+#   Targets are not automatically failed back when their primary node is back.
+#   CRM-specific command is executed to trigger failbacks.
 #
 #   A crash dump mechanism is configured to catch LBUGs, panics, etc.
 #
@@ -107,7 +112,7 @@ mpirun=$(which mpirun)
 
 ha_info()
 {
-    echo "$0: $(date +%s):" "$@"
+	echo "$0: $(date +%H:%M:%S' '%s):" "$@"
 }
 
 ha_error()
@@ -138,6 +143,8 @@ declare -a  ha_status_files
 declare     ha_machine_file=$ha_tmp_dir/machine_file
 declare     ha_power_down_cmd=${POWER_DOWN:-"pm -0"}
 declare     ha_power_up_cmd=${POWER_UP:-"pm -1"}
+declare     ha_failback_delay=${DELAY:-5}
+declare     ha_failback_cmd=${FAILBACK:-""}
 declare -a  ha_clients
 declare -a  ha_servers
 declare -a  ha_victims
@@ -517,7 +524,7 @@ ha_aim()
 ha_wait_node()
 {
     local node=$1
-    local end=$(($(date +%s) + 5 * 60))
+    local end=$(($(date +%s) + 10 * 60))
 
     ha_info "Waiting for $node to boot up"
     until pdsh -w $node -S hostname >/dev/null 2>&1 ||
@@ -525,6 +532,21 @@ ha_wait_node()
           (($(date +%s) >= end)); do
         ha_sleep 1 >/dev/null
     done
+}
+
+ha_failback()
+{
+	local node=$1
+	ha_info "Failback resources on $node in $ha_failback_delay sec"
+
+	ha_sleep $ha_failback_delay
+	[ "$ha_failback_cmd" ] ||
+	{
+		ha_info "No failback command set, skiping"
+		return 0
+	}
+
+	$ha_failback_cmd $node
 }
 
 ha_summarize()
@@ -560,8 +582,13 @@ ha_killer()
 
         ha_info "Bringing $node back"
         ha_sleep $(ha_rand 10)
-        $ha_workloads_only || ha_power_up $node
-        $ha_workloads_only || ha_wait_node $node
+	$ha_workloads_only ||
+	{
+		ha_power_up $node
+		ha_wait_node $node
+		ha_failback $node
+	}
+
         #
         # Wait for the failback to start.
         #
