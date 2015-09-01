@@ -2617,6 +2617,7 @@ static int echo_client_kbrw(struct echo_device *ed, int rw, struct obdo *oa,
         RETURN(rc);
 }
 
+#ifdef HAVE_SERVER_SUPPORT
 static int echo_client_prep_commit(const struct lu_env *env,
 				   struct obd_export *exp, int rw,
 				   struct obdo *oa, struct echo_object *eco,
@@ -2626,7 +2627,7 @@ static int echo_client_prep_commit(const struct lu_env *env,
 {
         struct lov_stripe_md *lsm = eco->eo_lsm;
         struct obd_ioobj ioo;
-        struct niobuf_local *lnb;
+        struct niobuf_local *lnb = tgt_io_ses(env)->local;
         struct niobuf_remote *rnb;
         obd_off off;
         obd_size npages, tot_pages;
@@ -2641,10 +2642,9 @@ static int echo_client_prep_commit(const struct lu_env *env,
 	npages = batch >> PAGE_CACHE_SHIFT;
 	tot_pages = count >> PAGE_CACHE_SHIFT;
 
-        OBD_ALLOC(lnb, npages * sizeof(struct niobuf_local));
         OBD_ALLOC(rnb, npages * sizeof(struct niobuf_remote));
 
-        if (lnb == NULL || rnb == NULL)
+        if (rnb == NULL)
                 GOTO(out, ret = -ENOMEM);
 
 	if (rw == OBD_BRW_WRITE && async)
@@ -2716,12 +2716,11 @@ static int echo_client_prep_commit(const struct lu_env *env,
         }
 
 out:
-        if (lnb)
-                OBD_FREE(lnb, npages * sizeof(struct niobuf_local));
         if (rnb)
                 OBD_FREE(rnb, npages * sizeof(struct niobuf_remote));
         RETURN(ret);
 }
+#endif
 
 static int echo_client_brw_ioctl(const struct lu_env *env, int rw,
 				 struct obd_export *exp,
@@ -2730,7 +2729,6 @@ static int echo_client_brw_ioctl(const struct lu_env *env, int rw,
 {
         struct obd_device *obd = class_exp2obd(exp);
         struct echo_device *ed = obd2echo_dev(obd);
-        struct echo_client_obd *ec = ed->ed_ec;
         struct obdo *oa = &data->ioc_obdo1;
         struct echo_object *eco;
         int rc;
@@ -2767,13 +2765,18 @@ static int echo_client_brw_ioctl(const struct lu_env *env, int rw,
                 rc = echo_client_kbrw(ed, rw, oa,
                                       eco, data->ioc_offset,
 				      data->ioc_count, async, dummy_oti);
-                break;
-        case 3:
+                    break;
+#ifdef HAVE_SERVER_SUPPORT
+	case 3: {
+		struct echo_client_obd *ec = ed->ed_ec;
+
 		rc = echo_client_prep_commit(env, ec->ec_exp, rw, oa,
 					     eco, data->ioc_offset,
 					     data->ioc_count, data->ioc_plen1,
 					     dummy_oti, async);
                 break;
+	}
+#endif
         default:
                 rc = -EINVAL;
         }
@@ -2829,7 +2832,7 @@ echo_client_iocontrol(unsigned int cmd, struct obd_export *exp, int len,
 
 #ifdef HAVE_SERVER_SUPPORT
 	env->le_ses = &echo_session;
-	rc = lu_context_init(env->le_ses, LCT_SERVER_SESSION | LCT_NOREF);
+	rc = lu_context_init(env->le_ses, LCT_SERVER_SESSION | LCT_IO_SESSION | LCT_NOREF);
 	if (unlikely(rc < 0))
 		GOTO(out_env, rc);
 	lu_context_enter(env->le_ses);

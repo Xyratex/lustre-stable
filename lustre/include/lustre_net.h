@@ -2392,7 +2392,6 @@ struct ptlrpc_thread {
         /**
          * thread-private data (preallocated memory)
          */
-        void *t_data;
         __u32 t_flags;
         /**
          * service thread index, from ptlrpc_start_threads
@@ -2506,16 +2505,6 @@ typedef int  (*svc_handler_t)(struct ptlrpc_request *req);
 
 struct ptlrpc_service_ops {
 	/**
-	 * if non-NULL called during thread creation (ptlrpc_start_thread())
-	 * to initialize service specific per-thread state.
-	 */
-	int		(*so_thr_init)(struct ptlrpc_thread *thr);
-	/**
-	 * if non-NULL called during thread shutdown (ptlrpc_main()) to
-	 * destruct state created by ->srv_init().
-	 */
-	void		(*so_thr_done)(struct ptlrpc_thread *thr);
-	/**
 	 * Handler function for incoming requests for this service
 	 */
 	int		(*so_req_handler)(struct ptlrpc_request *req);
@@ -2587,7 +2576,8 @@ struct ptlrpc_service {
          * Tags for lu_context associated with this thread, see struct
          * lu_context.
          */
-        __u32                           srv_ctx_tags;
+	enum lu_context_tag		srv_ctx_tags;
+	enum lu_context_tag		srv_ses_tags;
         /** soft watchdog timeout multiplier */
         int                             srv_watchdog_factor;
         /** under unregister_service */
@@ -3095,7 +3085,9 @@ struct ptlrpc_service_thr_conf {
 	/* set NUMA node affinity for service threads */
 	unsigned int			tc_cpu_affinity;
 	/* Tags for lu_context associated with service thread */
-	__u32				tc_ctx_tags;
+	enum lu_context_tag		tc_ctx_tags;
+	/* Tags for lu_context associated with service thread */
+	enum lu_context_tag		tc_ses_tags;
 };
 
 struct ptlrpc_service_cpt_conf {

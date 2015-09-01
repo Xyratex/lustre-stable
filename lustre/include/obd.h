@@ -45,6 +45,8 @@
 #ifdef HAVE_SERVER_SUPPORT
 # include <lu_target.h>
 # include <obd_target.h>
+#else
+struct niobuf_local;
 #endif
 #include <lu_ref.h>
 #include <lustre_export.h>
@@ -493,16 +495,6 @@ struct lmv_obd {
 	struct lmv_tgt_desc	**tgts;
 
 	struct obd_connect_data	conn_data;
-};
-
-struct niobuf_local {
-	__u64		lnb_file_offset;
-	__u32		lnb_page_offset;
-	__u32		lnb_len;
-	__u32		lnb_flags;
-	struct page	*lnb_page;
-	void		*lnb_data;
-	int		lnb_rc;
 };
 
 #define LUSTRE_FLD_NAME         "fld"

@@ -169,6 +169,7 @@ static int mds_start_ptlrpc_service(struct mds_device *m)
 			.tc_nthrs_user		= mds_num_threads,
 			.tc_cpu_affinity	= 1,
 			.tc_ctx_tags		= LCT_MD_THREAD,
+			.tc_ses_tags		= LCT_SERVER_SESSION,
 		},
 		.psc_cpt		= {
 			.cc_pattern		= mds_num_cpts,
@@ -213,6 +214,7 @@ static int mds_start_ptlrpc_service(struct mds_device *m)
 			.tc_nthrs_user		= mds_rdpg_num_threads,
 			.tc_cpu_affinity	= 1,
 			.tc_ctx_tags		= LCT_MD_THREAD,
+			.tc_ses_tags		= LCT_SERVER_SESSION,
 		},
 		.psc_cpt		= {
 			.cc_pattern		= mds_rdpg_num_cpts,
@@ -259,6 +261,7 @@ static int mds_start_ptlrpc_service(struct mds_device *m)
 			.tc_nthrs_user		= mds_attr_num_threads,
 			.tc_cpu_affinity	= 1,
 			.tc_ctx_tags		= LCT_MD_THREAD,
+			.tc_ses_tags		= LCT_SERVER_SESSION,
 		},
 		.psc_cpt		= {
 			.cc_pattern		= mds_attr_num_cpts,
@@ -304,6 +307,7 @@ static int mds_start_ptlrpc_service(struct mds_device *m)
 			.tc_cpu_affinity	= 1,
 			.tc_ctx_tags		= LCT_MD_THREAD |
 						  LCT_DT_THREAD,
+			.tc_ses_tags		= LCT_SERVER_SESSION,
 		},
 		.psc_cpt		= {
 			.cc_pattern		= mds_num_cpts,
@@ -342,6 +346,7 @@ static int mds_start_ptlrpc_service(struct mds_device *m)
 			.tc_nthrs_init		= MDS_OTHR_NTHRS_INIT,
 			.tc_nthrs_max		= MDS_OTHR_NTHRS_MAX,
 			.tc_ctx_tags		= LCT_MD_THREAD,
+			.tc_ses_tags		= LCT_SERVER_SESSION,
 		},
 		.psc_ops		= {
 			.so_req_handler		= tgt_request_handle,
@@ -377,7 +382,8 @@ static int mds_start_ptlrpc_service(struct mds_device *m)
 			.tc_thr_name		= LUSTRE_MDT_NAME "_seqm",
 			.tc_nthrs_init		= MDS_OTHR_NTHRS_INIT,
 			.tc_nthrs_max		= MDS_OTHR_NTHRS_MAX,
-			.tc_ctx_tags		= LCT_MD_THREAD | LCT_DT_THREAD
+			.tc_ctx_tags		= LCT_MD_THREAD | LCT_DT_THREAD,
+			.tc_ses_tags		= LCT_SERVER_SESSION,
 		},
 		.psc_ops		= {
 			.so_req_handler		= tgt_request_handle,
@@ -412,6 +418,7 @@ static int mds_start_ptlrpc_service(struct mds_device *m)
 			.tc_nthrs_init		= MDS_OTHR_NTHRS_INIT,
 			.tc_nthrs_max		= MDS_OTHR_NTHRS_MAX,
 			.tc_ctx_tags		= LCT_DT_THREAD | LCT_MD_THREAD,
+			.tc_ses_tags		= LCT_SERVER_SESSION,
 		},
 		.psc_ops		= {
 			.so_req_handler		= tgt_request_handle,

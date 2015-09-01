@@ -1074,6 +1074,7 @@ static int mgs_init0(const struct lu_env *env, struct mgs_device *mgs,
 			.tc_nthrs_init		= MGS_NTHRS_INIT,
 			.tc_nthrs_max		= MGS_NTHRS_MAX,
 			.tc_ctx_tags		= LCT_MG_THREAD,
+			.tc_ses_tags		= LCT_SERVER_SESSION,
 		},
 		.psc_ops		= {
 			.so_req_handler		= tgt_request_handle,

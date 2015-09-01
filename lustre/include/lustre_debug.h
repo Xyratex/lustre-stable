@@ -68,7 +68,6 @@ do { if (offset > ASSERT_MAX_SIZE_MB << 20) {                           \
 }} while(0)
 
 /* lib/debug.c */
-void dump_lniobuf(struct niobuf_local *lnb);
 int dump_req(struct ptlrpc_request *req);
 int block_debug_setup(void *addr, int len, __u64 off, __u64 id);
 int block_debug_check(char *who, void *addr, int len, __u64 off, __u64 id);
