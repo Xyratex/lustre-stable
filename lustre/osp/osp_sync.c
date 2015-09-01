@@ -949,19 +949,18 @@ static void osp_sync_process_committed(const struct lu_env *env,
 
 		body = req_capsule_client_get(&req->rq_pill, &RMF_OST_BODY);
 		LASSERT(body);
-
 		/* import can be closing, thus all commit cb's are
 		 * called we can check committness directly */
-		if (req->rq_transno <= imp->imp_peer_committed_transno) {
+		if (req->rq_import_generation == imp->imp_generation) {
 			rc = llog_cat_cancel_records(env, llh, 1,
 						     &body->oa.o_lcookie);
 			if (rc)
 				CERROR("%s: can't cancel record: %d\n",
 				       obd->obd_name, rc);
 		} else {
-			DEBUG_REQ(D_HA, req, "not committed");
+			DEBUG_REQ(D_ERROR, req, "imp_committed = "LPU64,
+				  imp->imp_peer_committed_transno);
 		}
-
 		ptlrpc_req_finished(req);
 		done++;
 	}
