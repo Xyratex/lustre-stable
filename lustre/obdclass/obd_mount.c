@@ -1122,7 +1122,8 @@ int server_register_target(struct super_block *sb)
                                 "Communication to the MGS return error %d. "
                                 "Is the MGS running?\n", rc);
                 } else {
-                        CERROR("Cannot talk to the MGS: %d, not fatal\n", rc);
+			CDEBUG(D_HA, "Error registering with the MGS: "
+				"rc = %d (not fatal)\n", rc);
                         /* reset the error code for non-fatal error. */
                         rc = 0;
                 }

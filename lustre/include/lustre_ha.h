@@ -59,7 +59,7 @@ void ptlrpc_fail_import(struct obd_import *imp, __u32 conn_cnt);
 int ptlrpc_check_suspend(void);
 void ptlrpc_activate_timeouts(struct obd_import *imp);
 void ptlrpc_deactivate_timeouts(struct obd_import *imp);
-
+void ptlrpc_pinger_force(struct obd_import *imp);
 /** @} ha */
 
 #endif
