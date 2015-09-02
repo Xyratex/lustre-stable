@@ -3116,8 +3116,12 @@ test_78() { #LU-6673
 		do_facet ost"$i" lctl set_param \
 			ost.OSS.*.nrs_orr_quantum=1
 		rc=$?
-		[ $rc -eq 0 -o $rc -eq 11 ] ||
-			error "Expected set_param to return 0 or EAGAIN"
+		# Valid return codes are:
+		# 0: Tuning succeeded
+		# ENODEV: Policy is still stopped
+		# EAGAIN: Policy is being initialized
+		[ $rc -eq 0 -o $rc -eq 19 -o $rc -eq 11 ] ||
+			error "Expected set_param to return 0|ENODEV|EAGAIN"
 	done
 
 	# Cleanup the ORR policy
