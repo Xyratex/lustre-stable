@@ -12753,6 +12753,54 @@ test_250() {
 }
 run_test 250 "Write above 16T limit"
 
+test_252_spend_po() {
+	local serv=$1
+	local mdtosc_proc=$2
+	local last_id
+	local next_id
+	local max_age
+
+	#Waiting statfs update at mds
+	max_age=$(do_facet $serv lctl get_param -n osp.$mdtosc_proc.maxage)
+
+	sleep $((max_age*3/2))
+
+	last_id=$(do_facet $serv lctl get_param -n \
+			  osp.$mdtosc_proc.prealloc_last_id)
+	next_id=$(do_facet $serv lctl get_param -n \
+			  osp.$mdtosc_proc.prealloc_next_id)
+
+	if [ $next_id -gt $last_id ]; then
+		return
+	fi
+
+	echo "Spend $((last_id-next_id)) prealloc objects..."
+	#Spend all prealloc objects
+	for i in $(seq 0 $((last_id-next_id))); do
+		dd if=/dev/zero of=$DIR/$tdir/r_$last_id_$i bs=1K count=1 \
+			2>/dev/null || break;
+	done
+}
+
+test_252_fill_ost() {
+	local size_1
+	local hwm=$3
+
+	blocks=$($LFS df $MOUNT | grep $1 | awk '{ print $4 }')
+	size_1=$((blocks/1024-hwm))
+	size_1=$((size_1+size_1/10))
+
+	if [[ $hwm < $((blocks/1024)) ]]; then
+		dd if=/dev/zero of=$DIR/$tdir/1 bs=1M count=$size_1 \
+			 oflag=append conv=notrunc
+
+		test_252_spend_po $SINGLEMDS $2
+
+		blocks=$($LFS df $MOUNT | grep $1 | awk '{ print $4 }')
+		echo "OST still has $((blocks/1024)) mbytes free"
+	fi
+}
+
 test_252() {
 	local ostidx=0
 	local rc=0
@@ -12777,46 +12825,43 @@ test_252() {
 	do_facet mgs $LCTL pool_new $FSNAME.$TESTNAME || return 1
 	do_facet mgs $LCTL pool_add $FSNAME.$TESTNAME $ost_name || return 2
 
-	$SETSTRIPE $DIR/$tdir -i $ostidx -c 1 -p $FSNAME.$TESTNAME
+	# Wait for client to see a OST at pool
+	wait_update $HOSTNAME "lctl get_param -n
+			lov.$FSNAME-*.pools.$TESTNAME | sort -u |
+			grep $ost_name" "$ost_name""_UUID" $((TIMEOUT/2)) ||
+			return 2
+	$SETSTRIPE $DIR/$tdir -i $ostidx -c 1 -p $FSNAME.$TESTNAME || return 3
 
 	dd if=/dev/zero of=$DIR/$tdir/0 bs=1M count=10
 	local blocks=$($LFS df $MOUNT | grep $ost_name | awk '{ print $4 }')
-	echo "OST still has $(($blocks/1024)) mbytes free"
+	echo "OST still has $((blocks/1024)) mbytes free"
 
-	local new_hwm=$(($blocks/1024-10))
+	local new_hwm=$((blocks/1024-10))
 	do_facet $SINGLEMDS lctl set_param \
-			osp.$mdtosc_proc1.rsrvd_size_nwm_mb $(($new_hwm+5))
+			osp.$mdtosc_proc1.rsrvd_size_nwm_mb $((new_hwm+5))
 	do_facet $SINGLEMDS lctl set_param \
 			osp.$mdtosc_proc1.rsrvd_size_hwm_mb $new_hwm
 
-	dd if=/dev/zero of=$DIR/$tdir/1 bs=1M count=15
-	#Waiting statfs update at mds
-	sleep $TIMEOUT
-	local last_id=$(do_facet $SINGLEMDS lctl get_param -n \
-			osp.$mdtosc_proc1.prealloc_last_id)
-	local next_id=$(do_facet $SINGLEMDS lctl get_param -n \
-			osp.$mdtosc_proc1.prealloc_next_id)
+	test_252_fill_ost $ost_name $mdtosc_proc1 $new_hwm
 
-	echo "Spend $(($last_id-$next_id)) prealloc objects..."
-	#Spend all prealloc objects
-	for i in `seq 0 $(($last_id-$next_id))`; do
-		dd if=/dev/zero of=$DIR/$tdir/r$i bs=1K count=1 2>/dev/null || break;
-	done
-	blocks=$($LFS df $MOUNT | grep $ost_name | awk '{ print $4 }')
-	echo "OST still has $(($blocks/1024)) mbytes free"
+	#First enospc could execute orphan deletion so repeat.
+	test_252_fill_ost $ost_name $mdtosc_proc1 $new_hwm
+
 	local oa_status=$(do_facet $SINGLEMDS lctl get_param -n \
 			osp.$mdtosc_proc1.prealloc_status)
 	echo "prealloc_status $oa_status"
-	dd if=/dev/zero of=$DIR/$tdir/2 bs=1M count=1 && \
+	#Check preallocate objects again
+	test_252_spend_po $SINGLEMDS $mdtosc_proc1
+
+	dd if=/dev/zero of=$DIR/$tdir/2 bs=1M count=1 &&
 		error "File creation should fail"
 	#object allocation was stopped, but we still able to append files
-	dd if=/dev/zero of=$DIR/$tdir/1 bs=1M seek=6 count=5 oflag=append || \
+	dd if=/dev/zero of=$DIR/$tdir/1 bs=1M seek=6 count=5 oflag=append ||
 		error "Append failed"
 	rm -rf $DIR/$tdir/1 $DIR/$tdir/0 $DIR/$tdir/r*
 	sleep $TIMEOUT
-	#The object allocation should work again
-	for i in `seq 10 12`; do
-		dd if=/dev/zero of=$DIR/$tdir/$i bs=1M count=1 2>/dev/null || \
+	for i in $(seq 10 12); do
+		dd if=/dev/zero of=$DIR/$tdir/$i bs=1M count=1 2>/dev/null ||
 			error "File creation failed after rm";
 	done
 
