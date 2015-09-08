@@ -1154,7 +1154,6 @@ static int mgs_object_init(const struct lu_env *env, struct lu_object *o,
 	struct mgs_device *d = lu2mgs_dev(o->lo_dev);
 	struct lu_device  *under;
 	struct lu_object  *below;
-	int                rc = 0;
 	ENTRY;
 
 	/* do no set .do_ops as mgs calls to bottom osd directly */
@@ -1164,12 +1163,12 @@ static int mgs_object_init(const struct lu_env *env, struct lu_object *o,
 
 	under = &d->mgs_bottom->dd_lu_dev;
 	below = under->ld_ops->ldo_object_alloc(env, o->lo_header, under);
-	if (below != NULL)
-		lu_object_add(o, below);
-	else
-		rc = -ENOMEM;
+	if (below == NULL)
+		RETURN(-ENOMEM);
 
-	return 0;
+	lu_object_add(o, below);
+
+	RETURN(0);
 }
 
 static void mgs_object_free(const struct lu_env *env, struct lu_object *o)
