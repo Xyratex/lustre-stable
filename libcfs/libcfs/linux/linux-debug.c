@@ -69,7 +69,7 @@
 
 #include <linux/kallsyms.h>
 
-char lnet_upcall[1024] = "/usr/lib/lustre/lnet_upcall";
+char lnet_upcall[1024] = "NONE";
 char lnet_debug_log_upcall[1024] = "/usr/lib/lustre/lnet_debug_log_upcall";
 
 /**
@@ -117,6 +117,9 @@ void libcfs_run_upcall(char **argv)
                 NULL};
         ENTRY;
 
+	if (!strcmp(lnet_upcall, "NONE"))
+		RETURN_EXIT;
+
         argv[0] = lnet_upcall;
         argc = 1;
         while (argv[argc] != NULL)
@@ -141,6 +144,7 @@ void libcfs_run_upcall(char **argv)
                        argc < 5 ? "" : ",", argc < 5 ? "" : argv[4],
                        argc < 6 ? "" : ",...");
         }
+	EXIT;
 }
 
 void libcfs_run_lbug_upcall(struct libcfs_debug_msg_data *msgdata)
@@ -158,6 +162,7 @@ void libcfs_run_lbug_upcall(struct libcfs_debug_msg_data *msgdata)
         argv[5] = NULL;
 
         libcfs_run_upcall (argv);
+	EXIT;
 }
 
 /* coverity[+kill] */
