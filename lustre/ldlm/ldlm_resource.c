@@ -36,6 +36,7 @@
  */
 
 #define DEBUG_SUBSYSTEM S_LDLM
+#include <linux/kthread.h>
 #include <lustre_dlm.h>
 #include <lustre_fid.h>
 #include <obd_class.h>
@@ -65,6 +66,9 @@ struct proc_dir_entry *ldlm_svc_proc_dir;
 /* during debug dump certain amount of granted locks for one resource to avoid
  * DDOS. */
 static unsigned int ldlm_dump_granted_max = 256;
+
+static int ldlm_drop_caches(enum ldlm_side client);
+static int ldlm_ns_drop_cache(struct ldlm_namespace *ns);
 
 #ifdef CONFIG_PROC_FS
 static ssize_t
@@ -96,6 +100,21 @@ ldlm_rw_uint_seq_write(struct file *file, const char __user *buffer,
 				    (unsigned int *)seq->private);
 }
 
+static ssize_t
+lprocfs_drop_caches_seq_write(struct file *file, const char __user *buffer,
+			      size_t count, loff_t *off)
+{
+	int rc = 0;
+	rc = ldlm_drop_caches(LDLM_NAMESPACE_CLIENT);
+	if (rc < 0)
+		RETURN(rc);
+	rc = ldlm_drop_caches(LDLM_NAMESPACE_SERVER);
+	if (rc < 0)
+		RETURN(rc);
+	RETURN(count);
+}
+
+LPROC_SEQ_FOPS_WR_ONLY(ldlm, drop_caches);
 LPROC_SEQ_FOPS(ldlm_rw_uint);
 
 #ifdef HAVE_SERVER_SUPPORT
@@ -218,6 +237,9 @@ int ldlm_proc_setup(void)
 		  .fops =	&ldlm_granted_fops,
 		  .data =	&ldlm_granted_total },
 #endif
+		{ .name = 	"drop_caches",
+		  .fops = 	&ldlm_drop_caches_fops,
+		  .proc_mode =	0222 },
 		{ NULL }};
 	ENTRY;
 	LASSERT(ldlm_ns_proc_dir == NULL);
@@ -342,22 +364,12 @@ static ssize_t lru_size_store(struct kobject *kobj, struct attribute *attr,
 	int err;
 
 	if (strncmp(buffer, "clear", 5) == 0) {
-                CDEBUG(D_DLMTRACE,
-                       "dropping all unused locks from namespace %s\n",
-                       ldlm_ns_name(ns));
-                if (ns_connect_lru_resize(ns)) {
-			/* Try to cancel all @ns_nr_unused locks. */
-			ldlm_cancel_lru(ns, ns->ns_nr_unused, 0,
-					LDLM_LRU_FLAG_PASSED |
-					LDLM_LRU_FLAG_CLEANUP);
-		} else {
-			tmp = ns->ns_max_unused;
-			ns->ns_max_unused = 0;
-			ldlm_cancel_lru(ns, 0, 0, LDLM_LRU_FLAG_PASSED |
-					LDLM_LRU_FLAG_CLEANUP);
-			ns->ns_max_unused = tmp;
-		}
-		return count;
+		int rc = 0;
+		rc = ldlm_ns_drop_cache(ns);
+		if (rc != 0)
+			return rc;
+		else
+			return count;
 	}
 
 	err = kstrtoul(buffer, 10, &tmp);
@@ -1708,3 +1720,227 @@ void ldlm_resource_dump(int level, struct ldlm_resource *res)
 	}
 }
 EXPORT_SYMBOL(ldlm_resource_dump);
+
+/**
+ * Clears the lustre cache for the namespace \a ns.
+ *
+ * \param[in] ns the namespace to clear
+ *
+ * \retval 0 if all unused locks in \a ns are cleared
+ * \retval -EINVAL if clearing all unused locks fails
+ */
+static int ldlm_ns_drop_cache(struct ldlm_namespace *ns)
+{
+	unsigned long tmp;
+	CDEBUG(D_DLMTRACE,
+	       "dropping all unused locks from namespace %s\n",
+	       ldlm_ns_name(ns));
+	if (ns_connect_lru_resize(ns)) {
+		/* Try to cancel all @ns_nr_unused locks. */
+		ldlm_cancel_lru(ns, ns->ns_nr_unused, 0, LDLM_LRU_FLAG_PASSED |
+				LDLM_LRU_FLAG_CLEANUP);
+	} else {
+		tmp = ns->ns_max_unused;
+		ns->ns_max_unused = 0;
+		ldlm_cancel_lru(ns, 0, 0, LDLM_LRU_FLAG_PASSED |
+				LDLM_LRU_FLAG_CLEANUP);
+		ns->ns_max_unused = tmp;
+	}
+
+	return 0;
+}
+
+/**
+ * Indicates whether the workq is empty.  Note that this answer may change
+ * between calling this function and the next instruction.
+ *
+ * \param[in] workq pointer to the workq
+ * \retval 1 if \a workq is empty
+ * \retval 0 if \a workq is nonempty
+ */
+static int ldlm_dc_workq_empty(struct ldlm_dc_workq *workq)
+{
+	return atomic_read(&workq->dcwq_cur_index) < 0;
+}
+
+/**
+ * Gets the next work item from the drop_caches work queue.  This is
+ * thread-safe.  That is, no two threads will get the same work item, and
+ * each work item is returned once.
+ *
+ * \param[in] workq pointer to the workq
+ * \retval pointer to the next work item in \a workq
+ * \retval NULL if \a workq is empty
+ */
+static struct ldlm_dc_work_item
+*ldlm_dc_get_work_item(struct ldlm_dc_workq *workq)
+{
+	int cur = atomic_dec_return(&workq->dcwq_cur_index);
+	if (cur < 0)
+		return NULL;
+	return &workq->dcwq_work_items[cur];
+}
+
+/**
+ * Cache-clearing worker thread function.  Takes work items from the work
+ * queue until it is empty.
+ *
+ * \param[in] arg pointer to ldlm_dc_ctl struct
+ * \retval 0 always
+ */
+static int ldlm_drop_cachesd(void *arg)
+{
+	struct ldlm_dc_ctl *dc_ctl = arg;
+	struct ldlm_dc_workq *workq = dc_ctl->dcc_workq;
+	struct ldlm_dc_work_item *work_item;
+
+	work_item = ldlm_dc_get_work_item(workq);
+
+	while (work_item != NULL) {
+		work_item->dcwi_rc = ldlm_ns_drop_cache(work_item->dcwi_ns);
+		ldlm_namespace_put(work_item->dcwi_ns);
+		work_item->dcwi_ns_needs_put = 0;
+		work_item = ldlm_dc_get_work_item(workq);
+	}
+
+	complete(&dc_ctl->dcc_finished);
+	/* Always return 0 since ldlm_drop_caches uses dcwi_rc of the work
+	 * item instead of the actual return code from the thread. */
+	return 0;
+}
+
+/**
+ * Creates a work queue of namespaces for ldlm_drop_caches.
+ *
+ * \param[in] client indicates whether to drop cache for client or server
+ * \retval pointer to the workq
+ * \retval an ERR_PTR if there was a problem
+ */
+static struct ldlm_dc_workq *ldlm_dc_get_workq(enum ldlm_side client)
+{
+	struct list_head *tmp;
+	int num_namespaces = ldlm_namespace_nr_read(client);
+	struct ldlm_dc_workq *workq;
+	int workq_size = offsetof(struct ldlm_dc_workq,
+				  dcwq_work_items[num_namespaces]);
+
+	LIBCFS_ALLOC(workq, workq_size);
+	if (workq == NULL) {
+		CERROR("Failed to allocate %d bytes of memory for dc_workq.\n",
+		       workq_size);
+		return ERR_PTR(-ENOMEM);
+	}
+
+	workq->dcwq_size = workq_size;
+	workq->dcwq_num_wi = 0;
+	mutex_lock(ldlm_namespace_lock(client));
+
+	/* This actually only iterates through the active namespace list. */
+	list_for_each(tmp, ldlm_namespace_list(client)) {
+		struct ldlm_namespace *ns;
+		struct ldlm_dc_work_item *wi;
+		/* The size of the namespace list may have increased since we
+		 * allocated workq, so make sure not to write off the end. */
+		if (workq->dcwq_num_wi >= num_namespaces) {
+			CDEBUG(D_DLMTRACE,
+			       "Number of namespaces increased from %d to %d. "
+			       "Locks in some namespaces may not be cleared.\n",
+			       num_namespaces, ldlm_namespace_nr_read(client));
+			break;
+		}
+
+		wi = &workq->dcwq_work_items[workq->dcwq_num_wi];
+		ns = list_entry(tmp, struct ldlm_namespace, ns_list_chain);
+
+		/* Increment the ref count of the namespace so that it doesn't
+		 * get freed before it is accessed by ldlm_drop_cachesd. */
+		ldlm_namespace_get(ns);
+		wi->dcwi_ns = ns;
+		wi->dcwi_rc = 0;
+		wi->dcwi_ns_needs_put = 1;
+
+		workq->dcwq_num_wi++;
+	}
+
+	mutex_unlock(ldlm_namespace_lock(client));
+
+	atomic_set(&workq->dcwq_cur_index, workq->dcwq_num_wi);
+
+	return workq;
+}
+
+/**
+ * Clears lustre caches for all namespaces.
+ *
+ * \param[in] client indicates whether to drop cache for client or server
+ * \retval 0 if unused locks are cleared for all namespaces
+ * \retval negative error code if there was a problem
+ */
+static int ldlm_drop_caches(enum ldlm_side client)
+{
+	int i;
+	int rc = 0;
+	struct task_struct *task;
+	int dc_ctls_size;
+	struct ldlm_dc_ctl *dc_ctls;
+	int num_threads = LDLM_DC_MAX_THREADS;
+	int num_threads_created = 0;
+
+	struct ldlm_dc_workq *workq;
+
+	workq = ldlm_dc_get_workq(client);
+	if (IS_ERR_VALUE(PTR_ERR(workq)))
+		return PTR_ERR(workq);
+
+	if (workq->dcwq_num_wi == 0)
+		GOTO(out, rc = 0);
+
+	if (num_threads > workq->dcwq_num_wi)
+		num_threads = workq->dcwq_num_wi;
+
+	dc_ctls_size = num_threads * sizeof(*dc_ctls);
+	LIBCFS_ALLOC(dc_ctls, dc_ctls_size);
+	if (dc_ctls == NULL) {
+		CERROR("Failed to allocate %d bytes of memory for dc_ctls.\n",
+		       dc_ctls_size);
+		GOTO(out, rc = -ENOMEM);
+	}
+
+	for (i = 0; i < num_threads; i++) {
+		init_completion(&dc_ctls[i].dcc_finished);
+		dc_ctls[i].dcc_workq = workq;
+
+		if (ldlm_dc_workq_empty(workq))
+			break;
+
+		task = kthread_run(ldlm_drop_cachesd, &dc_ctls[i],
+				   "ldlm_drop_cachesd");
+
+		if (IS_ERR(task)) {
+			rc = PTR_ERR(task);
+			CERROR("namespace cleanup thread %d/%d creation error: "
+			       "rc = %d\n", i + 1, num_threads, rc);
+			break;
+		}
+		num_threads_created++;
+	}
+
+	for (i = 0; i < num_threads_created; i++)
+		wait_for_completion(&dc_ctls[i].dcc_finished);
+
+	for (i = 0; i < workq->dcwq_num_wi; i++) {
+		if (workq->dcwq_work_items[i].dcwi_rc < 0 && rc == 0)
+			rc = workq->dcwq_work_items[i].dcwi_rc;
+
+		/* Make sure each namespace has its ref count decremented */
+		if (workq->dcwq_work_items[i].dcwi_ns_needs_put)
+			ldlm_namespace_put(workq->dcwq_work_items[i].dcwi_ns);
+	}
+
+	LIBCFS_FREE(dc_ctls, dc_ctls_size);
+
+out:
+	LIBCFS_FREE(workq, workq->dcwq_size);
+
+	return rc;
+}
