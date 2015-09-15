@@ -239,6 +239,7 @@ int obd_alloc_fail(const void *ptr, const char *name, const char *type,
 #define OBD_FAIL_MDS_RENAME3             0x155
 #define OBD_FAIL_MDS_RENAME4             0x156
 #define OBD_FAIL_MDS_LDLM_REPLY_NET	 0x157
+#define OBD_FAIL_MDS_LLOG_CREATE_FAILED2 0x15b
 #define OBD_FAIL_MDS_FLD_LOOKUP		 0x15c
 #define OBD_FAIL_MDS_INTENT_DELAY		0x160
 #define OBD_FAIL_MDS_XATTR_REP			0x161
