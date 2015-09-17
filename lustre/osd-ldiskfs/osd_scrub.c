@@ -481,6 +481,10 @@ osd_scrub_check_update(struct osd_thread_info *info, struct osd_device *dev,
 			GOTO(out, rc);
 		}
 
+		/* The inode has been reused as EA inode, ignore it. */
+		if (unlikely(osd_is_ea_inode(inode)))
+			GOTO(out, rc = 0);
+
 		if (!(sf->sf_param & SP_DRYRUN))
 			sf->sf_flags |= SF_UPGRADE;
 		sf->sf_internal_flags &= ~SIF_NO_HANDLE_OLD_FID;
@@ -516,6 +520,10 @@ iget:
 					rc = 0;
 				GOTO(out, rc);
 			}
+
+			/* The inode has been reused as EA inode, ignore it. */
+			if (unlikely(osd_is_ea_inode(inode)))
+				GOTO(out, rc = 0);
 		}
 
 		scrub->os_full_speed = 1;
@@ -917,6 +925,10 @@ static int osd_iit_iget(struct osd_thread_info *info, struct osd_device *dev,
 		       pos, rc);
 		RETURN(rc);
 	}
+
+	/* It is an EA inode, no OI mapping for it, skip it. */
+	if (osd_is_ea_inode(inode))
+		GOTO(put, rc = SCRUB_NEXT_CONTINUE);
 
 	if (scrub &&
 	    ldiskfs_test_inode_state(inode, LDISKFS_STATE_LUSTRE_NOSCRUB)) {
