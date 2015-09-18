@@ -1483,8 +1483,10 @@ test_24() {
                     tr -d '[:blank:]' | cut -f 2 -d ':')
             [[ "$pool" != "$pool1" ]] &&
                 error "Pool name ($pool) not inherited in $file($pool1)"
-            [[ "$count" != "$count1" ]] &&
-                error "Stripe count ($count) not inherited in $file ($count1)"
+	[[ "$count" != "$count1" ]] && [[ "$count" != "-1" ]] &&
+		error "Stripe count ($count) not inherited in $file ($count1)"
+	[[ "$count1" != "$OSTCOUNT" ]] && [[ "$count" = "-1" ]] &&
+		error "Stripe count ($count1) not equals to OSTCOUNT ($OSTCOUNT)"
             [[ "$size" != "$size1" ]] && [[ "$size" != "0" ]] &&
                 error "Stripe size ($size) not inherited in $file ($size1)"
         done
