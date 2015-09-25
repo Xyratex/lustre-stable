@@ -1492,8 +1492,6 @@ test_27p() {
 
 	exhaust_precreations 0 0x80000215
 	echo foo >> $DIR/$tdir/$tfile || error "append failed"
-	# flush cache and make sure to flush all writes
-	sync
 	$CHECKSTAT -s 80000004 $DIR/$tdir/$tfile || error "checkstat failed"
 	$GETSTRIPE $DIR/$tdir/$tfile
 
