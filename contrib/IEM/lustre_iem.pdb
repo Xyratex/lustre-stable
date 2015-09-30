@@ -20,9 +20,11 @@ Special script is used to convert that to CSV file for Documentation purposes.
 "Lustre", "026", "General", "000", "Data corruption - RAM or NET issues", "001"
 </csv>
 
+The IEM support is added and tested for 2.5.x version of Lustre.
 -->
+
 <patterndb version='4' pub_date='2015-05-22'>
-	<ruleset name='bad_write_checksum' id="FCBE293E-6EDE-4E26-89A1-4A13869B543D">
+	<ruleset name='bad_checksum' id="FCBE293E-6EDE-4E26-89A1-4A13869B543D">
 		<description>
 			Data corruption - RAM or NET issues
 		</description>
@@ -30,16 +32,18 @@ Special script is used to convert that to CSV file for Documentation purposes.
 			<rule provider="lustre" id="CFA86040-7130-43DF-91EB-0D79BCF7B93" class="system">
 				<patterns>
 					<pattern>LustreError: @ESTRING:id_cksm::@ BAD WRITE CHECKSUM: @ANYSTRING:data@</pattern>
+					<pattern>LustreError: @ESTRING:id_cksm::@ @ESTRING:dev_id::@ BAD WRITE CHECKSUM: @ANYSTRING:data@</pattern>
 				</patterns>
-				<examples>
-            		<example>
-                		<test_message program='patternize'>LustreError: 168-f: BAD WRITE CHECKSUM: changed in transit before arrival at OST from 12345-10.22.70.237@o2ib1 inode [0x200001080000386:0x0:0x0] object 7288406/0 extent [0-400511]</test_message>
-                		<test_values>
-              				<test_value name="id_cksm">168-f</test_value>
-              				<test_value name="data">changed in transit before arrival at OST from 12345-10.22.70.237@o2ib1 inode [0x200001080000386:0x0:0x0] object 7288406/0 extent [0-400511]</test_value>
-            			</test_values>
-            		</example>
-        		</examples>
+			<examples>
+			<example>
+				<test_message program='patternize'>LustreError: 168-f: BAD WRITE CHECKSUM: changed in transit before arrival at OST from 12345-10.22.70.237@o2ib1 inode [0x200001080000386:0x0:0x0] object 7288406/0 extent [0-400511]</test_message>
+				<test_message program='patternize'>LustreError: 133-1: lustre-OST0001-osc-ffff880053338348: BAD WRITE CHECKSUM: from 0@lo via inode [0x0:0x0:0x0] object 18499/0 extent [0-4095]</test_message>
+				<test_values>
+						<test_value name="id_cksm">168-f</test_value>
+						<test_value name="data">changed in transit before arrival at OST from 12345-10.22.70.237@o2ib1 inode [0x200001080000386:0x0:0x0] object 7288406/0 extent [0-400511]</test_value>
+				</test_values>
+			</example>
+			</examples>
 				<tags>
 					<tag>bad_write_checksum</tag>
 					<tag>iem_reinject</tag>
@@ -56,6 +60,1278 @@ Special script is used to convert that to CSV file for Documentation purposes.
 					<!--
 						</message>
 					-->
+					</action>
+				</actions>
+			</rule>
+			<rule provider="lustre" id="c1331031-5f4e-49d4-bd07-46de7f732272" class="system">
+				<patterns>
+					<pattern>LustreError: @ESTRING:id_cksm::@ BAD READ CHECKSUM: @ANYSTRING:data@</pattern>
+					<pattern>LustreError: @ESTRING:id_cksm::@ @ESTRING:dev_id::@ BAD READ CHECKSUM: @ANYSTRING:data@</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>LustreError: 168-f: BAD READ CHECKSUM: changed in transit before arrival at OST from 12345-10.22.70.237@o2ib1 inode [0x200001080000386:0x0:0x0] object 7288406/0 extent [0-400511]</test_message>
+				<test_message program='patternize'>LustreError: 133-1: lustre-OST0001-osc-ffff880053338348: BAD READ CHECKSUM: from 0@lo via inode [0x0:0x0:0x0] object 18499/0 extent [0-4095]</test_message>
+				<test_values>
+					<test_value name="id_cksm">168-f</test_value>
+					<test_value name="data">changed in transit before arrival at OST from 12345-10.22.70.237@o2ib1 inode [0x200001080000386:0x0:0x0] object 7288406/0 extent [0-400511]</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>bad_read_checksum</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026000002: BAD READ CHECKSUM: { "node": "$HOST_FROM", "id_cksm": "$id_cksm", "data": "$data" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+		</rules>
+	</ruleset>
+
+	<ruleset name='Kernel Panic' id="022898b3-020a-4678-9af2-ef5700560281">
+		<description>
+			Kernel Panic - LASSERT/LBUG/SOFTLOCKUP issues
+		</description>
+		<rules>
+			<rule provider="lustre" id="eb8dcf2f-e165-4533-93c4-b175d3669b09" class="system">
+				<patterns>
+					<pattern>LustreError: @NUMBER:pid@:@NUMBER:ext_pid@:(@ESTRING:file::@@NUMBER:line@:@ESTRING:func:(@)) ASSERTION@ANYSTRING:assert_info@</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>LustreError: 5432:10:(niobuf.c:550:ptlrpc_send_reply()) ASSERTION( req->rq_no_reply == 0 ) failed:</test_message>
+				<test_values>
+					<test_value name="pid">5432</test_value>
+					<test_value name="ext_pid">10</test_value>
+					<test_value name="filename">niobuf.c</test_value>
+					<test_value name="line">550</test_value>
+					<test_value name="func_name">ptlrpc_send_reply</test_value>
+					<test_value name="assert_info">( req->rq_no_reply == 0 ) failed:</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>lassert</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026000003: LASSERT: { "pid": "$pid", "ext_pid": "$ext_pid", "filename": "$file", "line": "$line", "func_name": "$func", "assert_info": "$assert_info" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+			<rule provider="lustre" id="afbfca78-5105-4cd1-86f1-c59806d8b2d4" class="system">
+				<patterns>
+					<pattern>LustreError: @NUMBER:pid@:@NUMBER:ext_pid@:(@ESTRING:file::@@NUMBER:line@:@ESTRING:func:(@)) LBUG</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>LustreError: 5432:10:(niobuf.c:550:ptlrpc_send_reply()) LBUG</test_message>
+				<test_values>
+					<test_value name="pid">5432</test_value>
+					<test_value name="ext_pid">10</test_value>
+					<test_value name="filename">niobuf.c</test_value>
+					<test_value name="line">550</test_value>
+					<test_value name="func_name">ptlrpc_send_reply</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>lbug</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026000004: LBUG: { "pid": "$pid", "ext_pid": "$ext_pid", "filename": "$file", "line": "$line", "func_name": "$func" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+			<rule provider="lustre" id="6fe30ff6-b8b1-4623-a0cd-e896e401e06d" class="system">
+				<patterns>
+					<pattern>BUG: soft lockup - @ANYSTRING:soft_lockup_info@</pattern>
+				</patterns>
+				<examples>
+			<example>
+			<test_message program='patternize'>BUG: soft lockup - CPU#0 stuck for 67s! [rm:10191]</test_message>
+			<test_values>
+					<test_value name="soft_lockup_info">CPU#0 stuck for 67s! [rm:10191]</test_value>
+			</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>softlockup</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026000005: SOFTLOCKUP: { "soft_lockup_info": "$soft_lockup_info" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+			<rule provider="lustre" id="8d45094d-d5ec-4ec5-8bc6-1fea6a3a2b4d" class="system">
+				<patterns>
+					<pattern>BUG: unable to handle kernel NULL pointer dereference at @ANYSTRING:data@</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>BUG: unable to handle kernel NULL pointer dereference at 000000000000001c</test_message>
+				<test_values>
+					<test_value name="data">000000000000001c</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>NULL_pointer_dereference</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026000006: NULL Pointer Dereference: { "data": "$data" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+			<rule provider="lustre" id="879bf5ad-e02a-4cb2-8e26-f028cac334ce" class="system">
+				<patterns>
+					<pattern>BUG: unable to handle kernel paging request at @ANYSTRING:data@</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>BUG: unable to handle kernel paging request at 0000000781bbc060</test_message>
+				<test_values>
+					<test_value name="data">0000000781bbc060</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>kernel_paging_request</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026000007: UNABLE TO HANDLE KERNEL PAGING REQUEST: { "data": "$data" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+			<rule provider="lustre" id="d7fdbbc0-9412-4b3c-85d8-4eb542c4f3b2" class="system">
+				<patterns>
+					<pattern>WARNING: at lib/list_debug.c:@NUMBER:line@ @ANYSTRING:debug_data@</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>WARNING: at lib/list_debug.c:48 list_del+0x6e/0xa0() (Not tainted)</test_message>
+				<test_values>
+					<test_value name="line">48</test_value>
+					<test_value name="debug_data">list_del+0x6e/0xa0() (Not tainted)</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>list_corruption</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026000008: LIST CORRUPTION AT lib/list_debug.c: { "line": "$line", "debug_data": "$debug_data" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+			<rule provider="lustre" id="e37b1c12-f0a8-4b86-a5ae-713c86fdb127" class="system">
+				<patterns>
+					<pattern>BUG: spinlock bad magic on @ANYSTRING:data@</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>BUG: spinlock bad magic on CPU#0, mdt00_002/3228 (Tainted: G --------------- H )</test_message>
+				<test_values>
+					<test_value name="data">CPU#0, mdt00_002/3228 (Tainted: G --------------- H )</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>spinlock_error</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026000009: SPINLOCK BAD MAGIC: { "data": "$data" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+			<rule provider="lustre" id="23d020d0-cdfb-4157-954e-b6f63b93e42e" class="system">
+				<patterns>
+					<pattern>BUG: scheduling while atomic: @ANYSTRING:data@</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>BUG: scheduling while atomic: ll_ost_io00_009/11559/0x10000100</test_message>
+				<test_values>
+					<test_value name="data">ll_ost_io00_009/11559/0x10000100</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>scheduling_error</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026000010: SCHEDULING WHILE ATOMIC ERROR: { "data": "$data" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+			<rule provider="lustre" id="ebcc9e64-3f63-4b1d-ac08-a6a36f5a221b" class="system">
+				<patterns>
+					<pattern>kernel BUG at @ESTRING:file::@@NUMBER:line:!@</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>kernel BUG at block/blk-core.c:2627!</test_message>
+				<test_values>
+					<test_value name="file">block/blk-core.c</test_value>
+					<test_value name="line">2627</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>kernel_bug</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026000011: KERNEL BUG: { "file": "$file", "line": "$line" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+			<rule provider="lustre" id="ce447a46-7b29-4c87-a955-4adb84b42e52" class="system">
+				<patterns>
+					<pattern>LNetError: @NUMBER:pid@:@NUMBER:ext_pid@:(@ESTRING:file::@@NUMBER:line@:@ESTRING:func:(@)) ASSERTION@ANYSTRING:assert_info@</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>LNetError: 2145:0:(api-ni.c:823:lnet_unprepare()) ASSERTION( list_empty(&amp;the_lnet.ln_nis) ) failed:</test_message>
+				<test_values>
+					<test_value name="pid">2145</test_value>
+					<test_value name="ext_pid">0</test_value>
+					<test_value name="filename">api-ni.c</test_value>
+					<test_value name="line">823</test_value>
+					<test_value name="func_name">lnet_unprepare</test_value>
+					<test_value name="assert_info">( list_empty(&amp;the_lnet.ln_nis) )</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>lassert</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026000012: LNET LASSERT: { "pid": "$pid", "ext_pid": "$ext_pid", "filename": "$file", "line": "$line", "func_name": "$func", "assert_info": "$assert_info" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+		</rules>
+	</ruleset>
+
+	<ruleset name='ldiskfs_errors' id="65dd7312-fc88-4e1a-8e9e-167761b199a8">
+		<description>
+			Ldiskfs Errors
+		</description>
+		<rules>
+			<rule provider="lustre" id="898d99cb-783e-482b-8dbf-5dac7f222e67" class="system">
+				<patterns>
+					<pattern>LDISKFS-fs (@ESTRING:device:)@: ldiskfs_check_descriptors: Checksum for group @NUMBER:group@ failed @ANYSTRING:data@</pattern>
+					<pattern>LDISKFS-fs (@ESTRING:device:)@: group descriptors corrupted!</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>LDISKFS-fs (vdb): ldiskfs_check_descriptors: Checksum for group 0 failed (20370!=29657)</test_message>
+				<test_values>
+					<test_value name="device">vdb</test_value>
+					<test_value name="data">(20370!=29657)</test_value>
+				</test_values>
+				<test_message program='patternize'>LDISKFS-fs (vdb): group descriptors corrupted!</test_message>
+				<test_values>
+					<test_value name="device">vdb</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>group_descriptors_corrupted</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026001001: GROUP DISCRIPTORS CORRUPTED: { "device": "$device", "data": "$data" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+			<rule provider="lustre" id="332325e5-0c30-45da-bd2a-7206e3656174" class="system">
+				<patterns>
+					<pattern>LustreError: @NUMBER:pid@:@NUMBER:ext_pid@:(@ESTRING:file::@@NUMBER:line@:@ESTRING:func:(@)) Unable to mount @ANYSTRING:error_info@</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>LustreError: 29743:0:(obd_mount.c:2393:lustre_fill_super()) Unable to mount (-5)</test_message>
+				<test_values>
+					<test_value name="pid">29743</test_value>
+					<test_value name="ext_pid">0</test_value>
+					<test_value name="filename">obd_mount.c</test_value>
+					<test_value name="line">2393</test_value>
+					<test_value name="func_name">lustre_fill_super</test_value>
+					<test_value name="error_info">(-5)</test_value>
+				</test_values>
+				<test_message program='patternize'>LustreError: 29743:0:(obd_mount.c:2393:lustre_fill_super()) Unable to mount /dev/mapper/sultan-ddn-l0 (-22)</test_message>
+				<test_values>
+					<test_value name="pid">29743</test_value>
+					<test_value name="ext_pid">0</test_value>
+					<test_value name="filename">obd_mount.c</test_value>
+					<test_value name="line">2393</test_value>
+					<test_value name="func_name">lustre_fill_super</test_value>
+					<test_value name="error_info">/dev/mapper/sultan-ddn-l0 (-22)</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>mount_error</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026001002: MOUNT FAILURE: { "pid": "$pid", "ext_pid": "$ext_pid", "filename": "$file", "line": "$line", "func_name": "$func", "error_info": "$error_info" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+			<rule provider="lustre" id="362fd8ae-88d5-457a-9a8a-c78205cd2dfc" class="system">
+				<patterns>
+					<pattern>LDISKFS-fs (@ESTRING:device:)@: mount failed</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>LDISKFS-fs (md0): mount failed</test_message>
+				<test_values>
+					<test_value name="device">md0</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>mount_error</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026001003: MOUNT FAILURE: { "device": "$device" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+			<rule provider="lustre" id="aee64217-bebb-4f93-be60-d4a25194238e" class="system">
+				<patterns>
+					<pattern>Kernel panic - not syncing: LDISKFS-fs @ANYSTRING:err_msg@</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>Kernel panic - not syncing: LDISKFS-fs panic from previous error</test_message>
+				<test_values>
+					<test_value name="err_msg">panic from previous error</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>ldiskfs_kernel_panic</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026001004: LDISKFS KERNEL PANIC: { "err_msg": "$err_msg" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+			<rule provider="lustre" id="314e9b5b-1f0c-489f-b73e-bad01f1f0dc0" class="system">
+				<patterns>
+					<pattern>LDISKFS-fs warning (device @ESTRING:device:)@: @ANYSTRING:warn_msg@</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>LDISKFS-fs warning (device md66): ldiskfs_dx_add_entry: Directory (ino: 2621441) index full, reach max htree level :2</test_message>
+				<test_values>
+					<test_value name="device">md66</test_value>
+					<test_value name="warn_msg">ldiskfs_dx_add_entry: Directory (ino: 2621441) index full, reach max htree level :2</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>ldiskfs_warning</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026001005: LDISKFS WARNING: { "device": "$device", "warn_msg": "$warn_msg" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+		</rules>
+	</ruleset>
+
+	<ruleset name='Memory Errors' id="01bcc5ce-54f9-4381-8289-2bc9edcf6488">
+		<description>
+			Memory Errors - page allocation failure, out of memory.
+		</description>
+		<rules>
+			<rule provider="lustre" id="e942f31e-6b63-4abb-8bdb-7470dd7bdc13" class="system">
+				<patterns>
+					<pattern>LNetError: @NUMBER:pid@:@NUMBER:ext_pid@:(@ESTRING:file::@@NUMBER:line@:@ESTRING:func:(@)) LNET: out of memory at @ANYSTRING:data@</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>LNetError: 23379:0:(lib-lnet.h:457:lnet_md_alloc()) LNET: out of memory at /var/lib/jenkins/workspace/lustre-master/arch/x86_64/build_type/client/distro/el6/ib_stack/inkernel/BUILD/BUILD/lustre-2.4.52/lnet/include/lnet/lib-lnet.h:457 (tried to alloc '(md)' = 4208)</test_message>
+				<test_values>
+					<test_value name="pid">23379</test_value>
+					<test_value name="ext_pid">0</test_value>
+					<test_value name="filename">lib-lnet.h</test_value>
+					<test_value name="line">457</test_value>
+					<test_value name="func_name">lnet_md_alloc</test_value>
+					<test_value name="data">/var/lib/jenkins/workspace/lustre-master/arch/x86_64/build_type/client/distro/el6/ib_stack/inkernel/BUILD/BUILD/lustre-2.4.52/lnet/include/lnet/lib-lnet.h:457 (tried to alloc '(md)' = 4208)</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>memory_error</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026002001: LNET OUT OF MEMORY ERROR: { "pid": "$pid", "ext_pid": "$ext_pid", "filename": "$file", "line": "$line", "func_name": "$func", "data": "$data" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+			<rule provider="lustre" id="a3e36e4d-06d6-42eb-9666-47f6c1147e2f" class="system">
+				<patterns>
+					<pattern>ptlrpcd_@ESTRING:thread_id::@ page allocation failure. @ANYSTRING:data@</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>ptlrpcd_0: page allocation failure. order:1, mode:0x40</test_message>
+				<test_values>
+					<test_value name="thread_id">thread_id</test_value>
+					<test_value name="data">order:1, mode:0x40</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>memory_error</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026002002: PTLRPC PAGE ALLOCATION FAILURE: { "thread_id": "$thread_id", "data": "$data" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+			<rule provider="lustre" id="5b1dde3f-23c9-4c6b-b547-38fefd06846d" class="system">
+				<patterns>
+					<pattern>Out of memory: @ANYSTRING:data@</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>Out of memory: Kill process 1421 (rsyslogd) score 1 or sacrifice child</test_message>
+				<test_values>
+					<test_value name="data">Kill process 1421 (rsyslogd) score 1 or sacrifice child</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>memory_error</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026002003: OUT OF MEMORY: { "data": "$data" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+			<rule provider="lustre" id="aab534a6-ad06-4eda-91ab-f0dd14a48b1f" class="system">
+				<patterns>
+					<pattern>LustreError: @NUMBER:pid@:@NUMBER:ext_pid@:(@ESTRING:file::@@NUMBER:line@:@ESTRING:func:(@)) request allocation out of memory</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>LustreError: 2956:0:(client.c:722:__ptlrpc_request_alloc()) request allocation out of memory</test_message>
+				<test_values>
+					<test_value name="pid">2956</test_value>
+					<test_value name="ext_pid">0</test_value>
+					<test_value name="filename">client.c</test_value>
+					<test_value name="line">722</test_value>
+					<test_value name="func_name">mdt_hsm_agent_send</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>memory_error</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026002004: REQUEST ALLOCATION OUT OF MEMORY: { "pid": "$pid", "ext_pid": "$ext_pid", "filename": "$file", "line": "$line", "func_name": "$func" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+			<rule provider="lustre" id="517e544d-f6da-4da2-928b-fb5965d79c1c" class="system">
+				<patterns>
+					<pattern>LustreError: @NUMBER:pid@:@NUMBER:ext_pid@:(@ESTRING:file::@@NUMBER:line@:@ESTRING:func:(@)) lloop: ran out of memory</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>LustreError: 2956:0:(lloop.c:884:lloop_init()) lloop: ran out of memory</test_message>
+				<test_values>
+					<test_value name="pid">2956</test_value>
+					<test_value name="ext_pid">0</test_value>
+					<test_value name="filename">lloop.c</test_value>
+					<test_value name="line">884</test_value>
+					<test_value name="func_name">lloop_init</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>memory_error</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026002005: LLOOP RAN OUT OF MEMORY: { "pid": "$pid", "ext_pid": "$ext_pid", "filename": "$file", "line": "$line", "func_name": "$func" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+		</rules>
+	</ruleset>
+
+	<ruleset name='Filesystem Corruption' id="b3bf4d43-ddd5-42d4-8c1c-86218ed23650">
+		<description>
+			Filesystem Corruption
+		</description>
+		<rules>
+			<rule provider="lustre" id="01f80d8a-cd68-4620-b971-803248b8da16" class="system">
+				<patterns>
+					<pattern>LDISKFS-fs error (device @ESTRING:device:)@: file system corruption: @ANYSTRING:data@</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>LDISKFS-fs error (device dm-9): file system corruption: inode #591204 logical block 447 mapped to 137004702958273 (size 1)</test_message>
+				<test_values>
+					<test_value name="device">dm-9</test_value>
+					<test_value name="data">inode #591204 logical block 447 mapped to 13700     4702958273 (size 1)</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>fs_corruption</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026001006: FILESYSTEM CORRUPTION: { "device": "$device", "data": "$data" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+			<rule provider="lustre" id="399edbbd-0012-44e1-b604-e47242ad6594" class="system">
+				<patterns>
+					<pattern>LDISKFS-fs error (device @ESTRING:device:)@: @ESTRING:func::@ bad header/extent in @ANYSTRING:data@</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>LDISKFS-fs error (device dm-3): ldiskfs_ext_find_extent: bad header/extent in inode #330052: invalid magic - magic 53be, entries 21067, max 517(0), depth 0(0)</test_message>
+				<test_values>
+					<test_value name="device">dm-3</test_value>
+					<test_value name="func">ldiskfs_ext_find_extent</test_value>
+					<test_value name="data">inode #330052: invalid magic - magic 53be, entries 21067, max 517(0), depth 0(0)</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>fs_corruption</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026001007: BAD HEADER/EXTENT IN INODE: { "device": "$device", "func_name": "$func", "data": "$data" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+			<rule provider="lustre" id="8f0db7a7-2dba-4194-88dd-5272d513dd0e" class="system">
+				<patterns>
+					<pattern>LDISKFS-fs error (device @ESTRING:device:)@: @ESTRING:func::@ on-disk bitmap for group @NUMBER:group@corrupted: @ANYSTRING:data@</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>LDISKFS-fs error (device md0): ldiskfs_mb_check_ondisk_bitmap: on-disk bitmap for group 37corrupted: 525 blocks free in bitmap, 524 - in gd</test_message>
+				<test_values>
+					<test_value name="device">md0</test_value>
+					<test_value name="func">ldiskfs_mb_check_ondisk_bitmap</test_value>
+					<test_value name="group">37</test_value>
+					<test_value name="data">525 blocks free in bitmap, 524 - in gd</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>fs_corruption</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026001008: ON-DISK BITMAP CORRUPTED: { "device": "$device", "func_name": "$func", "data": "$data" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+			<rule provider="lustre" id="76244be4-f1e6-4bdc-8d6b-df1dce0614ed" class="system">
+				<patterns>
+					<pattern>LDISKFS-fs error (device @ESTRING:device:)@: @ESTRING:func::@ deleted inode referenced: @ANYSTRING:data@</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>LDISKFS-fs error (device dm-2): ldiskfs_lookup: deleted inode referenced: 26072429</test_message>
+				<test_values>
+					<test_value name="device">dm-2</test_value>
+					<test_value name="func">ldiskfs_lookup</test_value>
+					<test_value name="data">26072429</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>fs_corruption</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026001009: DELETED INODE REFERENCED: { "device": "$device", "func_name": "$func", "data": "$data" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+			<rule provider="lustre" id="edcaddc0-b3ad-4121-96c1-2151f2a97b20" class="system">
+				<patterns>
+					<pattern>LDISKFS-fs error (device @ESTRING:device:)@: @ESTRING:func::@ Double free of blocks @ANYSTRING:data@</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>LDISKFS-fs error (device dm-20): ldiskfs_mb_free_metadata: Double free of blocks 30208 (30208 148)</test_message>
+				<test_values>
+					<test_value name="device">dm-20</test_value>
+					<test_value name="func">ldiskfs_mb_free_metadata</test_value>
+					<test_value name="data">30208 (30208 148)</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>fs_corruption</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026001010: DOUBLE FREE OF BLOCKS: { "device": "$device", "func_name": "$func", "data": "$data" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+		</rules>
+	</ruleset>
+
+	<ruleset name='Installation Error' id="3a75824b-a99d-404e-b143-5d4a177bd596">
+		<description>
+			Module Installation Error
+		</description>
+		<rules>
+			<rule provider="lustre" id="541ac551-efde-4076-8056-50435a24c772" class="system">
+		<patterns>
+			<!--
+			<pattern>FATAL: Error inserting @ESTRING:component@ (@ANYSTRING@fs/lustre/@ESTRING:module_name:)@: @ANYSTRING:err_msg@</pattern>
+			-->
+			<pattern>FATAL: Error inserting lustre (@ESTRING:module_path:)@: @ANYSTRING:err_msg@</pattern>
+			<pattern>FATAL: Error inserting mgs (@ESTRING:module_path:)@: @ANYSTRING:err_msg@</pattern>
+			<pattern>FATAL: Error inserting mdt (@ESTRING:module_path:)@: @ANYSTRING:err_msg@</pattern>
+			<pattern>FATAL: Error inserting mdd (@ESTRING:module_path:)@: @ANYSTRING:err_msg@</pattern>
+			<pattern>FATAL: Error inserting mgc (@ESTRING:module_path:)@: @ANYSTRING:err_msg@</pattern>
+			<pattern>FATAL: Error inserting mdc (@ESTRING:module_path:)@: @ANYSTRING:err_msg@</pattern>
+			<pattern>FATAL: Error inserting lnet (@ESTRING:module_path:)@: @ANYSTRING:err_msg@</pattern>
+			<pattern>FATAL: Error inserting osd_ldiskfs (@ESTRING:module_path:)@: @ANYSTRING:err_msg@</pattern>
+			<pattern>FATAL: Error inserting lov (@ESTRING:module_path:)@: @ANYSTRING:err_msg@</pattern>
+			<pattern>FATAL: Error inserting ptlrpc (@ESTRING:module_path:)@: @ANYSTRING:err_msg@</pattern>
+			<pattern>FATAL: Error inserting lmv (@ESTRING:module_path:)@: @ANYSTRING:err_msg@</pattern>
+			<pattern>FATAL: Error inserting osc (@ESTRING:module_path:)@: @ANYSTRING:err_msg@</pattern>
+			<pattern>FATAL: Error inserting obdclass (@ESTRING:module_path:)@: @ANYSTRING:err_msg@</pattern>
+			<pattern>FATAL: Error inserting fid (@ESTRING:module_path:)@: @ANYSTRING:err_msg@</pattern>
+			<pattern>FATAL: Error inserting fld (@ESTRING:module_path:)@: @ANYSTRING:err_msg@</pattern>
+			<pattern>FATAL: Error inserting libcfs (@ESTRING:module_path:)@: @ANYSTRING:err_msg@</pattern>
+			<pattern>FATAL: Error inserting ksocklnd (@ESTRING:module_path:)@: @ANYSTRING:err_msg@</pattern>
+		</patterns>
+		<examples>
+		<example>
+			<test_message program='patternize'>FATAL: Error inserting mgs (/lib/modules/2.6.32-279.14.1.el6_lustre.x86_64/updates/kernel/fs/lustre/mgs.ko): Input/output error</test_message>
+				<test_values>
+					<test_value name="module_path">/lib/modules/2.6.32-279.14.1.el6_lustre.x86_64/updates/kernel/fs/lustre/mgs.ko</test_value>
+					<test_value name="err_msg">Input/output error</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>module_install_error</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026003001: MODULE INSTALLATION ERROR: { "module_path": "$module_path", "err_msg":"$err_msg" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+		</rules>
+	</ruleset>
+
+	<ruleset name='HSM Errors' id="b6fa266e-db6e-42dc-bdb9-51d935d33970">
+		<description>
+			HSM Errors
+		</description>
+		<rules>
+			<rule provider="lustre" id="67e4535a-3a8b-4db1-b0b3-c8ae1c5b5bb8" class="system">
+				<patterns>
+					<pattern>LustreError: @NUMBER:pid@:@NUMBER:ext_pid@:(@ESTRING:file::@@NUMBER:line@:@ESTRING:func:(@)) @ESTRING:device::@ failed to process HSM_ACTIONS llog (rc=@NUMBER:status_code:)@</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>LustreError: 2990:0:(mdt_hsm_cdt_actions.c:104:cdt_llog_process()) tas01-MDT0000: failed to process HSM_ACTIONS llog (rc=-2)</test_message>
+				<test_values>
+					<test_value name="pid">2990</test_value>
+					<test_value name="ext_pid">0</test_value>
+					<test_value name="filename">mdt_hsm_cdt_actions.c</test_value>
+					<test_value name="line">104</test_value>
+					<test_value name="func_name">cdt_llog_process</test_value>
+					<test_value name="device">tas01-MDT0000</test_value>
+					<test_value name="status">-2</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>hsm_error</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026004001: FAILED TO PROCESS HSM_ACTIONS LLOG: { "pid": "$pid", "ext_pid": "$ext_pid", "filename": "$file", "line": "$line", "func_name": "$func", "device":"$device", "status": "$status_code" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+			<rule provider="lustre" id="d6e50da5-3cb5-43bf-b024-7819d8abd3e1" class="system">
+				<patterns>
+					<pattern>LustreError: @NUMBER:pid@:@NUMBER:ext_pid@:(@ESTRING:file::@@NUMBER:line@:@ESTRING:func:(@)) @ESTRING:device::@ hsm actions llog @ESTRING:err_msg::@ rc = @NUMBER:status_code@</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>LustreError: 2956:0:(mdd_device.c:794:mdd_hsm_actions_llog_init()) tas01-MDT0000: hsm actions llog setup failed: rc = -2</test_message>
+				<test_message program='patternize'>LustreError: 2956:0:(mdd_device.c:794:mdd_hsm_actions_llog_init()) tas01-MDT0000: hsm actions llog open_create failed: rc = -2</test_message>
+				<test_values>
+					<test_value name="pid">2956</test_value>
+					<test_value name="ext_pid">0</test_value>
+					<test_value name="filename">mdd_device.c</test_value>
+					<test_value name="line">794</test_value>
+					<test_value name="func_name">mdd_hsm_actions_llog_init</test_value>
+					<test_value name="device">tas01-MDT0000</test_value>
+					<test_value name="status">-2</test_value>
+					<test_value name="err_msg">setup failed</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>hsm_error</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026004002: HSM ACTIONS LLOG OPERATION FAILED: { "pid": "$pid", "ext_pid": "$ext_pid", "filename": "$file", "line": "$line", "func_name": "$func", "device":"$device", "status": "$status_code", "err_msg": "$err_msg" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+			<rule provider="lustre" id="2b97edcc-4ec3-4c09-9cfa-d2a271bc45c7" class="system">
+				<patterns>
+					<pattern>LustreError: llog_get_context() failed</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>LustreError: llog_get_context() failed</test_message>
+			</example>
+			</examples>
+				<tags>
+					<tag>hsm_error</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026004003: llog_get_context() FAILED: { }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+			<rule provider="lustre" id="4d35e681-c5de-4c92-b0d2-3a0f0a1972cd" class="system">
+				<patterns>
+					<pattern>LustreError: @NUMBER:pid@:@NUMBER:ext_pid@:(@ESTRING:file::@@NUMBER:line@:@ESTRING:func:(@)) @ESTRING:device::@ cannot take layout lock for [@ESTRING:fid:]@: rc = @NUMBER:status_code@</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>LustreError: 2956:0:(mdt_hsm_cdt_client.c:454:mdt_hsm_add_actions()) tas01-MDT0000: cannot take layout lock for [0x200000007:0x1:0x0]: rc = -2</test_message>
+				<test_values>
+					<test_value name="pid">2956</test_value>
+					<test_value name="ext_pid">0</test_value>
+					<test_value name="filename">mdt_hsm_cdt_client.c</test_value>
+					<test_value name="line">454</test_value>
+					<test_value name="func_name">mdt_hsm_add_actions</test_value>
+					<test_value name="device">tas01-MDT0000</test_value>
+					<test_value name="fid">0x200000007:0x1:0x0</test_value>
+					<test_value name="status">-2</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>hsm_error</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026004004: CANNOT TAKE LAYOUT LOCK: { "pid": "$pid", "ext_pid": "$ext_pid", "filename": "$file", "line": "$line", "func_name": "$func", "device":"$device", "fid": "$fid", "status": "$status_code" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+			<rule provider="lustre" id="becb3914-6b8f1b25a9ad-4380-9fce-9332" class="system">
+				<patterns>
+					<pattern>LustreError: @NUMBER:pid@:@NUMBER:ext_pid@:(@ESTRING:file::@@NUMBER:line@:@ESTRING:func:(@)) @ESTRING:device::@ agent uuid (@ESTRING:uuid:)@ not found, unregistering: rc = @NUMBER:status_code@</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>LustreError: 2956:0:(mdt_hsm_cdt_agent.c:451:mdt_hsm_agent_send()) tas01-MDT0000: agent uuid (4d35e681-c5de-4c92-b0d2-3a0f0a1972cd) not found, unregistering: rc = -2</test_message>
+				<test_values>
+					<test_value name="pid">2956</test_value>
+					<test_value name="ext_pid">0</test_value>
+					<test_value name="filename">mdt_hsm_cdt_agent.c</test_value>
+					<test_value name="line">451</test_value>
+					<test_value name="func_name">mdt_hsm_agent_send</test_value>
+					<test_value name="device">tas01-MDT0000</test_value>
+					<test_value name="uuid">4d35e681-c5de-4c92-b0d2-3a0f0a1972cd</test_value>
+					<test_value name="status">-2</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>hsm_error</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026004005: AGENT UUID NOT FOUND, UNREGISTERING: { "pid": "$pid", "ext_pid": "$ext_pid", "filename": "$file", "line": "$line", "func_name": "$func", "device":"$device", "uuid": "$uuid", "status": "$status_code" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+		</rules>
+	</ruleset>
+
+	<ruleset name='Initalization Errors' id="cd7eb616-1d65-4917-a361-3e16ede93011">
+		<description>
+			Initialization Errors
+		</description>
+		<rules>
+			<rule provider="lustre" id="3d470f3f-436f-46bc-b186-b84bded1aa9c" class="system">
+				<patterns>
+					<pattern>LustreError: @NUMBER:pid@:@NUMBER:ext_pid@:(@ESTRING:file::@@NUMBER:line@:@ESTRING:func:(@)) @ESTRING:device::@ failed to initialize @ESTRING:data::@ rc = @NUMBER:status_code@</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>LustreError: 33604:0:(mdd_device.c:1051:mdd_prepare()) lustre-MDD0000: failed to initialize lfsck: rc = -5</test_message>
+				<test_values>
+					<test_value name="pid">33604</test_value>
+					<test_value name="ext_pid">0</test_value>
+					<test_value name="filename">mdd_device.c</test_value>
+					<test_value name="line">1051</test_value>
+					<test_value name="func_name">mdd_prepare</test_value>
+					<test_value name="device">lustre-MDD0000</test_value>
+					<test_value name="data">lfsck</test_value>
+					<test_value name="status">-5</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>init_error</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026005001: FAILED TO INITIALIZE: { "pid": "$pid", "ext_pid": "$ext_pid", "filename": "$file", "line": "$line", "func_name": "$func", "device":"$device", "data": "$data", "status": "$status_code" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+			<rule provider="lustre" id="89d95f22-8143-49f7-9d05-9ace5352ac25" class="system">
+				<patterns>
+					<pattern>LustreError: @NUMBER:pid@:@NUMBER:ext_pid@:(@ESTRING:file::@@NUMBER:line@:@ESTRING:func:(@)) @ESTRING:device::@ initializing .lustre failed: rc = @NUMBER:status_code@</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>LustreError: 33604:0:(mdd_device.c:945:mdd_prepare()) lustre-MDD0000: initializing .lustre failed: rc = -2</test_message>
+				<test_values>
+					<test_value name="pid">33604</test_value>
+					<test_value name="ext_pid">0</test_value>
+					<test_value name="filename">mdd_device.c</test_value>
+					<test_value name="line">945</test_value>
+					<test_value name="func_name">mdd_prepare</test_value>
+					<test_value name="device">lustre-MDD0000</test_value>
+					<test_value name="status">-2</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>init_error</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026005002: FAILED TO INITIALIZE .lustre: { "pid": "$pid", "ext_pid": "$ext_pid", "filename": "$file", "line": "$line", "func_name": "$func", "device":"$device", "status": "$status_code" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+		</rules>
+	</ruleset>
+
+	<ruleset name='Changelog Errors' id="c4e759aa-3c38-4b0b-989e-ce00f3c43b4b">
+		<description>
+			Changelog Errors
+		</description>
+		<rules>
+			<rule provider="lustre" id="8f60ddf1-3f2f-4217-b90b-c56bcf840a4f" class="system">
+				<patterns>
+					<pattern>LustreError: @NUMBER:pid@:@NUMBER:ext_pid@:(@ESTRING:file::@@NUMBER:line@:@ESTRING:func:(@)) changelog failed: rc=@NUMBER:status@ @ANYSTRING:data@</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>LustreError: 11841:0:(mdd_object.c:1330:mdd_changelog_data_store()) changelog failed: rc=-28 op17 t[0x200de60af:0x17913:0x0]</test_message>
+				<test_values>
+					<test_value name="pid">11841</test_value>
+					<test_value name="ext_pid">0</test_value>
+					<test_value name="filename">mdd_object.c</test_value>
+					<test_value name="line">1330</test_value>
+					<test_value name="func_name">mdd_changelog_data_store</test_value>
+					<test_value name="status">-28</test_value>
+					<test_value name="data">op17 t[0x200de60af:0x17913:0x0]</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>changelog_error</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026006001: CHANGELOG FAILED: { "pid": "$pid", "ext_pid": "$ext_pid", "filename": "$file", "line": "$line", "func_name": "$func", "data":"$data", "status": "$status_code" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+			<rule provider="lustre" id="83260b68-b0ef-4a49-b8d1-e8d3286ac971" class="system">
+				<patterns>
+					<pattern>LustreError: @NUMBER:pid@:@NUMBER:ext_pid@:(@ESTRING:file::@@NUMBER:line@:@ESTRING:func:(@)) bad log header magic: @ANYSTRING:data@</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>LustreError: 14143:0:(llog_lvfs.c:199:llog_lvfs_read_header()) bad log header magic: 0x10670000 (expected 0x10645539)</test_message>
+				<test_values>
+					<test_value name="pid">14143</test_value>
+					<test_value name="ext_pid">0</test_value>
+					<test_value name="filename">llog_lvfs.c</test_value>
+					<test_value name="line">199</test_value>
+					<test_value name="func_name">llog_lvfs_read_header</test_value>
+					<test_value name="data">0x10670000 (expected 0x10645539)</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>changelog_error</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026006002: BAD LOG HEADER MAGIC: { "pid": "$pid", "ext_pid": "$ext_pid", "filename": "$file", "line": "$line", "func_name": "$func", "data":"$data" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+		</rules>
+	</ruleset>
+
+	<ruleset name='Disk Full' id="73630c34-834e-49a3-a2fc-8a01028c8607">
+		<description>
+			Disk Full or No Space Left Errors
+		</description>
+		<rules>
+			<rule provider="lustre" id="ecb70077-1c50-460e-a759-c570ac0b1947" class="system">
+				<patterns>
+					<pattern>LustreError: @NUMBER:pid@:@NUMBER:ext_pid@:(@ESTRING:file::@@NUMBER:line@:@ESTRING:func:(@)) @ESTRING:device::@ can&apos;t precreate: rc = -28</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>LustreError: 17127:0:(osp_precreate.c:481:osp_precreate_send()) lustre-OST0000-osc-MDT0000: can&apos;t precreate: rc = -28</test_message>
+				<test_values>
+					<test_value name="pid">11841</test_value>
+					<test_value name="ext_pid">0</test_value>
+					<test_value name="filename">mdd_object.c</test_value>
+					<test_value name="line">1330</test_value>
+					<test_value name="func_name">mdd_changelog_data_store</test_value>
+					<test_value name="device">lustre-OST0000-osc-MDT0000</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>disk_full_error</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026007001: CAN NOT PRECREATE: { "pid": "$pid", "ext_pid": "$ext_pid", "filename": "$file", "line": "$line", "func_name": "$func", "device":"$device" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+			<rule provider="lustre" id="68864da9-2cf3-4a5e-a5ef-4f2635519305" class="system">
+				<patterns>
+					<pattern>LustreError: @NUMBER:pid@:@NUMBER:ext_pid@:(@ESTRING:file::@@NUMBER:line@:@ESTRING:func:(@)) Write page @ESTRING:page: @of inode @ESTRING:inode: @failed -28</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>LustreError: 17541:0:(vvp_io.c:1081:vvp_io_commit_write()) Write page 6265883 of inode ffff880254611138 failed -28</test_message>
+				<test_values>
+					<test_value name="pid">17541</test_value>
+					<test_value name="ext_pid">0</test_value>
+					<test_value name="filename">vvp_io.c</test_value>
+					<test_value name="line">1081</test_value>
+					<test_value name="func_name">vvp_io_commit_write</test_value>
+					<test_value name="page">6265883</test_value>
+					<test_value name="inode">ffff880254611138</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>disk_full_error</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026007002: WRITE PAGE OF INODE FAILED WITH ENOSPC: { "pid": "$pid", "ext_pid": "$ext_pid", "filename": "$file", "line": "$line", "func_name": "$func", "page": "$page", "inode": "$inode" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+		</rules>
+	</ruleset>
+
+	<ruleset name='Lfsck' id="3e129b31-17e8-4170-93d3-c088c5cef75d">
+		<description>
+			Lfsck Debug/Error Messages - lfsck post done etc
+		</description>
+		<rules>
+			<rule provider="lustre" id="51d5ccf3-1214-4306-9a77-aaae214aad14" class="system">
+				<patterns>
+					<pattern>@ESTRING:timestamp:(@@ESTRING:file::@@NUMBER:line@:@ESTRING:func:(@)) @ESTRING:device::@ namespace LFSCK post done: rc = 0</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<!-- This is debug message to inform user that lfsck done successefully.
+				-->
+				<test_message program='patternize'>00100000:10000000:1.0:1414753245.981685:0:9875:0:(lfsck_namespace.c:4181:lfsck_namespace_post()) lustre-MDT0000-osd: namespace LFSCK post done: rc = 0</test_message>
+				<test_values>
+					<test_value name="filename">lfsck_namespace.c</test_value>
+					<test_value name="line">4181</test_value>
+					<test_value name="func_name">lfsck_namespace_post</test_value>
+					<test_value name="timestamp">00100000:10000000:1.0:1414753245.981685:0:9875:0:</test_value>
+					<test_value name="device">lustre-MDT0000-osd</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>lfsck</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026008001: DEBUG - LFSCK POST DONE: { "filename": "$file", "line": "$line", "func_name": "$func", "timestamp": "$timestamp", "device":"$device" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+		</rules>
+	</ruleset>
+
+	<ruleset name='Journal Errors' id="cd9246d7-4131-43b0-bc81-8f0660357b75">
+		<description>
+			Journal Error Messages
+		</description>
+		<rules>
+			<rule provider="lustre" id="f75d67ed-d32f-4493-8e13-256acc5649a9" class="system">
+				<patterns>
+					<pattern>LustreError: @NUMBER:pid@:@NUMBER:ext_pid@:(@ESTRING:file::@@NUMBER:line@:@ESTRING:func:(@)) journal_get_write_access() returned error @NUMBER:err_code@</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>LustreError: 4731:0:(osd_io.c:1014:osd_ldiskfs_write_record()) journal_get_write_access() returned error -30</test_message>
+				<test_values>
+					<test_value name="pid">4731</test_value>
+					<test_value name="ext_pid">0</test_value>
+					<test_value name="filename">osd_io.c</test_value>
+					<test_value name="line">1014</test_value>
+					<test_value name="func_name">osd_ldiskfs_write_record</test_value>
+					<test_value name="err_code">-30</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>journal_error</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026009001: journal_get_write_access() FAILED: { "pid": "$pid", "ext_pid": "$ext_pid", "filename": "$file", "line": "$line", "func_name": "$func", "err_code":"$err_code" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+			<rule provider="lustre" id="18ec728e-a4df-42c5-b32e-4efe905fd18c" class="system">
+				<patterns>
+					<pattern>LustreError: @NUMBER:pid@:@NUMBER:ext_pid@:(@ESTRING:file::@@NUMBER:line@:@ESTRING:func:(@)) @ESTRING:device::@ journal is too small @ANYSTRING:data@</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>LustreError: 27035:0:(mdd_trans.c:100:mdd_txn_credits_are_sane()) mdd_obd-lustre-MDT0000: journal is too small for 2 targets mdd, increase to at least 4828 blocks</test_message>
+				<test_values>
+					<test_value name="pid">27035</test_value>
+					<test_value name="ext_pid">0</test_value>
+					<test_value name="filename">mdd_trans.c</test_value>
+					<test_value name="line">100</test_value>
+					<test_value name="func_name">mdd_txn_credits_are_sane</test_value>
+					<test_value name="device">mdd_obd-lustre-MDT0000</test_value>
+					<test_value name="data">for 2 targets mdd, increase to at least 4828 blocks</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>journal_error</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026009002: JOURNAL IS TOO SMALL: { "pid": "$pid", "ext_pid": "$ext_pid", "filename": "$file", "line": "$line", "func_name": "$func", "device":"$device", "data": "$data" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+		</rules>
+	</ruleset>
+
+	<ruleset name='Race Condition' id="d3ab946c-475f-47e8-8d01-45e0efc3a7c6">
+		<description>
+			Race condition
+		</description>
+		<rules>
+			<rule provider="lustre" id="0f2e56f8-6561-456a-8bf8-e277cfbe45e6" class="system">
+				<patterns>
+					<pattern>LustreError: @NUMBER:pid@:@NUMBER:ext_pid@:(@ESTRING:file::@@NUMBER:line@:@ESTRING:func:(@)) lustre: revalidate FID [@ESTRING:fid:]@ error: rc = -71</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<!-- This can be the valid race condition.
+				-->
+				<test_message program='patternize'>LustreError: 47371:0:(file.c:3081:ll_inode_revalidate_fini()) lustre: revalidate FID [0x20000040c:0x1f:0x0] error: rc = -71</test_message>
+				<test_values>
+					<test_value name="pid">47371</test_value>
+					<test_value name="ext_pid">0</test_value>
+					<test_value name="filename">file.c</test_value>
+					<test_value name="line">3081</test_value>
+					<test_value name="func_name">ll_inode_revalidate_fini</test_value>
+					<test_value name="fid">0x20000040c:0x1f:0x0</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>race_condition</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026010001: REVALIDATE FID: { "pid": "$pid", "ext_pid": "$ext_pid", "filename": "$file", "line": "$line", "func_name": "$func", "fid":"$fid" }</value>
+						</values>
 					</action>
 				</actions>
 			</rule>
