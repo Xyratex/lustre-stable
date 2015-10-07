@@ -1595,8 +1595,13 @@ static int ptlrpc_server_hpreq_init(struct ptlrpc_service_part *svcpt,
 				 * error cases. e.g. see ost_rw_hpreq_check(),
 				 * and ost_brw_read(), ost_brw_write().
 				 */
-				if (rc < 0)
+				if (rc < 0) {
+					if (rc == -ESTALE) {
+						req->rq_status = rc;
+						ptlrpc_error(req);
+					}
 					RETURN(rc);
+				}
 				LASSERT(rc == 0 || rc == 1);
 				hp = rc;
 			}

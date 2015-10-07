@@ -1717,61 +1717,31 @@ static int ofd_quotactl(struct tgt_session_info *tsi)
 /* prolong locks for the current service time of the corresponding
  * portal (= OST_IO_PORTAL)
  */
-static inline int prolong_timeout(struct ptlrpc_request *req,
-				  struct ldlm_lock *lock)
+static inline int prolong_timeout(struct ptlrpc_request *req)
 {
 	struct ptlrpc_service_part *svcpt = req->rq_rqbd->rqbd_svcpt;
 
 	if (AT_OFF)
 		return obd_timeout / 2;
 
-	/* We are in the middle of the process - BL AST is sent, CANCEL
-	  is ahead. Take half of AT + IO process time. */
-	return at_est2timeout(at_get(&svcpt->scp_at_estimate)) +
-		(ldlm_bl_timeout(lock) >> 1);
+	return at_est2timeout(at_get(&svcpt->scp_at_estimate));
 }
 
-static int ofd_prolong_one_lock(struct tgt_session_info *tsi,
-				struct ldlm_lock *lock,
-				struct ldlm_extent *extent)
+static void ofd_prolong_extent_locks(struct tgt_session_info *tsi,
+				     struct prolong_args *data)
 {
-	int timeout = prolong_timeout(tgt_ses_req(tsi), lock);
-
-	if (lock->l_flags & LDLM_FL_DESTROYED) /* lock already cancelled */
-		return 0;
-
-	/* XXX: never try to grab resource lock here because we're inside
-	 * exp_bl_list_lock; in ldlm_lockd.c to handle waiting list we take
-	 * res lock and then exp_bl_list_lock. */
-
-	if (!(lock->l_flags & LDLM_FL_AST_SENT))
-		/* ignore locks not being cancelled */
-		return 0;
-
-	LDLM_DEBUG(lock, "refreshed for req x"LPU64" ext("LPU64"->"LPU64") "
-			 "to %ds.\n", tgt_ses_req(tsi)->rq_xid, extent->start,
-			 extent->end, timeout);
-
-	/* OK. this is a possible lock the user holds doing I/O
-	 * let's refresh eviction timer for it */
-	ldlm_refresh_waiting_lock(lock, timeout);
-	return 1;
-}
-
-static int ofd_prolong_extent_locks(struct tgt_session_info *tsi,
-				    __u64 start, __u64 end)
-{
-	struct obd_export	*exp = tsi->tsi_exp;
 	struct obdo		*oa  = &tsi->tsi_ost_body->oa;
-	struct ldlm_extent	 extent = {
-		.start = start,
-		.end = end
-	};
 	struct ldlm_lock	*lock;
-	int			 lock_count = 0;
 
 	ENTRY;
 
+	data->timeout = prolong_timeout(tgt_ses_req(tsi));
+	data->export = tsi->tsi_exp;
+	data->resid = tsi->tsi_resid;
+
+	CDEBUG(D_RPCTRACE, "Prolong locks for req %p with x"LPU64
+	       " ext("LPU64"->"LPU64")\n", tgt_ses_req(tsi),
+	       tgt_ses_req(tsi)->rq_xid, data->extent.start, data->extent.end);
 	if (oa->o_valid & OBD_MD_FLHANDLE) {
 		/* mostly a request should be covered by only one lock, try
 		 * fast path. */
@@ -1779,41 +1749,19 @@ static int ofd_prolong_extent_locks(struct tgt_session_info *tsi,
 		if (lock != NULL) {
 			/* Fast path to check if the lock covers the whole IO
 			 * region exclusively. */
-			if (lock->l_granted_mode == LCK_PW &&
-			    ldlm_extent_contain(&lock->l_policy_data.l_extent,
-						&extent)) {
+			if (ldlm_extent_contain(&lock->l_policy_data.l_extent,
+						&data->extent)) {
 				/* bingo */
-				LASSERT(lock->l_export == exp);
-				lock_count = ofd_prolong_one_lock(tsi, lock,
-								  &extent);
+				LASSERT(lock->l_export == data->export);
+				ldlm_lock_prolong_one(lock, data);
 				LDLM_LOCK_PUT(lock);
-				RETURN(lock_count);
+				RETURN_EXIT;
 			}
 			LDLM_LOCK_PUT(lock);
 		}
 	}
-
-	spin_lock_bh(&exp->exp_bl_list_lock);
-	list_for_each_entry(lock, &exp->exp_bl_list, l_exp_list) {
-		LASSERT(lock->l_flags & LDLM_FL_AST_SENT);
-		LASSERT(lock->l_resource->lr_type == LDLM_EXTENT);
-
-		/* ignore waiting locks, no more granted locks in the list */
-		if (lock->l_granted_mode != lock->l_req_mode)
-			break;
-
-		if (!ldlm_res_eq(&tsi->tsi_resid, &lock->l_resource->lr_name))
-			continue;
-
-		if (!ldlm_extent_overlap(&lock->l_policy_data.l_extent,
-					 &extent))
-			continue;
-
-		lock_count += ofd_prolong_one_lock(tsi, lock, &extent);
-	}
-	spin_unlock_bh(&exp->exp_bl_list_lock);
-
-	RETURN(lock_count);
+	ldlm_resource_prolong(data);
+	EXIT;
 }
 
 /**
@@ -1846,7 +1794,7 @@ static int ofd_rw_hpreq_lock_match(struct ptlrpc_request *req,
 		RETURN(0);
 
 	/* a bulk write can only hold a reference on a PW extent lock */
-	mode = LCK_PW;
+	mode = LCK_PW | LCK_GROUP;
 	if (opc == OST_READ)
 		/* whereas a bulk read can be protected by either a PR or PW
 		 * extent lock */
@@ -1873,8 +1821,8 @@ static int ofd_rw_hpreq_check(struct ptlrpc_request *req)
 	struct tgt_session_info	*tsi;
 	struct obd_ioobj	*ioo;
 	struct niobuf_remote	*rnb;
-	__u64			 start, end;
-	int			 lock_count;
+	int opc;
+	struct prolong_args pa = { 0 };
 
 	ENTRY;
 
@@ -1887,6 +1835,9 @@ static int ofd_rw_hpreq_check(struct ptlrpc_request *req)
 	 * Use LASSERT below because malformed RPCs should have
 	 * been filtered out in tgt_hpreq_handler().
 	 */
+	opc = lustre_msg_get_opc(req->rq_reqmsg);
+	LASSERT(opc == OST_READ || opc == OST_WRITE);
+
 	ioo = req_capsule_client_get(&req->rq_pill, &RMF_OBD_IOOBJ);
 	LASSERT(ioo != NULL);
 
@@ -1894,21 +1845,28 @@ static int ofd_rw_hpreq_check(struct ptlrpc_request *req)
 	LASSERT(rnb != NULL);
 	LASSERT(!(rnb->rnb_flags & OBD_BRW_SRVLOCK));
 
-	start = rnb->rnb_offset;
+	pa.mode = LCK_PW | LCK_GROUP;
+	if (opc == OST_READ)
+		pa.mode |= LCK_PR;
+
+	pa.extent.start = rnb->rnb_offset;
 	rnb += ioo->ioo_bufcnt - 1;
-	end = rnb->rnb_offset + rnb->rnb_len - 1;
+	pa.extent.end = rnb->rnb_offset + rnb->rnb_len - 1;
 
 	DEBUG_REQ(D_RPCTRACE, req, "%s %s: refresh rw locks: "DFID
-				   " ("LPU64"->"LPU64")\n",
-		  tgt_name(tsi->tsi_tgt), current->comm,
-		  PFID(&tsi->tsi_fid), start, end);
+		  " ("LPU64"->"LPU64")\n", tgt_name(tsi->tsi_tgt),
+		  current->comm, PFID(&tsi->tsi_fid), pa.extent.start,
+		  pa.extent.end);
 
-	lock_count = ofd_prolong_extent_locks(tsi, start, end);
+	ofd_prolong_extent_locks(tsi, &pa);
 
 	CDEBUG(D_DLMTRACE, "%s: refreshed %u locks timeout for req %p.\n",
-	       tgt_name(tsi->tsi_tgt), lock_count, req);
+	       tgt_name(tsi->tsi_tgt), pa.blocks_cnt, req);
 
-	RETURN(lock_count > 0);
+	if (pa.blocks_cnt > 0)
+		RETURN(1);
+
+	RETURN(pa.locks_cnt > 0 ? 0 : -ESTALE);
 }
 
 static void ofd_rw_hpreq_fini(struct ptlrpc_request *req)
@@ -1944,7 +1902,7 @@ static int ofd_punch_hpreq_check(struct ptlrpc_request *req)
 {
 	struct tgt_session_info	*tsi;
 	struct obdo		*oa;
-	int			 lock_count;
+	struct prolong_args pa = { 0 };
 
 	ENTRY;
 
@@ -1957,17 +1915,23 @@ static int ofd_punch_hpreq_check(struct ptlrpc_request *req)
 	LASSERT(!(oa->o_valid & OBD_MD_FLFLAGS &&
 		  oa->o_flags & OBD_FL_SRVLOCK));
 
+	pa.mode = LCK_PW | LCK_GROUP;
+	pa.extent.start = oa->o_size;
+	pa.extent.end   = oa->o_blocks;
+
 	CDEBUG(D_DLMTRACE,
 	       "%s: refresh locks: "LPU64"/"LPU64" ("LPU64"->"LPU64")\n",
 	       tgt_name(tsi->tsi_tgt), tsi->tsi_resid.name[0],
-	       tsi->tsi_resid.name[1], oa->o_size, oa->o_blocks);
+	       tsi->tsi_resid.name[1], pa.extent.start, pa.extent.end);
 
-	lock_count = ofd_prolong_extent_locks(tsi, oa->o_size, oa->o_blocks);
+	ofd_prolong_extent_locks(tsi, &pa);
 
 	CDEBUG(D_DLMTRACE, "%s: refreshed %u locks timeout for req %p.\n",
-	       tgt_name(tsi->tsi_tgt), lock_count, req);
+	       tgt_name(tsi->tsi_tgt), pa.blocks_cnt, req);
 
-	RETURN(lock_count > 0);
+	if (pa.blocks_cnt > 0)
+		RETURN(1);
+	RETURN(pa.locks_cnt > 0 ? 0 : -ESTALE);
 }
 
 static void ofd_punch_hpreq_fini(struct ptlrpc_request *req)
@@ -2002,7 +1966,9 @@ static void ofd_hp_brw(struct tgt_session_info *tsi)
 		LASSERT(rnb != NULL); /* must exist after request preprocessing */
 
 		/* no high priority if server lock is needed */
-		if (rnb->rnb_flags & OBD_BRW_SRVLOCK)
+		if (rnb->rnb_flags & OBD_BRW_SRVLOCK ||
+		    (lustre_msg_get_flags(tgt_ses_req(tsi)->rq_reqmsg)
+		     & MSG_REPLAY))
 			return;
 	}
 	tgt_ses_req(tsi)->rq_ops = &ofd_hpreq_rw;
@@ -2012,8 +1978,10 @@ static void ofd_hp_punch(struct tgt_session_info *tsi)
 {
 	LASSERT(tsi->tsi_ost_body != NULL); /* must exists if we are here */
 	/* no high-priority if server lock is needed */
-	if (tsi->tsi_ost_body->oa.o_valid & OBD_MD_FLFLAGS &&
-	    tsi->tsi_ost_body->oa.o_flags & OBD_FL_SRVLOCK)
+	if ((tsi->tsi_ost_body->oa.o_valid & OBD_MD_FLFLAGS &&
+	     tsi->tsi_ost_body->oa.o_flags & OBD_FL_SRVLOCK) ||
+	    tgt_conn_flags(tsi) & OBD_CONNECT_MDS ||
+	    lustre_msg_get_flags(tgt_ses_req(tsi)->rq_reqmsg) & MSG_REPLAY)
 		return;
 	tgt_ses_req(tsi)->rq_ops = &ofd_hpreq_punch;
 }
