@@ -121,8 +121,8 @@ check_diff() {
 	fi
 }
 
-# Test 1 - test basic operations
-test_1() {
+# Test 1a - test basic operations
+test_1a() {
     init_src
     init_changelog
     local xattr=$(check_xattr $TGT/foo)
@@ -205,12 +205,13 @@ test_1() {
     cleanup_src_tgt
     return $RC
 }
-run_test 1 "Simple Replication"
+run_test 1a "Simple Replication"
 
-# Test 1a - test create/delete operations in ROOT directory
-test_1a() { # LU-5005
+# Test 1b - test create/delete operations in ROOT directory
+test_1b() { # LU-5005
 	rm -rf $TGT/root-* 2> /dev/null
 	rm -rf $DIR/root-* 2> /dev/null
+	init_src
 	init_changelog
 
 	# Directory create
@@ -243,12 +244,13 @@ test_1a() { # LU-5005
 	stat $TGT/root-dir1 && error "Dir delete not replicated"
 	stat $TGT/root-file4 && error "File delete not replicated"
 
+	cleanup_src_tgt
 	fini_changelog
 	rm -fr $TGT/root-*
 	rm -fr $DIR/root-*
 	return 0
 }
-run_test 1a "Replicate create/delete operations in ROOT directory"
+run_test 1b "Replicate create/delete operations in ROOT directory"
 
 # Test 2a - Replicate files created by dbench
 test_2a() {
