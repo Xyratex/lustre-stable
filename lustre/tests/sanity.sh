@@ -6536,6 +6536,18 @@ grow_xattr() {
 	[[ "$new" != "$orig" ]] && error "$xbig different after growing $xsml"
 	log "$xbig still valid after growing $xsml"
 
+	local mdt_idx=0
+	if [[ $MDSCOUNT -gt 1 ]]; then
+		mdt_idx=$($LFS getdirstripe -i $DIR)
+	fi
+	local dev=$(mdsdevname $((mdt_idx+1)))
+
+	# On local setup stat may fail because caches of loop dev and
+	# underlying file may differ; use sync to avoid the problem.
+	do_facet mds$((mdt_idx+1)) sync
+	do_facet mds$((mdt_idx+1)) \
+		"debugfs -c -R \\\"stat ROOT/$tfile\\\" $dev" |\
+		grep "invalid EA entry" && error "invalid EA entry! MRP-3001"
 	rm -f $file
 }
 
