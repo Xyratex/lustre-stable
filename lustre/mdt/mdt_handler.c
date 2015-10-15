@@ -2959,13 +2959,22 @@ mdt_intent_lock_replace(struct mdt_thread_info *info,
 	/* If possible resent found a lock, @lh is set to its handle */
 	new_lock = ldlm_handle2lock_long(&lh->mlh_reg_lh, 0);
 
-        if (new_lock == NULL && (flags & LDLM_FL_INTENT_ONLY)) {
-                lh->mlh_reg_lh.cookie = 0;
-                RETURN(0);
-        }
+	if (new_lock == NULL) {
+		int  rc;
 
-        LASSERTF(new_lock != NULL,
-                 "lockh "LPX64"\n", lh->mlh_reg_lh.cookie);
+		if (flags & LDLM_FL_INTENT_ONLY) {
+			rc = 0;
+		} else if (flags & LDLM_FL_RESENT) {
+			LDLM_DEBUG_NOLOCK("Invalid lock handle "LPX64"\n",
+					  lh->mlh_reg_lh.cookie);
+			rc = -ESTALE;
+		} else {
+			LASSERTF(new_lock != NULL,
+				 "lockh "LPX64"\n", lh->mlh_reg_lh.cookie);
+		}
+		lh->mlh_reg_lh.cookie = 0;
+		RETURN(rc);
+	}
 
         /*
          * If we've already given this lock to a client once, then we should
