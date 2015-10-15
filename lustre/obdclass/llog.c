@@ -110,9 +110,10 @@ int llog_cancel_rec(struct llog_handle *loghandle, int index, int can_destroy)
 
         llh->llh_count--;
 
-        if ((llh->llh_flags & LLOG_F_ZAP_WHEN_EMPTY) &&
-            (llh->llh_count == 1) &&
-            (loghandle->lgh_last_idx == (LLOG_BITMAP_BYTES * 8) - 1)) {
+	if ((llh->llh_flags & LLOG_F_ZAP_WHEN_EMPTY) &&
+	   (llh->llh_count == 1) &&
+	    (loghandle->u.phd.phd_cat_handle->u.chd.chd_current_log !=
+		 loghandle)) {
                 if (!can_destroy)
                         RETURN(1);
                 rc = llog_destroy(loghandle);
