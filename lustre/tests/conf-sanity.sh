@@ -2737,7 +2737,7 @@ test_42() { #bug 14693
 	cleanup || error "stopping $FSNAME failed with invalid sys param"
 	load_modules
 	setup
-	check_mount || "client was not mounted with invalid sys param"
+	check_mount || error "client was not mounted with invalid sys param"
 	cleanup || error "stopping $FSNAME failed with invalid sys param"
 	return 0
 }

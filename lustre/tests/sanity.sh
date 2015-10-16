@@ -8834,12 +8834,12 @@ test_133a() {
 	# verify mdt stats first.
 	mkdir ${testdir} || error "mkdir failed"
 	check_stats $SINGLEMDS "mkdir" 1
-	touch ${testdir}/${tfile} || "touch failed"
+	touch ${testdir}/${tfile} || error "touch failed"
 	check_stats $SINGLEMDS "open" 1
 	check_stats $SINGLEMDS "close" 1
-	mknod ${testdir}/${tfile}-pipe p || "mknod failed"
+	mknod ${testdir}/${tfile}-pipe p || error "mknod failed"
 	check_stats $SINGLEMDS "mknod" 1
-	rm -f ${testdir}/${tfile}-pipe || "pipe remove failed"
+	rm -f ${testdir}/${tfile}-pipe || error "pipe remove failed"
 	check_stats $SINGLEMDS "unlink" 1
 	rm -f ${testdir}/${tfile} || error "file remove failed"
 	check_stats $SINGLEMDS "unlink" 2
@@ -8868,7 +8868,7 @@ test_133b() {
 	remote_mds_nodsh && skip "remote MDS with nodsh" && return
 	local testdir=$DIR/${tdir}/stats_testdir
 	mkdir -p ${testdir} || error "mkdir failed"
-	touch ${testdir}/${tfile} || "touch failed"
+	touch ${testdir}/${tfile} || error  "touch failed"
 	cancel_lru_locks mdc
 
 	# clear stats.
@@ -12037,7 +12037,7 @@ test_222b () {
        cancel_lru_locks osc
        #define OBD_FAIL_LDLM_AGL_DELAY           0x31a
        $LCTL set_param fail_loc=0x31a
-       rm -r $DIR/$tdir || "AGL for rmdir failed"
+       rm -r $DIR/$tdir || error "AGL for rmdir failed"
        $LCTL set_param fail_loc=0
 }
 run_test 222b "AGL for rmdir should not trigger CLIO lock failure ============="
