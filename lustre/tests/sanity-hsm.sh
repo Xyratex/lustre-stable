@@ -609,6 +609,7 @@ check_enough_free_space() {
 	local unit=$2
 	local need=$((nb * unit /1024))
 	local free=$(df -kP $MOUNT | tail -1 | awk '{print $4}')
+
 	(( $need >= $free )) && return 1
 	return 0
 }
@@ -619,8 +620,7 @@ make_large_for_striping() {
 
 	cleanup_large_files
 
-	check_enough_free_space 5 $sz
-	[ $? != 0 ] && return $?
+	check_enough_free_space 5 $sz || return $?
 
 	dd if=/dev/urandom of=$file2 count=5 bs=$sz conv=fsync ||
 		file_creation_failure dd $file2 $?
@@ -633,8 +633,7 @@ make_large_for_progress() {
 
 	cleanup_large_files
 
-	check_enough_free_space 39 1000000
-	[ $? != 0 ] && return $?
+	check_enough_free_space 39 1000000 || return $?
 
 	# big file is large enough, so copy time is > 30s
 	# so copytool make 1 progress
@@ -651,8 +650,7 @@ make_large_for_progress_aligned() {
 
 	cleanup_large_files
 
-	check_enough_free_space 33 1048576
-	[ $? != 0 ] && return $?
+	check_enough_free_space 33 1048576 || return $?
 
 	# big file is large enough, so copy time is > 30s
 	# so copytool make 1 progress
@@ -668,8 +666,7 @@ make_large_for_cancel() {
 
 	cleanup_large_files
 
-	check_enough_free_space 103 1048576
-	[ $? != 0 ] && return $?
+	check_enough_free_space 103 1048576 || return $?
 
 	# Copy timeout is 100s. 105MB => 105s
 	dd if=/dev/urandom of=$file2 count=103 bs=1M conv=fsync ||
