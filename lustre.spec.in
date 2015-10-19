@@ -219,7 +219,12 @@ Group: Development/Kernel
 # N.B. this package will always be called lustre-devel.
 Provides: lustre-devel = %{version}
 Obsoletes: %{name}-headers
-Requires: %{name} = %{version}, %{name}-modules = %{version}
+%if %{with build_kmod}
+Requires: kmod-%{name} = %{version}
+%else
+Requires: %{name}-modules = %{version}
+%endif
+Requires: %{name} = %{version}
 
 %description devel
 This package contains the headers required to build ancillary
