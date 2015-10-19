@@ -208,7 +208,8 @@ struct mdt_device {
 	struct {
 		unsigned int       mo_user_xattr:1,
 				   mo_acl:1,
-				   mo_cos:1;
+				   mo_cos:1,
+				   mo_evict_tgt_nids:1;
 	} mdt_opts;
         /* mdt state flags */
         unsigned long              mdt_state;

@@ -135,6 +135,7 @@ struct lod_tgt_desc_idx {
 	 TGT_PTRS_PER_BLOCK]->ldi_tgt[(index) % TGT_PTRS_PER_BLOCK])
 
 #define OST_TGT(lod, index)   LTD_TGT(&lod->lod_ost_descs, index)
+#define MDT_TGT(lod, index)   LTD_TGT(&lod->lod_mdt_descs, index)
 struct lod_tgt_descs {
 	/* list of known TGTs */
 	struct lod_tgt_desc_idx	*ltd_tgt_idx[TGT_PTRS];
@@ -203,6 +204,13 @@ struct lod_device {
 #define lod_osts_size	lod_ost_descs.ltd_tgts_size
 #define ltd_ost		ltd_tgt
 #define lod_ost_desc	lod_tgt_desc
+
+#define lod_mdts                lod_mdt_descs.ltd_tgts
+#define lod_mdt_bitmap          lod_mdt_descs.ltd_tgt_bitmap
+#define lod_remote_mdt_count    lod_mdt_descs.ltd_tgtnr
+#define lod_mdts_size           lod_mdt_descs.ltd_tgts_size
+#define ltd_mdt                 ltd_tgt
+#define lod_mdt_desc            lod_tgt_desc
 
 /*
  * XXX: shrink this structure, currently it's 72bytes on 32bit arch,
@@ -325,6 +333,9 @@ static inline struct lod_thread_info *lod_env_info(const struct lu_env *env)
 #define lod_foreach_ost(__dev, index)	\
 	if ((__dev)->lod_osts_size > 0)	\
 		cfs_foreach_bit((__dev)->lod_ost_bitmap, (index))
+
+#define lod_foreach_mdt(mdt_dev, index) \
+        cfs_foreach_bit((mdt_dev)->lod_mdt_bitmap, (index))
 
 /* lod_dev.c */
 int lod_fld_lookup(const struct lu_env *env, struct lod_device *lod,

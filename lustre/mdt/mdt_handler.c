@@ -1667,6 +1667,9 @@ static int mdt_set_info(struct tgt_session_info *tsi)
 
 		rc = mdt_iocontrol(OBD_IOC_CHANGELOG_CLEAR, req->rq_export,
 				   vallen, val, NULL);
+	} else if (KEY_IS(KEY_EVICT_BY_NID)) {
+		if (vallen > 0)
+			obd_export_evict_by_nid(req->rq_export->exp_obd, val);
 	} else {
 		RETURN(-EINVAL);
 	}
@@ -4273,7 +4276,7 @@ static int mdt_init0(const struct lu_env *env, struct mdt_device *m,
         m->mdt_max_mdsize = MAX_MD_SIZE; /* 4 stripes */
 
         m->mdt_som_conf = 0;
-
+	m->mdt_opts.mo_evict_tgt_nids = 1;
         m->mdt_opts.mo_cos = MDT_COS_DEFAULT;
 
 	lmi = server_get_mount(dev);
