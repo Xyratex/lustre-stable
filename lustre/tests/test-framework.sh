@@ -527,6 +527,7 @@ load_modules_local() {
         SYMLIST=/proc/kallsyms
         grep -q crc16 $SYMLIST || { modprobe crc16 2>/dev/null || true; }
         grep -q -w jbd $SYMLIST || { modprobe jbd 2>/dev/null || true; }
+	grep -q -w mbcache $SYMLIST || { modprobe mbcache 2>/dev/null || true; }
         grep -q -w jbd2 $SYMLIST || { modprobe jbd2 2>/dev/null || true; }
 		load_module lfsck/lfsck
 		[ "$LQUOTA" != "no" ] && load_module quota/lquota $LQUOTAOPTS
