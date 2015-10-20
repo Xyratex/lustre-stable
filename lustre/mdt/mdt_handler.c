@@ -1469,6 +1469,13 @@ static int mdt_getattr_name_lock(struct mdt_thread_info *info,
 		GOTO(out_parent, rc = PTR_ERR(child));
 
 	OBD_FAIL_TIMEOUT(OBD_FAIL_MDS_RESEND, obd_timeout*2);
+	if (!mdt_object_exists(child)) {
+		LU_OBJECT_DEBUG(D_INODE, info->mti_env,
+				&child->mot_obj,
+				"Object doesn't exist!\n");
+		GOTO(out_child, rc = -ENOENT);
+	}
+
 	rc = mdt_check_resent_lock(info, child, lhc);
 	if (rc < 0) {
 		GOTO(out_child, rc);
@@ -1476,13 +1483,6 @@ static int mdt_getattr_name_lock(struct mdt_thread_info *info,
                 mdt_lock_handle_init(lhc);
 		mdt_lock_reg_init(lhc, LCK_PR);
 		try_layout = false;
-
-		if (!mdt_object_exists(child)) {
-			LU_OBJECT_DEBUG(D_INODE, info->mti_env,
-					&child->mot_obj,
-					"Object doesn't exist!\n");
-			GOTO(out_child, rc = -ENOENT);
-		}
 
 		if (!(child_bits & MDS_INODELOCK_UPDATE) &&
 		      mdt_object_exists(child) && !mdt_object_remote(child)) {
