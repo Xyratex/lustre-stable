@@ -4062,7 +4062,7 @@ test_66() {
 	local MDS_NID=$(do_facet $SINGLEMDS $LCTL list_nids | head -1)
 
 	set_conf_param_and_check mds				     \
-	    "$LCTL get_param -n osc.$FSNAME-OST0000-osc-MDT*.active" \
+	    "$LCTL get_param -n osc.$FSNAME-OST0000-osc-MDT0000.active" \
 	    "$FSNAME-OST0000.osc.active"			     \
 	    "0"
 
@@ -4123,7 +4123,7 @@ test_66() {
 
 	start_mgsmds || error "start mgsmds failed"
 	set_conf_param_and_check mds				     \
-	    "$LCTL get_param -n osc.$FSNAME-OST0000-osc-MDT*.active" \
+	    "$LCTL get_param -n osc.$FSNAME-OST0000-osc-MDT0000.active" \
 	    "$FSNAME-OST0000.osc.active"			     \
 	    "1"
 
