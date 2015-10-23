@@ -13021,6 +13021,15 @@ test_400b() { # LU-1606, LU-5011
 }
 run_test 400b "packaged headers can be compiled"
 
+test_401() {
+	$LFS setdirstripe -i 0 $DIR/$tdir || error "setdirstripe -i 0 failed"
+#define OBD_FAIL_MDS_FLD_LOOKUP 0x158
+	do_facet mds1 "lctl set_param fail_loc=0x80000158"
+	touch $DIR/$tdir/$tfile && error "touch should fail with ENOENT" ||
+		echo "Touch failed - OK"
+}
+run_test 401 "Return ENOENT to lod_generate_and_set_lovea"
+
 #
 # tests that do cleanup/setup should be run at the end
 #

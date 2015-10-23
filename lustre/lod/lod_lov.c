@@ -550,7 +550,11 @@ int lod_generate_and_set_lovea(const struct lu_env *env,
 
 		ostid_cpu_to_le(&info->lti_ostid, &objs[i].l_ost_oi);
 		objs[i].l_ost_gen    = cpu_to_le32(0);
-		rc = lod_fld_lookup(env, lod, fid, &index, LU_SEQ_RANGE_OST);
+		if (OBD_FAIL_CHECK(OBD_FAIL_MDS_FLD_LOOKUP))
+			rc = -ENOENT;
+		else
+			rc = lod_fld_lookup(env, lod, fid,
+				&index, LU_SEQ_RANGE_OST);
 		if (rc < 0) {
 			lod_object_free_striping(env, lo);
 			CERROR("%s: Can not locate "DFID": rc = %d\n",
