@@ -9720,6 +9720,10 @@ run_test 154f "get parent fids by reading link ea"
 
 test_154g()
 {
+	remote_mds_nodsh && skip "remote MDS with nodsh" && return
+	[[ $(lustre_version_code $SINGLEMDS) -ge $(version_code 2.5.1) ]] ||
+		{ skip "Need MDS version at least 2.5.1"; return 0; }
+
 	mkdir -p $DIR/$tdir
 	llapi_fid_test -d $DIR/$tdir
 }
