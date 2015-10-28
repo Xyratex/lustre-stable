@@ -507,7 +507,7 @@ ssize_t ll_getxattr(struct dentry *dentry, const char *name,
                 }
 
                 if (size < lmmsize) {
-                        CERROR("server bug: replied size %d > %d for %s (%s)\n",
+                        CDEBUG(D_INODE, "replied size %d > %d for %s (%s)\n",
                                lmmsize, (int)size, dentry->d_name.name, name);
                         GOTO(out, rc = -ERANGE);
                 }
