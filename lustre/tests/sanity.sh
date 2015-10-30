@@ -60,6 +60,7 @@ UMOUNT=${UMOUNT:-"umount -d"}
 STRIPES_PER_OBJ=-1
 CHECK_GRANT=${CHECK_GRANT:-"yes"}
 GRANT_CHECK_LIST=${GRANT_CHECK_LIST:-""}
+export PARALLEL=${PARALLEL:-"no"}
 
 export NAME=${NAME:-local}
 
@@ -4150,7 +4151,7 @@ test_60b() { # bug 6411
 					 else
 						 print from_begin
 				 }"`
-	[ $LLOG_COUNT -gt 50 ] && error "CDEBUG_LIMIT not limiting messages ($LLOG_COUNT)"|| true
+	[[ $LLOG_COUNT -gt 50 ]] && error "CDEBUG_LIMIT not limiting messages ($LLOG_COUNT)"|| true
 }
 run_test 60b "limit repeated messages from CERROR/CWARN ========"
 
@@ -4414,7 +4415,7 @@ test_66() {
 	dd if=/dev/zero of=$DIR/f66 bs=1k count=$COUNT
 	sync; sleep 1; sync
 	BLOCKS=`ls -s $DIR/f66 | awk '{ print $1 }'`
-	[ $BLOCKS -ge $COUNT ] || error "$DIR/f66 blocks $BLOCKS < $COUNT"
+	[[ $BLOCKS -ge $COUNT ]] || error "$DIR/f66 blocks $BLOCKS < $COUNT"
 }
 run_test 66 "update inode blocks count on client ==============="
 
@@ -5567,14 +5568,14 @@ compare_stripe_info1() {
 				local size=$((STRIPE_SIZE * num))
 				local file=file"$num-$offset-$count"
 				stripe_size=$(lfs getstripe -S $PWD/$file)
-				[ $stripe_size -ne $size ] &&
+				[[ $stripe_size -ne $size ]] &&
 				    error "$file: size $stripe_size != $size"
 				stripe_count=$(lfs getstripe -c $PWD/$file)
 				# allow fewer stripes to be created, ORI-601
-				[ $stripe_count -lt $(((3 * count + 3) / 4)) ]&&
+				[[ $stripe_count -lt $(((3 * count + 3) / 4)) ]]&&
 				    error "$file: count $stripe_count != $count"
 				stripe_index=$(lfs getstripe -i $PWD/$file)
-				[ $stripe_index -ne 0 ] &&
+				[[ $stripe_index -ne 0 ]] &&
 					stripe_index_all_zero=false
 			done
 		done
