@@ -436,7 +436,7 @@ int ptlrpc_unregister_bulk(struct ptlrpc_request *req, int async)
 
 	/* Let's setup deadline for reply unlink. */
 	if (OBD_FAIL_CHECK(OBD_FAIL_PTLRPC_LONG_BULK_UNLINK) &&
-	    async && req->rq_bulk_deadline == 0)
+	    async && req->rq_bulk_deadline == 0 && cfs_fail_val == 0)
 		req->rq_bulk_deadline = cfs_time_current_sec() + LONG_UNLINK;
 
 	if (ptlrpc_client_bulk_active(req) == 0)	/* completed or */

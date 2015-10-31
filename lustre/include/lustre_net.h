@@ -1792,6 +1792,8 @@ struct ptlrpc_cli_req {
 	time_t				 cr_reply_deadline;
 	/** when req bulk unlink must finish. */
 	time_t				 cr_bulk_deadline;
+	/** when req unlink must finish. */
+	time_t				 cr_req_deadline;
 	/** Portal to which this request would be sent */
 	short				 cr_req_ptl;
 	/** Portal where to wait for reply and where reply would be sent */
@@ -1848,6 +1850,7 @@ struct ptlrpc_cli_req {
 #define rq_real_sent		rq_cli.cr_sent_out
 #define rq_reply_deadline	rq_cli.cr_reply_deadline
 #define rq_bulk_deadline	rq_cli.cr_bulk_deadline
+#define rq_req_deadline		rq_cli.cr_req_deadline
 #define rq_nr_resend		rq_cli.cr_resend_nr
 #define rq_request_portal	rq_cli.cr_req_ptl
 #define rq_reply_portal		rq_cli.cr_rep_ptl
@@ -2251,17 +2254,17 @@ ptlrpc_rqphase2str(struct ptlrpc_request *req)
 
 /** Convert bit flags into a string */
 #define DEBUG_REQ_FLAGS(req)                                                    \
-        ptlrpc_rqphase2str(req),                                                \
-        FLAG(req->rq_intr, "I"), FLAG(req->rq_replied, "R"),                    \
-        FLAG(req->rq_err, "E"),                                                 \
-        FLAG(req->rq_timedout, "X") /* eXpired */, FLAG(req->rq_resend, "S"),   \
-        FLAG(req->rq_restart, "T"), FLAG(req->rq_replay, "P"),                  \
-        FLAG(req->rq_no_resend, "N"),                                           \
-        FLAG(req->rq_waiting, "W"),                                             \
-        FLAG(req->rq_wait_ctx, "C"), FLAG(req->rq_hp, "H"),                     \
-        FLAG(req->rq_committed, "M")
+	ptlrpc_rqphase2str(req),                                                \
+	FLAG(req->rq_intr, "I"), FLAG(req->rq_replied, "R"),                    \
+	FLAG(req->rq_err, "E"), FLAG(req->rq_net_err, "e"),                     \
+	FLAG(req->rq_timedout, "X") /* eXpired */, FLAG(req->rq_resend, "S"),   \
+	FLAG(req->rq_restart, "T"), FLAG(req->rq_replay, "P"),                  \
+	FLAG(req->rq_no_resend, "N"),                                           \
+	FLAG(req->rq_waiting, "W"),                                             \
+	FLAG(req->rq_wait_ctx, "C"), FLAG(req->rq_hp, "H"),                     \
+	FLAG(req->rq_committed, "M")
 
-#define REQ_FLAGS_FMT "%s:%s%s%s%s%s%s%s%s%s%s%s%s"
+#define REQ_FLAGS_FMT "%s:%s%s%s%s%s%s%s%s%s%s%s%s%s"
 
 void _debug_req(struct ptlrpc_request *req,
                 struct libcfs_debug_msg_data *data, const char *fmt, ...)
@@ -2913,9 +2916,8 @@ static inline int ptlrpc_client_bulk_active(struct ptlrpc_request *req)
         LASSERT(req != NULL);
 	desc = req->rq_bulk;
 
-        if (OBD_FAIL_CHECK(OBD_FAIL_PTLRPC_LONG_BULK_UNLINK) &&
-            req->rq_bulk_deadline > cfs_time_current_sec())
-                return 1;
+	if (req->rq_bulk_deadline > cfs_time_current_sec())
+		return 1;
 
         if (!desc)
                 return 0;
@@ -3324,9 +3326,6 @@ ptlrpc_rqphase_move(struct ptlrpc_request *req, enum rq_phase new_phase)
 static inline int
 ptlrpc_client_early(struct ptlrpc_request *req)
 {
-        if (OBD_FAIL_CHECK(OBD_FAIL_PTLRPC_LONG_REPL_UNLINK) &&
-            req->rq_reply_deadline > cfs_time_current_sec())
-                return 0;
         return req->rq_early;
 }
 
@@ -3336,20 +3335,18 @@ ptlrpc_client_early(struct ptlrpc_request *req)
 static inline int
 ptlrpc_client_replied(struct ptlrpc_request *req)
 {
-        if (OBD_FAIL_CHECK(OBD_FAIL_PTLRPC_LONG_REPL_UNLINK) &&
-            req->rq_reply_deadline > cfs_time_current_sec())
-                return 0;
-        return req->rq_replied;
+	if (req->rq_reply_deadline > cfs_time_current_sec())
+		return 0;
+	return req->rq_replied;
 }
 
 /** Returns true if request \a req is in process of receiving server reply */
 static inline int
 ptlrpc_client_recv(struct ptlrpc_request *req)
 {
-        if (OBD_FAIL_CHECK(OBD_FAIL_PTLRPC_LONG_REPL_UNLINK) &&
-            req->rq_reply_deadline > cfs_time_current_sec())
-                return 1;
-        return req->rq_receiving_reply;
+	if (req->rq_reply_deadline > cfs_time_current_sec())
+		return 1;
+	return req->rq_receiving_reply;
 }
 
 static inline int
@@ -3358,11 +3355,15 @@ ptlrpc_client_recv_or_unlink(struct ptlrpc_request *req)
 	int rc;
 
 	spin_lock(&req->rq_lock);
-	if (OBD_FAIL_CHECK(OBD_FAIL_PTLRPC_LONG_REPL_UNLINK) &&
-	    req->rq_reply_deadline > cfs_time_current_sec()) {
+	if (req->rq_reply_deadline > cfs_time_current_sec()) {
 		spin_unlock(&req->rq_lock);
 		return 1;
 	}
+	if (req->rq_req_deadline > cfs_time_current_sec()) {
+		spin_unlock(&req->rq_lock);
+		return 1;
+	}
+
 	rc = req->rq_receiving_reply ;
 	rc = rc || req->rq_req_unlink || req->rq_reply_unlink;
 	spin_unlock(&req->rq_lock);

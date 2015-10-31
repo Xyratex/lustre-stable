@@ -592,9 +592,10 @@ static int __ptlrpc_request_bufs_pack(struct ptlrpc_request *request,
                                       int count, __u32 *lengths, char **bufs,
                                       struct ptlrpc_cli_ctx *ctx)
 {
-        struct obd_import  *imp = request->rq_import;
-        int                 rc;
-        ENTRY;
+	struct obd_import  *imp = request->rq_import;
+	time_t             *fail_t = NULL;
+	int                 rc;
+	ENTRY;
 
         if (unlikely(ctx))
                 request->rq_cli_ctx = sptlrpc_cli_ctx_get(ctx);
@@ -623,9 +624,11 @@ static int __ptlrpc_request_bufs_pack(struct ptlrpc_request *request,
         request->rq_reply_cbid.cbid_fn  = reply_in_callback;
         request->rq_reply_cbid.cbid_arg = request;
 
-        request->rq_reply_deadline = 0;
-        request->rq_phase = RQ_PHASE_NEW;
-        request->rq_next_phase = RQ_PHASE_UNDEFINED;
+	request->rq_reply_deadline = 0;
+	request->rq_bulk_deadline = 0;
+	request->rq_req_deadline = 0;
+	request->rq_phase = RQ_PHASE_NEW;
+	request->rq_next_phase = RQ_PHASE_UNDEFINED;
 
         request->rq_request_portal = imp->imp_client->cli_request_portal;
         request->rq_reply_portal = imp->imp_client->cli_reply_portal;
@@ -634,6 +637,23 @@ static int __ptlrpc_request_bufs_pack(struct ptlrpc_request *request,
 
 	request->rq_xid = ptlrpc_next_xid();
 	lustre_msg_set_opc(request->rq_reqmsg, opcode);
+
+	/* Let's setup deadline for req/reply/bulk unlink for opcode. */
+	if (cfs_fail_val == opcode) {
+		if (CFS_FAIL_CHECK(OBD_FAIL_PTLRPC_LONG_BULK_UNLINK))
+			fail_t = &request->rq_bulk_deadline;
+		else if (CFS_FAIL_CHECK(OBD_FAIL_PTLRPC_LONG_REPL_UNLINK))
+			fail_t = &request->rq_reply_deadline;
+		else if (CFS_FAIL_CHECK(OBD_FAIL_PTLRPC_LONG_REQ_UNLINK))
+			fail_t = &request->rq_req_deadline;
+		if (fail_t) {
+			*fail_t = cfs_time_current_sec() + LONG_UNLINK;
+			/* The RPC is infected, let the test to change the fail_loc */
+			schedule_timeout_and_set_state(TASK_UNINTERRUPTIBLE,
+						       cfs_time_seconds(2));
+			set_current_state(TASK_RUNNING);
+		}
+	}
 
 	RETURN(0);
 out_ctx:
@@ -1574,6 +1594,14 @@ int ptlrpc_check_set(const struct lu_env *env, struct ptlrpc_request_set *set)
                         LASSERT(req->rq_next_phase != req->rq_phase);
                         LASSERT(req->rq_next_phase != RQ_PHASE_UNDEFINED);
 
+			if (!OBD_FAIL_CHECK(OBD_FAIL_PTLRPC_LONG_REPL_UNLINK)) {
+				if (req->rq_req_deadline)
+					req->rq_req_deadline = 0;
+				if (req->rq_reply_deadline)
+					req->rq_reply_deadline = 0;
+				if (req->rq_bulk_deadline)
+					req->rq_bulk_deadline = 0;
+			}
                         /*
                          * Skip processing until reply is unlinked. We
                          * can't return to pool before that and we can't
@@ -2384,12 +2412,11 @@ int ptlrpc_unregister_reply(struct ptlrpc_request *request, int async)
 	 */
 	LASSERT(!in_interrupt());
 
-	/*
-	 * Let's setup deadline for reply unlink.
-	 */
-        if (OBD_FAIL_CHECK(OBD_FAIL_PTLRPC_LONG_REPL_UNLINK) &&
-            async && request->rq_reply_deadline == 0)
-                request->rq_reply_deadline = cfs_time_current_sec()+LONG_UNLINK;
+	/* Let's setup deadline for reply unlink. */
+	if (OBD_FAIL_CHECK(OBD_FAIL_PTLRPC_LONG_REPL_UNLINK) &&
+	    async && request->rq_reply_deadline == 0 && cfs_fail_val == 0)
+		request->rq_reply_deadline =
+			cfs_time_current_sec() + LONG_UNLINK;
 
         /*
          * Nothing left to do.
@@ -3062,7 +3089,6 @@ static void ptlrpcd_add_work_req(struct ptlrpc_request *req)
 	req->rq_timeout		= obd_timeout;
 	req->rq_sent		= cfs_time_current_sec();
 	req->rq_deadline	= req->rq_sent + req->rq_timeout;
-	req->rq_reply_deadline	= req->rq_deadline;
 	req->rq_phase		= RQ_PHASE_INTERPRET;
 	req->rq_next_phase	= RQ_PHASE_COMPLETE;
 	req->rq_xid		= ptlrpc_next_xid();

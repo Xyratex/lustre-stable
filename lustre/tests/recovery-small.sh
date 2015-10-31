@@ -2026,6 +2026,116 @@ test_113() {
 }
 run_test 113 "ldlm enqueue dropped reply should not cause deadlocks"
 
+test_112b() {
+	mount_client $DIR2
+	mkdir -p $DIR2/$tdir
+	touch $DIR2/$tdir/${tfile}
+	umount_client $DIR2
+
+	#OBD_FAIL_MDS_GETATTR_NET         0x102
+	do_facet $SINGLEMDS lctl set_param fail_loc=0x80000102  # hold getattr
+	local BEFORE=`date +%s`
+	stat $DIR/$tdir/${tfile} &
+	wait
+	do_facet $SINGLEMDS lctl set_param fail_loc=0
+	local DURATION=$((`date +%s`- $BEFORE))
+	echo 'Stat take - '$DURATION' sec'
+	fail $SINGLEMDS
+	remount_client $MOUNT
+
+	#if stat operation took less then obd_timeout,
+	#that`s mean that mds did not drop resent request with the same xid
+	[[ $DURATION -lt $TIMEOUT ]] && error "MDS fail to found resent request"
+
+	return 0
+}
+run_test 112b "getattr resend while orignal request is in progress"
+
+test_115_read() {
+	local fail1=$1
+	local fail2=$2
+
+	df $DIR
+	dd if=/dev/zero of=$DIR/$tfile bs=4096 count=1
+	cancel_lru_locks osc
+
+	# OST_READ       =  3,
+	$LCTL set_param fail_loc=$fail1 fail_val=3
+	dd of=/dev/null if=$DIR/$tfile bs=4096 count=1 &
+	pid=$!
+	sleep 1
+
+	set_nodes_failloc "$(osts_nodes)" $fail2
+
+	wait $pid || error "dd failed"
+	return 0
+}
+
+test_115_write() {
+	local fail1=$1
+	local fail2=$2
+	local error=$3
+
+	df $DIR
+	touch $DIR/$tfile
+
+	# OST_WRITE      =  4,
+	$LCTL set_param fail_loc=$fail1 fail_val=4
+	dd if=/dev/zero of=$DIR/$tfile bs=4096 count=1 oflag=dsync &
+	pid=$!
+	sleep 1
+
+	set_nodes_failloc "$(osts_nodes)" $fail2
+
+	wait $pid
+	rc=$?
+	[ $error -eq 0 ] && [ $rc -ne 0 ] && error "dd error ($rc)"
+	[ $error -ne 0 ] && [ $rc -eq 0 ] && error "dd success"
+	return 0
+}
+
+test_115a() {
+	#define OBD_FAIL_PTLRPC_LONG_REQ_UNLINK  0x51b
+	#define OBD_FAIL_PTLRPC_DROP_BULK	 0x51a
+	test_115_read 0x8000051b 0x8000051a
+}
+run_test 115a "read: late REQ MDunlink and no bulk"
+
+test_115b() {
+	#define OBD_FAIL_PTLRPC_LONG_REQ_UNLINK  0x51b
+	#define OBD_FAIL_OST_ENOSPC              0x215
+	test_115_write 0x8000051b 0x80000215 1
+}
+run_test 115b "write: late REQ MDunlink and no bulk"
+
+test_115c() {
+	#define OBD_FAIL_PTLRPC_LONG_REPL_UNLINK 0x50f
+	#define OBD_FAIL_PTLRPC_DROP_BULK	 0x51a
+	test_115_read 0x8000050f 0x8000051a
+}
+run_test 115c "read: late Reply MDunlink and no bulk"
+
+test_115d() {
+	#define OBD_FAIL_PTLRPC_LONG_REPL_UNLINK 0x50f
+	#define OBD_FAIL_OST_ENOSPC              0x215
+	test_115_write 0x8000050f 0x80000215 0
+}
+run_test 115d "write: late Reply MDunlink and no bulk"
+
+test_115e() {
+	#define OBD_FAIL_PTLRPC_LONG_BULK_UNLINK 0x510
+	#define OBD_FAIL_OST_ALL_REPLY_NET       0x211
+	test_115_read 0x80000510 0x80000211
+}
+run_test 115e "read: late Bulk MDunlink and no reply"
+
+test_115f() {
+	#define OBD_FAIL_PTLRPC_LONG_REQ_UNLINK  0x51b
+	#define OBD_FAIL_OST_ALL_REPLY_NET       0x211
+	test_115_read 0x8000051b 0x80000211
+}
+run_test 115f "read: late REQ MDunlink and no reply"
+
 # parameters: fail_loc CMD RC
 test_120_reply() {
 	local PID
@@ -2129,31 +2239,6 @@ test_120() {
 	test_120_destroy 0x320 || error "unlock-cleanup race failed"
 }
 run_test 120 "flock race: completion vs. evict"
-
-test_112b() {
-	mount_client $DIR2
-	mkdir -p $DIR2/$tdir
-	touch $DIR2/$tdir/${tfile}
-	umount_client $DIR2
-
-	#OBD_FAIL_MDS_GETATTR_NET         0x102
-	do_facet $SINGLEMDS lctl set_param fail_loc=0x80000102  # hold getattr
-	local BEFORE=`date +%s`
-	stat $DIR/$tdir/${tfile} &
-	wait
-	do_facet $SINGLEMDS lctl set_param fail_loc=0
-	local DURATION=$((`date +%s`- $BEFORE))
-	echo 'Stat take - '$DURATION' sec'
-	fail $SINGLEMDS
-	remount_client $MOUNT
-
-	#if stat operation took less then obd_timeout,
-	#that`s mean that mds did not drop resent request with the same xid
-	[[ $DURATION -lt $TIMEOUT ]] && error "MDS fail to found resent request"
-
-	return 0
-}
-run_test 112b "getattr resend while orignal request is in progress"
 
 complete $SECONDS
 check_and_cleanup_lustre
