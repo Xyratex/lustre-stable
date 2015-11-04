@@ -3104,7 +3104,8 @@ static int mdt_intent_getxattr(enum mdt_it_code opcode,
 
 	if (mdt_info_req(info)->rq_repmsg != NULL)
 		ldlm_rep = req_capsule_server_get(info->mti_pill, &RMF_DLM_REP);
-	if (ldlm_rep == NULL)
+	if (ldlm_rep == NULL ||
+	    OBD_FAIL_CHECK(OBD_FAIL_MDS_XATTR_REP))
 		RETURN(err_serious(-EFAULT));
 
 	ldlm_rep->lock_policy_res2 = grc;
