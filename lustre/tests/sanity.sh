@@ -12964,6 +12964,25 @@ test_254() {
 }
 run_test 254 "Check changelog size"
 
+test_257() {
+	remote_mds_nodsh && skip "remote MDS with nodsh" && return
+	test_mkdir -p $DIR/$tdir
+
+	setfattr -n trusted.name1 -v value1 $DIR/$tdir ||
+		error "setfattr -n trusted.name1=value1 $DIR/$tdir failed"
+	stat $DIR/$tdir
+
+#define OBD_FAIL_MDS_XATTR_REP			0x161
+	local MDSIDX=$(get_mds_dir "$DIR/$tdir")
+	set_nodes_failloc $(facet_host mds${MDSIDX}) 0x80000161
+	getfattr -n trusted.name1 $DIR/$tdir 2> /dev/null
+
+	stop mds${MDSIDX} || error "stop MDS failed"
+	start mds${MDSIDX} $(mdsdevname $MDSIDX) $MDS_MOUNT_OPTS ||
+		error "start MDS fail"
+}
+run_test 257 "xattr locks are not lost"
+
 test_400a() { # LU-1606, was conf-sanity test_74
 	local extra_flags=''
 	local out=$TMP/$tfile
