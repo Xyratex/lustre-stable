@@ -4988,6 +4988,10 @@ static int mdt_export_cleanup(struct obd_export *exp)
         info->mti_mdt = mdt;
         info->mti_exp = exp;
 
+	/* 3rd arg = 1 indicates that the client is evicted
+	 * 4th arg = 1 indicates to call hsm_cancel_all_actions() */
+	mdt_hsm_agent_unregister(info, &exp->exp_client_uuid, 1, 1);
+
 	if (!list_empty(&closing_list)) {
 		struct md_attr *ma = &info->mti_attr;
 
