@@ -305,16 +305,20 @@ static struct inode *osd_iget_check(struct osd_thread_info *info,
 				    struct osd_device *dev,
 				    const struct lu_fid *fid,
 				    struct osd_inode_id *id,
-				    bool in_oi)
+				    bool cached)
 {
 	struct inode	*inode;
 	int		 rc	= 0;
 	ENTRY;
 
+	/* The cached OI mapping is trustable. If we cannot locate the inode
+	 * via the cached OI mapping, then return the failure to the caller
+	 * directly without further OI checking. */
+
 	inode = ldiskfs_iget(osd_sb(dev), id->oii_ino);
 	if (IS_ERR(inode)) {
 		rc = PTR_ERR(inode);
-		if (!in_oi || (rc != -ENOENT && rc != -ESTALE)) {
+		if (cached || (rc != -ENOENT && rc != -ESTALE)) {
 			CDEBUG(D_INODE, "no inode: ino = %u, rc = %d\n",
 			       id->oii_ino, rc);
 
@@ -326,7 +330,7 @@ static struct inode *osd_iget_check(struct osd_thread_info *info,
 
 	if (is_bad_inode(inode)) {
 		rc = -ENOENT;
-		if (!in_oi) {
+		if (cached) {
 			CDEBUG(D_INODE, "bad inode: ino = %u\n", id->oii_ino);
 
 			GOTO(put, rc);
@@ -338,7 +342,7 @@ static struct inode *osd_iget_check(struct osd_thread_info *info,
 	if (id->oii_gen != OSD_OII_NOGEN &&
 	    inode->i_generation != id->oii_gen) {
 		rc = -ESTALE;
-		if (!in_oi) {
+		if (cached) {
 			CDEBUG(D_INODE, "unmatched inode: ino = %u, "
 			       "oii_gen = %u, i_generation = %u\n",
 			       id->oii_ino, id->oii_gen, inode->i_generation);
@@ -351,7 +355,7 @@ static struct inode *osd_iget_check(struct osd_thread_info *info,
 
 	if (inode->i_nlink == 0) {
 		rc = -ENOENT;
-		if (!in_oi) {
+		if (cached) {
 			CDEBUG(D_INODE, "stale inode: ino = %u\n", id->oii_ino);
 
 			GOTO(put, rc);
@@ -367,7 +371,7 @@ check_oi:
 		LASSERTF(rc == -ESTALE || rc == -ENOENT, "rc = %d\n", rc);
 
 		rc = osd_oi_lookup(info, dev, fid, id, OI_CHECK_FLD);
-		/* XXX: There are three possible cases:
+		/* XXX: There are four possible cases:
 		 *	1. rc = 0.
 		 *	   Backup/restore caused the OI invalid.
 		 *	2. rc = 0.
@@ -401,6 +405,11 @@ check_oi:
 				       saved_id.oii_ino, saved_id.oii_gen,
 				       id->oii_ino, id->oii_ino);
 			}
+		} else {
+			/* If the OI mapping was in OI file before the
+			 * osd_iget_check(), but now, it is disappear,
+			 * then it must be removed by race. That is a
+			 * normal race case. */
 		}
 	} else {
 		if (id->oii_gen == OSD_OII_NOGEN)
@@ -513,9 +522,6 @@ static int osd_check_lma(const struct lu_env *env, struct osd_object *obj)
 		}
 	}
 
-	if (unlikely(rc == -ENODATA))
-		RETURN(0);
-
 	if (rc < 0)
 		RETURN(rc);
 
@@ -586,7 +592,7 @@ static int osd_fid_lookup(const struct lu_env *env, struct osd_object *obj,
 	struct scrub_file      *sf;
 	int			result;
 	int			saved  = 0;
-	bool			in_oi  = false;
+	bool			cached  = true;
 	bool			triggered = false;
 	ENTRY;
 
@@ -627,10 +633,11 @@ static int osd_fid_lookup(const struct lu_env *env, struct osd_object *obj,
 			goto iget;
 	}
 
+	cached = false;
 	/* Search order: 3. OI files. */
 	result = osd_oi_lookup(info, dev, fid, id, OI_CHECK_FLD);
 	if (result == -ENOENT) {
-		if (!fid_is_norm(fid) ||
+		if (!(fid_is_norm(fid) || fid_is_igif(fid)) ||
 		    fid_is_on_ost(info, dev, fid, OI_CHECK_FLD) ||
 		    !ldiskfs_test_bit(osd_oi_fid2idx(dev,fid),
 				      sf->sf_oi_bitmap))
@@ -642,23 +649,16 @@ static int osd_fid_lookup(const struct lu_env *env, struct osd_object *obj,
 	if (result != 0)
 		GOTO(out, result);
 
-	in_oi = true;
-
 iget:
-	inode = osd_iget_check(info, dev, fid, id, in_oi);
+	inode = osd_iget_check(info, dev, fid, id, cached);
 	if (IS_ERR(inode)) {
 		result = PTR_ERR(inode);
-		if (result == -ENOENT || result == -ESTALE) {
-			if (!in_oi)
-				fid_zero(&oic->oic_fid);
-
+		if (result == -ENOENT || result == -ESTALE)
 			GOTO(out, result = -ENOENT);
-		} else if (result == -EREMCHG) {
+
+		if (result == -EREMCHG) {
 
 trigger:
-			if (!in_oi)
-				fid_zero(&oic->oic_fid);
-
 			if (unlikely(triggered))
 				GOTO(out, result = saved);
 
@@ -676,6 +676,9 @@ trigger:
 				else
 					result = -EREMCHG;
 			}
+
+			if (fid_is_on_ost(info, dev, fid, OI_CHECK_FLD))
+				GOTO(out, result);
 
 			/* We still have chance to get the valid inode: for the
 			 * object which is referenced by remote name entry, the
@@ -696,43 +699,81 @@ trigger:
 			result = osd_lookup_in_remote_parent(info, dev,
 							     fid, id);
 			if (result == 0) {
-				in_oi = false;
+				cached = true;
 				goto iget;
 			}
 
 			result = saved;
 		}
 
-                GOTO(out, result);
-        }
-
-        obj->oo_inode = inode;
-        LASSERT(obj->oo_inode->i_sb == osd_sb(dev));
-
-	result = osd_check_lma(env, obj);
-	if (result != 0) {
-		iput(inode);
-		obj->oo_inode = NULL;
-		if (result == -EREMCHG) {
-			if (!in_oi) {
-				result = osd_oi_lookup(info, dev, fid, id,
-						       OI_CHECK_FLD);
-				if (result != 0) {
-					fid_zero(&oic->oic_fid);
-					GOTO(out, result);
-				}
-			}
-
-			goto trigger;
-		}
-
 		GOTO(out, result);
 	}
 
+	obj->oo_inode = inode;
+	LASSERT(obj->oo_inode->i_sb == osd_sb(dev));
+
+	result = osd_check_lma(env, obj);
+	if (result != 0) {
+		if (result == -ENODATA) {
+			if (cached) {
+				result = osd_oi_lookup(info, dev, fid, id,
+						       OI_CHECK_FLD);
+				if (result != 0) {
+					/* result == -ENOENT means that the OI
+					 * mapping has been removed by race,
+					 * the target inode belongs to other
+					 * object.
+					 *
+					 * Others error also can be returned
+					 * directly. */
+					iput(inode);
+					obj->oo_inode = NULL;
+					GOTO(out, result);
+				} else {
+					/* result == 0 means the cached OI
+					 * mapping is still in the OI file,
+					 * the target the inode is valid. */
+				}
+			} else {
+				/* The current OI mapping is from the OI file,
+				 * since the inode has been found via
+				 * osd_iget_check(), no need recheck OI. */
+			}
+
+			goto found;
+		}
+
+		iput(inode);
+		obj->oo_inode = NULL;
+		if (result != -EREMCHG)
+			GOTO(out, result);
+
+		if (cached) {
+			result = osd_oi_lookup(info, dev, fid, id,
+					       OI_CHECK_FLD);
+			/* result == -ENOENT means the cached OI mapping
+			 * has been removed from the OI file by race,
+			 * above target inode belongs to other object.
+			 *
+			 * Others error also can be returned directly. */
+			if (result != 0)
+				GOTO(out, result);
+
+			/* result == 0, goto trigger */
+		} else {
+			/* The current OI mapping is from the OI file,
+			 * since the inode has been found via
+			 * osd_iget_check(), no need recheck OI. */
+		}
+
+		goto trigger;
+	}
+
+found:
 	obj->oo_compat_dot_created = 1;
 	obj->oo_compat_dotdot_created = 1;
 
-        if (!S_ISDIR(inode->i_mode) || !ldiskfs_pdo) /* done */
+	if (!S_ISDIR(inode->i_mode) || !ldiskfs_pdo) /* done */
 		GOTO(out, result = 0);
 
 	LASSERT(obj->oo_hl_head == NULL);
@@ -745,6 +786,9 @@ trigger:
 	GOTO(out, result = 0);
 
 out:
+	if (result != 0 && cached)
+		fid_zero(&oic->oic_fid);
+
 	LINVRNT(osd_invariant(obj));
 	return result;
 }
