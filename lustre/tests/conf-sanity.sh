@@ -2638,6 +2638,9 @@ run_test 41b "mount mds with --nosvc and --nomgs on first mount"
 test_41c() {
 	cleanup
 	# MDT concurent start
+	load_modules
+	do_facet $SINGLEMDS "lsmod | grep -q lustre" || return 1
+	do_facet ost1 "lsmod | grep -q lustre" || return 1
 	#define OBD_FAIL_TGT_DELAY_CONNECT 0x703
 	do_facet $SINGLEMDS "lctl set_param fail_loc=0x703"
 	start mds1 $(mdsdevname 1) $MDS_MOUNT_OPTS &
