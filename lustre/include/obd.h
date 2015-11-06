@@ -660,6 +660,16 @@ struct lov_statfs_data {
         struct obd_info   lsd_oi;
         struct obd_statfs lsd_statfs;
 };
+
+enum lq_flag {
+	LQ_DIRTY	= 0, /* recalc qos data */
+	LQ_SAME_SPACE	= 1, /* the ost's all have approx.
+                                     the same space avail */
+	LQ_RESET	= 2, /* zero current penalties */
+	LQ_SF_PROGRESS	= 3  /* statfs op in progress */
+
+};
+
 /* Stripe placement optimization */
 struct lov_qos {
         cfs_list_t          lq_oss_list; /* list of OSSs that targets use */
@@ -668,12 +678,7 @@ struct lov_qos {
         unsigned int        lq_prio_free;   /* priority for free space */
         unsigned int        lq_threshold_rr;/* priority for rr */
         struct lov_qos_rr   lq_rr;          /* round robin qos data */
-        unsigned long       lq_dirty:1,     /* recalc qos data */
-                            lq_same_space:1,/* the ost's all have approx.
-                                               the same space avail */
-                            lq_reset:1,     /* zero current penalties */
-                            lq_statfs_in_progress:1; /* statfs op in
-                                                        progress */
+        unsigned long       lq_flags;       /* statfs op flags */
         /* qos statfs data */
         struct lov_statfs_data *lq_statfs_data;
         cfs_waitq_t         lq_statfs_waitq; /* waitqueue to notify statfs

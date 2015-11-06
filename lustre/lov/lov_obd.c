@@ -844,8 +844,8 @@ int lov_setup(struct obd_device *obd, struct lustre_cfg *lcfg)
 
         CFS_INIT_LIST_HEAD(&lov->lov_qos.lq_oss_list);
         cfs_init_rwsem(&lov->lov_qos.lq_rw_sem);
-        lov->lov_qos.lq_dirty = 1;
-        lov->lov_qos.lq_reset = 1;
+	cfs_set_bit(LQ_DIRTY, &lov->lov_qos.lq_flags);
+	cfs_set_bit(LQ_RESET, &lov->lov_qos.lq_flags);
         /* Default priority is toward free space balance */
         lov->lov_qos.lq_prio_free = 232;
         /* Default threshold for rr (roughly 17%) */

@@ -230,8 +230,8 @@ static int lov_wr_qos_priofree(struct file *file, const char *buffer,
         if (val > 100)
                 return -EINVAL;
         lov->lov_qos.lq_prio_free = (val << 8) / 100;
-        lov->lov_qos.lq_dirty = 1;
-        lov->lov_qos.lq_reset = 1;
+	cfs_set_bit(LQ_DIRTY, &lov->lov_qos.lq_flags);
+	cfs_set_bit(LQ_RESET, &lov->lov_qos.lq_flags);
         return count;
 }
 
@@ -265,7 +265,7 @@ static int lov_wr_qos_thresholdrr(struct file *file, const char *buffer,
                 return -EINVAL;
 
         lov->lov_qos.lq_threshold_rr = (val << 8) / 100;
-        lov->lov_qos.lq_dirty = 1;
+	cfs_set_bit(LQ_DIRTY, &lov->lov_qos.lq_flags);
         return count;
 }
 

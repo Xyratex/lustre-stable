@@ -103,7 +103,7 @@ int qos_add_tgt(struct obd_device *obd, __u32 index)
            points to the list head, and we add to the end. */
         cfs_list_add_tail(&oss->lqo_oss_list, &temposs->lqo_oss_list);
 
-        lov->lov_qos.lq_dirty = 1;
+	cfs_set_bit(LQ_DIRTY, &lov->lov_qos.lq_flags);
         lov->lov_qos.lq_rr.lqr_dirty = 1;
 
         CDEBUG(D_QOS, "add tgt %s to OSS %s (%d OSTs)\n",
@@ -138,7 +138,7 @@ int qos_del_tgt(struct obd_device *obd, struct lov_tgt_desc *tgt)
                 OBD_FREE_PTR(oss);
         }
 
-        lov->lov_qos.lq_dirty = 1;
+	cfs_set_bit(LQ_DIRTY, &lov->lov_qos.lq_flags);
         lov->lov_qos.lq_rr.lqr_dirty = 1;
 out:
         cfs_up_write(&lov->lov_qos.lq_rw_sem);
@@ -157,7 +157,7 @@ static int qos_calc_ppo(struct obd_device *obd)
         time_t now, age;
         ENTRY;
 
-        if (!lov->lov_qos.lq_dirty)
+        if (!cfs_test_bit(LQ_DIRTY, &lov->lov_qos.lq_flags))
                 GOTO(out, rc = 0);
 
         num_active = lov->desc.ld_active_tgt_count - 1;
@@ -201,7 +201,8 @@ static int qos_calc_ppo(struct obd_device *obd)
                         (temp * prio_wide) >> 8;
 
                 age = (now - lov->lov_tgts[i]->ltd_qos.ltq_used) >> 3;
-                if (lov->lov_qos.lq_reset || age > 32 * lov->desc.ld_qos_maxage)
+                if (cfs_test_bit(LQ_RESET, &lov->lov_qos.lq_flags) ||
+		    age > 32 * lov->desc.ld_qos_maxage)
                         lov->lov_tgts[i]->ltd_qos.ltq_penalty = 0;
                 else if (age > lov->desc.ld_qos_maxage)
                         /* Decay the penalty by half for every 8x the update
@@ -232,7 +233,8 @@ static int qos_calc_ppo(struct obd_device *obd)
                 oss->lqo_penalty_per_obj = (temp * prio_wide) >> 8;
 
                 age = (now - oss->lqo_used) >> 3;
-                if (lov->lov_qos.lq_reset || age > 32 * lov->desc.ld_qos_maxage)
+                if (cfs_test_bit(LQ_RESET, &lov->lov_qos.lq_flags) ||
+		    age > 32 * lov->desc.ld_qos_maxage)
                         oss->lqo_penalty = 0;
                 else if (age > lov->desc.ld_qos_maxage)
                         /* Decay the penalty by half for every 8x the update
@@ -243,21 +245,21 @@ static int qos_calc_ppo(struct obd_device *obd)
                         oss->lqo_penalty >>= (age / lov->desc.ld_qos_maxage);
         }
 
-        lov->lov_qos.lq_dirty = 0;
-        lov->lov_qos.lq_reset = 0;
+        cfs_clear_bit(LQ_DIRTY, &lov->lov_qos.lq_flags);
+        cfs_clear_bit(LQ_RESET, &lov->lov_qos.lq_flags);
 
         /* If each ost has almost same free space,
          * do rr allocation for better creation performance */
-        lov->lov_qos.lq_same_space = 0;
+        cfs_clear_bit(LQ_SAME_SPACE, &lov->lov_qos.lq_flags);
         if ((ba_max * (256 - lov->lov_qos.lq_threshold_rr)) >> 8 < ba_min) {
-                lov->lov_qos.lq_same_space = 1;
+		cfs_set_bit(LQ_SAME_SPACE, &lov->lov_qos.lq_flags);
                 /* Reset weights for the next time we enter qos mode */
-                lov->lov_qos.lq_reset = 1;
+		cfs_set_bit(LQ_RESET, &lov->lov_qos.lq_flags);
         }
         rc = 0;
 
 out:
-        if (!rc && lov->lov_qos.lq_same_space)
+        if (!rc && cfs_test_bit(LQ_SAME_SPACE, &lov->lov_qos.lq_flags))
                 RETURN(-EAGAIN);
         RETURN(rc);
 }
@@ -814,7 +816,8 @@ static int alloc_qos(struct obd_export *exp, int *idx_arr, int *stripe_cnt,
                           cfs_time_shift_64(-2 * lov->desc.ld_qos_maxage), 1);
 
         /* Detect -EAGAIN early, before expensive lock is taken. */
-        if (!lov->lov_qos.lq_dirty && lov->lov_qos.lq_same_space)
+        if (!cfs_test_bit(LQ_DIRTY, &lov->lov_qos.lq_flags) &&
+	     cfs_test_bit(LQ_SAME_SPACE, &lov->lov_qos.lq_flags))
                 GOTO(out_nolock, rc = -EAGAIN);
 
         /* Do actual allocation, use write lock here. */
@@ -826,12 +829,12 @@ static int alloc_qos(struct obd_export *exp, int *idx_arr, int *stripe_cnt,
          * Check again, while we were sleeping on @lq_rw_sem things could
          * change.
          */
-        if (lov->lov_qos.lq_dirty)
+        if (cfs_test_bit(LQ_DIRTY, &lov->lov_qos.lq_flags))
                 rc = qos_calc_ppo(exp->exp_obd);
         if (rc)
                 GOTO(out, rc);
 
-        if (lov->lov_qos.lq_same_space)
+        if (cfs_test_bit(LQ_SAME_SPACE, &lov->lov_qos.lq_flags))
                 GOTO(out, rc = -EAGAIN);
 
         good_osts = 0;
@@ -1128,28 +1131,27 @@ out_err:
 void qos_update(struct lov_obd *lov)
 {
         ENTRY;
-        lov->lov_qos.lq_dirty = 1;
+        cfs_set_bit(LQ_DIRTY, &lov->lov_qos.lq_flags);
 }
 
 void qos_statfs_done(struct lov_obd *lov)
 {
-        LASSERT(lov->lov_qos.lq_statfs_in_progress);
-        cfs_down_write(&lov->lov_qos.lq_rw_sem);
-        lov->lov_qos.lq_statfs_in_progress = 0;
+	LASSERT(cfs_test_bit(LQ_SF_PROGRESS, &lov->lov_qos.lq_flags));
+	cfs_clear_bit(LQ_SF_PROGRESS, &lov->lov_qos.lq_flags);
         /* wake up any threads waiting for the statfs rpcs to complete */
         cfs_waitq_signal(&lov->lov_qos.lq_statfs_waitq);
-        cfs_up_write(&lov->lov_qos.lq_rw_sem);
 }
+
 
 static int qos_statfs_ready(struct obd_device *obd, __u64 max_age)
 {
         struct lov_obd         *lov = &obd->u.lov;
         int rc;
         ENTRY;
-        cfs_down_read(&lov->lov_qos.lq_rw_sem);
-        rc = lov->lov_qos.lq_statfs_in_progress == 0 ||
-             cfs_time_beforeq_64(max_age, obd->obd_osfs_age);
-        cfs_up_read(&lov->lov_qos.lq_rw_sem);
+
+	rc = cfs_test_bit(LQ_SF_PROGRESS, &lov->lov_qos.lq_flags) == 0 ||
+			   cfs_time_beforeq_64(max_age, obd->obd_osfs_age);
+
         RETURN(rc);
 }
 
@@ -1172,18 +1174,9 @@ void qos_statfs_update(struct obd_device *obd, __u64 max_age, int wait)
                 /* statfs data are quite recent, don't need to refresh it */
                 RETURN_EXIT;
 
-        if (!wait && lov->lov_qos.lq_statfs_in_progress)
-                /* statfs already in progress */
-                RETURN_EXIT;
-
-        cfs_down_write(&lov->lov_qos.lq_rw_sem);
-        if (lov->lov_qos.lq_statfs_in_progress) {
-                cfs_up_write(&lov->lov_qos.lq_rw_sem);
-                GOTO(out, rc = 0);
-        }
-        /* no statfs in flight, send rpcs */
-        lov->lov_qos.lq_statfs_in_progress = 1;
-        cfs_up_write(&lov->lov_qos.lq_rw_sem);
+	/* Check if statfs already in progress */
+	if (cfs_test_and_set_bit(LQ_SF_PROGRESS, &lov->lov_qos.lq_flags))
+		GOTO(out, rc = 0);
 
         if (wait)
                 CDEBUG(D_QOS, "%s: did not manage to get fresh statfs data "
@@ -1215,11 +1208,9 @@ void qos_statfs_update(struct obd_device *obd, __u64 max_age, int wait)
         GOTO(out, rc);
 
 out_failed:
-        cfs_down_write(&lov->lov_qos.lq_rw_sem);
-        lov->lov_qos.lq_statfs_in_progress = 0;
+	cfs_clear_bit(LQ_SF_PROGRESS, &lov->lov_qos.lq_flags);
         /* wake up any threads waiting for the statfs rpcs to complete */
         cfs_waitq_signal(&lov->lov_qos.lq_statfs_waitq);
-        cfs_up_write(&lov->lov_qos.lq_rw_sem);
         wait = 0;
 out:
         if (set)
