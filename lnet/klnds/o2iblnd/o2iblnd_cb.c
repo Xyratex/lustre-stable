@@ -2333,6 +2333,10 @@ kiblnd_passive_connect (struct rdma_cm_id *cmid, void *priv, int priv_nob)
 		goto failed;
 	}
 
+	/* We have validated the peer's parameters so use those */
+	peer->ibp_max_frags = reqmsg->ibm_u.connparams.ibcp_max_frags;
+	peer->ibp_queue_depth = reqmsg->ibm_u.connparams.ibcp_queue_depth;
+
 	write_lock_irqsave(g_lock, flags);
 
         peer2 = kiblnd_find_peer_locked(nid);
@@ -2371,6 +2375,12 @@ kiblnd_passive_connect (struct rdma_cm_id *cmid, void *priv, int priv_nob)
                 peer2->ibp_accepting++;
                 kiblnd_peer_addref(peer2);
 
+		/* Race with kiblnd_launch_tx (active connect) to create peer
+		 * so copy validated parameters since we now know what the
+		 * peer's limits are */
+		peer2->ibp_max_frags = peer->ibp_max_frags;
+		peer2->ibp_queue_depth = peer->ibp_queue_depth;
+
 		write_unlock_irqrestore(g_lock, flags);
                 kiblnd_peer_decref(peer);
                 peer = peer2;
@@ -2393,8 +2403,7 @@ kiblnd_passive_connect (struct rdma_cm_id *cmid, void *priv, int priv_nob)
 		write_unlock_irqrestore(g_lock, flags);
         }
 
-	conn = kiblnd_create_conn(peer, cmid, IBLND_CONN_PASSIVE_WAIT, version,
-				  &reqmsg->ibm_u.connparams);
+	conn = kiblnd_create_conn(peer, cmid, IBLND_CONN_PASSIVE_WAIT, version);
         if (conn == NULL) {
                 kiblnd_peer_connect_failed(peer, 0, -ENOMEM);
                 kiblnd_peer_decref(peer);
@@ -2404,10 +2413,9 @@ kiblnd_passive_connect (struct rdma_cm_id *cmid, void *priv, int priv_nob)
 
         /* conn now "owns" cmid, so I return success from here on to ensure the
          * CM callback doesn't destroy cmid. */
-
 	conn->ibc_incarnation      = reqmsg->ibm_srcstamp;
-	conn->ibc_credits          = reqmsg->ibm_u.connparams.ibcp_queue_depth;
-	conn->ibc_reserved_credits = reqmsg->ibm_u.connparams.ibcp_queue_depth;
+	conn->ibc_credits          = conn->ibc_queue_depth;
+	conn->ibc_reserved_credits = conn->ibc_queue_depth;
 	LASSERT(conn->ibc_credits + conn->ibc_reserved_credits +
 		IBLND_OOB_MSGS(version) <= IBLND_RX_MSGS(conn));
 
@@ -2416,10 +2424,8 @@ kiblnd_passive_connect (struct rdma_cm_id *cmid, void *priv, int priv_nob)
 
         kiblnd_init_msg(ackmsg, IBLND_MSG_CONNACK,
                         sizeof(ackmsg->ibm_u.connparams));
-	ackmsg->ibm_u.connparams.ibcp_queue_depth  =
-		reqmsg->ibm_u.connparams.ibcp_queue_depth;
-	ackmsg->ibm_u.connparams.ibcp_max_frags    =
-		reqmsg->ibm_u.connparams.ibcp_max_frags;
+	ackmsg->ibm_u.connparams.ibcp_queue_depth  = conn->ibc_queue_depth;
+	ackmsg->ibm_u.connparams.ibcp_max_frags    = conn->ibc_max_frags;
 	ackmsg->ibm_u.connparams.ibcp_max_msg_size = IBLND_MSG_SIZE;
 
         kiblnd_pack_msg(ni, ackmsg, version, 0, nid, reqmsg->ibm_srcstamp);
@@ -2501,6 +2507,9 @@ kiblnd_reconnect (kib_conn_t *conn, int version,
                 break;
 
 	case IBLND_REJECT_RDMA_FRAGS:
+		if (!cp)
+			goto failed;
+
 		if (conn->ibc_max_frags <= cp->ibcp_max_frags) {
 			CNETERR("Unsupported max frags, peer supports %d\n",
 				cp->ibcp_max_frags);
@@ -2511,18 +2520,21 @@ kiblnd_reconnect (kib_conn_t *conn, int version,
 			goto failed;
 		}
 
-		conn->ibc_max_frags = cp->ibcp_max_frags;
+		peer->ibp_max_frags = cp->ibcp_max_frags;
 		reason = "rdma fragments";
 		break;
 
 	case IBLND_REJECT_MSG_QUEUE_SIZE:
+		if (!cp)
+			goto failed;
+
 		if (conn->ibc_queue_depth <= cp->ibcp_queue_depth) {
 			CNETERR("Unsupported queue depth, peer supports %d\n",
 				cp->ibcp_queue_depth);
 			goto failed;
 		}
 
-		conn->ibc_queue_depth = cp->ibcp_queue_depth;
+		peer->ibp_queue_depth = cp->ibcp_queue_depth;
 		reason = "queue depth";
 		break;
 
@@ -2804,7 +2816,7 @@ kiblnd_active_connect (struct rdma_cm_id *cmid)
 	read_unlock_irqrestore(&kiblnd_data.kib_global_lock, flags);
 
 	conn = kiblnd_create_conn(peer, cmid, IBLND_CONN_ACTIVE_CONNECT,
-				  version, NULL);
+				  version);
         if (conn == NULL) {
                 kiblnd_peer_connect_failed(peer, 1, -ENOMEM);
                 kiblnd_peer_decref(peer); /* lose cmid's ref */
