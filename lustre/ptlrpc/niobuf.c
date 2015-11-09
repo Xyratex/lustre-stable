@@ -453,8 +453,8 @@ int ptlrpc_unregister_bulk(struct ptlrpc_request *req, int async)
 	if (ptlrpc_client_bulk_active(req) == 0)	/* completed or */
 		RETURN(1);				/* never registered */
 
-        /* Move to "Unregistering" phase as bulk was not unlinked yet. */
-        ptlrpc_rqphase_move(req, RQ_PHASE_UNREGISTERING);
+	/* Move to "Unregistering" phase as bulk was not unlinked yet. */
+	ptlrpc_rqphase_move(req, RQ_PHASE_UNREG_BULK);
 
         /* Do not wait for unlink to finish. */
         if (async)

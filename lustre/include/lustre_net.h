@@ -708,13 +708,14 @@ struct ptlrpc_thread;
 
 /** RPC stages */
 enum rq_phase {
-        RQ_PHASE_NEW            = 0xebc0de00,
-        RQ_PHASE_RPC            = 0xebc0de01,
-        RQ_PHASE_BULK           = 0xebc0de02,
-        RQ_PHASE_INTERPRET      = 0xebc0de03,
-        RQ_PHASE_COMPLETE       = 0xebc0de04,
-        RQ_PHASE_UNREGISTERING  = 0xebc0de05,
-        RQ_PHASE_UNDEFINED      = 0xebc0de06
+	RQ_PHASE_NEW            = 0xebc0de00,
+	RQ_PHASE_RPC            = 0xebc0de01,
+	RQ_PHASE_BULK           = 0xebc0de02,
+	RQ_PHASE_INTERPRET      = 0xebc0de03,
+	RQ_PHASE_COMPLETE       = 0xebc0de04,
+	RQ_PHASE_UNREG_RPC      = 0xebc0de05,
+	RQ_PHASE_UNREG_BULK     = 0xebc0de06,
+	RQ_PHASE_UNDEFINED      = 0xebc0de07
 };
 
 /** Type of request interpreter call-back */
@@ -2217,22 +2218,24 @@ static inline void lustre_set_rep_swabbed(struct ptlrpc_request *req,
 static inline const char *
 ptlrpc_phase2str(enum rq_phase phase)
 {
-        switch (phase) {
-        case RQ_PHASE_NEW:
-                return "New";
-        case RQ_PHASE_RPC:
-                return "Rpc";
-        case RQ_PHASE_BULK:
-                return "Bulk";
-        case RQ_PHASE_INTERPRET:
-                return "Interpret";
-        case RQ_PHASE_COMPLETE:
-                return "Complete";
-        case RQ_PHASE_UNREGISTERING:
-                return "Unregistering";
-        default:
-                return "?Phase?";
-        }
+	switch (phase) {
+	case RQ_PHASE_NEW:
+		return "New";
+	case RQ_PHASE_RPC:
+		return "Rpc";
+	case RQ_PHASE_BULK:
+		return "Bulk";
+	case RQ_PHASE_INTERPRET:
+		return "Interpret";
+	case RQ_PHASE_COMPLETE:
+		return "Complete";
+	case RQ_PHASE_UNREG_RPC:
+		return "UnregRPC";
+	case RQ_PHASE_UNREG_BULK:
+		return "UnregBULK";
+	default:
+		return "?Phase?";
+	}
 }
 
 /**
@@ -3303,13 +3306,15 @@ ptlrpc_rqphase_move(struct ptlrpc_request *req, enum rq_phase new_phase)
 	if (req->rq_phase == new_phase)
 		return;
 
-	if (new_phase == RQ_PHASE_UNREGISTERING) {
+	if (new_phase == RQ_PHASE_UNREG_RPC ||
+	    new_phase == RQ_PHASE_UNREG_BULK) {
 		req->rq_next_phase = req->rq_phase;
 		if (req->rq_import)
 			atomic_inc(&req->rq_import->imp_unregistering);
 	}
 
-	if (req->rq_phase == RQ_PHASE_UNREGISTERING) {
+	if (req->rq_phase == RQ_PHASE_UNREG_RPC ||
+	    req->rq_phase == RQ_PHASE_UNREG_BULK) {
 		if (req->rq_import)
 			atomic_dec(&req->rq_import->imp_unregistering);
 	}

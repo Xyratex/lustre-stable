@@ -1581,18 +1581,20 @@ int ptlrpc_check_set(const struct lu_env *env, struct ptlrpc_request_set *set)
 		    req->rq_sent > cfs_time_current_sec())
 			continue;
 
-                if (!(req->rq_phase == RQ_PHASE_RPC ||
-                      req->rq_phase == RQ_PHASE_BULK ||
-                      req->rq_phase == RQ_PHASE_INTERPRET ||
-                      req->rq_phase == RQ_PHASE_UNREGISTERING ||
-                      req->rq_phase == RQ_PHASE_COMPLETE)) {
-                        DEBUG_REQ(D_ERROR, req, "bad phase %x", req->rq_phase);
-                        LBUG();
-                }
+		if (!(req->rq_phase == RQ_PHASE_RPC ||
+		      req->rq_phase == RQ_PHASE_BULK ||
+		      req->rq_phase == RQ_PHASE_INTERPRET ||
+		      req->rq_phase == RQ_PHASE_UNREG_RPC ||
+		      req->rq_phase == RQ_PHASE_UNREG_BULK ||
+		      req->rq_phase == RQ_PHASE_COMPLETE)) {
+			DEBUG_REQ(D_ERROR, req, "bad phase %x", req->rq_phase);
+			LBUG();
+		}
 
-                if (req->rq_phase == RQ_PHASE_UNREGISTERING) {
-                        LASSERT(req->rq_next_phase != req->rq_phase);
-                        LASSERT(req->rq_next_phase != RQ_PHASE_UNDEFINED);
+		if (req->rq_phase == RQ_PHASE_UNREG_RPC ||
+		    req->rq_phase == RQ_PHASE_UNREG_BULK) {
+			LASSERT(req->rq_next_phase != req->rq_phase);
+			LASSERT(req->rq_next_phase != RQ_PHASE_UNDEFINED);
 
 			if (!OBD_FAIL_CHECK(OBD_FAIL_PTLRPC_LONG_REPL_UNLINK)) {
 				if (req->rq_req_deadline)
@@ -1602,16 +1604,19 @@ int ptlrpc_check_set(const struct lu_env *env, struct ptlrpc_request_set *set)
 				if (req->rq_bulk_deadline)
 					req->rq_bulk_deadline = 0;
 			}
-                        /*
-                         * Skip processing until reply is unlinked. We
-                         * can't return to pool before that and we can't
-                         * call interpret before that. We need to make
-                         * sure that all rdma transfers finished and will
-                         * not corrupt any data.
-                         */
-                        if (ptlrpc_client_recv_or_unlink(req) ||
-                            ptlrpc_client_bulk_active(req))
-                                continue;
+			/*
+			 * Skip processing until reply is unlinked. We
+			 * can't return to pool before that and we can't
+			 * call interpret before that. We need to make
+			 * sure that all rdma transfers finished and will
+			 * not corrupt any data.
+			 */
+			if (req->rq_phase == RQ_PHASE_UNREG_RPC &&
+			    ptlrpc_client_recv_or_unlink(req))
+				continue;
+			if (req->rq_phase == RQ_PHASE_UNREG_BULK &&
+			    ptlrpc_client_bulk_active(req))
+				continue;
 
                         /*
                          * Turn fail_loc off to prevent it from looping
@@ -2086,7 +2091,7 @@ void ptlrpc_interrupted_set(void *data)
 			list_entry(tmp, struct ptlrpc_request, rq_set_chain);
 
 		if (req->rq_phase != RQ_PHASE_RPC &&
-		    req->rq_phase != RQ_PHASE_UNREGISTERING)
+		    req->rq_phase != RQ_PHASE_UNREG_RPC)
 			continue;
 
 		ptlrpc_mark_interrupted(req);
@@ -2432,10 +2437,8 @@ int ptlrpc_unregister_reply(struct ptlrpc_request *request, int async)
         if (!ptlrpc_client_recv_or_unlink(request))
                 RETURN(1);
 
-        /*
-         * Move to "Unregistering" phase as reply was not unlinked yet.
-         */
-        ptlrpc_rqphase_move(request, RQ_PHASE_UNREGISTERING);
+	/* Move to "Unregistering" phase as reply was not unlinked yet. */
+	ptlrpc_rqphase_move(request, RQ_PHASE_UNREG_RPC);
 
         /*
          * Do not wait for unlink to finish.
