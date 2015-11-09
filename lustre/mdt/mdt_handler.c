@@ -3081,7 +3081,8 @@ static int mdt_intent_getxattr(enum mdt_it_code opcode,
 {
 	struct mdt_lock_handle *lhc = &info->mti_lh[MDT_LH_RMT];
 	struct ldlm_reply      *ldlm_rep = NULL;
-	int rc, grc;
+	int rc;
+	ENTRY;
 
 	/*
 	 * Initialize lhc->mlh_reg_lh either from a previously granted lock
@@ -3098,19 +3099,24 @@ static int mdt_intent_getxattr(enum mdt_it_code opcode,
 			return rc;
 	}
 
-	grc = mdt_getxattr(info);
-
-	rc = mdt_intent_lock_replace(info, lockp, lhc, flags);
+	rc = mdt_getxattr(info);
 
 	if (mdt_info_req(info)->rq_repmsg != NULL)
 		ldlm_rep = req_capsule_server_get(info->mti_pill, &RMF_DLM_REP);
 	if (ldlm_rep == NULL ||
-	    OBD_FAIL_CHECK(OBD_FAIL_MDS_XATTR_REP))
+	    OBD_FAIL_CHECK(OBD_FAIL_MDS_XATTR_REP)) {
+		mdt_object_unlock(info,  info->mti_object, lhc, 1);
 		RETURN(err_serious(-EFAULT));
+	}
 
-	ldlm_rep->lock_policy_res2 = grc;
+	ldlm_rep->lock_policy_res2 = clear_serious(rc);
+        if (ldlm_rep->lock_policy_res2) {
+		mdt_object_unlock(info, info->mti_object, lhc, 1);
+		RETURN(ELDLM_LOCK_ABORTED);
+        }
 
-	return rc;
+	rc = mdt_intent_lock_replace(info, lockp, lhc, flags);
+	RETURN(rc);
 }
 
 static int mdt_intent_getattr(enum mdt_it_code opcode,
