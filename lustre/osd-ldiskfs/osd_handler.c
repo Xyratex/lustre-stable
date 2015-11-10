@@ -2557,7 +2557,6 @@ static int osd_declare_object_destroy(const struct lu_env *env,
 
 	oh = container_of0(th, struct osd_thandle, ot_super);
 	LASSERT(oh->ot_handle == NULL);
-	LASSERT(inode);
 
 	osd_trans_declare_op(env, oh, OSD_OT_DESTROY,
 			     osd_dto_credits_noquota[DTO_OBJECT_DELETE]);
@@ -2565,6 +2564,10 @@ static int osd_declare_object_destroy(const struct lu_env *env,
 	 * to be changed. */
 	osd_trans_declare_op(env, oh, OSD_OT_DELETE,
 			     osd_dto_credits_noquota[DTO_INDEX_DELETE] + 3);
+
+	if (inode == NULL)
+		RETURN(0);
+
 	/* one less inode */
 	rc = osd_declare_inode_qid(env, i_uid_read(inode), i_gid_read(inode),
 				   -1, oh, obj, false, NULL, false);
