@@ -13057,8 +13057,8 @@ run_test 400b "packaged headers can be compiled"
 
 test_401() {
 	$LFS setdirstripe -i 0 $DIR/$tdir || error "setdirstripe -i 0 failed"
-#define OBD_FAIL_MDS_FLD_LOOKUP 0x158
-	do_facet mds1 "lctl set_param fail_loc=0x80000158"
+#define OBD_FAIL_MDS_FLD_LOOKUP 0x15c
+	do_facet mds1 "lctl set_param fail_loc=0x8000015c"
 	touch $DIR/$tdir/$tfile && error "touch should fail with ENOENT" ||
 		echo "Touch failed - OK"
 }
