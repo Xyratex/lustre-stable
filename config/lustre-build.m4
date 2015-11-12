@@ -330,7 +330,7 @@ ENABLE_INIT_SCRIPTS=0
 AS_IF([test x$enable_utils = xyes], [
 	AC_CACHE_CHECK([whether to install init scripts], [lb_cv_enable_init_scripts], [
 	# our scripts only work on red hat systems
-	AS_IF([test -f /etc/init.d/functions -a -f /etc/sysconfig/network],
+	AS_IF([test -f /etc/redhat-release],
 		[lb_cv_enable_init_scripts="yes"],
 		[lb_cv_enable_init_scripts="no"])
 	])
