@@ -5619,14 +5619,14 @@ free_fd()
         echo $fd
 }
 
-# Get the jounnal size of the filesystem.
-get_journal_size() {
+# Get the number of blocks of journal.
+get_journal_length() {
     local facet=$1
     local device=$2
     local size
 
     size=$(do_facet $facet "$DUMPE2FS -h $device 2>&1" |
-           awk '/^Journal size:/ {print $3}')
+           awk '/^Journal length:/ {print $3}')
     echo $size
 }
 
@@ -5705,4 +5705,28 @@ delete_external_journal() {
 	journal_dev=$(losetup -j ${journal_file} | sed 's/:.*$//' | tail -1)
 	losetup -d ${journal_dev}
 	rm ${journal_file}
+}
+
+#
+# Check existing journal size with minimum required journal size
+# for given ost count
+#
+# Argument: ostcount
+#
+# - Return true if existing mds journal size is sufficient for given number of
+#   osts, false othrewise.
+#
+check_mds_journal_by_ost_nr() {
+	local ostcount=$1
+	local max_txn_size=$(mdd_max_txn_size_by_ost_nr $ostcount)
+	local num_required_blocks=$((max_txn_size * 4))
+	local mds_dev=$(mdsdevname ${SINGLEMDS//mds/})
+	local num_found_blocks=$(get_journal_length $SINGLEMDS $mds_dev)
+
+	[ $num_found_blocks -lt $num_required_blocks ] &&
+	echo "Journal blocks $num_found_blocks is not sufficient for" \
+		"$ostcount OST, minimum required journal blocks is" \
+		"$num_required_blocks" && return 1
+
+	return 0
 }
