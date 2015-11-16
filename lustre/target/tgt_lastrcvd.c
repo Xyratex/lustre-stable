@@ -675,6 +675,7 @@ int tgt_client_del(const struct lu_env *env, struct obd_export *exp)
 		       ted->ted_lcd->lcd_uuid, rc);
 		RETURN(rc);
 	}
+	CFS_FAIL_TIMEOUT(OBD_FAIL_TGT_CLIENT_DEL, 5);
 
 	mutex_lock(&ted->ted_lcd_lock);
 	memset(ted->ted_lcd->lcd_uuid, 0, sizeof ted->ted_lcd->lcd_uuid);
