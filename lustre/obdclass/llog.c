@@ -132,7 +132,10 @@ int llog_cancel_rec(const struct lu_env *env, struct llog_handle *loghandle,
 
 	if ((llh->llh_flags & LLOG_F_ZAP_WHEN_EMPTY) &&
 	    (llh->llh_count == 1) &&
-	    (loghandle->lgh_last_idx == (LLOG_BITMAP_BYTES * 8) - 1)) {
+	    ((loghandle->lgh_last_idx == (LLOG_BITMAP_BYTES * 8) - 1) ||
+	     (loghandle->u.phd.phd_cat_handle != NULL &&
+	      loghandle->u.phd.phd_cat_handle->u.chd.chd_current_log !=
+	      loghandle))) {
 		spin_unlock(&loghandle->lgh_hdr_lock);
 		rc = llog_destroy(env, loghandle);
 		if (rc < 0) {
