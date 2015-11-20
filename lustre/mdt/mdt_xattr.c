@@ -155,6 +155,86 @@ out:
 	return rc;
 }
 
+static int mdt_getxattr_all(struct mdt_thread_info *info,
+			    struct mdt_body *reqbody, struct mdt_body *repbody,
+			    struct lu_buf *buf, struct md_object *next)
+{
+	const struct lu_env *env = info->mti_env;
+	struct ptlrpc_request *req = mdt_info_req(info);
+	struct mdt_export_data *med = mdt_req2med(req);
+	struct lu_ucred        *uc  = mdt_ucred(info);
+	char *v, *b, *eadatahead;
+	__u32 *sizes;
+	int eadatasize, eavallen = 0, eavallens = 0, rc;
+
+	ENTRY;
+	/*
+	 * The format of the pill is the following:
+	 * EADATA:      attr1\0attr2\0...attrn\0
+	 * EAVALS:      val1val2...valn
+	 * EAVALS_LENS: 4,4,...4
+	 */
+
+	eadatahead = buf->lb_buf;
+
+	/* Fill out EADATA */
+	rc = mo_xattr_list(env, next, buf);
+	if (rc < 0)
+		GOTO(out_shrink, rc);
+
+	eadatasize = rc;
+
+	v = req_capsule_server_get(info->mti_pill, &RMF_EAVALS);
+	sizes = req_capsule_server_get(info->mti_pill, &RMF_EAVALS_LENS);
+
+	/* Fill out EAVALS and EAVALS_LENS */
+	for (b = eadatahead; b < eadatahead + eadatasize;
+				b += strlen(b) + 1, v += rc) {
+		/* Filter out ACL ACCESS since it is cached separately */
+		if (!strcmp(b, XATTR_NAME_ACL_ACCESS)) {
+			/* Remove posix_acl_access from the list, but
+			 * exit early if it's the last attribute
+			 */
+			eadatasize -= sizeof(XATTR_NAME_ACL_ACCESS);
+			if (eadatasize - (b - eadatahead) == 0)
+				break;
+			memmove(b, b + sizeof(XATTR_NAME_ACL_ACCESS),
+			eadatasize - (b - eadatahead));
+		}
+
+		buf->lb_buf = v;
+		buf->lb_len = reqbody->eadatasize - eavallen;
+		rc = mdt_getxattr_one(info, b, next, buf, med, uc);
+		if (rc < 0)
+			GOTO(out_shrink, rc);
+
+		sizes[eavallens] = rc;
+		eavallens++;
+		eavallen += rc;
+	}
+
+out_shrink:
+	if (rc < 0) {
+		eadatasize = 0;
+		eavallens = 0;
+		eavallen = 0;
+	}
+
+	repbody->aclsize = eavallen;
+	repbody->max_mdsize = eavallens;
+
+	req_capsule_shrink(info->mti_pill, &RMF_EAVALS,
+				eavallen, RCL_SERVER);
+	req_capsule_shrink(info->mti_pill, &RMF_EAVALS_LENS,
+			eavallens * sizeof(__u32), RCL_SERVER);
+	req_capsule_shrink(info->mti_pill, &RMF_EADATA,
+				eadatasize, RCL_SERVER);
+
+	if (rc >= 0)
+		RETURN(eadatasize);
+	return rc;
+}
+
 int mdt_getxattr(struct mdt_thread_info *info)
 {
         struct ptlrpc_request  *req = mdt_info_req(info);
@@ -226,61 +306,8 @@ int mdt_getxattr(struct mdt_thread_info *info)
                 if (rc < 0)
                         CDEBUG(D_INFO, "listxattr failed: %d\n", rc);
         } else if (info->mti_body->valid & OBD_MD_FLXATTRALL) {
-		/*
-		 * The format of the pill is the following:
-		 * EADATA:      attr1\0attr2\0...attrn\0
-		 * EAVALS:      val1val2...valn
-		 * EAVALS_LENS: 4,4,...4
-		 */
-		char *v, *b;
-		__u32 *sizes;
-		int eadatasize, eavallen = 0, eavallens = 0;
-		struct lu_buf buf2 = { .lb_len = reqbody->eadatasize };
-
-		/* Fill out EADATA */
-		eadatasize = mo_xattr_list(info->mti_env, next, buf);
-		if (eadatasize < 0)
-			GOTO(out, rc = eadatasize);
-
-		v = req_capsule_server_get(info->mti_pill, &RMF_EAVALS);
-		sizes = req_capsule_server_get(info->mti_pill, &RMF_EAVALS_LENS);
-
-		/* Fill out EAVALS and EAVALS_LENS */
-		for (b = buf->lb_buf;
-		     b < (char *)buf->lb_buf + eadatasize;
-		     b += strlen(b) + 1, v += rc) {
-			/* Filter out ACL ACCESS since it is cached separately */
-			if (!strcmp(b, XATTR_NAME_ACL_ACCESS)) {
-				/* Remove posix_acl_access from the list, but
-				 * exit early if it's the last attribute
-				 */
-				eadatasize -= sizeof(XATTR_NAME_ACL_ACCESS);
-				if (eadatasize - (b - (char *)buf->lb_buf) == 0)
-					break;
-				memmove(b, b + sizeof(XATTR_NAME_ACL_ACCESS),
-					eadatasize - (b - (char *)buf->lb_buf));
-			}
-
-			buf2.lb_buf = v;
-			rc = mdt_getxattr_one(info, b, next, &buf2, med, uc);
-			if (rc < 0)
-				GOTO(out, rc);
-			sizes[eavallens] = rc;
-			buf2.lb_len -= rc;
-			eavallens++;
-			eavallen += rc;
-		}
-
-		repbody->aclsize = eavallen;
-		repbody->max_mdsize = eavallens;
-
-		req_capsule_shrink(info->mti_pill, &RMF_EAVALS,
-					eavallen, RCL_SERVER);
-		req_capsule_shrink(info->mti_pill, &RMF_EAVALS_LENS,
-					eavallens * sizeof(__u32), RCL_SERVER);
-		req_capsule_shrink(info->mti_pill, &RMF_EADATA,
-					eadatasize, RCL_SERVER);
-		rc = eadatasize;
+		rc = mdt_getxattr_all(info, reqbody, repbody,
+				      buf, next);
 	} else
 		LBUG();
 
