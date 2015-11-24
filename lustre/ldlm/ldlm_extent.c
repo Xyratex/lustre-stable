@@ -621,9 +621,7 @@ destroylock:
  */
 void ldlm_lock_prolong_one(struct ldlm_lock *lock, struct prolong_args *arg)
 {
-	/* We are in the middle of the process - BL AST is sent, CANCEL
-	  is ahead. Take half of BL AT + IO AT process time. */
-	int timeout = arg->timeout + (ldlm_bl_timeout(lock) >> 1);
+	int timeout;
 
 	if (arg->export != lock->l_export || LDLM_IS(lock, DESTROYED))
 		/* ignore unrelated locks */
@@ -634,6 +632,10 @@ void ldlm_lock_prolong_one(struct ldlm_lock *lock, struct prolong_args *arg)
 	if (!(lock->l_flags & LDLM_FL_AST_SENT))
 		/* ignore locks not being cancelled */
 		return;
+
+	/* We are in the middle of the process - BL AST is sent, CANCEL
+	  is ahead. Take half of BL AT + IO AT process time. */
+	timeout = arg->timeout + (ldlm_bl_timeout(lock) >> 1);
 
 	LDLM_DEBUG(lock, "refreshed to %ds.\n", timeout);
 
@@ -684,6 +686,7 @@ void ldlm_resource_prolong(struct prolong_args *arg)
 			arg->resid.name[0], arg->resid.name[1]);
 		RETURN_EXIT;
 	}
+	lock_res(res);
 
 	for (idx = 0; idx < LCK_MODE_NUM; idx++) {
 		tree = &res->lr_itree[idx];
@@ -702,6 +705,7 @@ void ldlm_resource_prolong(struct prolong_args *arg)
 				ldlm_resource_prolong_cb, arg);
 	}
 
+	unlock_res(res);
 	ldlm_resource_putref(res);
 
 	EXIT;
