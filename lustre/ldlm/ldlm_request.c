@@ -93,10 +93,12 @@ int ldlm_expired_completion_wait(void *data)
 			   cfs_time_sub(cfs_time_current_sec(),
 					lock->l_last_activity));
                 if (cfs_time_after(cfs_time_current(), next_dump)) {
-                        last_dump = next_dump;
-                        next_dump = cfs_time_shift(300);
-                        ldlm_namespace_dump(D_DLMTRACE,
-                                            ldlm_lock_to_ns(lock));
+			last_dump = next_dump;
+			next_dump = cfs_time_shift(30);
+
+			lock_res(lock->l_resource);
+			ldlm_resource_dump(D_DLMTRACE, lock->l_resource);
+			unlock_res(lock->l_resource);
                         if (last_dump == 0)
                                 libcfs_debug_dumplog();
                 }
