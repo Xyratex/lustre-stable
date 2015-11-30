@@ -3416,6 +3416,8 @@ static int mdt_intent_opc(long itopc, struct mdt_thread_info *info,
 	if (flv->it_act != NULL) {
 		struct ldlm_reply *rep;
 
+		OBD_FAIL_TIMEOUT(OBD_FAIL_MDS_INTENT_DELAY, 10);
+
 		/* execute policy */
 		rc = flv->it_act(opc, info, lockp, flags);
 

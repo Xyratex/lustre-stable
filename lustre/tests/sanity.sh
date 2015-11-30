@@ -5318,7 +5318,7 @@ test_68b() {  # was test_68
 run_test 68b "support swapping to Lustre ========================"
 
 # bug5265, obdfilter oa2dentry return -ENOENT
-# #define OBD_FAIL_OST_ENOENT 0x217
+# #define OBD_FAIL_SRV_ENOENT 0x217
 test_69() {
 	[ $PARALLEL == "yes" ] && skip "skip parallel run" && return
 	remote_ost_nodsh && skip "remote OST with nodsh" && return
@@ -7256,7 +7256,7 @@ test_118b()
 
 	reset_async
 
-	#define OBD_FAIL_OST_ENOENT 0x217
+	#define OBD_FAIL_SRV_ENOENT 0x217
 	set_nodes_failloc "$(osts_nodes)" 0x217
 	$MULTIOP $DIR/$tfile oO_CREAT:O_RDWR:O_SYNC:w4096c
 	RC=$?
