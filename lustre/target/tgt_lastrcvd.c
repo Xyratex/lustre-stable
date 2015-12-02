@@ -88,9 +88,12 @@ void tgt_client_free(struct obd_export *exp)
 	OBD_FREE_PTR(ted->ted_lcd);
 	ted->ted_lcd = NULL;
 
-	/* Slot may be not yet assigned */
-	if (ted->ted_lr_idx < 0)
+	/* Target may have been freed (see LU-7430)
+	 * Slot may be not yet assigned */
+	if (exp->exp_obd->u.obt.obt_magic != OBT_MAGIC ||
+	    ted->ted_lr_idx < 0)
 		return;
+
 	/* Clear bit when lcd is freed */
 	LASSERT(lut->lut_client_bitmap);
 	if (!test_and_clear_bit(ted->ted_lr_idx, lut->lut_client_bitmap)) {

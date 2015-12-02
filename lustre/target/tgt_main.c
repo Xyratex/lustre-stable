@@ -117,6 +117,8 @@ out_obj:
 	lu_object_put(env, &lut->lut_last_rcvd->do_lu);
 	lut->lut_last_rcvd = NULL;
 out_bitmap:
+	obd->u.obt.obt_magic = 0;
+	obd->u.obt.obt_lut = NULL;
 	OBD_FREE(lut->lut_client_bitmap, LR_MAX_CLIENTS >> 3);
 	lut->lut_client_bitmap = NULL;
 	return rc;
