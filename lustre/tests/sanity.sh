@@ -12549,6 +12549,14 @@ test_244()
 }
 run_test 244 "sendfile with group lock tests"
 
+test_260() {
+#define OBD_FAIL_MDC_CLOSE               0x806
+	$LCTL set_param fail_loc=0x80000806
+	touch $DIR/$tfile
+
+}
+run_test 260 "Check mdc_close fail"
+
 test_250() {
 	[ "$(facet_fstype ost$(($($GETSTRIPE -i $DIR/$tfile) + 1)))" = "zfs" ] \
 	 && skip "no 16TB file size limit on ZFS" && return
