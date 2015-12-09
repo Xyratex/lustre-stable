@@ -3316,6 +3316,11 @@ ptlrpc_rqphase_move(struct ptlrpc_request *req, enum rq_phase new_phase)
 
 	if (new_phase == RQ_PHASE_UNREG_RPC ||
 	    new_phase == RQ_PHASE_UNREG_BULK) {
+		/* No embedded unregistering phases */
+		if (req->rq_phase == RQ_PHASE_UNREG_RPC ||
+		    req->rq_phase == RQ_PHASE_UNREG_BULK)
+			return;
+
 		req->rq_next_phase = req->rq_phase;
 		if (req->rq_import)
 			atomic_inc(&req->rq_import->imp_unregistering);
