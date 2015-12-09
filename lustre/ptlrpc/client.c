@@ -593,7 +593,6 @@ static int __ptlrpc_request_bufs_pack(struct ptlrpc_request *request,
                                       struct ptlrpc_cli_ctx *ctx)
 {
 	struct obd_import  *imp = request->rq_import;
-	time_t             *fail_t = NULL;
 	int                 rc;
 	ENTRY;
 
@@ -640,14 +639,25 @@ static int __ptlrpc_request_bufs_pack(struct ptlrpc_request *request,
 
 	/* Let's setup deadline for req/reply/bulk unlink for opcode. */
 	if (cfs_fail_val == opcode) {
+		time_t *fail_t = NULL, *fail2_t = NULL;
+
 		if (CFS_FAIL_CHECK(OBD_FAIL_PTLRPC_LONG_BULK_UNLINK))
 			fail_t = &request->rq_bulk_deadline;
 		else if (CFS_FAIL_CHECK(OBD_FAIL_PTLRPC_LONG_REPL_UNLINK))
 			fail_t = &request->rq_reply_deadline;
 		else if (CFS_FAIL_CHECK(OBD_FAIL_PTLRPC_LONG_REQ_UNLINK))
 			fail_t = &request->rq_req_deadline;
+		else if (CFS_FAIL_CHECK(OBD_FAIL_PTLRPC_LONG_BOTH_UNLINK)) {
+			fail_t = &request->rq_reply_deadline;
+			fail2_t = &request->rq_bulk_deadline;
+		}
+
 		if (fail_t) {
 			*fail_t = cfs_time_current_sec() + LONG_UNLINK;
+
+			if (fail2_t)
+				*fail2_t = cfs_time_current_sec() + LONG_UNLINK;
+
 			/* The RPC is infected, let the test to change the fail_loc */
 			schedule_timeout_and_set_state(TASK_UNINTERRUPTIBLE,
 						       cfs_time_seconds(2));
@@ -1596,14 +1606,16 @@ int ptlrpc_check_set(const struct lu_env *env, struct ptlrpc_request_set *set)
 			LASSERT(req->rq_next_phase != req->rq_phase);
 			LASSERT(req->rq_next_phase != RQ_PHASE_UNDEFINED);
 
-			if (!OBD_FAIL_CHECK(OBD_FAIL_PTLRPC_LONG_REPL_UNLINK)) {
-				if (req->rq_req_deadline)
-					req->rq_req_deadline = 0;
-				if (req->rq_reply_deadline)
-					req->rq_reply_deadline = 0;
-				if (req->rq_bulk_deadline)
-					req->rq_bulk_deadline = 0;
-			}
+			if (req->rq_req_deadline &&
+			    !OBD_FAIL_CHECK(OBD_FAIL_PTLRPC_LONG_REQ_UNLINK))
+				req->rq_req_deadline = 0;
+			if (req->rq_reply_deadline &&
+			    !OBD_FAIL_CHECK(OBD_FAIL_PTLRPC_LONG_REPL_UNLINK))
+				req->rq_reply_deadline = 0;
+			if (req->rq_bulk_deadline &&
+			    !OBD_FAIL_CHECK(OBD_FAIL_PTLRPC_LONG_BULK_UNLINK))
+				req->rq_bulk_deadline = 0;
+
 			/*
 			 * Skip processing until reply is unlinked. We
 			 * can't return to pool before that and we can't

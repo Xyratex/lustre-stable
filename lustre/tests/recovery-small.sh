@@ -2136,6 +2136,12 @@ test_115f() {
 }
 run_test 115f "read: late REQ MDunlink and no reply"
 
+test_115g() {
+	#define OBD_FAIL_PTLRPC_LONG_BOTH_UNLINK 0x51c
+	test_115_read 0x8000051c 0
+}
+run_test 115g "read: late REQ MDunlink and Reply MDunlink"
+
 # parameters: fail_loc CMD RC
 test_120_reply() {
 	local PID
