@@ -372,6 +372,13 @@ int llog_obd_origin_setup(struct obd_device *obd, struct obd_llog_group *olg,
 
         if (logid && logid->lgl_oid) {
                 rc = llog_create(ctxt, &handle, logid, NULL, LLOG_CREATE_RW);
+		if (rc == -ENOENT) {
+			CWARN("open llog file failed, create a new one\n");
+			rc = llog_create(ctxt, &handle, NULL, NULL,
+					 LLOG_CREATE_RW);
+			if (rc == 0)
+				*logid = handle->lgh_id;
+		}
         } else {
                 rc = llog_create(ctxt, &handle, NULL, (char *)name, LLOG_CREATE_RW);
                 if (!rc && logid)
