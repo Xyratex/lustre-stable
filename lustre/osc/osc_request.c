@@ -4614,6 +4614,10 @@ static int osc_llog_init(struct obd_device *obd, struct obd_llog_group *olg,
                 GOTO(out, rc);
         }
 
+	if (unlikely(OBD_FAIL_CHECK_VALUE(OBD_FAIL_LLOG_CATLIST_CORRUPTION,
+					  *index)))
+		catid.lci_logid.lgl_oid = 0x7fffffffUL;
+
         CDEBUG(D_INFO, "%s: Init llog for %d - catid "LPX64"/"LPX64":%x\n",
                obd->obd_name, *index, catid.lci_logid.lgl_oid,
                catid.lci_logid.lgl_oseq, catid.lci_logid.lgl_ogen);

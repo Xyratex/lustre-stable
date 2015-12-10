@@ -443,6 +443,7 @@ int obd_alloc_fail(const void *ptr, const char *name, const char *type,
 #define OBD_FAIL_LLOG_ORIGIN_HANDLE_WRITE_REC_NET   0x1307
 #define OBD_FAIL_LLOG_ORIGIN_HANDLE_CLOSE_NET       0x1308
 #define OBD_FAIL_LLOG_CATINFO_NET                   0x1309
+#define OBD_FAIL_LLOG_CATLIST_CORRUPTION	    0x130A
 #define OBD_FAIL_MDS_SYNC_CAPA_SL                   0x1310
 #define OBD_FAIL_SEQ_ALLOC                          0x1311
 

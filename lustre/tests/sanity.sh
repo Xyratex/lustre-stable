@@ -10487,6 +10487,32 @@ test_256() {
 }
 run_test 256 "Check llog delete for empty and not full state"
 
+test_259() {
+	[ $PARALLEL == "yes" ] && skip "skip parallel run" && return
+	remote_mds_nodsh && skip "remote MDS with nodsh" && return
+
+	local MDS_OSCS=($(do_facet mds1 lctl dl | grep OST0000 |
+			awk '/[oO][sS][cC].*md[ts]/ { print $4 }'))
+
+	echo "Check ${MDS_OSCS[0]}"
+#define OBD_FAIL_LLOG_CATLIST_CORRUPTION	    0x130A
+	do_facet mds1 $LCTL set_param fail_val=0x0
+	do_facet mds1 $LCTL set_param fail_loc=0x0000130A
+	remount_facet mds1
+	wait_recovery_complete mds1
+	do_facet mds1 $LCTL dl | grep ${MDS_OSCS[0]}
+	local STATE=$(do_facet mds1 $LCTL dl | grep ${MDS_OSCS[0]} |
+		      awk -v N=2 '{print $N}')
+
+	do_facet mds1 $LCTL set_param fail_loc=0
+	remount_facet mds1
+
+	[ $STATE == "IN" ] && error "OST wasn\`t activated"
+
+	return 0
+}
+run_test 259 "Check CATALOGS corruption behaviour"
+
 #
 # tests that do cleanup/setup should be run at the end
 #
