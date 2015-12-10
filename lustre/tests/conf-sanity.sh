@@ -3758,6 +3758,8 @@ test_56() {
 	local n
 
 	MDSJOURNALSIZE=16
+	[[ $(lustre_version_code $SINGLEMDS) -le $(version_code 2.1.0) ]] &&
+		skip "Need MDS version greater than 2.1.0" && return
 
 	for num in $(seq 1 $MDSCOUNT); do
 		add mds${num} $(mkfs_opts mds${num} $(mdsdevname $num)) \
