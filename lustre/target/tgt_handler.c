@@ -1384,6 +1384,49 @@ TGT_SEC_HDL_VAR(0,	SEC_CTX_FINI,		tgt_sec_ctx_handle),
 };
 EXPORT_SYMBOL(tgt_sec_ctx_handlers);
 
+/*
+ * initialize per-thread page pool (bug 5137).
+ */
+int tgt_io_thread_init(struct ptlrpc_thread *thread)
+{
+	struct tgt_thread_big_cache *tbc;
+
+	ENTRY;
+
+	LASSERT(thread != NULL);
+	LASSERT(thread->t_data == NULL);
+
+	OBD_ALLOC_LARGE(tbc, sizeof(*tbc));
+	if (tbc == NULL)
+		RETURN(-ENOMEM);
+	thread->t_data = tbc;
+	RETURN(0);
+}
+EXPORT_SYMBOL(tgt_io_thread_init);
+
+/*
+ * free per-thread pool created by tgt_thread_init().
+ */
+void tgt_io_thread_done(struct ptlrpc_thread *thread)
+{
+	struct tgt_thread_big_cache *tbc;
+
+	ENTRY;
+
+	LASSERT(thread != NULL);
+
+	/*
+	 * be prepared to handle partially-initialized pools (because this is
+	 * called from ost_io_thread_init() for cleanup.
+	 */
+	tbc = thread->t_data;
+	if (tbc != NULL) {
+		OBD_FREE_LARGE(tbc, sizeof(*tbc));
+		thread->t_data = NULL;
+	}
+	EXIT;
+}
+EXPORT_SYMBOL(tgt_io_thread_done);
 /**
  * Helper function for getting server side [start, start+count] DLM lock
  * if asked by client.
@@ -1547,7 +1590,6 @@ static __u32 tgt_checksum_bulk(struct lu_target *tgt,
 int tgt_brw_read(struct tgt_session_info *tsi)
 {
 	struct ptlrpc_request	*req = tgt_ses_req(tsi);
-	struct tgt_io_session	*tio = tgt_io_ses(tsi->tsi_env);
 	struct ptlrpc_bulk_desc	*desc = NULL;
 	struct obd_export	*exp = tsi->tsi_exp;
 	struct niobuf_remote	*remote_nb;
@@ -1558,6 +1600,7 @@ int tgt_brw_read(struct tgt_session_info *tsi)
 	struct lustre_handle	 lockh = { 0 };
 	int			 niocount, npages, nob = 0, rc, i;
 	int			 no_reply = 0;
+	struct tgt_thread_big_cache *tbc = req->rq_svc_thread->t_data;
 
 	ENTRY;
 
@@ -1590,7 +1633,7 @@ int tgt_brw_read(struct tgt_session_info *tsi)
 	/* There must be big cache in current thread to process this request
 	 * if it is NULL then something went wrong and it wasn't allocated,
 	 * report -ENOMEM in that case */
-	if (tio == NULL)
+	if (tbc == NULL)
 		RETURN(-ENOMEM);
 
 	body = tsi->tsi_ost_body;
@@ -1603,7 +1646,7 @@ int tgt_brw_read(struct tgt_session_info *tsi)
 	remote_nb = req_capsule_client_get(&req->rq_pill, &RMF_NIOBUF_REMOTE);
 	LASSERT(remote_nb != NULL); /* must exists after tgt_ost_body_unpack */
 
-	local_nb = tio->local;
+	local_nb = tbc->local;
 
 	rc = tgt_brw_lock(exp->exp_obd->obd_namespace, &tsi->tsi_resid, ioo,
 			  remote_nb, &lockh, LCK_PR);
@@ -1781,7 +1824,6 @@ static void tgt_warn_on_cksum(struct ptlrpc_request *req,
 int tgt_brw_write(struct tgt_session_info *tsi)
 {
 	struct ptlrpc_request	*req = tgt_ses_req(tsi);
-	struct tgt_io_session	*tio = tgt_io_ses(tsi->tsi_env);
 	struct ptlrpc_bulk_desc	*desc = NULL;
 	struct obd_export	*exp = req->rq_export;
 	struct niobuf_remote	*remote_nb;
@@ -1795,6 +1837,7 @@ int tgt_brw_write(struct tgt_session_info *tsi)
 	int			 rc, i, j;
 	cksum_type_t		 cksum_type = OBD_CKSUM_CRC32;
 	bool			 no_reply = false, mmap;
+	struct tgt_thread_big_cache *tbc = req->rq_svc_thread->t_data;
 	struct obd_trans_info trans_info = { 0 };
 
 	ENTRY;
@@ -1828,8 +1871,8 @@ int tgt_brw_write(struct tgt_session_info *tsi)
 	/* There must be big cache in current thread to process this request
 	 * if it is NULL then something went wrong and it wasn't allocated,
 	 * report -ENOMEM in that case */
-	if (tio == NULL)
-		RETURN(err_serious(-ENOMEM));
+	if (tbc == NULL)
+		RETURN(-ENOMEM);
 
 	body = tsi->tsi_ost_body;
 	LASSERT(body != NULL);
@@ -1863,7 +1906,7 @@ int tgt_brw_write(struct tgt_session_info *tsi)
 	CFS_FAIL_TIMEOUT(OBD_FAIL_OST_BRW_PAUSE_PACK, cfs_fail_val);
 	rcs = req_capsule_server_get(&req->rq_pill, &RMF_RCS);
 
-	local_nb = tio->local;
+	local_nb = tbc->local;
 
 	rc = tgt_brw_lock(exp->exp_obd->obd_namespace, &tsi->tsi_resid, ioo,
 			  remote_nb, &lockh, LCK_PW);

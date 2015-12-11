@@ -2987,7 +2987,6 @@ static int ldlm_setup(void)
 			.tc_nthrs_user		= ldlm_num_threads,
 			.tc_cpu_affinity	= 1,
 			.tc_ctx_tags		= LCT_MD_THREAD | LCT_DT_THREAD,
-			.tc_ses_tags		= LCT_SERVER_SESSION,
 		},
 		.psc_cpt		= {
 			.cc_pattern		= ldlm_cpts,
@@ -3030,7 +3029,6 @@ static int ldlm_setup(void)
 			.tc_ctx_tags		= LCT_MD_THREAD | \
 						  LCT_DT_THREAD | \
 						  LCT_CL_THREAD,
-			.tc_ses_tags		= LCT_SERVER_SESSION,
 		},
 		.psc_cpt		= {
 			.cc_pattern		= ldlm_cpts,

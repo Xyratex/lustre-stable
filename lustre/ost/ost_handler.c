@@ -116,7 +116,6 @@ static int ost_setup(struct obd_device *obd, struct lustre_cfg* lcfg)
 			.tc_nthrs_user		= oss_num_threads,
 			.tc_cpu_affinity	= 1,
 			.tc_ctx_tags		= LCT_DT_THREAD,
-			.tc_ses_tags		= LCT_SERVER_SESSION,
 		},
 		.psc_cpt                = {
 			.cc_pattern             = oss_cpts,
@@ -156,7 +155,6 @@ static int ost_setup(struct obd_device *obd, struct lustre_cfg* lcfg)
 			.tc_nthrs_user		= oss_num_create_threads,
 			.tc_cpu_affinity	= 1,
 			.tc_ctx_tags		= LCT_DT_THREAD,
-			.tc_ses_tags		= LCT_SERVER_SESSION,
 		},
 		.psc_cpt                = {
 			.cc_pattern             = oss_cpts,
@@ -220,7 +218,6 @@ static int ost_setup(struct obd_device *obd, struct lustre_cfg* lcfg)
 			.tc_nthrs_user		= oss_num_threads,
 			.tc_cpu_affinity	= 1,
 			.tc_ctx_tags		= LCT_DT_THREAD,
-			.tc_ses_tags		= LCT_SERVER_SESSION | LCT_IO_SESSION,
 		},
 		.psc_cpt		= {
 			.cc_cptable		= ost_io_cptable,
@@ -228,6 +225,8 @@ static int ost_setup(struct obd_device *obd, struct lustre_cfg* lcfg)
 						  oss_io_cpts : NULL,
 		},
 		.psc_ops		= {
+			.so_thr_init		= tgt_io_thread_init,
+			.so_thr_done		= tgt_io_thread_done,
 			.so_req_handler		= tgt_request_handle,
 			.so_hpreq_handler	= tgt_hpreq_handler,
 			.so_req_printer		= target_print_req,
@@ -263,8 +262,8 @@ static int ost_setup(struct obd_device *obd, struct lustre_cfg* lcfg)
 			.tc_nthrs_user		= oss_num_create_threads,
 			.tc_cpu_affinity	= 1,
 			.tc_ctx_tags		= LCT_DT_THREAD,
-			.tc_ses_tags		= LCT_SERVER_SESSION,
 		},
+
 		.psc_cpt		= {
 			.cc_pattern	     = oss_cpts,
 		},
@@ -310,7 +309,6 @@ static int ost_setup(struct obd_device *obd, struct lustre_cfg* lcfg)
 			.tc_cpu_affinity	= 1,
 			.tc_ctx_tags		= LCT_MD_THREAD |
 						  LCT_DT_THREAD,
-			.tc_ses_tags		= LCT_SERVER_SESSION,
 		},
 		.psc_cpt		= {
 			.cc_pattern		= oss_cpts,

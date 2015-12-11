@@ -2027,7 +2027,7 @@ static int target_recovery_thread(void *arg)
         thread->t_env = env;
         thread->t_id = -1; /* force filter_iobuf_get/put to use local buffers */
         env->le_ctx.lc_thread = thread;
-
+	tgt_io_thread_init(thread); /* init thread_big_cache for IO requests */
 	thread->t_watchdog = NULL;
 
 	CDEBUG(D_HA, "%s: started recovery thread pid %d\n", obd->obd_name,
@@ -2128,6 +2128,7 @@ static int target_recovery_thread(void *arg)
         trd->trd_processing_task = 0;
 	complete(&trd->trd_finishing);
 
+	tgt_io_thread_done(thread);
 	OBD_FREE_PTR(thread);
 	OBD_FREE_PTR(env);
 	RETURN(rc);
