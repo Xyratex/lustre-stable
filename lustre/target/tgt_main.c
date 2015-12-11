@@ -142,45 +142,8 @@ void tgt_fini(const struct lu_env *env, struct lu_target *lut)
 }
 EXPORT_SYMBOL(tgt_fini);
 
-static struct kmem_cache *tgt_thread_kmem;
-static struct kmem_cache *tgt_session_kmem;
-static struct lu_kmem_descr tgt_caches[] = {
-        {
-                .ckd_cache = &tgt_thread_kmem,
-                .ckd_name  = "tgt_thread_kmem",
-                .ckd_size  = sizeof (struct tgt_thread_info),
-        },
-        {
-                .ckd_cache = &tgt_session_kmem,
-                .ckd_name  = "tgt_session_kmem",
-                .ckd_size  = sizeof (struct tgt_session_info)
-        },
-        {
-                .ckd_cache = NULL
-        }
-};
-
-static void *tgt_key_init(const struct lu_context *ctx,
-				  struct lu_context_key *key)
-{
-	struct tgt_thread_info *thread;
-
-	OBD_SLAB_ALLOC_PTR_GFP(thread, tgt_thread_kmem, GFP_NOFS);
-	if (thread == NULL)
-		return ERR_PTR(-ENOMEM);
-
-	return thread;
-}
-
-static void tgt_key_fini(const struct lu_context *ctx,
-		struct lu_context_key *key, void *data)
-{
-	struct tgt_thread_info *thread = data;
-
-	OBD_SLAB_FREE_PTR(thread, tgt_thread_kmem);
-}
-
 /* context key constructor/destructor: tg_key_init, tg_key_fini */
+LU_KEY_INIT_FINI(tgt, struct tgt_thread_info);
 static void tgt_key_exit(const struct lu_context *ctx,
 			 struct lu_context_key *key, void *data)
 {
@@ -201,25 +164,8 @@ EXPORT_SYMBOL(tgt_thread_key);
 
 LU_KEY_INIT_GENERIC(tgt);
 
-static void *tgt_ses_key_init(const struct lu_context *ctx,
-			      struct lu_context_key *key)
-{
-	struct tgt_session_info *session;
-
-	OBD_SLAB_ALLOC_PTR_GFP(session, tgt_session_kmem, GFP_NOFS);
-	if (session == NULL)
-		return ERR_PTR(-ENOMEM);
-
-	return session;
-}
-
-static void tgt_ses_key_fini(const struct lu_context *ctx,
-                                 struct lu_context_key *key, void *data)
-{
-	struct tgt_session_info *session = data;
-
-	OBD_SLAB_FREE_PTR(session,tgt_session_kmem);
-}
+/* context key constructor/destructor: tgt_ses_key_init, tgt_ses_key_fini */
+LU_KEY_INIT_FINI(tgt_ses, struct tgt_session_info);
 
 /* context key: tgt_session_key */
 struct lu_context_key tgt_session_key = {
@@ -242,12 +188,7 @@ struct page *tgt_page_to_corrupt;
 
 int tgt_mod_init(void)
 {
-	int result;
 	ENTRY;
-
-	result = lu_kmem_init(tgt_caches);
-	if (result != 0)
-		RETURN(result);
 
 	tgt_page_to_corrupt = alloc_page(GFP_IOFS);
 
@@ -267,7 +208,5 @@ void tgt_mod_exit(void)
 
 	lu_context_key_degister(&tgt_thread_key);
 	lu_context_key_degister(&tgt_session_key);
-
-	lu_kmem_fini(tgt_caches);
 }
 
