@@ -78,30 +78,6 @@ struct lu_target {
 	unsigned long		*lut_client_bitmap;
 };
 
-struct niobuf_local {
-	__u64		lnb_file_offset;
-	__u32		lnb_page_offset;
-	__u32		lnb_len;
-	__u32		lnb_flags;
-	struct page	*lnb_page;
-	void		*lnb_data;
-	int		lnb_rc;
-};
-
-struct tgt_io_session {
-	struct niobuf_local	local[PTLRPC_MAX_BRW_PAGES];
-};
-
-extern struct lu_context_key tgt_io_ses_key;
-
-static inline struct tgt_io_session *tgt_io_ses(const struct lu_env *env)
-{
-	struct tgt_io_session *tio;
-
-	tio = lu_context_key_get(env->le_ses, &tgt_io_ses_key);
-	return tio;
-}
-
 extern struct lu_context_key tgt_session_key;
 
 struct tgt_session_info {
@@ -289,6 +265,9 @@ int tgt_sendpage(struct tgt_session_info *tsi, struct lu_rdpg *rdpg, int nob);
 int tgt_validate_obdo(struct tgt_session_info *tsi, struct obdo *oa);
 int tgt_sync(const struct lu_env *env, struct lu_target *tgt,
 	     struct dt_object *obj, __u64 start, __u64 end);
+
+int tgt_io_thread_init(struct ptlrpc_thread *thread);
+void tgt_io_thread_done(struct ptlrpc_thread *thread);
 
 int tgt_extent_lock(struct ldlm_namespace *ns, struct ldlm_res_id *res_id,
 		    __u64 start, __u64 end, struct lustre_handle *lh,

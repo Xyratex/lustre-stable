@@ -231,35 +231,6 @@ EXPORT_SYMBOL(tgt_session_key);
 
 LU_KEY_INIT_GENERIC(tgt_ses);
 
-static void *tgt_io_ses_key_init(const struct lu_context *ctx,
-				  struct lu_context_key *key)
-{
-	struct tgt_io_session *session;
-
-	OBD_ALLOC_LARGE(session, sizeof(*session));
-
-	return session;
-}
-
-static void tgt_io_ses_key_fini(const struct lu_context *ctx,
-                                 struct lu_context_key *key, void *data)
-{
-	struct tgt_io_session *session = data;
-
-	OBD_FREE_LARGE(session, sizeof(*session));
-}
-
-/* context key: tgt_session_key */
-struct lu_context_key tgt_io_ses_key = {
-	.lct_tags = LCT_IO_SESSION,
-	.lct_init = tgt_io_ses_key_init,
-	.lct_fini = tgt_io_ses_key_fini,
-};
-EXPORT_SYMBOL(tgt_io_ses_key);
-
-LU_KEY_INIT_GENERIC(tgt_io_ses);
-
-
 /*
  * this page is allocated statically when module is initializing
  * it is used to simulate data corruptions, see ost_checksum_bulk()
@@ -286,9 +257,6 @@ int tgt_mod_init(void)
 	tgt_ses_key_init_generic(&tgt_session_key, NULL);
 	lu_context_key_register_many(&tgt_session_key, NULL);
 
-	tgt_io_ses_key_init_generic(&tgt_io_ses_key, NULL);
-	lu_context_key_register_many(&tgt_io_ses_key, NULL);
-
 	RETURN(0);
 }
 
@@ -299,7 +267,6 @@ void tgt_mod_exit(void)
 
 	lu_context_key_degister(&tgt_thread_key);
 	lu_context_key_degister(&tgt_session_key);
-	lu_context_key_degister(&tgt_io_ses_key);
 
 	lu_kmem_fini(tgt_caches);
 }

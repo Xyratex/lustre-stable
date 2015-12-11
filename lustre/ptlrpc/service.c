@@ -706,7 +706,6 @@ ptlrpc_register_service(struct ptlrpc_service_conf *conf,
 	LASSERT(conf->psc_buf.bc_buf_size >=
 		conf->psc_buf.bc_req_max_size + SPTLRPC_MAX_PAYLOAD);
 	LASSERT(conf->psc_thr.tc_ctx_tags != 0);
-	LASSERT(conf->psc_thr.tc_ses_tags != 0);
 
 	cptable = cconf->cc_cptable;
 	if (cptable == NULL)
@@ -779,7 +778,6 @@ ptlrpc_register_service(struct ptlrpc_service_conf *conf,
 
 	service->srv_thread_name	= conf->psc_thr.tc_thr_name;
 	service->srv_ctx_tags		= conf->psc_thr.tc_ctx_tags;
-	service->srv_ses_tags		= conf->psc_thr.tc_ses_tags;
 	service->srv_hpreq_ratio	= PTLRPC_SVC_HP_RATIO;
 	service->srv_ops		= conf->psc_ops;
 
@@ -1971,7 +1969,8 @@ ptlrpc_server_handle_req_in(struct ptlrpc_service_part *svcpt,
 	if (thread != NULL) {
 		/* initialize request session, it is needed for request
 		 * processing by target */
-		rc = lu_context_init(&req->rq_session, svc->srv_ses_tags | LCT_NOREF);
+		rc = lu_context_init(&req->rq_session, LCT_SERVER_SESSION |
+						       LCT_NOREF);
 		if (rc) {
 			CERROR("%s: failure to initialize session: rc = %d\n",
 			       thread->t_name, rc);
@@ -2414,6 +2413,12 @@ static int ptlrpc_main(void *arg)
 	set_current_groups(ginfo);
 	put_group_info(ginfo);
 
+	if (svc->srv_ops.so_thr_init != NULL) {
+		rc = svc->srv_ops.so_thr_init(thread);
+                if (rc)
+                        goto out;
+        }
+
         OBD_ALLOC_PTR(env);
         if (env == NULL) {
                 rc = -ENOMEM;
@@ -2526,6 +2531,12 @@ static int ptlrpc_main(void *arg)
         thread->t_watchdog = NULL;
 
 out_srv_fini:
+        /*
+         * deconstruct service specific state created by ptlrpc_start_thread()
+         */
+	if (svc->srv_ops.so_thr_done != NULL)
+		svc->srv_ops.so_thr_done(thread);
+
         if (env != NULL) {
                 lu_context_fini(&env->le_ctx);
                 OBD_FREE_PTR(env);
