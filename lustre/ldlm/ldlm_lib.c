@@ -2439,11 +2439,18 @@ int target_pack_pool_reply(struct ptlrpc_request *req)
 }
 EXPORT_SYMBOL(target_pack_pool_reply);
 
-int target_send_reply_msg(struct ptlrpc_request *req, int rc, int fail_id)
+static int target_send_reply_msg(struct ptlrpc_request *req, int rc,
+				 int fail_id)
 {
-        if (OBD_FAIL_CHECK_ORSET(fail_id & ~OBD_FAIL_ONCE, OBD_FAIL_ONCE)) {
-                DEBUG_REQ(D_ERROR, req, "dropping reply");
-                return (-ECOMM);
+	if (OBD_FAIL_PRECHECK(fail_id)) {
+		__u32 opc = lustre_msg_get_opc(req->rq_reqmsg);
+		if (cfs_fail_val == 0 || cfs_fail_val == opc) {
+			if (OBD_FAIL_CHECK_ORSET(fail_id & ~OBD_FAIL_ONCE,
+						 OBD_FAIL_ONCE)) {
+				DEBUG_REQ(D_ERROR, req, "dropping reply");
+				return -ECOMM;
+			}
+		}
         }
 
         if (unlikely(rc)) {

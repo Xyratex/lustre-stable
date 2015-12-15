@@ -1100,7 +1100,8 @@ static int server_register_target(struct lustre_sb_info *lsi)
 	       mti->mti_flags);
 
 	/* if write_conf is true, the registration must succeed */
-	writeconf = !!(lsi->lsi_flags & (LDD_F_NEED_INDEX | LDD_F_UPDATE));
+	writeconf = !!(lsi->lsi_flags & (LDD_F_NEED_INDEX | LDD_F_UPDATE |
+					 LDD_F_WRITECONF));
 	mti->mti_flags |= LDD_F_OPC_REG;
 
 	/* Register the target */

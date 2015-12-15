@@ -2916,9 +2916,6 @@ test_43() {
 }
 run_test 43 "check root_squash and nosquash_nids"
 
-umount_client $MOUNT
-cleanup_nocli
-
 test_44() { # 16317
         setup
         check_mount || return 2
@@ -5420,6 +5417,40 @@ test_89() {
 	reformat
 }
 run_test 89 "writeconf on mdt>0 shouldn't duplicate mdc/osp and crash"
+
+test_90()
+{
+	[ "$OSTCOUNT" -lt "2" ] && skip_env "$OSTCOUNT < 2, skipping" && return
+	stopall
+	reformat
+	setup_noconfig
+	start_ost2
+	umount_client $MOUNT
+	stop_ost2
+	stop_ost
+	stop_mds
+
+	writeconf_all $MDSCOUNT 2
+
+	start_mds || error "start_mds failed"
+	start_ost || error "should fail"
+
+# have mgs to drop reply to MGS_TARGET_REG
+#define OBD_FAIL_MGS_ALL_REPLY_NET	 0x902
+	do_facet mgs "$LCTL set_param fail_val=253"
+	do_facet mgs "$LCTL set_param fail_loc=0x902"
+	start_ost2 && error "should fail"
+	do_facet mgs "$LCTL set_param fail_loc=0"
+	do_facet mgs "$LCTL set_param fail_val=0"
+
+	start_ost2 || error "start_ost failed"
+	wait_osc_import_state mds ost FULL
+
+	mount_client $MOUNT || error "mount_client failed"
+
+	stopall
+}
+run_test 90 "test ost registration failure after writeconf"
 
 if ! combined_mgs_mds ; then
 	stop mgs
