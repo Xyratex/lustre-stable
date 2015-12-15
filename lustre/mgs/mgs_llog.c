@@ -2566,6 +2566,13 @@ static int mgs_write_log_osc_to_lov(const struct lu_env *env,
 	if (rc)
 		GOTO(out_free, rc);
 
+	/* if "add osc" config record for this target presents in the
+	 * log already it has to be marked with CM_SKIP flag,
+	 * otherwise a log consumer would get confused */
+	rc = mgs_modify(env, mgs, fsdb, mti, logname, mti->mti_svname,
+			"add osc", CM_SKIP);
+	if (rc < 0)
+		GOTO(out_free, rc);
 
         /*
         #03 L add_uuid nid=uml1@tcp(0x20000c0a80201) 0:  1:uml1_UUID
