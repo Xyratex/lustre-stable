@@ -3119,10 +3119,15 @@ static int mdt_intent_getxattr(enum mdt_it_code opcode,
 	}
 
 	ldlm_rep->lock_policy_res2 = clear_serious(rc);
+
+	/* This is left for interop instead of adding a new interp flag.
+	 * MRP-3072, MRP-3137 */
+#if LUSTRE_VERSION_CODE > OBD_OCD_VERSION(3, 0, 0, 0)
         if (ldlm_rep->lock_policy_res2) {
 		mdt_object_unlock(info, info->mti_object, lhc, 1);
 		RETURN(ELDLM_LOCK_ABORTED);
         }
+#endif
 
 	rc = mdt_intent_lock_replace(info, lockp, lhc, flags);
 	RETURN(rc);
