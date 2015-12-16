@@ -1948,6 +1948,18 @@ restart:
 				goto restart;
 			} else {
 				cfs_mutex_lock(&cld->cld_lock);
+				/* make sure cld->cld_stopping has not become
+				 * true before proceeding ahead, as we release
+				 * and re-acquire cld_lock in mid of this
+				 * operation.
+				 * Probability is cld_stopping may get set in
+				 * config_log_end().
+				 */
+				if (cld->cld_stopping) {
+					cfs_mutex_unlock(&cld->cld_lock);
+					RETURN(0);
+				}
+
 				cld->cld_lostlock = 1;
 			}
 		} else {
