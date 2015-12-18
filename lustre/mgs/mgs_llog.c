@@ -107,9 +107,9 @@ int class_dentry_readdir(const struct lu_env *env, struct mgs_device *mgs,
 		}
 
 		/* filter out ".bak" files */
-		/* sizeof(".bak") - 1 == 3 */
-		if (key_sz >= 3 &&
-		    !memcmp(".bak", key + key_sz - 3, 3)) {
+		/* sizeof(".bak") - 1 == 4 */
+		if (key_sz >= 4 &&
+		    !memcmp(".bak", key + key_sz - 4, 4)) {
 			CDEBUG(D_MGS, "Skipping backup file %.*s\n",
 			       key_sz, key);
 			goto next;
