@@ -101,9 +101,11 @@ int class_dentry_readdir(const struct lu_env *env,
 		}
 
 		/* filter out ".bak" files */
-		if (key_sz >= strlen(".bak") &&
-		    !strcmp(".bak", key + key_sz - strlen(".bak"))) {
-			CDEBUG(D_MGS, "Skipping backup file %s\n", key);
+		/* sizeof(".bak") - 1 == 4 */
+		if (key_sz >= 4 &&
+		    !memcmp(".bak", key + key_sz - 4, 4)) {
+			CDEBUG(D_MGS, "Skipping backup file %.*s\n",
+			       key_sz, key);
 			goto next;
 		}
 
