@@ -2629,20 +2629,20 @@ static int echo_client_prep_commit(const struct lu_env *env,
         struct niobuf_local *lnb;
         struct niobuf_remote *rnb;
         obd_off off;
-        obd_size npages, tot_pages;
+        obd_size npages, tot_pages, apc;
 	int i, ret = 0, brw_flags = 0;
 
-        ENTRY;
+	ENTRY;
 
 	if (count <= 0 || (count & (~CFS_PAGE_MASK)) != 0 ||
 	    (lsm != NULL && ostid_id(&lsm->lsm_oi) != ostid_id(&oa->o_oi)))
 		RETURN(-EINVAL);
 
-	npages = batch >> PAGE_CACHE_SHIFT;
+	apc = npages = batch >> PAGE_CACHE_SHIFT;
 	tot_pages = count >> PAGE_CACHE_SHIFT;
 
-        OBD_ALLOC(lnb, npages * sizeof(struct niobuf_local));
-        OBD_ALLOC(rnb, npages * sizeof(struct niobuf_remote));
+        OBD_ALLOC(lnb, apc * sizeof(struct niobuf_local));
+        OBD_ALLOC(rnb, apc * sizeof(struct niobuf_remote));
 
         if (lnb == NULL || rnb == NULL)
                 GOTO(out, ret = -ENOMEM);
@@ -2668,11 +2668,11 @@ static int echo_client_prep_commit(const struct lu_env *env,
 
                 ioo.ioo_bufcnt = npages;
 
-                lpages = npages;
+		lpages = npages;
 		ret = obd_preprw(env, rw, exp, oa, 1, &ioo, rnb, &lpages,
                                  lnb, oti, NULL);
-                if (ret != 0)
-                        GOTO(out, ret);
+		if (ret != 0)
+			GOTO(out, ret);
                 LASSERT(lpages == npages);
 
                 for (i = 0; i < lpages; i++) {
@@ -2704,8 +2704,8 @@ static int echo_client_prep_commit(const struct lu_env *env,
 
 		ret = obd_commitrw(env, rw, exp, oa, 1, &ioo,
 				   rnb, npages, lnb, oti, ret);
-                if (ret != 0)
-                        GOTO(out, ret);
+		if (ret != 0)
+			break;
 
                 /* Reset oti otherwise it would confuse ldiskfs. */
                 memset(oti, 0, sizeof(*oti));
@@ -2717,9 +2717,9 @@ static int echo_client_prep_commit(const struct lu_env *env,
 
 out:
         if (lnb)
-                OBD_FREE(lnb, npages * sizeof(struct niobuf_local));
+                OBD_FREE(lnb, apc * sizeof(struct niobuf_local));
         if (rnb)
-                OBD_FREE(rnb, npages * sizeof(struct niobuf_remote));
+                OBD_FREE(rnb, apc * sizeof(struct niobuf_remote));
         RETURN(ret);
 }
 
