@@ -223,9 +223,10 @@ long filter_grant(struct obd_export *exp, obd_size current_grant,
                        obd->obd_name, exp->exp_client_uuid.uuid, exp, want);
         } else if (current_grant < want &&
                    current_grant < fed->fed_grant + FILTER_GRANT_CHUNK) {
-                grant = min(want + (1 << blockbits) - 1, fs_space_left / 8);
-                grant &= ~((1ULL << blockbits) - 1);
-
+		grant = min(want - current_grant, fs_space_left >> 3);
+		/* round grant upt to the next block size */
+		grant = (grant + (1 << blockbits) - 1) &
+			~((1ULL << blockbits) - 1);
                 if (grant) {
                         if (grant > FILTER_GRANT_CHUNK && conservative)
                                 grant = FILTER_GRANT_CHUNK;
