@@ -4978,6 +4978,11 @@ test_81() {
 run_test 81 "EIO in remote config reading doesn't cause LBUG"
 
 test_82() {
+	if [ $(facet_fstype ost1) != ldiskfs ]; then
+		skip "Only applicable to ldiskfs-based OSTs"
+		return
+	fi
+
         local dev
         local ostmnt
         local fstype
@@ -4991,7 +4996,7 @@ test_82() {
         # Mount the OST as an ldiskfs filesystem.
         log "mount the OST $dev as a $fstype filesystem"
         add ost1 $(mkfs_opts ost1 $dev) $FSTYPE_OPT \
-                --reformat $dev $dev > /dev/null ||
+                --reformat $dev > /dev/null ||
                 error "format ost1 error"
 
         if ! test -b $dev; then
