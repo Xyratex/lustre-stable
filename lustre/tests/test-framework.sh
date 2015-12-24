@@ -3717,7 +3717,7 @@ set_conf_param_and_check() {
 	do_facet mgs "$LCTL conf_param $PARAM='$FINAL'" ||
 		error "conf_param $PARAM failed"
 
-	wait_update $(facet_host $myfacet) "$TEST" "$FINAL" ||
+	wait_update_facet $myfacet "$TEST" "$FINAL" ||
 		error "check $PARAM failed!"
 }
 
