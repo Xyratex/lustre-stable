@@ -707,8 +707,8 @@ static inline void obd_pages_sub(int order)
 #define __OBD_MALLOC_VERBOSE(ptr, cptab, cpt, size, flags)		      \
 do {									      \
 	(ptr) = (cptab) == NULL ?					      \
-		kmalloc(size, flags | __GFP_ZERO) :			      \
-		cfs_cpt_malloc(cptab, cpt, size, flags | __GFP_ZERO);	      \
+		kmalloc(size, (flags) | __GFP_ZERO) :			      \
+		cfs_cpt_malloc(cptab, cpt, size, (flags) | __GFP_ZERO);	      \
 	if (unlikely((ptr) == NULL)) {                                        \
 		CERROR("kmalloc of '" #ptr "' (%d bytes) failed at %s:%d\n",  \
 		       (int)(size), __FILE__, __LINE__);		      \
@@ -888,10 +888,10 @@ do {									      \
 
 #define __OBD_SLAB_ALLOC_VERBOSE(ptr, slab, cptab, cpt, size, type)	      \
 do {									      \
-	LASSERT(ergo((type) != GFP_ATOMIC, !in_interrupt()));	      \
+	LASSERT(ergo((type) != GFP_ATOMIC, !in_interrupt()));		      \
 	(ptr) = (cptab) == NULL ?					      \
-		kmem_cache_alloc(slab, type | __GFP_ZERO) :		      \
-		cfs_mem_cache_cpt_alloc(slab, cptab, cpt, type | __GFP_ZERO); \
+		kmem_cache_alloc(slab, (type) | __GFP_ZERO) :		      \
+		cfs_mem_cache_cpt_alloc(slab, cptab, cpt, (type) | __GFP_ZERO); \
         if (likely((ptr) != NULL &&                                           \
                    (!HAS_FAIL_ALLOC_FLAG || obd_alloc_fail_rate == 0 ||       \
                     !obd_alloc_fail(ptr, #ptr, "slab-", size,                 \
