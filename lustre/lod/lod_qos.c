@@ -127,7 +127,7 @@ int qos_add_tgt(struct lod_device *lod, struct lod_tgt_desc *ost_desc)
 	   points to the list head, and we add to the end. */
 	list_add_tail(&oss->lqo_oss_list, &temposs->lqo_oss_list);
 
-	lod->lod_qos.lq_dirty = 1;
+	set_bit(LQ_DIRTY, &lod->lod_qos.lq_flags);
 	lod->lod_qos.lq_rr.lqr_dirty = 1;
 
 out:
@@ -167,7 +167,7 @@ int qos_del_tgt(struct lod_device *lod, struct lod_tgt_desc *ost_desc)
 		OBD_FREE_PTR(oss);
 	}
 
-	lod->lod_qos.lq_dirty = 1;
+	set_bit(LQ_DIRTY, &lod->lod_qos.lq_flags);
 	lod->lod_qos.lq_rr.lqr_dirty = 1;
 out:
 	up_write(&lod->lod_qos.lq_rw_sem);
@@ -231,7 +231,7 @@ static int lod_statfs_and_check(const struct lu_env *env, struct lod_device *d,
 
 			LASSERT(d->lod_desc.ld_active_tgt_count > 0);
 			d->lod_desc.ld_active_tgt_count--;
-			d->lod_qos.lq_dirty = 1;
+			set_bit(LQ_DIRTY, &d->lod_qos.lq_flags);
 			d->lod_qos.lq_rr.lqr_dirty = 1;
 			CDEBUG(D_CONFIG, "%s: turns inactive\n",
 			       ost->ltd_exp->exp_obd->obd_name);
@@ -247,7 +247,7 @@ static int lod_statfs_and_check(const struct lu_env *env, struct lod_device *d,
 			ost->ltd_active = 1;
 			ost->ltd_connecting = 0;
 			d->lod_desc.ld_active_tgt_count++;
-			d->lod_qos.lq_dirty = 1;
+			set_bit(LQ_DIRTY, &d->lod_qos.lq_flags);
 			d->lod_qos.lq_rr.lqr_dirty = 1;
 			CDEBUG(D_CONFIG, "%s: turns active\n",
 			       ost->ltd_exp->exp_obd->obd_name);
@@ -297,7 +297,7 @@ void lod_qos_statfs_update(const struct lu_env *env, struct lod_device *lod)
 			continue;
 		if (OST_TGT(lod,idx)->ltd_statfs.os_bavail != avail)
 			/* recalculate weigths */
-			lod->lod_qos.lq_dirty = 1;
+			set_bit(LQ_DIRTY, &lod->lod_qos.lq_flags);
 	}
 	obd->obd_osfs_age = ktime_get_seconds();
 
@@ -332,7 +332,7 @@ static int lod_qos_calc_ppo(struct lod_device *lod)
 	time64_t	    now, age;
 	ENTRY;
 
-	if (!lod->lod_qos.lq_dirty)
+	if (!test_bit(LQ_DIRTY, &lod->lod_qos.lq_flags))
 		GOTO(out, rc = 0);
 
 	num_active = lod->lod_desc.ld_active_tgt_count - 1;
@@ -377,7 +377,7 @@ static int lod_qos_calc_ppo(struct lod_device *lod)
 			(temp * prio_wide) >> 8;
 
 		age = (now - OST_TGT(lod,i)->ltd_qos.ltq_used) >> 3;
-		if (lod->lod_qos.lq_reset ||
+		if (test_bit(LQ_RESET, &lod->lod_qos.lq_flags) ||
 		    age > 32 * lod->lod_desc.ld_qos_maxage)
 			OST_TGT(lod,i)->ltd_qos.ltq_penalty = 0;
 		else if (age > lod->lod_desc.ld_qos_maxage)
@@ -402,7 +402,7 @@ static int lod_qos_calc_ppo(struct lod_device *lod)
 		oss->lqo_penalty_per_obj = (temp * prio_wide) >> 8;
 
 		age = (now - oss->lqo_used) >> 3;
-		if (lod->lod_qos.lq_reset ||
+		if (test_bit(LQ_RESET, &lod->lod_qos.lq_flags) ||
 		    age > 32 * lod->lod_desc.ld_qos_maxage)
 			oss->lqo_penalty = 0;
 		else if (age > lod->lod_desc.ld_qos_maxage)
@@ -410,22 +410,22 @@ static int lod_qos_calc_ppo(struct lod_device *lod)
 			oss->lqo_penalty >>= age / lod->lod_desc.ld_qos_maxage;
 	}
 
-	lod->lod_qos.lq_dirty = 0;
-	lod->lod_qos.lq_reset = 0;
+	clear_bit(LQ_DIRTY, &lod->lod_qos.lq_flags);
+	clear_bit(LQ_RESET, &lod->lod_qos.lq_flags);
 
 	/* If each ost has almost same free space,
 	 * do rr allocation for better creation performance */
-	lod->lod_qos.lq_same_space = 0;
+	clear_bit(LQ_SAME_SPACE, &lod->lod_qos.lq_flags);
 	if ((ba_max * (256 - lod->lod_qos.lq_threshold_rr)) >> 8 < ba_min) {
-		lod->lod_qos.lq_same_space = 1;
+		set_bit(LQ_SAME_SPACE, &lod->lod_qos.lq_flags);
 		/* Reset weights for the next time we enter qos mode */
-		lod->lod_qos.lq_reset = 1;
+		set_bit(LQ_RESET, &lod->lod_qos.lq_flags);
 	}
 	rc = 0;
 
 out:
 #ifndef FORCE_QOS
-	if (!rc && lod->lod_qos.lq_same_space)
+	if (!rc && test_bit(LQ_SAME_SPACE, &lod->lod_qos.lq_flags))
 		RETURN(-EAGAIN);
 #endif
 	RETURN(rc);
@@ -1468,7 +1468,8 @@ static inline int lod_qos_is_usable(struct lod_device *lod)
 #endif
 
 	/* Detect -EAGAIN early, before expensive lock is taken. */
-	if (!lod->lod_qos.lq_dirty && lod->lod_qos.lq_same_space)
+	if (!test_bit(LQ_DIRTY, &lod->lod_qos.lq_flags) &&
+	     test_bit(LQ_SAME_SPACE, &lod->lod_qos.lq_flags))
 		return 0;
 
 	if (lod->lod_desc.ld_active_tgt_count < 2)
@@ -1712,8 +1713,8 @@ static int lod_alloc_qos(const struct lu_env *env, struct lod_object *lo,
 		}
 
 		/* makes sense to rebalance next time */
-		lod->lod_qos.lq_dirty = 1;
-		lod->lod_qos.lq_same_space = 0;
+		set_bit(LQ_DIRTY, &lod->lod_qos.lq_flags);
+		clear_bit(LQ_SAME_SPACE, &lod->lod_qos.lq_flags);
 
 		rc = -EAGAIN;
 	}

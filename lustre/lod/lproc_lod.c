@@ -456,8 +456,8 @@ static ssize_t qos_prio_free_store(struct kobject *kobj, struct attribute *attr,
 	if (val > 100)
 		return -EINVAL;
 	lod->lod_qos.lq_prio_free = (val << 8) / 100;
-	lod->lod_qos.lq_dirty = 1;
-	lod->lod_qos.lq_reset = 1;
+	set_bit(LQ_DIRTY, &lod->lod_qos.lq_flags);
+	set_bit(LQ_RESET, &lod->lod_qos.lq_flags);
 
 	return count;
 }
@@ -522,7 +522,7 @@ lod_qos_thresholdrr_seq_write(struct file *file, const char __user *buffer,
 		return -EINVAL;
 
 	lod->lod_qos.lq_threshold_rr = (val << 8) / 100;
-	lod->lod_qos.lq_dirty = 1;
+	set_bit(LQ_DIRTY, &lod->lod_qos.lq_flags);
 
 	return count;
 }
