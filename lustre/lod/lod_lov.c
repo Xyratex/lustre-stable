@@ -1963,9 +1963,9 @@ int lod_pools_init(struct lod_device *lod, struct lustre_cfg *lcfg)
 	/* Set up allocation policy (QoS and RR) */
 	INIT_LIST_HEAD(&lod->lod_qos.lq_oss_list);
 	init_rwsem(&lod->lod_qos.lq_rw_sem);
-	lod->lod_qos.lq_dirty = 1;
+	set_bit(LQ_DIRTY, &lod->lod_qos.lq_flags);
 	lod->lod_qos.lq_rr.lqr_dirty = 1;
-	lod->lod_qos.lq_reset = 1;
+	set_bit(LQ_RESET, &lod->lod_qos.lq_flags);
 	/* Default priority is toward free space balance */
 	lod->lod_qos.lq_prio_free = 232;
 	/* Default threshold for rr (roughly 17%) */
