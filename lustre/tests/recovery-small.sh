@@ -246,16 +246,25 @@ test_10d() {
 	local evict
 	# sleep 1 is to make sure that BEFORE is not equal to EVICTED below
 	sleep 1
-	echo -n ", world" | dd of=$TMP/$tfile bs=1c seek=5
+	local rec1len=6
+	local rec2len=5
+	$MULTIOP $TMP/$tfile oO_CREAT:O_WRONLY:T0z${rec1len}w${rec2len}c
 
 	mount_client $MOUNT2
 
 	$LFS setstripe -i 0 -c 1 $DIR1/$tfile
-	echo -n hello > $DIR1/$tfile
 
-	$LCTL set_param fail_val=71
-	drop_bl_callback_once "echo -n \\\", world\\\" >> $DIR2/$tfile"
-	$LCTL set_param fail_val=0
+	# dd is to guarantee that first multiop will not submit data to
+	# server due to ar_force_sync flag set
+	dd if=/dev/zero of=$DIR1/$tfile bs=4k count=1
+	$MULTIOP $DIR1/$tfile oO_CREAT:O_WRONLY:T0w${rec1len}c
+	$MULTIOP $DIR2/$tfile oO_WRONLY:z${rec1len}_w${rec2len}c &
+	PID1=$!
+#define OBD_FAIL_LDLM_BL_CALLBACK_NET			0x305
+	do_facet client $LCTL set_param fail_loc=0x80000305
+	do_facet client $LCTL set_param fail_val=71
+	kill -USR1 $PID1
+	wait $PID1
 
 	client_reconnect
 
