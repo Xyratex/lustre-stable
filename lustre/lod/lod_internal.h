@@ -70,6 +70,14 @@ struct pool_desc {
 #define pool_tgt_array(p)  ((p)->pool_obds.op_array)
 #define pool_tgt_rw_sem(p) ((p)->pool_obds.op_rw_sem)
 
+enum lq_flag {
+	LQ_DIRTY	= 0, /* recalc qos data */
+	LQ_SAME_SPACE	= 1, /* the ost's all have approx.
+                                the same space avail */
+	LQ_RESET	= 2, /* zero current penalties */
+
+};
+
 struct lod_qos {
 	struct list_head	 lq_oss_list;
 	struct rw_semaphore	 lq_rw_sem;
@@ -77,10 +85,7 @@ struct lod_qos {
 	unsigned int		 lq_prio_free;   /* priority for free space */
 	unsigned int		 lq_threshold_rr;/* priority for rr */
 	struct lod_qos_rr	 lq_rr;          /* round robin qos data */
-	bool			 lq_dirty:1,     /* recalc qos data */
-				 lq_same_space:1,/* the ost's all have approx.
-						    the same space avail */
-				 lq_reset:1;     /* zero current penalties */
+	unsigned long		 lq_flags;       /* statfs op flags */
 };
 
 struct lod_qos_oss {
