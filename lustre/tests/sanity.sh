@@ -12676,6 +12676,9 @@ test_254() {
 	local cl_user
 
 	[ $PARALLEL == "yes" ] && skip "skip parallel run" && return
+	remote_mds_nodsh && skip "remote MDS with nodsh" && return
+	do_facet mds1  $LCTL get_param -n mdd.$MDT0.changelog_size ||
+		{ skip  "remote MDS doesn\`t support changelog_size" && return; }
 
 	cl_user=$(do_facet mds1 $LCTL --device $MDT0 changelog_register -n)
 	echo "Registered as changelog user $cl_user"
