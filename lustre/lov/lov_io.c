@@ -789,7 +789,10 @@ static const struct cl_io_operations lov_io_ops = {
 static void lov_empty_io_fini(const struct lu_env *env,
                               const struct cl_io_slice *ios)
 {
+	struct lov_object *lov = cl2lov(ios->cis_obj);
         ENTRY;
+	if (cfs_atomic_dec_and_test(&lov->lo_active_ios))
+		cfs_waitq_broadcast(&lov->lo_waitq);
         EXIT;
 }
 
@@ -807,8 +810,8 @@ static void lov_empty_impossible(const struct lu_env *env,
 static const struct cl_io_operations lov_empty_io_ops = {
         .op = {
                 [CIT_READ] = {
-#if 0
                         .cio_fini       = lov_empty_io_fini,
+#if 0
                         .cio_iter_init  = LOV_EMPTY_IMPOSSIBLE,
                         .cio_lock       = LOV_EMPTY_IMPOSSIBLE,
                         .cio_start      = LOV_EMPTY_IMPOSSIBLE,
@@ -872,10 +875,12 @@ int lov_io_init_raid0(const struct lu_env *env, struct cl_object *obj,
 int lov_io_init_empty(const struct lu_env *env, struct cl_object *obj,
                       struct cl_io *io)
 {
+	struct lov_object *lov = cl2lov(obj);
         struct lov_io *lio = lov_env_io(env);
         int result;
 
         ENTRY;
+	lio->lis_object = lov;
         switch (io->ci_type) {
         default:
                 LBUG();
@@ -893,8 +898,10 @@ int lov_io_init_empty(const struct lu_env *env, struct cl_object *obj,
                        PFID(lu_object_fid(&obj->co_lu)));
                 break;
         }
-        if (result == 0)
+	if (result == 0) {
                 cl_io_slice_add(io, &lio->lis_cl, obj, &lov_empty_io_ops);
+		cfs_atomic_inc(&lov->lo_active_ios);
+	}
         io->ci_result = result;
         RETURN(result != 0);
 }

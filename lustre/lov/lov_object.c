@@ -76,6 +76,8 @@ struct lov_layout_operations {
                             struct cl_attr *attr);
 };
 
+static int lov_layout_wait(const struct lu_env *env, struct lov_object *lov);
+
 /*****************************************************************************
  *
  * Lov object layout operations.
@@ -464,6 +466,35 @@ do {                                                                    \
                 cfs_up_read(&__obj->lo_type_guard);                     \
 } while (0)
 
+static void lov_conf_lock(struct lov_object *lov)
+{
+	LASSERT(lov->lo_owner != cfs_current());
+	cfs_down_write(&lov->lo_type_guard);
+	LASSERT(lov->lo_owner == NULL);
+	lov->lo_owner = cfs_current();
+}
+
+static void lov_conf_unlock(struct lov_object *lov)
+{
+	lov->lo_owner = NULL;
+	cfs_up_write(&lov->lo_type_guard);
+}
+
+static int lov_layout_wait(const struct lu_env *env, struct lov_object *lov)
+{
+	struct l_wait_info lwi = { 0 };
+	ENTRY;
+	while (cfs_atomic_read(&lov->lo_active_ios) > 0) {
+		lov_conf_unlock(lov);
+		CDEBUG(D_INODE, "file:"DFID" wait for active IO, now: %d.\n",
+			PFID(lu_object_fid(lov2lu(lov))),
+			cfs_atomic_read(&lov->lo_active_ios));
+		l_wait_event(lov->lo_waitq,
+			cfs_atomic_read(&lov->lo_active_ios) == 0, &lwi);
+		lov_conf_lock(lov);
+	}
+	RETURN(0);
+}
 static int lov_layout_change(const struct lu_env *env,
                              struct lov_object *obj, enum lov_layout_type llt,
                              const struct cl_object_conf *conf)
@@ -527,7 +558,8 @@ int lov_object_init(const struct lu_env *env, struct lu_object *obj,
 
         ENTRY;
         cfs_init_rwsem(&lov->lo_type_guard);
-
+	cfs_atomic_set(&lov->lo_active_ios, 0);
+	cfs_waitq_init(&lov->lo_waitq);
         /* no locking is necessary, as object is being created */
         lov->lo_type = cconf->u.coc_md->lsm != NULL ? LLT_RAID0 : LLT_EMPTY;
         ops = &lov_dispatch[lov->lo_type];
@@ -549,16 +581,14 @@ static int lov_conf_set(const struct lu_env *env, struct cl_object *obj,
         /*
          * Currently only LLT_EMPTY -> LLT_RAID0 transition is supported.
          */
-        LASSERT(lov->lo_owner != cfs_current());
-        cfs_down_write(&lov->lo_type_guard);
-        LASSERT(lov->lo_owner == NULL);
-        lov->lo_owner = cfs_current();
-        if (lov->lo_type == LLT_EMPTY && conf->u.coc_md->lsm != NULL)
+	lov_conf_lock(lov);
+	if (lov->lo_type == LLT_EMPTY && conf->u.coc_md->lsm != NULL) {
+		lov_layout_wait(env, lov);
                 result = lov_layout_change(env, lov, LLT_RAID0, conf);
-        else
+	} else {
                 result = -EOPNOTSUPP;
-        lov->lo_owner = NULL;
-        cfs_up_write(&lov->lo_type_guard);
+	}
+	lov_conf_unlock(lov);
         RETURN(result);
 }
 

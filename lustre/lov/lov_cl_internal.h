@@ -200,6 +200,9 @@ struct lov_object {
          */
         enum lov_layout_type   lo_type;
 
+	cfs_atomic_t           lo_active_ios;
+	cfs_waitq_t            lo_waitq;
+
         union lov_layout_state {
                 struct lov_layout_raid0 {
                         unsigned               lo_nr;
