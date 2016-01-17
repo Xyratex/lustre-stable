@@ -761,19 +761,19 @@ static int get_root_path(int want, char *fsname, int *outfd, char *path,
         int rc = -ENODEV;
 
         /* get the mount point */
-        fp = setmntent(MOUNTED, "r");
+        fp = setmntent(PROC_MOUNTS, "r");
         if (fp == NULL) {
                 rc = -EIO;
                 llapi_error(LLAPI_MSG_ERROR, rc,
-                            "setmntent(%s) failed", MOUNTED);
+                            "setmntent(%s) failed", PROC_MOUNTS);
                 return rc;
         }
         while (1) {
                 if (getmntent_r(fp, &mnt, buf, sizeof(buf)) == NULL)
                         break;
 
-                if (!llapi_is_lustre_mnt(&mnt))
-                        continue;
+		if (!llapi_is_lustre_mnt(&mnt))
+			continue;
 
                 if ((want & WANT_INDEX) && (idx++ != index))
                         continue;

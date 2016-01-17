@@ -63,6 +63,9 @@ enum llapi_message_level {
 #define LLAPI_MSG_MASK          0x00000007
 #define LLAPI_MSG_NO_ERRNO      0x00000010
 
+/* mount point listings in /proc/mounts */
+#define PROC_MOUNTS "/proc/mounts"
+
 /* liblustreapi.c */
 extern void llapi_msg_set_level(int level);
 void llapi_error(int level, int rc, const char *fmt, ...)
