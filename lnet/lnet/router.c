@@ -1342,36 +1342,46 @@ rescan:
 void
 lnet_destroy_rtrbuf(lnet_rtrbuf_t *rb, int npages)
 {
-	int sz = offsetof(lnet_rtrbuf_t, rb_kiov[1]);
-	int order = fls(npages);
+        int sz = offsetof(lnet_rtrbuf_t, rb_kiov[npages]);
 
-	__free_pages(rb->rb_kiov[0].kiov_page, order);
+        while (--npages >= 0)
+		__free_page(rb->rb_kiov[npages].kiov_page);
 
-	LIBCFS_FREE(rb, sz);
+        LIBCFS_FREE(rb, sz);
 }
 
 lnet_rtrbuf_t *
 lnet_new_rtrbuf(lnet_rtrbufpool_t *rbp, int cpt)
 {
-	int            order = fls(rbp->rbp_npages);
-	int            sz = offsetof(lnet_rtrbuf_t, rb_kiov[1]);
-	lnet_rtrbuf_t *rb;
+        int            npages = rbp->rbp_npages;
+        int            sz = offsetof(lnet_rtrbuf_t, rb_kiov[npages]);
+        struct page   *page;
+        lnet_rtrbuf_t *rb;
+        int            i;
 
 	LIBCFS_CPT_ALLOC(rb, lnet_cpt_table(), cpt, sz);
 	if (rb == NULL)
 		return NULL;
 
-	rb->rb_kiov[0].kiov_page = alloc_pages(GFP_KERNEL, order);
-	if (rb->rb_kiov[0].kiov_page != NULL) {
-		rb->rb_pool = rbp;
-		rb->rb_kiov[0].kiov_len = rbp->rbp_npages * PAGE_SIZE;
-		rb->rb_kiov[0].kiov_offset = 0;
-	} else {
-		LIBCFS_FREE(rb, sz);
-		rb = NULL;
-	}
+	rb->rb_pool = rbp;
 
-	return rb;
+	for (i = 0; i < npages; i++) {
+		page = cfs_page_cpt_alloc(lnet_cpt_table(), cpt,
+					  __GFP_ZERO | GFP_IOFS);
+                if (page == NULL) {
+                        while (--i >= 0)
+				__free_page(rb->rb_kiov[i].kiov_page);
+
+                        LIBCFS_FREE(rb, sz);
+                        return NULL;
+                }
+
+		rb->rb_kiov[i].kiov_len = PAGE_CACHE_SIZE;
+                rb->rb_kiov[i].kiov_offset = 0;
+                rb->rb_kiov[i].kiov_page = page;
+        }
+
+        return rb;
 }
 
 void

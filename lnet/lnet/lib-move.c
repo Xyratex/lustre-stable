@@ -1003,8 +1003,8 @@ lnet_post_routed_recv_locked (lnet_msg_t *msg, int do_recv)
 	rb = list_entry(rbp->rbp_bufs.next, lnet_rtrbuf_t, rb_list);
 	list_del(&rb->rb_list);
 
-	msg->msg_niov = 1;
-	msg->msg_kiov = &rb->rb_kiov[0];
+        msg->msg_niov = rbp->rbp_npages;
+        msg->msg_kiov = &rb->rb_kiov[0];
 
         if (do_recv) {
 		int cpt = msg->msg_rx_cpt;

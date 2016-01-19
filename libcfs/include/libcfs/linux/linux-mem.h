@@ -99,11 +99,8 @@ extern void *cfs_cpt_malloc(struct cfs_cpt_table *cptab, int cpt,
 			    size_t nr_bytes, gfp_t flags);
 extern void *cfs_cpt_vzalloc(struct cfs_cpt_table *cptab, int cpt,
 			     size_t nr_bytes);
-extern struct page *cfs_pages_cpt_alloc(struct cfs_cpt_table *cptab,
-				      int cpt, gfp_t flags, unsigned order);
-#define cfs_page_cpt_alloc(cptab, cpt, flags) \
-		cfs_pages_cpt_alloc(cptab, cpt, flags, 0)
-
+extern struct page *cfs_page_cpt_alloc(struct cfs_cpt_table *cptab,
+				      int cpt, gfp_t flags);
 extern void *cfs_mem_cache_cpt_alloc(struct kmem_cache *cachep,
 				     struct cfs_cpt_table *cptab,
 				     int cpt, gfp_t flags);
