@@ -3296,6 +3296,9 @@ struct llog_log_hdr {
         __u32                   llh_bitmap_offset;
         __u32                   llh_size;
         __u32                   llh_flags;
+	/* for a catalog the first/oldest and still in-use plain slot is just
+	 * next to it. It will serve as the upper limit after Catalog has
+	 * wrapped around */
         __u32                   llh_cat_idx;
         /* for a catalog the first plain slot is next to it */
         struct obd_uuid         llh_tgtuuid;
