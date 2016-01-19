@@ -9643,6 +9643,9 @@ test_154e()
 run_test 154e ".lustre is not returned by readdir"
 
 test_154f() {
+	remote_mds_nodsh && skip "remote MDS with nodsh" && return
+	[[ $(lustre_version_code $SINGLEMDS) -lt $(version_code 2.5.1) ]] &&
+        	skip "Needs MDS version to be at least 2.5.1" && return
 	# create parent directory on a single MDT to avoid cross-MDT hardlinks
 	test_mkdir -p $DIR/$tdir/d
 	# test dirs inherit from its stripe
