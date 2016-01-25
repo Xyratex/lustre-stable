@@ -1685,11 +1685,22 @@ test_102()
 
         zconf_mount_clients $clients $MOUNT || error "Cannot mount client"
 
-        # check new version
-        new_version=$(nidtbl_version_client client)
-        [ $new_version -lt $old_version ] &&
-                error "nidtbl version wrong after mgs restarts"
-        return 0
+	# Sleep here to let client retrieve recovery logs from server.
+	# MGC_TIMEOUT_MIN_SECONDS + MGC_TIMEOUT_RAND_CENTISEC + 20 seconds
+	# to retrieve logs.
+	count=30
+	while [ $count -gt 0 ]; do
+	# check new version
+		new_version=$(nidtbl_version_client client)
+	# nidtbl_version is 0 in case when recovery logs are not retrieved.
+		[ $new_version -ne "0" ] && break
+		sleep 1
+		count=$((count-1))
+	done
+
+	[ $new_version -lt $old_version ] &&
+		error "nidtbl version wrong after mgs restarts"
+	return 0
 }
 run_test 102 "IR: New client gets updated nidtbl after MGS restart"
 

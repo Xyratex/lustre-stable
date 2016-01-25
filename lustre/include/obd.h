@@ -361,6 +361,7 @@ struct client_obd {
 	struct dt_object	 *cl_mgc_configs_dir;
 	atomic_t		  cl_mgc_refcount;
 	struct obd_export        *cl_mgc_mgsexp;
+	unsigned int		cl_mgc_srv_has_ir:1;
 
         /* checksumming for data sent over the network */
         unsigned int             cl_checksum:1; /* 0 = disabled, 1 = enabled */

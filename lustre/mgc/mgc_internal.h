@@ -49,8 +49,6 @@ extern struct lprocfs_seq_vars lprocfs_mgc_obd_vars[];
 int lprocfs_mgc_rd_ir_state(struct seq_file *m, void *data);
 #endif  /* LPROCFS */
 
-int mgc_process_log(struct obd_device *mgc, struct config_llog_data *cld);
-
 static inline int cld_is_sptlrpc(struct config_llog_data *cld)
 {
         return cld->cld_type == CONFIG_T_SPTLRPC;

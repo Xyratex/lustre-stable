@@ -203,6 +203,8 @@ struct config_llog_data {
         unsigned int                cld_stopping:1, /* we were told to stop
                                                      * watching */
                                     cld_lostlock:1; /* lock not requeued */
+	struct completion	    cld_received;
+	int			    cld_rc;	    /* log process rc */
         char                        cld_logname[0];
 };
 
