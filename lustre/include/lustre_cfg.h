@@ -90,6 +90,7 @@ enum lcfg_command_type {
 					      * cleanup cleanup */
 	LCFG_SET_PARAM		= 0x00ce032, /**< use set_param syntax to set
 					      *a proc parameters */
+	LCFG_PARAMS_START	= 0x00cf033, /**< process params log */
 };
 
 struct lustre_cfg_bufs {
