@@ -1104,11 +1104,15 @@ int ll_fill_super(struct super_block *sb, struct vfsmount *mnt)
         cfg->cfg_uuid = lsi->lsi_llsbi->ll_sb_uuid;
 	cfg->cfg_callback = class_config_llog_handler;
         /* set up client obds */
-        err = lustre_process_log(sb, profilenm, cfg);
+        err = lustre_process_log(sb, profilenm, cfg, LCFG_LOG_START);
 	if (err < 0)
 		GOTO(out_free, err);
 
-        /* Profile set with LCFG_MOUNTOPT so we can find our mdc and osc obds */
+	err = lustre_process_log(sb, profilenm, cfg, LCFG_PARAMS_START);
+	if (err < 0)
+		GOTO(out_free, err);
+
+	/* Profile set with LCFG_MOUNTOPT so we can find our mdc and osc obds */
         lprof = class_get_profile(profilenm);
         if (lprof == NULL) {
                 LCONSOLE_ERROR_MSG(0x156, "The client profile '%s' could not be"

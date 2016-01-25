@@ -580,7 +580,7 @@ int llog_add(const struct lu_env *env, struct llog_handle *lgh,
 int llog_declare_add(const struct lu_env *env, struct llog_handle *lgh,
 		     struct llog_rec_hdr *rec, struct thandle *th);
 int lustre_process_log(struct super_block *sb, char *logname,
-		       struct config_llog_instance *cfg);
+		       struct config_llog_instance *cfg, int cmd);
 int lustre_end_log(struct super_block *sb, char *logname,
 		   struct config_llog_instance *cfg);
 int llog_open_create(const struct lu_env *env, struct llog_ctxt *ctxt,
