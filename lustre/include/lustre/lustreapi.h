@@ -71,6 +71,10 @@ typedef void (*llapi_log_callback_t)(enum llapi_message_level level, int err,
 #define LLAPI_MSG_MASK          0x00000007
 #define LLAPI_MSG_NO_ERRNO      0x00000010
 
+#ifndef PROC_MOUNTS
+#define PROC_MOUNTS "/proc/mounts"
+#endif
+
 static inline const char *llapi_msg_level2str(enum llapi_message_level level)
 {
 	static const char *levels[LLAPI_MSG_MAX] = {"OFF", "FATAL", "ERROR",
