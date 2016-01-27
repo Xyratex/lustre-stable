@@ -2259,6 +2259,10 @@ T130_PID=0
 test_130_base() {
 	test_mkdir -p $DIR/$tdir
 
+	# Prevent interference from layout intent RPCs due to
+	# asynchronous writeback. These will be tested in 130c below.
+	do_nodes ${CLIENTS:-$HOSTNAME} sync
+
 	# get only LOOKUP lock on $tdir
 	cancel_lru_locks mdc
 	ls $DIR/$tdir/$tfile 2>/dev/null
