@@ -2679,7 +2679,6 @@ struct obd_ops mdc_obd_ops = {
 struct md_ops mdc_md_ops = {
         .m_getstatus        = mdc_getstatus,
         .m_null_inode	    = mdc_null_inode,
-        .m_find_cbdata      = mdc_find_cbdata,
         .m_close            = mdc_close,
         .m_create           = mdc_create,
         .m_done_writing     = mdc_done_writing,

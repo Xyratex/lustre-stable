@@ -1028,8 +1028,6 @@ struct obd_ops {
                           struct obd_trans_info *oti, int rc);
         int (*o_change_cbdata)(struct obd_export *, struct lov_stripe_md *,
                                ldlm_iterator_t it, void *data);
-        int (*o_find_cbdata)(struct obd_export *, struct lov_stripe_md *,
-                             ldlm_iterator_t it, void *data);
         int (*o_init_export)(struct obd_export *exp);
         int (*o_destroy_export)(struct obd_export *exp);
 
@@ -1187,9 +1185,6 @@ struct md_ops {
 			   struct obd_capa **);
 
 	int (*m_null_inode)(struct obd_export *, const struct lu_fid *);
-
-	int (*m_find_cbdata)(struct obd_export *, const struct lu_fid *,
-			     ldlm_iterator_t, void *);
 
 	int (*m_done_writing)(struct obd_export *, struct md_op_data  *,
 			      struct md_open_data *);
