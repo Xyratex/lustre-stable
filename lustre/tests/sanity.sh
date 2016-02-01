@@ -12899,6 +12899,42 @@ test_401() {
 }
 run_test 401 "Return ENOENT to lod_generate_and_set_lovea"
 
+test_403() {
+	local file1=$DIR/$tfile.1
+	local file2=$DIR/$tfile.2
+	local tfile=$TMP/$tfile
+
+	rm -f $file1 $file2 $tfile
+
+	touch $file1
+	ln $file1 $file2
+
+	# the following is 2 sec OBD_TIMEOUT in ll_getattr()
+	# right before populating st_nlink
+	$LCTL set_param fail_loc=0x80001408
+	stat -c %h $file1 > $tfile &
+	sleep 1
+	$LCTL set_param fail_loc=0
+
+	# the following removes any cached locks,
+	# specifically the lock requested by getattr
+	cancel_lru_locks mdc
+	cancel_lru_locks osc
+
+	sleep 0.5
+
+	# finally, this opens the file and immediately closes
+	# it making ll_d_iput() spoil the inode
+	$MULTIOP $file2 oc
+
+	wait
+
+	[ `cat $tfile` -gt 0 ] || error "wrong nlink count: `cat $tfile`"
+
+	rm -f $tfile $file1 $file2
+}
+run_test 403 "nlink should not drop to zero"
+
 #
 # tests that do cleanup/setup should be run at the end
 #
