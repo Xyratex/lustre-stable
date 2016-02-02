@@ -5287,7 +5287,7 @@ test_88_clear_conf()
 		start_mgs "-o nosvc" || error "start_mgs nosvc failed"
 	else
 		mgsdev=$(mdsdevname 1)
-		start_mds "-o nosvc" || error "start_mds nosvc failed"
+		start_mdt 1 "-o nosvc" || error "start_mdt 1 nosvc failed"
 	fi
 
 	do_facet mgs "rm -rf $TMP/conf1; mkdir -p $TMP/conf1; \
