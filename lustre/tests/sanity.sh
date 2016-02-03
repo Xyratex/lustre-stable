@@ -1230,6 +1230,10 @@ run_test 27t "check that utils parse path correctly"
 test_27u() { # bug 4900
 	[ "$OSTCOUNT" -lt "2" ] && skip_env "too few OSTs" && return
 	remote_mds_nodsh && skip "remote MDS with nodsh" && return
+	check_mds_journal_by_ost_nr 2
+	[ $? -ne 0 ] && skip_env "skipping the test due to insufficient" \
+		"journal size" && return
+
 	local index
 	local list=$(comma_list $(mdts_nodes))
 
@@ -1310,6 +1314,11 @@ run_test 27wa "check $SETSTRIPE -c -i options"
 test_27x() {
 	remote_ost_nodsh && skip "remote OST with nodsh" && return
 	[ "$OSTCOUNT" -lt "2" ] && skip_env "$OSTCOUNT < 2 OSTs" && return
+
+	check_mds_journal_by_ost_nr 2
+	[ $? -ne 0 ] && skip_env "skipping test due to the insufficient" \
+		"journal size" && return
+
 	OFFSET=$(($OSTCOUNT - 1))
 	OSTIDX=0
 	local OST=$(ostname_from_index $OSTIDX)
@@ -1328,9 +1337,14 @@ test_27x() {
 run_test 27x "create files while OST0 is degraded"
 
 test_27y() {
-        [ "$OSTCOUNT" -lt "2" ] && skip_env "$OSTCOUNT < 2 OSTs -- skipping" && return
+        [ "$OSTCOUNT" -lt "2" ] &&
+		skip_env "$OSTCOUNT < 2 OSTs -- skipping" && return
         remote_mds_nodsh && skip "remote MDS with nodsh" && return
         remote_ost_nodsh && skip "remote OST with nodsh" && return
+
+	check_mds_journal_by_ost_nr 2
+	[ $? -ne 0 ] && skip_env "skipping test due to the insufficient" \
+		"journal size" && return
 
         local mdtosc=$(get_mdtosc_proc_path $SINGLEMDS $FSNAME-OST0000)
         local last_id=$(do_facet $SINGLEMDS lctl get_param -n \
@@ -1341,7 +1355,8 @@ test_27y() {
         [ $fcount -eq 0 ] && skip "not enough space on OST0" && return
         [ $fcount -gt $OSTCOUNT ] && fcount=$OSTCOUNT
 
-        MDS_OSCS=`do_facet $SINGLEMDS lctl dl | awk '/[oO][sS][cC].*md[ts]/ { print $4 }'`
+        MDS_OSCS=`do_facet $SINGLEMDS lctl dl |
+			awk '/[oO][sS][cC].*md[ts]/ { print $4 }'`
         OFFSET=$(($OSTCOUNT-1))
         OST=-1
         for OSC in $MDS_OSCS; do
