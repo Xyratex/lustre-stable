@@ -2354,8 +2354,10 @@ int lprocfs_obd_rd_recovery_status(char *page, char **start, off_t off,
                         goto out;
                 if (lprocfs_obd_snprintf(&page, size, &len,
                                          "recovery_duration: %lu\n",
-                                         obd->obd_recovery_end -
-                                         obd->obd_recovery_start) <= 0)
+					 (obd->obd_recovery_end ?
+					  obd->obd_recovery_end :
+					  cfs_time_current_sec()) -
+					 obd->obd_recovery_start) <= 0)
                         goto out;
                 /* Number of clients that have completed recovery */
                 if (lprocfs_obd_snprintf(&page, size, &len,
