@@ -2281,7 +2281,7 @@ int osc_enqueue_base(struct obd_export *exp, struct ldlm_res_id *res_id,
 	struct obd_device *obd = exp->exp_obd;
 	struct ptlrpc_request *req = NULL;
 	int intent = *flags & LDLM_FL_HAS_INTENT;
-	__u64 match_lvb = (agl != 0 ? 0 : LDLM_FL_LVB_READY);
+	__u64 match_flags = *flags;
 	ldlm_mode_t mode;
 	int rc;
 	ENTRY;
@@ -2315,7 +2315,11 @@ int osc_enqueue_base(struct obd_export *exp, struct ldlm_res_id *res_id,
         mode = einfo->ei_mode;
         if (einfo->ei_mode == LCK_PR)
                 mode |= LCK_PW;
-        mode = ldlm_lock_match(obd->obd_namespace, *flags | match_lvb, res_id,
+	if (agl == 0)
+		match_flags |= LDLM_FL_LVB_READY;
+	if (intent != 0)
+		match_flags |= LDLM_FL_BLOCK_GRANTED;
+	mode = ldlm_lock_match(obd->obd_namespace, match_flags, res_id,
                                einfo->ei_type, policy, mode, lockh, 0);
         if (mode) {
                 struct ldlm_lock *matched = ldlm_handle2lock(lockh);
