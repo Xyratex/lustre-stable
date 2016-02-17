@@ -6001,7 +6001,7 @@ add_pool_to_list () {
 
     local listvar=${fsname}_CREATED_POOLS
 	local temp=${listvar}=$(expand_list ${!listvar} $poolname)
-	eval export temp
+	eval export $temp
 }
 
 remove_pool_from_list () {
@@ -6010,7 +6010,7 @@ remove_pool_from_list () {
 
     local listvar=${fsname}_CREATED_POOLS
 	local temp=${listvar}=$(exclude_items_from_list ${!listvar} $poolname)
-	eval export temp
+	eval export $temp
 }
 
 destroy_pool_int() {
