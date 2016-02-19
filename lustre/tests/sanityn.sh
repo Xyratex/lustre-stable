@@ -40,6 +40,8 @@ init_test_env $@
 . ${CONFIG:=$LUSTRE/tests/cfg/$NAME.sh}
 init_logging
 
+. $LUSTRE/tests/setup-nfs.sh
+
 if [ $(facet_fstype $SINGLEMDS) = "zfs" ]; then
 # bug number for skipped test:        LU-2189 LU-2776
 	ALWAYS_EXCEPT="$ALWAYS_EXCEPT 36      51a"
@@ -360,6 +362,31 @@ test_14d() { # bug 10921
 	rm $TMP/test14.junk $DIR1/d14/multiop || error "removing multiop"
 }
 run_test 14d "chmod of executing file is still possible ========"
+
+test_14e() { # LU-4398/MRP-3322
+	local rc=0
+
+	test_mkdir -p $DIR1/$tdir
+	rm -f $DIR1/$tdir/$tfile
+
+	setup_nfs 4 $DIR1 $HOSTNAME $HOSTNAME $DIR2 ||
+		error "nfs setup failed!"
+
+	touch $DIR2/$tdir/$tfile
+	chmod +x $DIR2/$tdir/$tfile
+	printf '#!/bin/bash' > $DIR2/$tdir/$tfile
+
+	$DIR1/$tdir/$tfile || rc=1
+
+	# always cleanup
+	cleanup_nfs $DIR2 $HOSTNAME $HOSTNAME ||
+		error_noexit false "failed to cleanup nfs"
+
+	[ $rc -ne 0 ] && echo "failed to execute"
+
+	return $rc
+}
+run_test 14e "conflicting locks should be flushed on open ======"
 
 test_15() {	# bug 974 - ENOSPC
 	echo "PATH=$PATH"
