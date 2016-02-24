@@ -12869,13 +12869,13 @@ test_252_spend_po() {
 	local max_age
 
 	#Waiting statfs update at mds
-	max_age=$(do_facet $serv lctl get_param -n osp.$mdtosc_proc.maxage)
+	max_age=$(do_facet $serv $LCTL get_param -n osp.$mdtosc_proc.maxage)
 
 	sleep $((max_age*3/2))
 
-	last_id=$(do_facet $serv lctl get_param -n \
+	last_id=$(do_facet $serv $LCTL get_param -n \
 			  osp.$mdtosc_proc.prealloc_last_id)
-	next_id=$(do_facet $serv lctl get_param -n \
+	next_id=$(do_facet $serv $LCTL get_param -n \
 			  osp.$mdtosc_proc.prealloc_next_id)
 
 	if [ $next_id -gt $last_id ]; then
@@ -12912,6 +12912,8 @@ test_252_fill_ost() {
 test_252() {
 	local ostidx=0
 	local rc=0
+	local last_wm_h
+	local last_wm_n
 
 	[ $PARALLEL == "yes" ] && skip "skip parallel run" && return
 	remote_mds_nodsh && skip "remote MDS with nodsh" && return
@@ -12919,14 +12921,17 @@ test_252() {
 
 	rm -rf $DIR/$tdir
 	mkdir $DIR/$tdir
-	local ost_name=$($LFS osts | grep ${ostidx}": " | \
-		awk '{print $2}' | sed -e 's/_UUID$//')
+	local ost_name=$(ostname_from_index $ostidx)
 
 	# on the mdt's osc
 	local mdtosc_proc1=$(get_mdtosc_proc_path $SINGLEMDS $ost_name)
-	local last_wm_h=$(do_facet $SINGLEMDS lctl get_param -n \
-			osp.$mdtosc_proc1.rsrvd_size_hwm_mb)
-	local last_wm_n=$(do_facet $SINGLEMDS lctl get_param -n \
+
+	last_wm_h=$(do_facet $SINGLEMDS $LCTL get_param -n \
+			osp.$mdtosc_proc1.rsrvd_size_hwm_mb) ||
+	{ skip  "remote MDS doesn\`t support rsrvd_size_hwm_mb" && return; }
+
+
+	last_wm_n=$(do_facet $SINGLEMDS $LCTL get_param -n \
 			osp.$mdtosc_proc1.rsrvd_size_nwm_mb)
 	echo "prev high watermark $last_wm_h, prev normal watermark $last_wm_n"
 
@@ -12935,7 +12940,7 @@ test_252() {
 	do_facet mgs $LCTL pool_add $FSNAME.$TESTNAME $ost_name || return 2
 
 	# Wait for client to see a OST at pool
-	wait_update $HOSTNAME "lctl get_param -n
+	wait_update $HOSTNAME "$LCTL get_param -n
 			lov.$FSNAME-*.pools.$TESTNAME | sort -u |
 			grep $ost_name" "$ost_name""_UUID" $((TIMEOUT/2)) ||
 			return 2
@@ -12946,9 +12951,9 @@ test_252() {
 	echo "OST still has $((blocks/1024)) mbytes free"
 
 	local new_hwm=$((blocks/1024-10))
-	do_facet $SINGLEMDS lctl set_param \
+	do_facet $SINGLEMDS $LCTL set_param \
 			osp.$mdtosc_proc1.rsrvd_size_nwm_mb $((new_hwm+5))
-	do_facet $SINGLEMDS lctl set_param \
+	do_facet $SINGLEMDS $LCTL set_param \
 			osp.$mdtosc_proc1.rsrvd_size_hwm_mb $new_hwm
 
 	test_252_fill_ost $ost_name $mdtosc_proc1 $new_hwm
@@ -12956,7 +12961,7 @@ test_252() {
 	#First enospc could execute orphan deletion so repeat.
 	test_252_fill_ost $ost_name $mdtosc_proc1 $new_hwm
 
-	local oa_status=$(do_facet $SINGLEMDS lctl get_param -n \
+	local oa_status=$(do_facet $SINGLEMDS $LCTL get_param -n \
 			osp.$mdtosc_proc1.prealloc_status)
 	echo "prealloc_status $oa_status"
 	#Check preallocate objects again
@@ -12974,16 +12979,16 @@ test_252() {
 			error "File creation failed after rm";
 	done
 
-	oa_status=$(do_facet $SINGLEMDS lctl get_param -n \
+	oa_status=$(do_facet $SINGLEMDS $LCTL get_param -n \
 			osp.$mdtosc_proc1.prealloc_status)
 	echo "prealloc_status $oa_status"
 
 	if [ x$oa_status != "x0" ]; then
 		error "Object allocation still disable after rm"
 	fi
-	do_facet $SINGLEMDS lctl set_param \
+	do_facet $SINGLEMDS $LCTL set_param \
 			osp.$mdtosc_proc1.rsrvd_size_hwm_mb $last_wm_h
-	do_facet $SINGLEMDS lctl set_param \
+	do_facet $SINGLEMDS $LCTL set_param \
 			osp.$mdtosc_proc1.rsrvd_size_nwm_mb $last_wm_n
 
 
