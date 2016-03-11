@@ -663,6 +663,11 @@ extern char obd_jobid_var[];
 #define OBD_FAIL_BARRIER_DELAY			0x2202
 #define OBD_FAIL_BARRIER_FAILURE		0x2203
 
+/* OBDECHO */
+#define OBD_FAIL_OBDECHO			0x2300
+#define OBD_FAIL_OBDECHO_ALL_REQUEST_NET	0x2301
+#define OBD_FAIL_OBDECHO_ALL_REPLY_NET		0x2302
+
 /* Assign references to moved code to reduce code changes */
 #define OBD_FAIL_PRECHECK(id)                   CFS_FAIL_PRECHECK(id)
 #define OBD_FAIL_CHECK(id)                      CFS_FAIL_CHECK(id)

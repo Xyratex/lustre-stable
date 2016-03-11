@@ -42,6 +42,7 @@
 #include <lustre_debug.h>
 #include <lustre_dlm.h>
 #include <lprocfs_status.h>
+#include <lu_target.h>
 
 #include "echo_internal.h"
 
@@ -115,16 +116,25 @@ static u64 echo_next_id(struct obd_device *obddev)
 	return id;
 }
 
-static int echo_create(const struct lu_env *env, struct obd_export *exp,
-		       struct obdo *oa)
+static int echo_create(struct tgt_session_info *tsi)
 {
-        struct obd_device *obd = class_exp2obd(exp);
+	struct obd_export       *exp = tsi->tsi_exp;
+	struct obd_device *obd = class_exp2obd(exp);
+	struct ost_body *repbody;
+	struct obdo     *oa = &tsi->tsi_ost_body->oa;
+	struct obdo             *rep_oa;
+	u64                      seq = ostid_seq(&oa->o_oi);
 
-        if (!obd) {
-		CERROR("invalid client cookie %#llx\n",
-                       exp->exp_handle.h_cookie);
-                return -EINVAL;
-        }
+	if (OBD_FAIL_CHECK(OBD_FAIL_OST_EROFS))
+		return -EROFS;
+	repbody = req_capsule_server_get(tsi->tsi_pill, &RMF_OST_BODY);
+	if (repbody == NULL)
+		return -ENOMEM;
+	rep_oa = &repbody->oa;
+	rep_oa->o_oi = oa->o_oi;
+
+	LASSERT(seq >= FID_SEQ_OST_MDT0);
+	LASSERT(oa->o_valid & OBD_MD_FLGROUP);
 
 	if (!(oa->o_mode & S_IFMT)) {
 		CERROR("echo obd: no type!\n");
@@ -133,29 +143,29 @@ static int echo_create(const struct lu_env *env, struct obd_export *exp,
 
         if (!(oa->o_valid & OBD_MD_FLTYPE)) {
 		CERROR("invalid o_valid %#llx\n", oa->o_valid);
-                return -EINVAL;
-        }
-
-	ostid_set_seq_echo(&oa->o_oi);
-	if (ostid_set_id(&oa->o_oi, echo_next_id(obd))) {
-		CERROR("Bad %llu to set " DOSTID "\n",
-		       echo_next_id(obd), POSTID(&oa->o_oi));
 		return -EINVAL;
 	}
-	oa->o_valid = OBD_MD_FLID;
+
+	ostid_set_seq_echo(&rep_oa->o_oi);
+	if (ostid_set_id(&rep_oa->o_oi, echo_next_id(obd))) {
+		CERROR("Bad %llu to set " DOSTID "\n",
+		       echo_next_id(obd), POSTID(&rep_oa->o_oi));
+		return -EINVAL;
+	}
+	rep_oa->o_valid = OBD_MD_FLID;
 
 	return 0;
 }
 
-static int echo_destroy(const struct lu_env *env, struct obd_export *exp,
-			struct obdo *oa)
+static int echo_destroy(struct tgt_session_info *tsi)
 {
-        struct obd_device *obd = class_exp2obd(exp);
+	struct obd_device *obd = class_exp2obd(tsi->tsi_exp);
+	struct obdo *oa = &tsi->tsi_ost_body->oa;
 
         ENTRY;
         if (!obd) {
 		CERROR("invalid client cookie %#llx\n",
-                       exp->exp_handle.h_cookie);
+		       tsi->tsi_exp->exp_handle.h_cookie);
                 RETURN(-EINVAL);
         }
 
@@ -222,6 +232,162 @@ static int echo_setattr(const struct lu_env *env, struct obd_export *exp,
 	obd->u.echo.eo_oa = *oa;
 
 	RETURN(0);
+}
+
+#define OBD_FAIL_OST_WRITE_NET	OBD_FAIL_OST_BRW_NET
+#define OBD_FAIL_OST_READ_NET	OBD_FAIL_OST_BRW_NET
+#define OST_BRW_WRITE	OST_WRITE
+#define OST_BRW_READ	OST_READ
+
+static struct tgt_handler obdecho_tgt_handlers[] = {
+	TGT_RPC_HANDLER(OST_FIRST_OPC,
+			0, OST_CONNECT, tgt_connect,
+			&RQF_CONNECT, LUSTRE_OBD_VERSION),
+	TGT_RPC_HANDLER(OST_FIRST_OPC,
+			0, OST_DISCONNECT,tgt_disconnect,
+			&RQF_OST_DISCONNECT, LUSTRE_OBD_VERSION),
+	TGT_OST_HDL(HABEO_REFERO | MUTABOR,
+		    OST_CREATE, echo_create),
+	TGT_OST_HDL(HABEO_REFERO | MUTABOR,
+		    OST_DESTROY, echo_destroy),
+	TGT_OST_HDL(HABEO_CORPUS|  MUTABOR,
+		    OST_BRW_WRITE, tgt_brw_write),
+	TGT_OST_HDL(HABEO_CORPUS| HABEO_REFERO,
+		    OST_BRW_READ, tgt_brw_read),
+};
+static struct tgt_opc_slice obdecho_common_slice[] = {
+	{
+		.tos_opc_start	= OST_FIRST_OPC,
+		.tos_opc_end    = OST_LAST_OPC,
+		.tos_hs	        = obdecho_tgt_handlers
+	}
+};
+
+struct obdecho_device {
+	struct obd_device	*ec_obd;
+	struct lu_target	ec_lut;
+	struct echo_obd 	*ed_eo;
+	struct dt_device	ec_dt_dev;
+	struct lu_device	*ec_lu_dev;
+};
+
+static inline struct obdecho_device *obdecho_dev(struct lu_device *d)
+{
+	return container_of0(d, struct obdecho_device, ec_dt_dev.dd_lu_dev);
+}
+
+static struct lu_device * obdecho_device_free(const struct lu_env *env,
+					      struct lu_device *d)
+{
+	struct obdecho_device *ed = obdecho_dev(d);
+	struct obd_device *obd = ed->ec_dt_dev.dd_lu_dev.ld_obd;
+	int leaked;
+
+	lprocfs_obd_cleanup(obd);
+	lprocfs_free_obd_stats(obd);
+
+	ldlm_lock_decref(&obd->u.echo.eo_nl_lock, LCK_NL);
+
+	/* XXX Bug 3413; wait for a bit to ensure the BL callback has
+	* happened before calling ldlm_namespace_free() */
+	set_current_state(TASK_UNINTERRUPTIBLE);
+	schedule_timeout(cfs_time_seconds(1));
+
+	ldlm_namespace_free(obd->obd_namespace, NULL, obd->obd_force);
+	obd->obd_namespace = NULL;
+
+	leaked = atomic_read(&obd->u.echo.eo_prep);
+	if (leaked != 0)
+		CERROR("%d prep/commitrw pages leaked\n", leaked);
+
+	dt_device_fini(&ed->ec_dt_dev);
+	OBD_FREE_PTR(ed);
+	RETURN(NULL);
+}
+
+static struct lu_device *obdecho_device_fini(const struct lu_env *env,
+					     struct lu_device *d)
+{
+	struct obdecho_device *ed = obdecho_dev(d);
+
+	ENTRY;
+	tgt_fini(env, &ed->ec_lut);
+	RETURN(NULL);
+}
+
+static struct lu_device *obdecho_device_alloc(const struct lu_env *env,
+					      struct lu_device_type *t,
+					      struct lustre_cfg *cfg)
+{
+	struct obdecho_device *ed;
+	struct lu_device   *lud;
+	struct obd_device  *obd = NULL;
+	__u64			lock_flags = 0;
+	struct ldlm_res_id	res_id = {.name = {1}};
+	char			ns_name[48];
+	int rc;
+
+	ENTRY;
+
+	OBD_ALLOC_PTR(ed);
+	if (ed == NULL)
+		ERR_PTR(-ENOMEM);
+	dt_device_init(&ed->ec_dt_dev, t);
+	lud = &ed->ec_dt_dev.dd_lu_dev;
+	obd = class_name2obd(lustre_cfg_string(cfg, 0));
+	LASSERT(obd != NULL);
+
+	obd->obd_replayable = 0;
+
+	rc = tgt_init(env, &ed->ec_lut, obd, &ed->ec_dt_dev,
+		      obdecho_common_slice,
+		      OBD_FAIL_OBDECHO_ALL_REQUEST_NET,
+		      OBD_FAIL_OBDECHO_ALL_REPLY_NET);
+	if (rc)
+		GOTO(err_tgt, rc);
+
+	ed->ec_dt_dev.dd_lu_dev.ld_obd = obd;
+
+	spin_lock_init(&obd->u.echo.eo_lock);
+	obd->u.echo.eo_lastino = ECHO_INIT_OID;
+
+	sprintf(ns_name, "echotgt-%s", obd->obd_uuid.uuid);
+	obd->obd_namespace = ldlm_namespace_new(obd, ns_name,
+                                                LDLM_NAMESPACE_SERVER,
+                                                LDLM_NAMESPACE_MODEST,
+                                                LDLM_NS_TYPE_OST);
+	if (obd->obd_namespace == NULL)
+		GOTO(err_ns, rc = -ENOMEM);
+
+	rc = ldlm_cli_enqueue_local(obd->obd_namespace, &res_id, LDLM_PLAIN,
+				    NULL, LCK_NL, &lock_flags, NULL,
+				    ldlm_completion_ast,
+				    NULL, NULL, 0,
+				    LVB_T_NONE, NULL, &obd->u.echo.eo_nl_lock);
+	if (rc)
+		GOTO(err_en, rc);
+
+	if (lprocfs_obd_setup(obd, true) == 0 &&
+	    lprocfs_alloc_obd_stats(obd, LPROC_ECHO_LAST) == 0) {
+			lprocfs_counter_init(obd->obd_stats, LPROC_ECHO_READ_BYTES,
+					     LPROCFS_CNTR_AVGMINMAX,
+					     "read_bytes", "bytes");
+			lprocfs_counter_init(obd->obd_stats, LPROC_ECHO_WRITE_BYTES,
+					     LPROCFS_CNTR_AVGMINMAX,
+					     "write_bytes", "bytes");
+	}
+	ptlrpc_init_client(LDLM_CB_REQUEST_PORTAL, LDLM_CB_REPLY_PORTAL,
+			   "echo_ldlm_cb_client", &obd->obd_ldlm_client);
+
+	RETURN(lud);
+err_en:
+	ldlm_namespace_free(obd->obd_namespace, NULL, obd->obd_force);
+	obd->obd_namespace = NULL;
+err_ns:
+	tgt_fini(env, &ed->ec_lut);
+err_tgt:
+	OBD_FREE_PTR(ed);
+	return ERR_PTR(rc);
 }
 
 static void
@@ -546,88 +712,29 @@ commitrw_cleanup:
 	return rc;
 }
 
-static int echo_setup(struct obd_device *obd, struct lustre_cfg *lcfg)
-{
-	int			rc;
-	__u64			lock_flags = 0;
-	struct ldlm_res_id	res_id = {.name = {1}};
-	char			ns_name[48];
-	ENTRY;
-
-        obd->u.echo.eo_obt.obt_magic = OBT_MAGIC;
-	spin_lock_init(&obd->u.echo.eo_lock);
-        obd->u.echo.eo_lastino = ECHO_INIT_OID;
-
-        sprintf(ns_name, "echotgt-%s", obd->obd_uuid.uuid);
-        obd->obd_namespace = ldlm_namespace_new(obd, ns_name,
-                                                LDLM_NAMESPACE_SERVER,
-                                                LDLM_NAMESPACE_MODEST,
-                                                LDLM_NS_TYPE_OST);
-        if (obd->obd_namespace == NULL) {
-                LBUG();
-                RETURN(-ENOMEM);
-        }
-
-        rc = ldlm_cli_enqueue_local(obd->obd_namespace, &res_id, LDLM_PLAIN,
-                                    NULL, LCK_NL, &lock_flags, NULL,
-				    ldlm_completion_ast, NULL, NULL, 0,
-				    LVB_T_NONE, NULL, &obd->u.echo.eo_nl_lock);
-        LASSERT (rc == ELDLM_OK);
-
-	if (!lprocfs_obd_setup(obd, true) &&
-            lprocfs_alloc_obd_stats(obd, LPROC_ECHO_LAST) == 0) {
-                lprocfs_counter_init(obd->obd_stats, LPROC_ECHO_READ_BYTES,
-                                     LPROCFS_CNTR_AVGMINMAX,
-                                     "read_bytes", "bytes");
-                lprocfs_counter_init(obd->obd_stats, LPROC_ECHO_WRITE_BYTES,
-                                     LPROCFS_CNTR_AVGMINMAX,
-                                     "write_bytes", "bytes");
-        }
-
-	ptlrpc_init_client(LDLM_CB_REQUEST_PORTAL, LDLM_CB_REPLY_PORTAL,
-			   "echo_ldlm_cb_client", &obd->obd_ldlm_client);
-        RETURN(0);
-}
-
-static int echo_cleanup(struct obd_device *obd)
-{
-	int leaked;
-	ENTRY;
-
-	lprocfs_obd_cleanup(obd);
-	lprocfs_free_obd_stats(obd);
-
-	ldlm_lock_decref(&obd->u.echo.eo_nl_lock, LCK_NL);
-
-	/* XXX Bug 3413; wait for a bit to ensure the BL callback has
-	 * happened before calling ldlm_namespace_free() */
-	set_current_state(TASK_UNINTERRUPTIBLE);
-	schedule_timeout(cfs_time_seconds(1));
-
-	ldlm_namespace_free(obd->obd_namespace, NULL, obd->obd_force);
-	obd->obd_namespace = NULL;
-
-	leaked = atomic_read(&obd->u.echo.eo_prep);
-	if (leaked != 0)
-		CERROR("%d prep/commitrw pages leaked\n", leaked);
-
-	RETURN(0);
-}
-
 struct obd_ops echo_obd_ops = {
-        .o_owner           = THIS_MODULE,
-        .o_connect         = echo_connect,
-        .o_disconnect      = echo_disconnect,
-        .o_init_export     = echo_init_export,
-        .o_destroy_export  = echo_destroy_export,
-        .o_create          = echo_create,
-        .o_destroy         = echo_destroy,
-        .o_getattr         = echo_getattr,
-        .o_setattr         = echo_setattr,
-        .o_preprw          = echo_preprw,
-        .o_commitrw        = echo_commitrw,
-        .o_setup           = echo_setup,
-        .o_cleanup         = echo_cleanup
+	.o_owner           = THIS_MODULE,
+	.o_connect         = echo_connect,
+	.o_disconnect      = echo_disconnect,
+	.o_init_export     = echo_init_export,
+	.o_destroy_export  = echo_destroy_export,
+	.o_getattr         = echo_getattr,
+	.o_setattr         = echo_setattr,
+	.o_preprw          = echo_preprw,
+	.o_commitrw        = echo_commitrw
+};
+
+static const struct lu_device_type_operations obdecho_device_type_ops = {
+	.ldto_device_alloc  = obdecho_device_alloc,
+	.ldto_device_free   = obdecho_device_free,
+	.ldto_device_fini   = obdecho_device_fini
+};
+
+static struct lu_device_type obdecho_device_type = {
+	.ldt_tags     = LU_DEVICE_DT,
+	.ldt_name     = LUSTRE_ECHO_NAME,
+	.ldt_ops      = &obdecho_device_type_ops,
+	.ldt_ctx_tags = LCT_DT_THREAD,
 };
 
 void echo_persistent_pages_fini(void)
@@ -641,7 +748,7 @@ void echo_persistent_pages_fini(void)
 		}
 }
 
-int echo_persistent_pages_init(void)
+static int echo_persistent_pages_init(void)
 {
 	struct page *pg;
 	int          i;
@@ -663,4 +770,18 @@ int echo_persistent_pages_init(void)
 	}
 
 	return 0;
+}
+int obdecho_srv_register()
+{
+	int rc;
+
+	rc = echo_persistent_pages_init();
+	if (rc != 0)
+		return rc;
+
+	rc = class_register_type(&echo_obd_ops, NULL, true, NULL,
+			       LUSTRE_ECHO_NAME, &obdecho_device_type);
+	if (rc != 0)
+		echo_persistent_pages_fini();
+	return rc;
 }
