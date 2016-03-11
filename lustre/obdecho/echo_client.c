@@ -3170,14 +3170,9 @@ static int __init obdecho_init(void)
 	LASSERT(PAGE_CACHE_SIZE % OBD_ECHO_BLOCK_SIZE == 0);
 
 # ifdef HAVE_SERVER_SUPPORT
-        rc = echo_persistent_pages_init();
-        if (rc != 0)
-                goto failed_0;
-
-	rc = class_register_type(&echo_obd_ops, NULL, true, NULL,
-				 LUSTRE_ECHO_NAME, NULL);
+	rc = obdecho_srv_register();
 	if (rc != 0)
-		goto failed_1;
+		goto failed_0;
 # endif
 
         rc = echo_client_init();
@@ -3187,8 +3182,6 @@ static int __init obdecho_init(void)
                 RETURN(0);
 
         class_unregister_type(LUSTRE_ECHO_NAME);
-failed_1:
-        echo_persistent_pages_fini();
 failed_0:
 # endif
         RETURN(rc);

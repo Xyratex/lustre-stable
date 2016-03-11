@@ -44,9 +44,9 @@
 #define OBD_ECHO_BLOCK_SIZE	(4<<10)
 
 #ifdef HAVE_SERVER_SUPPORT
-extern struct obd_ops echo_obd_ops;
-int echo_persistent_pages_init(void);
 void echo_persistent_pages_fini(void);
+int obdecho_srv_register(void);
+
 #endif /* HAVE_SERVER_SUPPORT */
 
 #endif

@@ -1945,7 +1945,7 @@ int tgt_brw_write(struct tgt_session_info *tsi)
 
 	npages = PTLRPC_MAX_BRW_PAGES;
 	rc = obd_preprw(tsi->tsi_env, OBD_BRW_WRITE, exp, &repbody->oa,
-			objcount, ioo, remote_nb, &npages, local_nb, NULL,
+			objcount, ioo, remote_nb, &npages, local_nb, &trans_info,
 			BYPASS_CAPA);
 	if (rc < 0)
 		GOTO(out_lock, rc);
