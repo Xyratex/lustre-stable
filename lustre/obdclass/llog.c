@@ -330,8 +330,10 @@ static int llog_process_thread(void *arg)
                                 if (rc == LLOG_PROC_BREAK) {
                                         GOTO(out, rc);
                                 } else if (rc == LLOG_DEL_RECORD) {
-                                        llog_cancel_rec(loghandle,
-                                                        rec->lrh_index, 1);
+					cfs_down_write(&loghandle->lgh_lock);
+					llog_cancel_rec(loghandle,
+							rec->lrh_index, 1);
+					cfs_up_write(&loghandle->lgh_lock);
                                         rc = 0;
                                 }
                                 if (rc)

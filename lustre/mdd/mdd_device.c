@@ -2416,8 +2416,10 @@ static int mdd_changelog_user_purge_cb(struct llog_handle *llh,
 
         /* hdr+1 is loc of data */
         hdr->lrh_len -= sizeof(*hdr) + sizeof(struct llog_rec_tail);
-        rc = llog_write_rec(llh, hdr, NULL, 0, (void *)(hdr + 1),
-                            hdr->lrh_index);
+	cfs_down_write(&llh->lgh_lock);
+	rc = llog_write_rec(llh, hdr, NULL, 0, (void *)(hdr + 1),
+			    hdr->lrh_index);
+	cfs_up_write(&llh->lgh_lock);
 	mdd_trans_stop(mcud->mcud_env, mdd, rc, trans_h);
 
         RETURN(rc);
