@@ -3029,6 +3029,22 @@ test_101() { #LU-5648
 }
 run_test 101 "Shouldn't reassign precreated objs to other files after recovery"
 
+test_102() {
+	remote_mds_nodsh && skip "remote MDS with nodsh" && return
+#define OBD_FAIL_MDS_TRACK_OVERFLOW 0x162
+	do_facet mds1 $LCTL set_param fail_loc=0x80000162
+
+	mkdir -p $DIR/$tdir
+	createmany -o $DIR/$tdir/t- 30 || error "create files on remote directory failed"
+	sync
+	rm -rf $DIR/$tdir/t-*
+	sync
+#MDS should crash with tr->otr_next_id overflow
+	fail mds1
+}
+run_test 102 "Check otr_next_id overflow"
+
+
 complete $SECONDS
 check_and_cleanup_lustre
 exit_status

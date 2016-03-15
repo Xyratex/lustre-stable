@@ -1537,6 +1537,9 @@ static __u32 osp_sync_id_get(struct osp_device *d, __u32 id)
 
 	/* XXX: we can improve this introducing per-cpu preallocated ids? */
 	spin_lock(&tr->otr_lock);
+	if (OBD_FAIL_CHECK(OBD_FAIL_MDS_TRACK_OVERFLOW))
+		tr->otr_next_id = 0xfffffff0;
+
 	if (unlikely(tr->otr_next_id <= d->opd_syn_last_used_id)) {
 		spin_unlock(&tr->otr_lock);
 		CERROR("%s: next %u, last synced %lu\n",
