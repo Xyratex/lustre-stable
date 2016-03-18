@@ -842,6 +842,16 @@ test_21e() { # LU-5863
 }
 run_test 21e "separate MGS and MDS"
 
+test_21f()
+{
+	local saved_mgsnid="$MGSNID"
+	MGSNID="0.0.0.0@tcp,$MGSNID"
+	echo $MGSNID
+	setup
+	MGSNID=$saved_mgsnid
+}
+run_test 21f "test comma separated MGSNID"
+
 test_22() {
 	start_mds
 
