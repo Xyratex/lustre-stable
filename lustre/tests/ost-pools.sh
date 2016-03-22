@@ -173,19 +173,26 @@ drain_pool() {
 }
 
 add_pool() {
-    local pool=$1
-    local osts=$2
-    local tgt="${3}$(lctl get_param -n lov.$FSNAME-*.pools.$pool |
-               sort -u | tr '\n' ' ')"
+	local pool=$1
+	local osts=$2
+	local tgt="${3}$(lctl get_param -n lov.$FSNAME-*.pools.$pool |
+		sort -u | tr '\n' ' ')"
 
 	do_facet mgs lctl pool_add $FSNAME.$pool $osts
-    local RC=$?
-    [[ $RC -ne 0 ]] && return $RC
+	local RC=$?
+	[[ $RC -ne 0 ]] && return $RC
 
-    wait_update $HOSTNAME "lctl get_param -n lov.$FSNAME-*.pools.$pool |
-                           sort -u | tr '\n' ' ' " "$tgt" >/dev/null || RC=1
-    [[ $RC -ne 0 ]] && error "pool_add failed: $1; $2"
-    return $RC
+	# wait for OSTs to be added to the pool
+	for num in $(seq $MDSCOUNT); do
+		wait_update_facet mds$num \
+			"lctl get_param -n lov.$FSNAME-*.pools.$pool |
+			sort -u | tr '\n' ' ' " "$tgt" >/dev/null ||
+			error "mds$num:pool add failed $1; $2"
+	done
+	wait_update $HOSTNAME "lctl get_param -n lov.$FSNAME-*.pools.$pool |
+		sort -u | tr '\n' ' ' " "$tgt" >/dev/null ||
+		error "pool_add failed: $1; $2"
+	return $RC
 }
 
 create_pool_nofail() {
