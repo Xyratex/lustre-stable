@@ -445,13 +445,9 @@ run_mdtest() {
     # We devide the files by number of core
     mdtest_nFiles=$((mdtest_nFiles/mdtest_THREADS/num_clients))
     mdtest_iteration=${mdtest_iteration:-1}
+	local mdtest_custom_params=${mdtest_custom_params:-""}
 
     local type=${1:-"ssf"}
-
-    if [ "$NFSCLIENT" ]; then
-        skip "skipped for NFSCLIENT mode"
-        return
-    fi
 
     [ x$MDTEST = x ] &&
         { skip_env "mdtest not found" && return; }
@@ -461,7 +457,8 @@ run_mdtest() {
 
     print_opts MDTEST mdtest_iteration mdtest_THREADS mdtest_nFiles
 
-    local testdir=$DIR/d0.mdtest
+	local dir=${2:-$DIR}
+	local testdir=$dir/d0.mdtest
     mkdir -p $testdir
     # mpi_run uses mpiuser
     chmod 0777 $testdir
@@ -471,7 +468,7 @@ run_mdtest() {
     # -n # : number of file/dir to create/stat/remove
     # -u   : each process create/stat/remove individually
 
-    local cmd="$MDTEST -d $testdir -i $mdtest_iteration -n $mdtest_nFiles"
+    local cmd="$MDTEST -d $testdir -i $mdtest_iteration -n $mdtest_nFiles $mdtest_custom_params"
     [ $type = "fpp" ] && cmd="$cmd -u"
 
 	echo "+ $cmd"

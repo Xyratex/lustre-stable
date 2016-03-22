@@ -116,5 +116,14 @@ test_iorfpp() {
 }
 run_test iorfpp "iorfpp"
 
+test_mdtestssf() {
+        run_mdtest "ssf" $NFS_CLIMNTPT
+}
+run_test mdtestssf "mdtestssf"
+
+test_mdtestfpp() {
+        run_mdtest "fpp" $NFS_CLIMNTPT
+}
+run_test mdtestfpp "mdtestfpp"
 complete $SECONDS
 exit_status
