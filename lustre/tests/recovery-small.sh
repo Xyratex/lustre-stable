@@ -2121,6 +2121,7 @@ test_115_write() {
 	local fail1=$1
 	local fail2=$2
 	local error=$3
+	local fail_val2=${4:-0}
 
 	df $DIR
 	touch $DIR/$tfile
@@ -2131,7 +2132,7 @@ test_115_write() {
 	pid=$!
 	sleep 1
 
-	set_nodes_failloc "$(osts_nodes)" $fail2
+	set_nodes_failloc "$(osts_nodes)" $fail2 $fail_val2
 
 	wait $pid
 	rc=$?
@@ -2150,7 +2151,10 @@ run_test 115a "read: late REQ MDunlink and no bulk"
 test_115b() {
 	#define OBD_FAIL_PTLRPC_LONG_REQ_UNLINK  0x51b
 	#define OBD_FAIL_OST_ENOSPC              0x215
-	test_115_write 0x8000051b 0x80000215 1
+
+	# pass $OSTCOUNT for the fail_loc to be caught
+	# appropriately by the IO thread
+	test_115_write 0x8000051b 0x80000215 1 $OSTCOUNT
 }
 run_test 115b "write: late REQ MDunlink and no bulk"
 
