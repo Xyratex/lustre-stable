@@ -967,6 +967,7 @@ static int ptlrpc_connect_interpret(const struct lu_env *env,
 		RETURN(0);
 	}
 
+	imp->imp_connect_error = 0;
 	if (rc) {
 		struct ptlrpc_request *free_req;
 		struct ptlrpc_request *tmp;
@@ -986,6 +987,7 @@ static int ptlrpc_connect_interpret(const struct lu_env *env,
 		/* if this reconnect to busy export - not need select new target
 		 * for connecting*/
 		imp->imp_force_reconnect = ptlrpc_busy_reconnect(rc);
+		imp->imp_connect_error = rc;
 		spin_unlock(&imp->imp_lock);
 		ptlrpc_maybe_ping_import_soon(imp);
 		GOTO(out, rc);
