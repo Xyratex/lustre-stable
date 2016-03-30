@@ -218,8 +218,9 @@ static void ptlrpc_pinger_process_import(struct obd_import *imp,
         if (level == LUSTRE_IMP_DISCON && !imp_is_deactive(imp)) {
                 /* wait for a while before trying recovery again */
                 imp->imp_next_ping = ptlrpc_next_reconnect(imp);
-                if (!imp->imp_no_pinger_recover)
-                        ptlrpc_initiate_recovery(imp);
+		if (!imp->imp_no_pinger_recover ||
+		    imp->imp_connect_error == -EAGAIN)
+			ptlrpc_initiate_recovery(imp);
         } else if (level != LUSTRE_IMP_FULL ||
                    imp->imp_obd->obd_no_recov ||
                    imp_is_deactive(imp)) {
