@@ -118,16 +118,23 @@ static inline void ldlm_flock_blocking_link(struct ldlm_lock *req,
 
 void ldlm_flock_blocking_unlink(struct ldlm_lock *req)
 {
+	struct ldlm_flock *flock;
+
         /* For server only */
         if (req->l_export == NULL)
                 return;
 
+	flock = &req->l_policy_data.l_flock;
         check_res_locked(req->l_resource);
         if (req->l_export->exp_flock_hash != NULL &&
-            !cfs_hlist_unhashed(&req->l_exp_flock_hash))
+	    !cfs_hlist_unhashed(&req->l_exp_flock_hash)) {
+		CDEBUG(D_HA, "lock: %p/"LPX64" bl exp: %p ref: %d\n", req,
+		       req->l_handle.h_cookie,
+	       flock->blocking_export, cfs_atomic_read(&flock->blocking_refs));
                 cfs_hash_del(req->l_export->exp_flock_hash,
                              &req->l_policy_data.l_flock.owner,
                              &req->l_exp_flock_hash);
+	}
 }
 
 static inline void
@@ -168,11 +175,17 @@ static int ldlm_flock_lookup_cb(cfs_hash_t *hs, cfs_hash_bd_t *bd,
                                 (struct ldlm_flock_lookup_cb_data*)data;
         struct obd_export *exp = cfs_hash_object(hs, hnode);
         struct ldlm_lock *lock = NULL;
+	struct ldlm_flock *flock;
 
         if (exp->exp_flock_hash != NULL)
                 lock = cfs_hash_lookup(exp->exp_flock_hash, cb_data->bl_owner);
         if (lock == NULL)
                 return 0;
+
+	flock = &lock->l_policy_data.l_flock;
+	CDEBUG(D_HA, "lock: %p/"LPX64" bl exp: %p ref: %d\n", lock,
+	       lock->l_handle.h_cookie,
+	       flock->blocking_export, cfs_atomic_read(&flock->blocking_refs));
 
         /* Stop on first found lock. Same process can't sleep twice */
         cb_data->lock = lock;
@@ -1039,7 +1052,8 @@ ldlm_export_flock_get(cfs_hash_t *hs, cfs_hlist_node_t *hnode)
         LDLM_LOCK_GET(lock);
 
         flock = &lock->l_policy_data.l_flock;
-	CDEBUG(D_HA, "lock: %p bl exp: %p ref: %d\n", lock,
+	CDEBUG(D_HA, "lock: %p/"LPX64" bl exp: %p ref: %d\n", lock,
+	       lock->l_handle.h_cookie,
 	       flock->blocking_export, cfs_atomic_read(&flock->blocking_refs));
         LASSERT(flock->blocking_export != NULL);
         class_export_get(flock->blocking_export);
@@ -1057,7 +1071,8 @@ ldlm_export_flock_put(cfs_hash_t *hs, cfs_hlist_node_t *hnode)
         flock = &lock->l_policy_data.l_flock;
         LASSERT(flock->blocking_export != NULL);
 
-	CDEBUG(D_HA, "lock: %p bl exp: %p ref: %d\n", lock,
+	CDEBUG(D_HA, "lock: %p/"LPX64" bl exp: %p ref: %d\n", lock,
+	       lock->l_handle.h_cookie,
 	       flock->blocking_export, cfs_atomic_read(&flock->blocking_refs));
         class_export_put(flock->blocking_export);
 	if (cfs_atomic_dec_and_test(&flock->blocking_refs)) {
