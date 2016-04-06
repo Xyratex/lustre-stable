@@ -1,0 +1,160 @@
+--- linux-stage.orig/fs/ext4/ialloc.c	2016-04-25 15:52:21.737760496 +0300
++++ linux-stage/fs/ext4/ialloc.c	2016-04-25 15:56:37.987901642 +0300
+@@ -797,6 +797,9 @@ err_ret:
+ 	return retval;
+ }
+ 
++#define NEW_INODE_ATTRS (ATTR_UID | ATTR_GID | \
++			 ATTR_ATIME | ATTR_CTIME | ATTR_MTIME)
++
+ /*
+  * There are two policies for allocating an inode.  If the new inode is
+  * a directory, then a forward search is made for a block group with both
+@@ -808,7 +808,8 @@ err_ret:
+  * group to find a free inode.
+  */
+ struct inode *ext4_new_inode(handle_t *handle, struct inode *dir, int mode,
+-			     const struct qstr *qstr, __u32 goal)
++			     const struct qstr *qstr, __u32 goal,
++			     struct iattr *attr)
+ {
+ 	struct super_block *sb;
+ 	struct buffer_head *inode_bitmap_bh = NULL;
+@@ -827,6 +832,8 @@ struct inode *ext4_new_inode(handle_t
+ 	static int once = 1;
+ 	ldiskfs_group_t flex_group;
+ 
++	BUG_ON(attr && !((attr->ia_valid&NEW_INODE_ATTRS) == NEW_INODE_ATTRS));
++
+ 	/* Cannot create files in a deleted directory */
+ 	if (!dir || !dir->i_nlink)
+ 		return ERR_PTR(-EPERM);
+@@ -994,22 +995,24 @@ got:
+ 		atomic_dec(&sbi->s_flex_groups[flex_group].free_inodes);
+ 	}
+ 
+-	inode->i_uid = current_fsuid();
++	inode->i_uid = attr ? attr->ia_uid : current_fsuid();
+ 	if (test_opt(sb, GRPID))
+ 		inode->i_gid = dir->i_gid;
+-	else if (dir->i_mode & S_ISGID) {
++	else if (dir->i_mode & S_ISGID && attr == NULL) {
+ 		inode->i_gid = dir->i_gid;
+ 		if (S_ISDIR(mode))
+ 			mode |= S_ISGID;
+ 	} else
+-		inode->i_gid = current_fsgid();
++		inode->i_gid = attr ? attr->ia_gid : current_fsgid();
+ 	inode->i_mode = mode;
+ 
+ 	inode->i_ino = ino + group * EXT4_INODES_PER_GROUP(sb);
+ 	/* This is the optimal IO size (for stat), not the fs block size */
+ 	inode->i_blocks = 0;
+-	inode->i_mtime = inode->i_atime = inode->i_ctime = ei->i_crtime =
+-						       ext4_current_time(inode);
++	ei->i_crtime = ext4_current_time(inode);
++	inode->i_mtime = attr ? attr->ia_mtime : ei->i_crtime;
++	inode->i_atime = attr ? attr->ia_atime : ei->i_crtime;
++	inode->i_ctime = attr ? attr->ia_ctime : ei->i_crtime;
+ 
+ 	memset(ei->i_data, 0, sizeof(ei->i_data));
+ 	ei->i_dir_start_lookup = 0;
+--- linux-stage.orig/fs/ext4/ext4.h	2016-04-25 16:06:13.271984889 +0300
++++ linux-stage/fs/ext4/ext4.h	2016-04-25 16:06:53.855716049 +0300
+@@ -1869,7 +1869,8 @@ extern int ext4fs_dirhash(const char
+ 
+ /* ialloc.c */
+ extern struct inode *ext4_new_inode(handle_t *, struct inode *, int,
+-				    const struct qstr *qstr, __u32 goal);
++				    const struct qstr *qstr, __u32 goal,
++				    struct iattr *attr);
+ extern void ext4_free_inode(handle_t *, struct inode *);
+ extern unsigned long ext4_find_reverse(struct super_block *);
+ extern struct inode * ext4_orphan_get(struct super_block *, unsigned long);
+@@ -1970,7 +1971,8 @@ extern int ext4_orphan_del(handle_t *
+ extern int ext4_htree_fill_tree(struct file *dir_file, __u32 start_hash,
+ 				__u32 start_minor_hash, __u32 *next_hash);
+ extern struct inode *ext4_create_inode(handle_t *handle,
+-				       struct inode * dir, int mode);
++				       struct inode * dir, int mode,
++				       struct iattr *attr);
+ extern int ext4_add_entry(handle_t *handle, struct dentry *dentry,
+ 			  struct inode *inode, struct htree_lock *lck);
+ extern int ext4_delete_entry(handle_t *handle, struct inode * dir,
+--- linux-stage.orig/fs/ext4/migrate.c	2016-04-25 16:04:43.800580014 +0300
++++ linux-stage/fs/ext4/migrate.c	2016-04-25 16:04:50.808533269 +0300
+@@ -491,7 +491,7 @@ int ext4_ext_migrate(struct inode *in
+ 	goal = (((inode->i_ino - 1) / ext4_INODES_PER_GROUP(inode->i_sb)) *
+ 		ext4_INODES_PER_GROUP(inode->i_sb)) + 1;
+ 	tmp_inode = ext4_new_inode(handle, inode->i_sb->s_root->d_inode,
+-				   S_IFREG, 0, goal);
++				   S_IFREG, 0, goal, NULL);
+ 	if (IS_ERR(tmp_inode)) {
+ 		retval = -ENOMEM;
+ 		ext4_journal_stop(handle);
+--- linux-stage.orig/fs/ext4/xattr.c	2016-04-25 16:05:58.496082932 +0300
++++ linux-stage/fs/ext4/xattr.c	2016-04-25 16:06:06.360030741 +0300
+@@ -725,7 +725,7 @@ ext4_xattr_inode_create(handle_t *han
+ 	 * in the same group, or nearby one.
+ 	 */
+ 	ea_inode = ext4_new_inode(handle, inode->i_sb->s_root->d_inode,
+-				  S_IFREG|0600, NULL, inode->i_ino + 1);
++				  S_IFREG|0600, NULL, inode->i_ino + 1, NULL);
+ 
+ 	if (!IS_ERR(ea_inode)) {
+ 		ea_inode->i_op = &ext4_file_inode_operations;
+--- linux-stage.orig/fs/ext4/namei.c	2016-04-25 15:48:09.311726331 +0300
++++ linux-stage/fs/ext4/namei.c	2016-04-25 16:05:48.944146362 +0300
+@@ -2373,12 +2373,12 @@ static unsigned ext4_dentry_goal(stru
+ 
+  /* Return locked inode, then the caller can modify the inode's states/flags
+   * before others finding it. The caller should unlock the inode by itself. */
+-struct inode *ext4_create_inode(handle_t *handle, struct inode *dir, int mode)
++struct inode *ext4_create_inode(handle_t *handle, struct inode *dir, int mode, struct iattr *attr)
+ {
+ 	struct inode *inode;
+ 
+-	inode = ext4_new_inode(handle, dir, mode, 0,
+-			       EXT4_SB(dir->i_sb)->s_inode_goal);
++	inode = ext4_new_inode(handle, dir, mode, 0,
++			       EXT4_SB(dir->i_sb)->s_inode_goal, attr);
+ 	if (!IS_ERR(inode)) {
+ 		if (S_ISCHR(mode) || S_ISBLK(mode) || S_ISFIFO(mode)) {
+ #ifdef CONFIG_ext4_FS_XATTR
+@@ -2420,7 +2420,7 @@ retry:
+ 		ext4_handle_sync(handle);
+ 
+ 	inode = ext4_new_inode(handle, dir, mode, &dentry->d_name,
+-				ext4_dentry_goal(dir->i_sb, dentry));
++				ext4_dentry_goal(dir->i_sb, dentry), NULL);
+ 	err = PTR_ERR(inode);
+ 	if (!IS_ERR(inode)) {
+ 		inode->i_op = &ext4_file_inode_operations;
+@@ -2455,7 +2455,7 @@ retry:
+ 		ext4_handle_sync(handle);
+ 
+ 	inode = ext4_new_inode(handle, dir, mode, &dentry->d_name,
+-				ext4_dentry_goal(dir->i_sb, dentry));
++				ext4_dentry_goal(dir->i_sb, dentry), NULL);
+ 	err = PTR_ERR(inode);
+ 	if (!IS_ERR(inode)) {
+ 		init_special_inode(inode, inode->i_mode, rdev);
+@@ -2559,7 +2559,7 @@ retry:
+ 		ext4_handle_sync(handle);
+ 
+ 	inode = ext4_new_inode(handle, dir, S_IFDIR | mode, &dentry->d_name,
+-			       ext4_dentry_goal(dir->i_sb, dentry));
++			       ext4_dentry_goal(dir->i_sb, dentry), NULL);
+ 	err = PTR_ERR(inode);
+ 	if (IS_ERR(inode))
+ 		goto out_stop;
+@@ -2959,7 +2959,8 @@ retry:
+ 		ext4_handle_sync(handle);
+ 
+ 	inode = ext4_new_inode(handle, dir, S_IFLNK|S_IRWXUGO,
+-			       &dentry->d_name, ext4_dentry_goal(dir->i_sb, dentry));
++			       &dentry->d_name, ext4_dentry_goal(dir->i_sb, dentry),
++				  NULL);
+ 	err = PTR_ERR(inode);
+ 	if (IS_ERR(inode))
+ 		goto out_stop;

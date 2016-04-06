@@ -2031,7 +2031,7 @@ struct dentry *osd_child_dentry_get(const struct lu_env *env,
 
 static int osd_mkfile(struct osd_thread_info *info, struct osd_object *obj,
 		      umode_t mode, struct dt_allocation_hint *hint,
-		      struct thandle *th)
+		      struct thandle *th, struct iattr *iattr)
 {
         int result;
         struct osd_device  *osd = osd_obj2dev(obj);
@@ -2055,11 +2055,11 @@ static int osd_mkfile(struct osd_thread_info *info, struct osd_object *obj,
         if (hint && hint->dah_parent)
                 parent = hint->dah_parent;
 
-        inode = ldiskfs_create_inode(oth->ot_handle,
-                                     parent ? osd_dt_obj(parent)->oo_inode :
-                                              osd_sb(osd)->s_root->d_inode,
-                                     mode);
-        if (!IS_ERR(inode)) {
+	inode = ldiskfs_create_inode(oth->ot_handle,
+				     parent ? osd_dt_obj(parent)->oo_inode :
+					      osd_sb(osd)->s_root->d_inode,
+				     mode, iattr);
+	if (!IS_ERR(inode)) {
 		/* Do not update file c/mtime in ldiskfs. */
 		inode->i_flags |= S_NOCMTIME;
 
@@ -2088,7 +2088,8 @@ static int osd_mkdir(struct osd_thread_info *info, struct osd_object *obj,
                      struct lu_attr *attr,
                      struct dt_allocation_hint *hint,
                      struct dt_object_format *dof,
-                     struct thandle *th)
+                     struct thandle *th,
+		     struct iattr *iattr)
 {
         int result;
         struct osd_thandle *oth;
@@ -2098,7 +2099,7 @@ static int osd_mkdir(struct osd_thread_info *info, struct osd_object *obj,
 
         oth = container_of(th, struct osd_thandle, ot_super);
         LASSERT(oth->ot_handle->h_transaction != NULL);
-        result = osd_mkfile(info, obj, mode, hint, th);
+        result = osd_mkfile(info, obj, mode, hint, th, iattr);
 
         return result;
 }
@@ -2107,7 +2108,8 @@ static int osd_mk_index(struct osd_thread_info *info, struct osd_object *obj,
                         struct lu_attr *attr,
                         struct dt_allocation_hint *hint,
                         struct dt_object_format *dof,
-                        struct thandle *th)
+                        struct thandle *th,
+			struct iattr *iattr)
 {
         int result;
         struct osd_thandle *oth;
@@ -2120,7 +2122,7 @@ static int osd_mk_index(struct osd_thread_info *info, struct osd_object *obj,
         oth = container_of(th, struct osd_thandle, ot_super);
         LASSERT(oth->ot_handle->h_transaction != NULL);
 
-        result = osd_mkfile(info, obj, mode, hint, th);
+        result = osd_mkfile(info, obj, mode, hint, th, iattr);
         if (result == 0) {
                 LASSERT(obj->oo_inode != NULL);
                 if (feat->dif_flags & DT_IND_VARKEY)
@@ -2144,29 +2146,34 @@ static int osd_mkreg(struct osd_thread_info *info, struct osd_object *obj,
                      struct lu_attr *attr,
                      struct dt_allocation_hint *hint,
                      struct dt_object_format *dof,
-                     struct thandle *th)
+                     struct thandle *th,
+		     struct iattr *iattr)
 {
         LASSERT(S_ISREG(attr->la_mode));
         return osd_mkfile(info, obj, (attr->la_mode &
-                               (S_IFMT | S_IALLUGO | S_ISVTX)), hint, th);
+                               (S_IFMT | S_IALLUGO | S_ISVTX)), hint, th,
+			  iattr);
 }
 
 static int osd_mksym(struct osd_thread_info *info, struct osd_object *obj,
                      struct lu_attr *attr,
                      struct dt_allocation_hint *hint,
                      struct dt_object_format *dof,
-                     struct thandle *th)
+                     struct thandle *th,
+		     struct iattr *iattr)
 {
         LASSERT(S_ISLNK(attr->la_mode));
         return osd_mkfile(info, obj, (attr->la_mode &
-                              (S_IFMT | S_IALLUGO | S_ISVTX)), hint, th);
+                              (S_IFMT | S_IALLUGO | S_ISVTX)), hint, th,
+			  iattr);
 }
 
 static int osd_mknod(struct osd_thread_info *info, struct osd_object *obj,
 		     struct lu_attr *attr,
 		     struct dt_allocation_hint *hint,
 		     struct dt_object_format *dof,
-		     struct thandle *th)
+		     struct thandle *th,
+		     struct iattr *iattr)
 {
 	umode_t mode = attr->la_mode & (S_IFMT | S_IALLUGO | S_ISVTX);
 	int result;
@@ -2176,7 +2183,7 @@ static int osd_mknod(struct osd_thread_info *info, struct osd_object *obj,
         LASSERT(S_ISCHR(mode) || S_ISBLK(mode) ||
                 S_ISFIFO(mode) || S_ISSOCK(mode));
 
-        result = osd_mkfile(info, obj, mode, hint, th);
+        result = osd_mkfile(info, obj, mode, hint, th, iattr);
         if (result == 0) {
                 LASSERT(obj->oo_inode != NULL);
 		/*
@@ -2194,7 +2201,7 @@ typedef int (*osd_obj_type_f)(struct osd_thread_info *, struct osd_object *,
                               struct lu_attr *,
                               struct dt_allocation_hint *hint,
                               struct dt_object_format *dof,
-                              struct thandle *);
+                              struct thandle *, struct iattr *);
 
 static osd_obj_type_f osd_create_type_f(enum dt_format_type type)
 {
@@ -2274,6 +2281,8 @@ static void osd_attr_init(struct osd_thread_info *info, struct osd_object *obj,
         attr->la_valid = valid;
 }
 
+#define sec_to_ts(seconds) ((struct timespec) { .tv_sec = seconds })
+
 /**
  * Helper function for osd_object_create()
  *
@@ -2287,13 +2296,28 @@ static int __osd_object_create(struct osd_thread_info *info,
 {
 	int	result;
 	__u32	umask;
+	struct iattr iattr;
 
 	/* we drop umask so that permissions we pass are not affected */
 	umask = current->fs->umask;
 	current->fs->umask = 0;
 
+	/* Only this combination of attrs is allowed by ldiskfs */
+	iattr.ia_valid = ATTR_UID | ATTR_GID |
+			 ATTR_ATIME | ATTR_CTIME | ATTR_MTIME;
+	iattr.ia_uid = attr->la_valid & LA_UID ?
+		       attr->la_uid : current_fsuid();
+	iattr.ia_gid = attr->la_valid & LA_GID ?
+		       attr->la_gid : current_fsgid();
+	iattr.ia_atime = attr->la_valid & LA_ATIME ?
+			 sec_to_ts(attr->la_atime) : CURRENT_TIME_SEC;
+	iattr.ia_ctime = attr->la_valid & LA_CTIME ?
+			 sec_to_ts(attr->la_ctime) : CURRENT_TIME_SEC;
+	iattr.ia_mtime = attr->la_valid & LA_MTIME ?
+			 sec_to_ts(attr->la_mtime) : CURRENT_TIME_SEC;
+
 	result = osd_create_type_f(dof->dof_type)(info, obj, attr, hint, dof,
-						  th);
+						  th, &iattr);
 	if (result == 0) {
 		osd_attr_init(info, obj, attr, dof);
 		osd_object_init0(obj);
@@ -2685,7 +2709,8 @@ static struct inode *osd_create_local_agent_inode(const struct lu_env *env,
 
 	/* FIXME: Insert index api needs to know the mode of
 	 * the remote object. Just use S_IFDIR for now */
-	local = ldiskfs_create_inode(oh->ot_handle, pobj->oo_inode, S_IFDIR);
+	local = ldiskfs_create_inode(oh->ot_handle, pobj->oo_inode, S_IFDIR,
+				     NULL);
 	if (IS_ERR(local)) {
 		CERROR("%s: create local error %d\n", osd_name(osd),
 		       (int)PTR_ERR(local));
