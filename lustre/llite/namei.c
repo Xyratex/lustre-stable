@@ -229,10 +229,15 @@ int ll_dom_lock_cancel(struct inode *inode, struct ldlm_lock *lock)
 
 void ll_lock_cancel_bits(struct ldlm_lock *lock, __u64 to_cancel)
 {
-	struct inode *inode = ll_inode_from_resource_lock(lock);
+	struct inode *inode;
 	__u64 bits = to_cancel;
 	int rc;
 
+	/* Nothing to do for non-granted locks */
+	if (lock->l_req_mode != lock->l_granted_mode)
+		return;
+
+	inode = ll_inode_from_resource_lock(lock);
 	if (inode == NULL)
 		return;
 
