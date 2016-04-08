@@ -289,13 +289,12 @@ hsm_action_permission(struct mdt_thread_info *mti,
  * register a list of requests
  * \param mti [IN]
  * \param hal [IN] list of requests
- * \param compound_id [OUT] id of the compound request
  * \retval 0 success
  * \retval -ve failure
  * in case of restore, caller must hold layout lock
  */
 int mdt_hsm_add_actions(struct mdt_thread_info *mti,
-			struct hsm_action_list *hal, __u64 *compound_id)
+			struct hsm_action_list *hal)
 {
 	struct mdt_device	*mdt = mti->mti_mdt;
 	struct coordinator	*cdt = &mdt->mdt_coordinator;
@@ -304,6 +303,7 @@ int mdt_hsm_add_actions(struct mdt_thread_info *mti,
 	int			 rc = 0, i;
 	struct md_hsm		 mh;
 	bool			 is_restore = false;
+	__u64			 compound_id;
 	ENTRY;
 
 	/* no coordinator started, so we cannot serve requests */
@@ -313,7 +313,7 @@ int mdt_hsm_add_actions(struct mdt_thread_info *mti,
 	if (!hal_is_sane(hal))
 		RETURN(-EINVAL);
 
-	*compound_id = atomic_inc_return(&cdt->cdt_compound_id);
+	compound_id = atomic_inc_return(&cdt->cdt_compound_id);
 
 	/* search for compatible request, if found hai_cookie is set
 	 * to the request cookie
@@ -476,7 +476,7 @@ int mdt_hsm_add_actions(struct mdt_thread_info *mti,
 record:
 		OBD_FAIL_TIMEOUT(OBD_FAIL_MDS_HSM_CDT_DELAY, cfs_fail_val);
 		/* record request */
-		rc = mdt_agent_record_add(mti->mti_env, mdt, *compound_id,
+		rc = mdt_agent_record_add(mti->mti_env, mdt, compound_id,
 					  archive_id, flags, hai);
 		if (rc)
 			GOTO(out, rc);
@@ -624,4 +624,3 @@ int mdt_hsm_get_actions(struct mdt_thread_info *mti,
 
 	RETURN(0);
 }
-
