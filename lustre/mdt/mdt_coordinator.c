@@ -135,6 +135,10 @@ struct hsm_scan_request {
 struct hsm_scan_data {
 	struct mdt_thread_info		*mti;
 	char				 fs_name[MTI_NAME_MAXLEN+1];
+	/* are we scanning the logs for housekeeping, or just looking
+	 * for new work?
+	 */
+	bool				 housekeeping;
 	/* request to be send to agents */
 	int				 max_requests;	/** vector size */
 	int				 request_cnt;	/** used count */
@@ -199,13 +203,25 @@ static int mdt_coordinator_cb(const struct lu_env *env,
 		if (!request) {
 			struct hsm_action_list *hal;
 
-			if (hsd->request_cnt == hsd->max_requests)
-				/* Unknown request and no more room
-				 * for a new request. Continue to scan
-				 * to find other entries for already
-				 * existing requests.
-				 */
-				RETURN(0);
+			if (hsd->request_cnt == hsd->max_requests) {
+				if (!hsd->housekeeping) {
+					/* The request array is full,
+					 * stop here. There might be
+					 * more known requests that
+					 * could be merged, but this
+					 * avoid analyzing too many
+					 * llogs for minor gains.
+					 */
+					RETURN(LLOG_PROC_BREAK);
+				} else {
+					/* Unknown request and no more room
+					 * for a new request. Continue to scan
+					 * to find other entries for already
+					 * existing requests.
+					 */
+					RETURN(0);
+				}
+			}
 
 			request = &hsd->request[hsd->request_cnt];
 
@@ -289,6 +305,9 @@ static int mdt_coordinator_cb(const struct lu_env *env,
 		cfs_time_t now = cfs_time_current_sec();
 		cfs_time_t last;
 
+		if (!hsd->housekeeping)
+			break;
+
 		/* we search for a running request
 		 * error may happen if coordinator crashes or stopped
 		 * with running request
@@ -359,6 +378,9 @@ static int mdt_coordinator_cb(const struct lu_env *env,
 	case ARS_FAILED:
 	case ARS_CANCELED:
 	case ARS_SUCCEED:
+		if (!hsd->housekeeping)
+			break;
+
 		if ((larr->arr_req_change + cdt->cdt_grace_delay) <
 		    cfs_time_current_sec())
 			RETURN(LLOG_DEL_RECORD);
@@ -569,10 +591,15 @@ static int mdt_coordinator(void *data)
 
 		/* If no event, and no housekeeping to do, continue to
 		 * wait. */
-		if (last_housekeeping + cdt->cdt_loop_period <= get_seconds())
+		if (last_housekeeping + cdt->cdt_loop_period <=
+		    get_seconds()) {
 			last_housekeeping = get_seconds();
-		else if (!cdt->cdt_event)
+			hsd.housekeeping = true;
+		} else if (cdt->cdt_event) {
+			hsd.housekeeping = false;
+		} else {
 			continue;
+		}
 
 		cdt->cdt_event = false;
 
