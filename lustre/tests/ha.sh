@@ -413,7 +413,7 @@ ha_repeat_nonmpi_load()
                        rm -rf $dir" >>"$log" 2>&1 || rc=$?
 
         if ((rc != 0)); then
-            ha_dump_logs "$client ${ha_servers[*]}"
+            ha_dump_logs "${ha_clients[*]} ${ha_servers[*]}"
             touch "$ha_fail_file"
             touch "$ha_stop_file"
         fi
