@@ -113,6 +113,7 @@ static inline obd_size ofd_grant_chunk(struct obd_export *exp,
 void ofd_grant_sanity_check(struct obd_device *obd, const char *func)
 {
 	struct ofd_device	*ofd = ofd_dev(obd->obd_lu_dev);
+	struct filter_export_data       *fed;
 	struct obd_export	*exp;
 	obd_size		 maxsize;
 	obd_size		 tot_dirty = 0;
@@ -134,16 +135,19 @@ void ofd_grant_sanity_check(struct obd_device *obd, const char *func)
 
 	spin_lock(&obd->obd_dev_lock);
 	spin_lock(&ofd->ofd_grant_lock);
+	exp = obd->obd_self_export;
+	fed = &exp->exp_filter_data;
+	CDEBUG(D_CACHE, "%s: processing self export: %ld %ld "
+		"%ld\n", obd->obd_name, fed->fed_grant,
+		fed->fed_pending, fed->fed_dirty);
+	tot_granted += fed->fed_grant + fed->fed_pending;
+	tot_pending += fed->fed_pending;
+	tot_dirty += fed->fed_dirty;
+
 	list_for_each_entry(exp, &obd->obd_exports, exp_obd_chain) {
-		struct filter_export_data	*fed;
-		int				 error = 0;
+		int	 error = 0;
 
 		fed = &exp->exp_filter_data;
-
-		if (obd->obd_self_export == exp)
-			CDEBUG(D_CACHE, "%s: processing self export: %ld %ld "
-			       "%ld\n", obd->obd_name, fed->fed_grant,
-			       fed->fed_pending, fed->fed_dirty);
 
 		if (fed->fed_grant < 0 || fed->fed_pending < 0 ||
 		    fed->fed_dirty < 0)
