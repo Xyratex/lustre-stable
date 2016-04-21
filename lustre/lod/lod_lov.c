@@ -556,9 +556,9 @@ int lod_generate_and_set_lovea(const struct lu_env *env,
 			rc = lod_fld_lookup(env, lod, fid,
 				&index, LU_SEQ_RANGE_OST);
 		if (rc < 0) {
-			lod_object_free_striping(env, lo);
 			CERROR("%s: Can not locate "DFID": rc = %d\n",
 			       lod2obd(lod)->obd_name, PFID(fid), rc);
+			lod_object_free_striping(env, lo);
 			RETURN(rc);
 		}
 		objs[i].l_ost_idx = cpu_to_le32(index);
