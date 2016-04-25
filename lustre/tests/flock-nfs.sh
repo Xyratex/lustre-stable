@@ -158,8 +158,8 @@ run_test 3b "cleanup with blocked lock"
 
 test_4() {
 	nfs_start || return 1
-#define OBD_FAIL_LLITE_FLOCK_UNLOCK_RACE       0x1406
-	do_node $lustre_client "lctl set_param fail_loc=0x1406"
+#define OBD_FAIL_LLITE_FLOCK_UNLOCK_RACE       0x140a
+	do_node $lustre_client "lctl set_param fail_loc=0x140a"
 	do_node $lustre_client "flocks_test 5 set write sleep 10 $LUSTRE_MNT/$LOCKF" &
 	sleep 1
 	do_node $NFS_CLIENT "flocks_test 5 set write sleep 5 $LUSTRE_MNT/$LOCKF"
@@ -175,8 +175,8 @@ test_5() {
 	do_node $lustre_client \
 		"flocks_test 5 set write sleep 10 $LUSTRE_MNT/$LOCKF" &
 	sleep 1
-#define OBD_FAIL_LLITE_FLOCK_BL_GRANT_RACE     0x1407
-	do_node $lustre_client "lctl set_param fail_loc=0x1407"
+#define OBD_FAIL_LLITE_FLOCK_BL_GRANT_RACE     0x140b
+	do_node $lustre_client "lctl set_param fail_loc=0x140b"
 	do_node $NFS_CLIENT "flocks_test 5 set write sleep 5 $LUSTRE_MNT/$LOCKF"
 	wait
 	do_node $lustre_client "lctl set_param fail_loc=0"
