@@ -80,9 +80,10 @@ static bool can_populate_pages(const struct lu_env *env, struct cl_io *io,
 	case CIT_WRITE:
 		/* don't need lock here to check lli_layout_gen as we have held
 		 * extent lock and GROUP lock has to hold to swap layout */
-		if (ll_layout_version_get(lli) != cio->cui_layout_gen) {
+		if (ll_layout_version_get(lli) != cio->cui_layout_gen ||
+		    OBD_FAIL_CHECK_RESET(OBD_FAIL_LLITE_LOST_LAYOUT, 0)) {
 			io->ci_need_restart = 1;
-			/* this will return application a short read/write */
+			/* this will cause a short read/write */
 			io->ci_continue = 0;
 			rc = false;
 		}
@@ -764,35 +765,47 @@ int vvp_io_write_commit(const struct lu_env *env, struct cl_io *io)
 static int vvp_io_write_start(const struct lu_env *env,
                               const struct cl_io_slice *ios)
 {
-        struct ccc_io      *cio   = cl2ccc_io(env, ios);
-        struct cl_io       *io    = ios->cis_io;
-        struct cl_object   *obj   = io->ci_obj;
-        struct inode       *inode = ccc_object_inode(obj);
-        ssize_t result = 0;
-        loff_t pos = io->u.ci_wr.wr.crw_pos;
-        size_t cnt = io->u.ci_wr.wr.crw_count;
+	struct ccc_io      *cio   = cl2ccc_io(env, ios);
+	struct cl_io       *io    = ios->cis_io;
+	struct cl_object   *obj   = io->ci_obj;
+	struct inode       *inode = ccc_object_inode(obj);
+	ssize_t result = 0;
+	loff_t pos = io->u.ci_wr.wr.crw_pos;
+	size_t cnt = io->u.ci_wr.wr.crw_count;
 
-        ENTRY;
+	ENTRY;
 
 	if (!can_populate_pages(env, io, inode))
 		RETURN(0);
 
-        if (cl_io_is_append(io)) {
-                /*
-                 * PARALLEL IO This has to be changed for parallel IO doing
-                 * out-of-order writes.
-                 */
-                pos = io->u.ci_wr.wr.crw_pos = i_size_read(inode);
-                cio->cui_iocb->ki_pos = pos;
-        } else {
+	if (cl_io_is_append(io)) {
+		/*
+		 * PARALLEL IO This has to be changed for parallel IO doing
+		 * out-of-order writes.
+		 */
+		pos = io->u.ci_wr.wr.crw_pos = i_size_read(inode);
+		cio->cui_iocb->ki_pos = pos;
+	} else {
 		LASSERT(cio->cui_iocb->ki_pos == pos);
 	}
 
-        CDEBUG(D_VFSTRACE, "write: [%lli, %lli)\n", pos, pos + (long long)cnt);
+	CDEBUG(D_VFSTRACE, "write: [%lli, %lli)\n", pos, pos + (long long)cnt);
 
-        if (cio->cui_iov == NULL) /* from a temp io in ll_cl_init(). */
-                result = 0;
-        else
+	/* The maximum Lustre file size is variable, based on the OST maximum
+	 * object size and number of stripes.  This needs another check in
+	 * addition to the VFS checks earlier. */
+	if (pos + cnt > ll_file_maxbytes(inode)) {
+		CDEBUG(D_INODE,
+		       "%s: file "DFID" offset %llu > maxbytes "LPU64"\n",
+		       ll_get_fsname(inode->i_sb, NULL, 0),
+		       PFID(ll_inode2fid(inode)), pos + cnt,
+		       ll_file_maxbytes(inode));
+		RETURN(-EFBIG);
+	}
+
+	if (cio->cui_iov == NULL) /* from a temp io in ll_cl_init(). */
+		result = 0;
+	else
 		result = generic_file_aio_write(cio->cui_iocb,
 						cio->cui_iov, cio->cui_nrsegs,
 						cio->cui_iocb->ki_pos);
@@ -803,7 +816,7 @@ static int vvp_io_write_start(const struct lu_env *env,
 			io->ci_nob += result;
 
 			CDEBUG(D_VFSTRACE, "write: nob %zd, result: %zd\n",
-				io->ci_nob, result);
+			       io->ci_nob, result);
 		}
 	}
 	if (result > 0) {
