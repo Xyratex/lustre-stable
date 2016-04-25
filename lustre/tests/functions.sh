@@ -352,6 +352,7 @@ run_metabench() {
     mbench_NFILES=${mbench_NFILES:-30400}
     # threads per client
     mbench_THREADS=${mbench_THREADS:-4}
+	mbench_CLEANUP=${mbench_CLEANUP:-true}
 
     [ x$METABENCH = x ] &&
         { skip_env "metabench not found" && return; }
@@ -369,7 +370,7 @@ run_metabench() {
     # -C             Run the file creation tests.
     # -S             Run the file stat tests.
     # -c nfile       Number of files to be used in each test.
-    # -k             Cleanup.  Remove the test directories.
+    # -k          => dont cleanup files when finished.
     local cmd="$METABENCH -w $testdir -c $mbench_NFILES -C -S -k $mbench_OPTIONS"
     echo "+ $cmd"
 
@@ -386,7 +387,12 @@ run_metabench() {
     if [ $rc != 0 ] ; then
         error "metabench failed! $rc"
     fi
-    rm -rf $testdir
+
+	if $mbench_CLEANUP; then
+		rm -rf $testdir
+	else
+		mv $dir/d0.metabench $dir/_xxx.$(date +%s).d0.metabench
+	fi
 }
 
 run_simul() {
