@@ -1274,8 +1274,10 @@ int lustre_fill_super(struct super_block *sb, void *data, int silent)
 
         /* Figure out the lmd from the mount options */
         if (lmd_parse((char *)(lmd2->lmd2_data), lmd)) {
+		rc = -EINVAL;
+		CERROR("Parse mount data failed: rc = %d", rc);
                 lustre_put_lsi(sb);
-                GOTO(out, rc = -EINVAL);
+                GOTO(out, rc);
         }
 
         if (lmd_is_client(lmd)) {
@@ -1291,6 +1293,8 @@ int lustre_fill_super(struct super_block *sb, void *data, int silent)
                 } else {
                         rc = lustre_start_mgc(sb);
                         if (rc) {
+				CERROR("Failed to start mgc while mounting "
+					"device %s: rc = %d", lmd->lmd_dev, rc);
                                 lustre_put_lsi(sb);
                                 GOTO(out, rc);
                         }

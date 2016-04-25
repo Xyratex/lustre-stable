@@ -1700,6 +1700,8 @@ int server_fill_super(struct super_block *sb)
 
 	rc = lsi_prepare(lsi);
 	if (rc) {
+		CERROR("lsi prepare failed device : %s, rc = %d",
+			lsi->lsi_lmd->lmd_dev, rc);
 		lustre_put_lsi(sb);
 		RETURN(rc);
 	}
@@ -1767,6 +1769,8 @@ out_mnt:
 	/* We jump here in case of failure while starting targets or MGS.
 	 * In this case we can't just put @mnt and have to do real cleanup
 	 * with stoping targets, etc. */
+	CERROR("Server fill super failed while mounting device %s: rc = %d",
+			lsi->lsi_lmd->lmd_dev, rc);
 	server_put_super(sb);
 	return rc;
 }

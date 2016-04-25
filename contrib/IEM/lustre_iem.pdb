@@ -392,44 +392,6 @@ The IEM support is added and tested for 2.5.x version of Lustre.
 					</action>
 				</actions>
 			</rule>
-			<rule provider="lustre" id="332325e5-0c30-45da-bd2a-7206e3656174" class="system">
-				<patterns>
-					<pattern>LustreError: @NUMBER:pid@:@NUMBER:ext_pid@:(@ESTRING:file::@@NUMBER:line@:@ESTRING:func:(@)) Unable to mount @ANYSTRING:error_info@</pattern>
-				</patterns>
-			<examples>
-			<example>
-				<test_message program='patternize'>LustreError: 29743:0:(obd_mount.c:2393:lustre_fill_super()) Unable to mount (-5)</test_message>
-				<test_values>
-					<test_value name="pid">29743</test_value>
-					<test_value name="ext_pid">0</test_value>
-					<test_value name="filename">obd_mount.c</test_value>
-					<test_value name="line">2393</test_value>
-					<test_value name="func_name">lustre_fill_super</test_value>
-					<test_value name="error_info">(-5)</test_value>
-				</test_values>
-				<test_message program='patternize'>LustreError: 29743:0:(obd_mount.c:2393:lustre_fill_super()) Unable to mount /dev/mapper/sultan-ddn-l0 (-22)</test_message>
-				<test_values>
-					<test_value name="pid">29743</test_value>
-					<test_value name="ext_pid">0</test_value>
-					<test_value name="filename">obd_mount.c</test_value>
-					<test_value name="line">2393</test_value>
-					<test_value name="func_name">lustre_fill_super</test_value>
-					<test_value name="error_info">/dev/mapper/sultan-ddn-l0 (-22)</test_value>
-				</test_values>
-			</example>
-			</examples>
-				<tags>
-					<tag>mount_error</tag>
-					<tag>iem_reinject</tag>
-				</tags>
-				<actions>
-					<action>
-						<values>
-							<value name="MESSAGE">IEC: 026001002: MOUNT FAILURE: { "pid": "$pid", "ext_pid": "$ext_pid", "filename": "$file", "line": "$line", "func_name": "$func", "error_info": "$error_info" }</value>
-						</values>
-					</action>
-				</actions>
-			</rule>
 			<rule provider="lustre" id="362fd8ae-88d5-457a-9a8a-c78205cd2dfc" class="system">
 				<patterns>
 					<pattern>LDISKFS-fs (@ESTRING:device:)@: mount failed</pattern>
@@ -449,7 +411,7 @@ The IEM support is added and tested for 2.5.x version of Lustre.
 				<actions>
 					<action>
 						<values>
-							<value name="MESSAGE">IEC: 026001003: MOUNT FAILURE: { "device": "$device" }</value>
+							<value name="MESSAGE">IEC: 026001002: MOUNT FAILURE: { "device": "$device" }</value>
 						</values>
 					</action>
 				</actions>
@@ -473,7 +435,7 @@ The IEM support is added and tested for 2.5.x version of Lustre.
 				<actions>
 					<action>
 						<values>
-							<value name="MESSAGE">IEC: 026001004: LDISKFS KERNEL PANIC: { "err_msg": "$err_msg" }</value>
+							<value name="MESSAGE">IEC: 026001003: LDISKFS KERNEL PANIC: { "err_msg": "$err_msg" }</value>
 						</values>
 					</action>
 				</actions>
@@ -498,7 +460,7 @@ The IEM support is added and tested for 2.5.x version of Lustre.
 				<actions>
 					<action>
 						<values>
-							<value name="MESSAGE">IEC: 026001005: LDISKFS WARNING: { "device": "$device", "warn_msg": "$warn_msg" }</value>
+							<value name="MESSAGE">IEC: 026001004: LDISKFS WARNING: { "device": "$device", "warn_msg": "$warn_msg" }</value>
 						</values>
 					</action>
 				</actions>
@@ -1337,4 +1299,249 @@ The IEM support is added and tested for 2.5.x version of Lustre.
 			</rule>
 		</rules>
 	</ruleset>
+
+	<ruleset name='mount_errors' id="f441e4db-d8b1-4f5d-b2a9-08a3cd700950">
+		<description>
+			Mount Errors
+		</description>
+		<rules>
+			<rule provider="lustre" id="019f9720-981f-416c-8371-85b499bd5898" class="system">
+				<patterns>
+					<pattern>LustreError: @NUMBER:pid@:@NUMBER:ext_pid@:(@ESTRING:file::@@NUMBER:line@:@ESTRING:func:(@)) Unable to mount @ANYSTRING:error_info@</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>LustreError: 29743:0:(obd_mount.c:2393:lustre_fill_super()) Unable to mount (-5)</test_message>
+				<test_values>
+					<test_value name="pid">29743</test_value>
+					<test_value name="ext_pid">0</test_value>
+					<test_value name="filename">obd_mount.c</test_value>
+					<test_value name="line">2393</test_value>
+					<test_value name="func_name">lustre_fill_super</test_value>
+					<test_value name="error_info">(-5)</test_value>
+				</test_values>
+				<test_message program='patternize'>LustreError: 29743:0:(obd_mount.c:2393:lustre_fill_super()) Unable to mount /dev/mapper/xyz-l0 (-22)</test_message>
+				<test_values>
+					<test_value name="pid">29743</test_value>
+					<test_value name="ext_pid">0</test_value>
+					<test_value name="filename">obd_mount.c</test_value>
+					<test_value name="line">2393</test_value>
+					<test_value name="func_name">lustre_fill_super</test_value>
+					<test_value name="error_info">/dev/mapper/xyz-10 (-22)</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>mount_error</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026011001: MOUNT FAILURE: { "pid": "$pid", "ext_pid": "$ext_pid", "filename": "$file", "line": "$line", "func_name": "$func", "error_info": "$error_info" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+			<rule provider="lustre" id="29a7aaf4-aa83-48b4-a7fa-c79c5219dfe5" class="system">
+				<patterns>
+					<pattern>LustreError: @NUMBER:pid@:@NUMBER:ext_pid@:(@ESTRING:file::@@NUMBER:line@:@ESTRING:func:(@)) Failed to start mgc while mounting device @ESTRING:device::@ rc = @NUMBER:status_code@</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>LustreError: 24445:0:(obd_mount.c:1281:lustre_fill_super()) Failed to start mgc while mounting device /dev/loop0: rc = -4 </test_message>
+				<test_values>
+					<test_value name="pid">24445</test_value>
+					<test_value name="ext_pid">0</test_value>
+					<test_value name="filename">obd_mount.c</test_value>
+					<test_value name="line">1281</test_value>
+					<test_value name="func_name">lustre_fill_super</test_value>
+					<test_value name="device">/dev/loop0</test_value>
+					<test_value name="status">-4</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>mount_error</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026011002: MOUNT FAILURE: { "pid": "$pid", "ext_pid": "$ext_pid", "filename": "$file", "line": "$line", "func_name": "$func", "device": "$device", "status": "$status_code" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+			<rule provider="lustre" id="f1fe3a2b-483d-47dc-85ab-97bf3c2e6181" class="system">
+				<patterns>
+					<pattern>LustreError: @NUMBER:pid@:@NUMBER:ext_pid@:(@ESTRING:file::@@NUMBER:line@:@ESTRING:func:(@)) Server fill super failed while mounting device @ESTRING:device::@ rc = @NUMBER:status_code@</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>LustreError: 24604:0:(obd_mount_server.c:1727:server_fill_super()) Server fill super failed while mounting device /dev/loop1: rc = -5 </test_message>
+				<test_values>
+					<test_value name="pid">24604</test_value>
+					<test_value name="ext_pid">0</test_value>
+					<test_value name="filename">obd_mount_server.c</test_value>
+					<test_value name="line">1727</test_value>
+					<test_value name="func_name">server_fill_super</test_value>
+					<test_value name="device">/dev/loop1</test_value>
+					<test_value name="status">-5</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>mount_error</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026011003: MOUNT FAILURE: { "pid": "$pid", "ext_pid": "$ext_pid", "filename": "$file", "line": "$line", "func_name": "$func", "device": "$device", "status": "$status_code" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+			<rule provider="lustre" id="ac72e010-3dd1-4fca-bade-baacc86fd0b6" class="system">
+				<patterns>
+					<pattern>LustreError: @NUMBER:pid@:@NUMBER:ext_pid@:(@ESTRING:file::@@NUMBER:line@:@ESTRING:func:(@)) Unable to start osd on @ESTRING:device::@ @NUMBER:status_code@</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>LustreError: 12047:0:(obd_mount_server.c:1682:server_fill_super()) Unable to start osd on lustre-mgt/mgt: -19</test_message>
+				<test_values>
+					<test_value name="pid">12047</test_value>
+					<test_value name="ext_pid">0</test_value>
+					<test_value name="filename">obd_mount_server.c</test_value>
+					<test_value name="line">1682</test_value>
+					<test_value name="func_name">server_fill_super</test_value>
+					<test_value name="device">lustre-mgt/mgt</test_value>
+					<test_value name="status">-19</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>mount_error</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026011004: MOUNT FAILURE: { "pid": "$pid", "ext_pid": "$ext_pid", "filename": "$file", "line": "$line", "func_name": "$func", "device": "$device", "status": "$status_code" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+			<rule provider="lustre" id="5fe61d30-7c0f-4982-a7f2-c9f31fcf84b2" class="system">
+				<patterns>
+					<pattern>LustreError: @NUMBER:pid@:@NUMBER:ext_pid@:(@ESTRING:file::@@NUMBER:line@:@ESTRING:func:(@)) lsi prepare failed device : @ESTRING:device:,@ rc = @NUMBER:status_code@</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>LustreError: 24445:0:(obd_mount_server.c:1698:server_fill_super()) lsi prepare failed device : /dev/loop0, rc = -22</test_message>
+				<test_values>
+					<test_value name="pid">24445</test_value>
+					<test_value name="ext_pid">0</test_value>
+					<test_value name="filename">obd_mount_server.c</test_value>
+					<test_value name="line">1698</test_value>
+					<test_value name="func_name">server_fill_super</test_value>
+					<test_value name="device">/dev/loop0</test_value>
+					<test_value name="status">-22</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>mount_error</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026011005: MOUNT FAILURE: { "pid": "$pid", "ext_pid": "$ext_pid", "filename": "$file", "line": "$line", "func_name": "$func", "device": "$device", "status": "$status_code" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+			<rule provider="lustre" id="2c8d7e13-8866-4a28-bd59-ad89c228bdbb" class="system">
+				<patterns>
+					<pattern>LustreError: @ESTRING:errno::@ The target named @ESTRING:err_msg:.@ Double-mount may have compromised the disk journal.</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>LustreError: 161-6: The target named lustre-OST0000 is already running. Double-mount may have compromised the disk journal.</test_message>
+				<test_values>
+					<test_value name="errno">161-6</test_value>
+					<test_value name="err_msg">lustre-OST0000 is already running</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>mount_error</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026011006: MOUNT FAILURE: { "errno": "$errno", "err_msg": "$err_msg" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+			<rule provider="lustre" id="97bf542b-a0f5-41d9-a62b-92d0d8f87054" class="system">
+				<patterns>
+					<pattern>LustreError: @ESTRING:errno::@ Nothing registered for client mount! Is the 'lustre' module loaded?</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>LustreError: 165-2: Nothing registered for client mount! Is the 'lustre' module loaded?</test_message>
+				<test_values>
+					<test_value name="errno">165-2</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>mount_error</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026011007: MOUNT FAILURE: { "errno": "$errno" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+			<rule provider="lustre" id="596f23f3-eb25-464d-998e-5794d8bdddea" class="system">
+				<patterns>
+					<pattern>LustreError: @NUMBER:pid@:@NUMBER:ext_pid@:(@ESTRING:file::@@NUMBER:line@:@ESTRING:func:(@)) Parse mount data failed: rc = @NUMBER:status_code@</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>LustreError: 24445:0:(obd_mount.c:1271:lustre_fill_super()) Parse mount data failed: rc = %d</test_message>
+				<test_values>
+					<test_value name="pid">24445</test_value>
+					<test_value name="ext_pid">0</test_value>
+					<test_value name="filename">obd_mount.c</test_value>
+					<test_value name="line">1271</test_value>
+					<test_value name="func_name">lustre_fill_super</test_value>
+					<test_value name="status">-22</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>mount_error</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026011008: MOUNT FAILURE: { "pid": "$pid", "ext_pid": "$ext_pid", "filename": "$file", "line": "$line", "func_name": "$func", "status": "$status_code" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
+		</rules>
+	</ruleset>
+
 </patterndb>
