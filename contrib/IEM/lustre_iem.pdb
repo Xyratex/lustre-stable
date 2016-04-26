@@ -1201,18 +1201,19 @@ The IEM support is added and tested for 2.5.x version of Lustre.
 		<rules>
 			<rule provider="lustre" id="51d5ccf3-1214-4306-9a77-aaae214aad14" class="system">
 				<patterns>
-					<pattern>@ESTRING:timestamp:(@@ESTRING:file::@@NUMBER:line@:@ESTRING:func:(@)) @ESTRING:device::@ namespace LFSCK post done: rc = 0</pattern>
+					<pattern>Lustre: @NUMBER:pid@:@NUMBER:ext_pid@:(@ESTRING:file::@@NUMBER:line@:@ESTRING:func:(@)) @ESTRING:device::@ namespace LFSCK post done: rc = 0</pattern>
 				</patterns>
 			<examples>
 			<example>
 				<!-- This is debug message to inform user that lfsck done successefully.
 				-->
-				<test_message program='patternize'>00100000:10000000:1.0:1414753245.981685:0:9875:0:(lfsck_namespace.c:4181:lfsck_namespace_post()) lustre-MDT0000-osd: namespace LFSCK post done: rc = 0</test_message>
+				<test_message program='patternize'>Lustre: 3788:0:(lfsck_namespace.c:1127:lfsck_namespace_post()) lustre-MDT0000-osd: namespace LFSCK post done: rc = 0</test_message>
 				<test_values>
+					<test_value name="pid">3788</test_value>
+					<test_value name="ext_pid">0</test_value>
 					<test_value name="filename">lfsck_namespace.c</test_value>
-					<test_value name="line">4181</test_value>
+					<test_value name="line">1127</test_value>
 					<test_value name="func_name">lfsck_namespace_post</test_value>
-					<test_value name="timestamp">00100000:10000000:1.0:1414753245.981685:0:9875:0:</test_value>
 					<test_value name="device">lustre-MDT0000-osd</test_value>
 				</test_values>
 			</example>
@@ -1224,7 +1225,7 @@ The IEM support is added and tested for 2.5.x version of Lustre.
 				<actions>
 					<action>
 						<values>
-							<value name="MESSAGE">IEC: 026008001: DEBUG - LFSCK POST DONE: { "filename": "$file", "line": "$line", "func_name": "$func", "timestamp": "$timestamp", "device":"$device" }</value>
+							<value name="MESSAGE">IEC: 026008001: LFSCK POST DONE: { "pid": "$pid", "ext_pid": "$ext_pid", "filename": "$file", "line": "$line", "func_name": "$func", "device":"$device" }</value>
 						</values>
 					</action>
 				</actions>
