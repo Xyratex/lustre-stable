@@ -2316,8 +2316,8 @@ test_89() {
         cancel_lru_locks osc
         mkdir -p $DIR/$tdir
         rm -f $DIR/$tdir/$tfile
-        wait_mds_ost_sync
-        wait_delete_completed
+        wait_mds_ost_sync || error "MDS-OST sync timed out"
+	wait_delete_completed || error "Wait delete timed out"
         BLOCKS1=$(df -P $MOUNT | tail -n 1 | awk '{ print $3 }')
         $SETSTRIPE -i 0 -c 1 $DIR/$tdir/$tfile
         dd if=/dev/zero bs=1M count=10 of=$DIR/$tdir/$tfile
@@ -2329,8 +2329,8 @@ test_89() {
         mount_facet ost1
         zconf_mount $(hostname) $MOUNT
         client_up || return 1
-        wait_mds_ost_sync
-        wait_delete_completed
+        wait_mds_ost_sync || error "MDS-OST sync timed out"
+	wait_delete_completed || error "Wait delete timed out"
         BLOCKS2=$(df -P $MOUNT | tail -n 1 | awk '{ print $3 }')
 	[ $((BLOCKS2 - BLOCKS1)) -le 4  ] || \
 		error $((BLOCKS2 - BLOCKS1)) blocks leaked
