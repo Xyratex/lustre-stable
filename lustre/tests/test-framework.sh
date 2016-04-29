@@ -4577,13 +4577,21 @@ pgcache_empty() {
 }
 
 debugsave() {
-    DEBUGSAVE="$(lctl get_param -n debug)"
+	DEBUGSAVE="$(lctl get_param -n debug)"
+	DEBUGSAVE_SERVER=$(do_facet $SINGLEMDS "$LCTL get_param -n debug")
 }
 
 debugrestore() {
-    [ -n "$DEBUGSAVE" ] && \
-        do_nodes $(comma_list $(nodes_list)) "$LCTL set_param debug=\\\"${DEBUGSAVE}\\\";"
-    DEBUGSAVE=""
+	[ -n "$DEBUGSAVE" ] &&
+		do_nodes $CLIENTS "$LCTL set_param debug=\\\"${DEBUGSAVE}\\\""\
+		|| true
+	DEBUGSAVE=""
+
+	[ -n "DEBUGSAVE_SERVER" ] &&
+		do_nodes $(comma_list $(all_server_nodes)) \
+			 "$LCTL set_param debug=\\\"${DEBUGSAVE_SERVER}\\\"" ||\
+			 true
+	DEBUGSAVE_SERVER=""
 }
 
 debug_size_save() {
@@ -4888,7 +4896,7 @@ check_mds() {
 reset_fail_loc () {
     echo -n "Resetting fail_loc and fail_val on all nodes..."
     do_nodes $(comma_list $(nodes_list)) "lctl set_param -n fail_loc=0 \
-	    fail_val=0 2>/dev/null || true"
+	    fail_val=0 2>/dev/null" || true
     echo done.
 }
 
