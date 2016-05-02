@@ -95,7 +95,16 @@ init_agt_vars() {
 	export HSMTOOL_EVENT_FIFO=${HSMTOOL_EVENT_FIFO:=""}
 	export HSMTOOL_TESTDIR
 	export HSMTOOL_BASE=$(basename "$HSMTOOL" | cut -f1 -d" ")
+	# $hsm_root/$HSMTMP Makes $hsm_root dir path less generic to ensure
+	# rm -rf $hsm_root/* is safe even if $hsm_root becomes unset to avoid
+	# deleting everything in filesystem, independent of any copytool.
+	export HSMTMP=${HSMTMP:-"shsm"}
+
 	HSM_ARCHIVE=$(copytool_device $SINGLEAGT)
+
+	[ -z "${HSM_ARCHIVE// /}" ] && error "HSM_ARCHIVE is empty!"
+	HSM_ARCHIVE=$HSM_ARCHIVE/$HSMTMP
+
 	HSM_ARCHIVE_NUMBER=2
 
 	# The test only support up to 10 MDTs
@@ -212,6 +221,9 @@ copytool_setup() {
 	local lustre_mntpnt=${2:-$MOUNT}
 	local arc_id=$3
 	local hsm_root=${4:-$(copytool_device $facet)}
+
+	[ -z "${hsm_root// /}" ] && error "copytool_setup: hsm_root empty!"
+
 	local agent=$(facet_active_host $facet)
 
 	if [[ -z "$arc_id" ]] &&
@@ -222,14 +234,16 @@ copytool_setup() {
 
 	if $HSM_ARCHIVE_PURGE; then
 		echo "Purging archive on $agent"
-		do_facet $facet "rm -rf $hsm_root/*"
+		do_facet $facet "rm -rf $hsm_root/$HSMTMP/*"
 	fi
 
 	echo "Starting copytool $facet on $agent"
-	do_facet $facet "mkdir -p $hsm_root" || error "mkdir '$hsm_root' failed"
+	do_facet $facet "mkdir -p $hsm_root/$HSMTMP/" ||
+			error "mkdir '$hsm_root/$HSMTMP' failed"
 	# bandwidth is limited to 1MB/s so the copy time is known and
 	# independent of hardware
-	local cmd="$HSMTOOL $HSMTOOL_VERBOSE --daemon --hsm-root $hsm_root"
+	local cmd="$HSMTOOL $HSMTOOL_VERBOSE --daemon"
+	cmd+=" --hsm-root $hsm_root/$HSMTMP"
 	[[ -z "$arc_id" ]] || cmd+=" --archive $arc_id"
 	[[ -z "$HSMTOOL_UPDATE_INTERVAL" ]] ||
 		cmd+=" --update-interval $HSMTOOL_UPDATE_INTERVAL"
@@ -274,6 +288,8 @@ copytool_cleanup() {
 	local mdt_hsmctrl
 	local hsm_root=$(copytool_device $facet)
 
+	[ -z "${hsm_root// /}" ] && error "copytool_cleanup: hsm_root empty!"
+
 	do_nodesv $agents "pkill -INT -x $HSMTOOL_BASE" || return 0
 	sleep 1
 	echo "Copytool is stopped on $agents"
@@ -298,7 +314,7 @@ copytool_cleanup() {
 			error "mds${mdtno} cdt state is not $oldstate"
 	done
 	if do_facet $facet "df $hsm_root" >/dev/null 2>&1 ; then
-		do_facet $facet "rm -rf $hsm_root/*"
+		do_facet $facet "rm -rf $hsm_root/$HSMTMP/*"
 	fi
 }
 
