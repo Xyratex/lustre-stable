@@ -1506,7 +1506,7 @@ test_16() {
 	local end=$(date +%s)
 	local duration=$((end - start))
 
-	[[ $duration -ge $goal ]] ||
+	[[ $duration -ge $((goal - 1)) ]] ||
 		error "Transfer is too fast $duration < $goal"
 
 	copytool_cleanup
