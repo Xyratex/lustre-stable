@@ -73,7 +73,6 @@
 #include <lustre_quota.h>
 
 #include <ldiskfs/xattr.h>
-#define INIT_GOAL_INODE 2
 
 int ldiskfs_pdo = 1;
 CFS_MODULE_PARM(ldiskfs_pdo, "i", int, 0644,
@@ -2053,24 +2052,10 @@ static int osd_mkfile(struct osd_thread_info *info, struct osd_object *obj,
         if (hint && hint->dah_parent)
                 parent = hint->dah_parent;
 
-	if (parent == NULL) {
-		struct inode *dir;
-
-		dir = osd_sb(osd)->s_root->d_inode;
-		if (S_ISDIR(mode) &&
-		    (LDISKFS_SB(dir->i_sb)->s_inode_goal == 0)) {
-			LDISKFS_SB(dir->i_sb)->s_inode_goal = INIT_GOAL_INODE;
-			inode = ldiskfs_create_inode(oth->ot_handle, dir, mode);
-			LDISKFS_SB(dir->i_sb)->s_inode_goal = 0;
-		} else {
-			inode = ldiskfs_create_inode(oth->ot_handle, dir, mode);
-		}
-	} else {
-		inode = ldiskfs_create_inode(oth->ot_handle,
-					     osd_dt_obj(parent)->oo_inode,
-					     mode);
-	}
-
+        inode = ldiskfs_create_inode(oth->ot_handle,
+                                     parent ? osd_dt_obj(parent)->oo_inode :
+                                              osd_sb(osd)->s_root->d_inode,
+                                     mode);
         if (!IS_ERR(inode)) {
 		/* Do not update file c/mtime in ldiskfs. */
 		inode->i_flags |= S_NOCMTIME;
