@@ -50,11 +50,13 @@ fi
 [ -z "$MODPROBECONF" -a -f /etc/modprobe.conf ] &&
     MODPROBECONF=/etc/modprobe.conf
 
-validate_parameters() {
+sanitize_parameters() {
 	for i in DIR DIR1 DIR2 MOUNT MOUNT1 MOUNT2
 	do
 		local path=${!i}
-		eval export $i=$(echo $path | sed -E 's/\/+$//g')
+		if [ -d "$path" ]; then
+			eval export $i=$(echo $path | sed -r 's/\/+$//g')
+		fi
 	done
 }
 
@@ -3875,13 +3877,13 @@ is_empty_fs() {
 }
 
 check_and_setup_lustre() {
-	validate_parameters
-    nfs_client_mode && return
-    cifs_client_mode && return
+	sanitize_parameters
+	nfs_client_mode && return
+	cifs_client_mode && return
 
-    local MOUNTED=$(mounted_lustre_filesystems)
+	local MOUNTED=$(mounted_lustre_filesystems)
 
-    local do_check=true
+	local do_check=true
     # 1.
     # both MOUNT and MOUNT2 are not mounted
     if ! is_mounted $MOUNT && ! is_mounted $MOUNT2; then
