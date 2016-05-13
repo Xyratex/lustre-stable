@@ -211,6 +211,7 @@ int ptlrpc_resend(struct obd_import *imp)
         }
 	spin_unlock(&imp->imp_lock);
 
+	OBD_FAIL_TIMEOUT(OBD_FAIL_LDLM_ENQUEUE_OLD_EXPORT, 2);
 	RETURN(0);
 }
 EXPORT_SYMBOL(ptlrpc_resend);
