@@ -9984,6 +9984,16 @@ test_155h() {
 }
 run_test 155h "Verify big file correctness: read cache:off write_cache:off"
 
+test_155i() {
+	[[ $OSTCOUNT -lt 2 ]] && skip_env "need 2 osts" && return
+	local tb=$((1024 * 1024 * 1024 * 1024))
+	$SETSTRIPE -c 2 $DIR/$tfile
+	dd if=/dev/zero of=$DIR/$tfile bs=1 seek=$((20 * tb)) count=1
+	$READS -f $DIR/$tfile -l 512 -o $((16 * tb)) -b 4096 -s \
+	    $((20 * tb + 1)) -n 4
+}
+run_test 155i "Verify big file correctness: test ras_update"
+
 test_156() {
 	remote_ost_nodsh && skip "remote OST with nodsh" && return
 	[ $PARALLEL == "yes" ] && skip "skip parallel run" && return
