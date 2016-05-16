@@ -690,7 +690,8 @@ int ll_readahead(const struct lu_env *env, struct cl_io *io,
 static void ras_set_start(struct inode *inode, struct ll_readahead_state *ras,
 			  unsigned long index)
 {
-	ras->ras_window_start = index & (~(RAS_INCREASE_STEP(inode) - 1));
+	ras->ras_window_start = index &
+		(~((unsigned long)RAS_INCREASE_STEP(inode) - 1));
 }
 
 /* called with the ras_lock held or from places where it doesn't matter */
