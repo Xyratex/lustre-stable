@@ -1165,6 +1165,16 @@ int mdt_open_by_fid(struct mdt_thread_info *info, struct ldlm_reply *rep)
         RETURN(rc);
 }
 
+static ldlm_mode_t open_flags_to_lock_mode(__u64 open_flags)
+{
+	if (open_flags & FMODE_WRITE)
+		return LCK_CW;
+	else if (open_flags & MDS_FMODE_EXEC)
+		return LCK_PR;
+
+	return LCK_CR;
+}
+
 /* lock object for open */
 static int mdt_object_open_lock(struct mdt_thread_info *info,
 				struct mdt_object *obj,
@@ -1225,26 +1235,33 @@ static int mdt_object_open_lock(struct mdt_thread_info *info,
 		down_read(&obj->mot_open_sem);
 
 		if (open_flags & MDS_OPEN_LOCK) {
-			if (open_flags & FMODE_WRITE)
-				lm = LCK_CW;
-			else if (open_flags & MDS_FMODE_EXEC)
-				lm = LCK_PR;
-			else
-				lm = LCK_CR;
-
+			lm = open_flags_to_lock_mode(open_flags);
 			*ibits = MDS_INODELOCK_LOOKUP | MDS_INODELOCK_OPEN;
 		} else if (atomic_read(&obj->mot_lease_count) > 0) {
-			if (open_flags & FMODE_WRITE)
-				lm = LCK_CW;
-			else
-				lm = LCK_CR;
-
 			/* revoke lease */
+			lm = open_flags_to_lock_mode(open_flags);
 			*ibits = MDS_INODELOCK_OPEN;
 			try_layout = false;
 
 			lhc = &info->mti_lh[MDT_LH_LOCAL];
+		} else if (S_ISREG(lu_object_attr(&obj->mot_obj)) &&
+			   open_flags & (FMODE_WRITE | MDS_FMODE_EXEC)) {
+			/*
+			 * We need to flush open handles for proper ETXTBUSY
+			 * reporting, but the client is not interested in an
+			 * open lock, so lock and unlock immediately.
+			 */
+			CDEBUG(D_INODE, "open lock and unlock "DFID"\n",
+			       PFID(mdt_object_fid(obj)));
+			mdt_lock_reg_init(lhc,
+					  open_flags_to_lock_mode(open_flags));
+			rc = mdt_object_lock(info, obj, lhc, MDS_INODELOCK_OPEN,
+					     MDT_CROSS_LOCK);
+			if (rc < 0)
+				GOTO(out, rc);
+			mdt_object_unlock(info, obj, lhc, 1);
 		}
+
 		CDEBUG(D_INODE, "normal open:"DFID" lease count: %d, lm: %d\n",
 			PFID(mdt_object_fid(obj)),
 			atomic_read(&obj->mot_open_count), lm);
@@ -1260,13 +1277,15 @@ static int mdt_object_open_lock(struct mdt_thread_info *info,
 		 * lock for each open.
 		 * However this is a double-edged sword because changing
 		 * permission will revoke huge # of LOOKUP locks. */
-		*ibits |= MDS_INODELOCK_LAYOUT | MDS_INODELOCK_LOOKUP;
-		if (!mdt_object_lock_try(info, obj, lhc, *ibits,
+		if (!mdt_object_lock_try(info, obj, lhc,
+					 *ibits | MDS_INODELOCK_LAYOUT |
+						  MDS_INODELOCK_LOOKUP,
 					 MDT_CROSS_LOCK)) {
-			*ibits &= ~(MDS_INODELOCK_LAYOUT|MDS_INODELOCK_LOOKUP);
 			if (*ibits != 0)
 				rc = mdt_object_lock(info, obj, lhc, *ibits,
 						MDT_CROSS_LOCK);
+		} else {
+			*ibits |= MDS_INODELOCK_LAYOUT | MDS_INODELOCK_LOOKUP;
 		}
 	} else if (*ibits != 0) {
 		rc = mdt_object_lock(info, obj, lhc, *ibits, MDT_CROSS_LOCK);
