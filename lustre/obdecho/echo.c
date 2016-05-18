@@ -339,7 +339,7 @@ static struct lu_device *obdecho_device_alloc(const struct lu_env *env,
 
 	OBD_ALLOC_PTR(ed);
 	if (ed == NULL)
-		ERR_PTR(-ENOMEM);
+		RETURN(ERR_PTR(-ENOMEM));
 	dt_device_init(&ed->ec_dt_dev, t);
 	lud = &ed->ec_dt_dev.dd_lu_dev;
 	obd = class_name2obd(lustre_cfg_string(cfg, 0));
