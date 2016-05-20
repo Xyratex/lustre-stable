@@ -708,6 +708,9 @@ kiblnd_create_conn(kib_peer_t *peer, struct rdma_cm_id *cmid,
 	kib_dev_t              *dev;
 	struct ib_qp_init_attr *init_qp_attr;
 	struct kib_sched_info	*sched;
+#ifdef HAVE_IB_CQ_INIT_ATTR
+	struct ib_cq_init_attr  cq_attr = {};
+#endif
 	kib_conn_t		*conn;
 	struct ib_cq		*cq;
 	unsigned long		flags;
@@ -804,12 +807,18 @@ kiblnd_create_conn(kib_peer_t *peer, struct rdma_cm_id *cmid,
 		goto failed_2;
 
 	kiblnd_map_rx_descs(conn);
-
+#ifdef HAVE_IB_CQ_INIT_ATTR
+	cq_attr.cqe = IBLND_CQ_ENTRIES(version);
+	cq_attr.comp_vector = kiblnd_get_completion_vector(conn, cpt);
+	cq = ib_create_cq(cmid->device,
+			  kiblnd_cq_completion, kiblnd_cq_event, conn,
+			  &cq_attr);
+#else
 	cq = ib_create_cq(cmid->device,
 			  kiblnd_cq_completion, kiblnd_cq_event, conn,
 			  IBLND_CQ_ENTRIES(conn),
 			  kiblnd_get_completion_vector(conn, cpt));
-
+#endif
 	if (IS_ERR(cq)) {
 		CERROR("Failed to create CQ with %d CQEs: %ld\n",
 			IBLND_CQ_ENTRIES(conn), PTR_ERR(cq));
