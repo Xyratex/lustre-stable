@@ -1273,9 +1273,10 @@ static int osd_write_commit(const struct lu_env *env, struct dt_object *dt,
         }
 
         if (likely(rc == 0)) {
-                if (isize > i_size_read(inode)) {
-                        i_size_write(inode, isize);
-                        LDISKFS_I(inode)->i_disksize = isize;
+		if (isize > i_size_read(inode)) {
+			OBD_FAIL_TIMEOUT(OBD_FAIL_OST_WRITE_DELAY, 2);
+			i_size_write(inode, isize);
+			LDISKFS_I(inode)->i_disksize = isize;
 			ll_dirty_inode(inode, I_DIRTY_DATASYNC);
                 }
 
