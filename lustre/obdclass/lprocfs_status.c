@@ -1662,6 +1662,7 @@ void lprocfs_init_mps_stats(int num_private_stats, struct lprocfs_stats *stats)
         LPROCFS_MD_OP_INIT(num_private_stats, stats, close);
         LPROCFS_MD_OP_INIT(num_private_stats, stats, create);
         LPROCFS_MD_OP_INIT(num_private_stats, stats, enqueue);
+	LPROCFS_MD_OP_INIT(num_private_stats, stats, enqueue_async);
         LPROCFS_MD_OP_INIT(num_private_stats, stats, getattr);
         LPROCFS_MD_OP_INIT(num_private_stats, stats, getattr_name);
         LPROCFS_MD_OP_INIT(num_private_stats, stats, intent_lock);

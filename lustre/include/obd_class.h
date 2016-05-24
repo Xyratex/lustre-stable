@@ -1458,6 +1458,25 @@ static inline int md_enqueue(struct obd_export *exp,
         RETURN(rc);
 }
 
+static inline int md_enqueue_async(struct obd_export *exp,
+				   struct ldlm_enqueue_info *einfo,
+				   obd_enqueue_update_f upcall,
+				   struct md_op_data *op_data,
+				   const union ldlm_policy_data *policy,
+				   __u64 lock_flags)
+{
+	int rc;
+
+	ENTRY;
+	rc = exp_check_ops(exp);
+	if (rc)
+		RETURN(rc);
+	EXP_MD_COUNTER_INCREMENT(exp, enqueue_async);
+	rc = MDP(exp->exp_obd, enqueue_async)(exp, einfo, upcall, op_data,
+					      policy, lock_flags);
+	RETURN(rc);
+}
+
 static inline int md_getattr_name(struct obd_export *exp,
                                   struct md_op_data *op_data,
                                   struct ptlrpc_request **request)
