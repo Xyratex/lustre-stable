@@ -286,6 +286,7 @@ static inline void ll_set_fs_pwd(struct fs_struct *fs, struct vfsmount *mnt,
 
 #ifndef HAVE_LM_XXX_LOCK_MANAGER_OPS
 # define lm_compare_owner	fl_compare_owner
+# define lm_grant		fl_grant
 #endif
 
 /*

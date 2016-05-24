@@ -3968,44 +3968,25 @@ int ll_fsync(struct file *file, struct dentry *dentry, int datasync)
 	RETURN(rc);
 }
 
-static int
-ll_file_flock(struct file *file, int cmd, struct file_lock *file_lock)
+static int ll_file_flc2policy(struct file_lock *file_lock, int cmd,
+		       union ldlm_policy_data *flock)
 {
-	struct inode *inode = file_inode(file);
-	struct ll_sb_info *sbi = ll_i2sbi(inode);
-	struct ldlm_enqueue_info einfo = {
-		.ei_type	= LDLM_FLOCK,
-		.ei_cb_cp	= ldlm_flock_completion_ast,
-		.ei_cbdata	= file_lock,
-	};
-	struct md_op_data *op_data;
-	struct lustre_handle lockh = { 0 };
-	union ldlm_policy_data flock = { { 0 } };
-	int fl_type = file_lock->fl_type;
-	__u64 flags = 0;
-	int rc;
-	int rc2 = 0;
 	ENTRY;
 
-	CDEBUG(D_VFSTRACE, "VFS Op:inode="DFID" file_lock=%p\n",
-	       PFID(ll_inode2fid(inode)), file_lock);
-
-        ll_stats_ops_tally(ll_i2sbi(inode), LPROC_LL_FLOCK, 1);
-
-        if (file_lock->fl_flags & FL_FLOCK) {
-                LASSERT((cmd == F_SETLKW) || (cmd == F_SETLK));
-                /* flocks are whole-file locks */
-                flock.l_flock.end = OFFSET_MAX;
-                /* For flocks owner is determined by the local file desctiptor*/
-                flock.l_flock.owner = (unsigned long)file_lock->fl_file;
-        } else if (file_lock->fl_flags & FL_POSIX) {
-                flock.l_flock.owner = (unsigned long)file_lock->fl_owner;
-                flock.l_flock.start = file_lock->fl_start;
-                flock.l_flock.end = file_lock->fl_end;
-        } else {
-                RETURN(-EINVAL);
-        }
-        flock.l_flock.pid = file_lock->fl_pid;
+	if (file_lock->fl_flags & FL_FLOCK) {
+		LASSERT((cmd == F_SETLKW) || (cmd == F_SETLK));
+		/* flocks are whole-file locks */
+		flock->l_flock.end = OFFSET_MAX;
+		/* For flocks owner is determined by the local file desctiptor*/
+		flock->l_flock.owner = (__u64)file_lock->fl_file;
+	} else if (file_lock->fl_flags & FL_POSIX) {
+		flock->l_flock.owner = (__u64)file_lock->fl_owner;
+		flock->l_flock.start = file_lock->fl_start;
+		flock->l_flock.end = file_lock->fl_end;
+	} else {
+		RETURN(-EINVAL);
+	}
+	flock->l_flock.pid = file_lock->fl_pid;
 
 	/* Somewhat ugly workaround for svc lockd.
 	 * lockd installs custom fl_lmops->lm_compare_owner that checks
@@ -4013,9 +3994,196 @@ ll_file_flock(struct file *file, int cmd, struct file_lock *file_lock)
 	 * I guess between lockd processes) and then compares pid.
 	 * As such we assign pid to the owner field to make it all work,
 	 * conflict with normal locks is unlikely since pid space and
-	 * pointer space for current->files are not intersecting */
+	 * pointer space for current->files are not intersecting
+	 */
 	if (file_lock->fl_lmops && file_lock->fl_lmops->lm_compare_owner)
-		flock.l_flock.owner = (unsigned long)file_lock->fl_pid;
+		flock->l_flock.owner = (__u64)file_lock->fl_pid;
+
+	RETURN(0);
+}
+
+static int ll_file_flock_lock(struct file *file, struct file_lock *file_lock)
+{
+	int rc = -EINVAL;
+
+	/* We don't need to sleep on conflicting locks.
+	 * It is called in following usecases :
+	 * 1. adding new lock - no conflicts exist as it is already granted
+	 *    on the server.
+	 * 2. unlock - never conflicts with anything.
+	 */
+	file_lock->fl_flags &= ~FL_SLEEP;
+#ifdef HAVE_LOCKS_LOCK_FILE_WAIT
+	rc = locks_lock_file_wait(file, file_lock);
+#else
+	if (file_lock->fl_flags & FL_FLOCK) {
+		rc = flock_lock_file_wait(file, file_lock);
+	} else if (file_lock->fl_flags & FL_POSIX) {
+		rc = posix_lock_file(file, file_lock, NULL);
+	}
+#endif /* HAVE_LOCKS_LOCK_FILE_WAIT */
+	if (rc)
+		CDEBUG(D_ERROR, "kernel lock failed rc=%d\n", rc);
+
+	return rc;
+}
+
+static int ll_flock_upcall(void *cookie, int err);
+static int
+ll_flock_completion_ast_async(struct ldlm_lock *lock, __u64 flags, void *data);
+
+static int ll_file_flock_async_unlock(struct inode *inode,
+				      struct file_lock *file_lock)
+{
+	struct ll_sb_info *sbi = ll_i2sbi(inode);
+	struct ldlm_enqueue_info einfo = { .ei_type = LDLM_FLOCK,
+					   .ei_cb_cp =
+					      ll_flock_completion_ast_async,
+					   .ei_mode = LCK_NL,
+					   .ei_cbdata = NULL };
+	union ldlm_policy_data flock = { {0} };
+	struct md_op_data *op_data;
+	int rc;
+
+	ENTRY;
+	rc = ll_file_flc2policy(file_lock, F_SETLK, &flock);
+	if (rc)
+		RETURN(rc);
+
+	op_data = ll_prep_md_op_data(NULL, inode, NULL, NULL, 0, 0,
+				     LUSTRE_OPC_ANY, NULL);
+	if (IS_ERR(op_data))
+		RETURN(PTR_ERR(op_data));
+
+	rc = md_enqueue_async(sbi->ll_md_exp, &einfo, ll_flock_upcall,
+			      op_data, &flock, 0);
+
+	ll_finish_md_op_data(op_data);
+
+	RETURN(rc);
+}
+
+/* This function is called only once after ldlm callback. Args are already
+ * detached from lock. So, locking isn't needed.
+ * It should only report lock status to kernel.
+ */
+static void ll_file_flock_async_cb(struct ldlm_flock_info *args, int err)
+{
+	struct file_lock *file_lock = args->fa_fl;
+	struct file_lock *flc = &args->fa_flc;
+	struct file *file = args->fa_file;
+	struct inode *inode = file->f_path.dentry->d_inode;
+	int rc;
+
+	ENTRY;
+	CDEBUG(D_INFO, "err=%d file_lock=%p file=%p start=%llu end=%llu\n",
+	       err, file_lock, file, flc->fl_start, flc->fl_end);
+
+	/* The kernel is responsible for resolving grant vs F_CANCELK or
+	 * grant vs. cleanup races, it may happen that CANCELED flag
+	 * isn't set and err == 0, because f_CANCELK/cleanup happens between
+	 * ldlm_flock_completion_ast_async() and ll_flock_run_flock_cb().
+	 * In this case notify() returns error for already canceled flock.
+	 */
+	if (!(args->fa_flags & FA_FL_CANCELED)) {
+		if (err == 0)
+			ll_file_flock_lock(file, flc);
+#ifdef HAVE_LM_GRANT_2ARGS
+		rc = args->fa_notify(file_lock, err);
+#else
+		rc = args->fa_notify(file_lock, NULL, err);
+#endif
+		if (rc) {
+			CDEBUG(D_ERROR, "notify failed file_lock=%p err=%d\n",
+			       file_lock, err);
+			if (err == 0) {
+				flc->fl_type = F_UNLCK;
+				ll_file_flock_lock(file, flc);
+				ll_file_flock_async_unlock(inode, flc);
+			}
+		}
+	}
+
+	fput(file);
+
+	EXIT;
+}
+
+static void ll_flock_run_flock_cb(struct ldlm_flock_info *args)
+{
+	if (args) {
+		ll_file_flock_async_cb(args, args->fa_err);
+		OBD_FREE_PTR(args);
+	}
+}
+
+static int ll_flock_upcall(void *cookie, int err)
+{
+	struct ldlm_flock_info *args;
+	struct ldlm_lock *lock = cookie;
+
+	if (err != 0) {
+		CERROR("ldlm_cli_enqueue_fini: %d lock=%p\n", err, lock);
+
+		lock_res_and_lock(lock);
+		args = lock->l_ast_data;
+		lock->l_ast_data = NULL;
+		unlock_res_and_lock(lock);
+
+		if (args)
+			args->fa_err = err;
+		ll_flock_run_flock_cb(args);
+	}
+
+	return 0;
+}
+
+static int
+ll_flock_completion_ast_async(struct ldlm_lock *lock, __u64 flags, void *data)
+{
+	struct ldlm_flock_info *args;
+
+	ENTRY;
+
+	args = ldlm_flock_completion_ast_async(lock, flags, data);
+	if (args && args->fa_flags & FA_FL_CANCELED) {
+		/* lock was cancelled in a race */
+		struct inode *inode = args->fa_file->f_path.dentry->d_inode;
+
+		ll_file_flock_async_unlock(inode, &args->fa_flc);
+	}
+
+	ll_flock_run_flock_cb(args);
+
+	RETURN(0);
+}
+
+int ll_file_flock(struct file *file, int cmd, struct file_lock *file_lock)
+{
+	struct inode *inode = file_inode(file);
+	struct ll_sb_info *sbi = ll_i2sbi(inode);
+	struct ldlm_enqueue_info einfo = {
+		.ei_type	= LDLM_FLOCK,
+		.ei_cb_cp	= ldlm_flock_completion_ast,
+		.ei_cbdata	= NULL,
+	};
+	struct md_op_data *op_data;
+	struct lustre_handle lockh = { 0 };
+	union ldlm_policy_data flock = { { 0 } };
+	int fl_type = file_lock->fl_type;
+	__u64 flags = 0;
+	struct ldlm_flock_info *cb_data = NULL;
+	int rc;
+	ENTRY;
+
+	CDEBUG(D_VFSTRACE, "VFS Op:inode="DFID" file_lock=%p\n",
+	       PFID(ll_inode2fid(inode)), file_lock);
+
+        ll_stats_ops_tally(ll_i2sbi(inode), LPROC_LL_FLOCK, 1);
+
+	rc = ll_file_flc2policy(file_lock, cmd, &flock);
+	if (rc)
+		RETURN(rc);
 
 	switch (fl_type) {
         case F_RDLCK:
@@ -4059,53 +4227,97 @@ ll_file_flock(struct file *file, int cmd, struct file_lock *file_lock)
 #endif
                 flags = LDLM_FL_TEST_LOCK;
                 break;
+	case F_CANCELLK:
+		CDEBUG(D_DLMTRACE, "F_CANCELLK owner=%llx %llu-%llu\n",
+		       flock.l_flock.owner, flock.l_flock.start,
+		       flock.l_flock.end);
+		file_lock->fl_type = F_UNLCK;
+		einfo.ei_mode = LCK_NL;
+		break;
         default:
                 CERROR("unknown fcntl lock command: %d\n", cmd);
                 RETURN (-EINVAL);
         }
 
-	/* Save the old mode so that if the mode in the lock changes we
-	 * can decrement the appropriate reader or writer refcount. */
-	file_lock->fl_type = einfo.ei_mode;
+	CDEBUG(D_DLMTRACE, "inode="DFID", pid=%u, owner=%#llx, flags=%#llx,"
+			   " mode=%u, start=%llu, end=%llu\n",
+	       PFID(ll_inode2fid(inode)), flock.l_flock.pid,
+	       flock.l_flock.owner, flags, einfo.ei_mode,
+	       flock.l_flock.start, flock.l_flock.end);
 
         op_data = ll_prep_md_op_data(NULL, inode, NULL, NULL, 0, 0,
                                      LUSTRE_OPC_ANY, NULL);
         if (IS_ERR(op_data))
                 RETURN(PTR_ERR(op_data));
 
-	CDEBUG(D_DLMTRACE, "inode="DFID", pid=%u, flags=%#llx, mode=%u, "
-	       "start=%llu, end=%llu\n", PFID(ll_inode2fid(inode)),
-	       flock.l_flock.pid, flags, einfo.ei_mode,
-	       flock.l_flock.start, flock.l_flock.end);
+	OBD_ALLOC_PTR(cb_data);
+	if (!cb_data)
+		GOTO(out, rc = -ENOMEM);
 
-	rc = md_enqueue(sbi->ll_md_exp, &einfo, &flock, op_data, &lockh,
-			flags);
+	cb_data->fa_file = file;
+	cb_data->fa_fl = file_lock;
+	cb_data->fa_mode = einfo.ei_mode;
+	locks_init_lock(&cb_data->fa_flc);
+	locks_copy_lock(&cb_data->fa_flc, file_lock);
+	if (cmd == F_CANCELLK)
+		cb_data->fa_flags |= FA_FL_CANCEL_RQST;
+	einfo.ei_cbdata = cb_data;
 
-	/* Restore the file lock type if not TEST lock. */
-	if (!(flags & LDLM_FL_TEST_LOCK))
-		file_lock->fl_type = fl_type;
+	if (file_lock->fl_lmops && file_lock->fl_lmops->lm_grant &&
+	    file_lock->fl_type != F_UNLCK &&
+	    flags == LDLM_FL_BLOCK_NOWAIT /* F_SETLK/F_SETLK64 */) {
 
-#ifdef HAVE_LOCKS_LOCK_FILE_WAIT
-	if ((rc == 0 || file_lock->fl_type == F_UNLCK) &&
-	    !(flags & LDLM_FL_TEST_LOCK))
-		rc2  = locks_lock_file_wait(file, file_lock);
-#else
-        if ((file_lock->fl_flags & FL_FLOCK) &&
-            (rc == 0 || file_lock->fl_type == F_UNLCK))
-		rc2  = flock_lock_file_wait(file, file_lock);
-        if ((file_lock->fl_flags & FL_POSIX) &&
-            (rc == 0 || file_lock->fl_type == F_UNLCK) &&
-            !(flags & LDLM_FL_TEST_LOCK))
-		rc2  = posix_lock_file_wait(file, file_lock);
-#endif /* HAVE_LOCKS_LOCK_FILE_WAIT */
+		cb_data->fa_notify = file_lock->fl_lmops->lm_grant;
+		flags = (file_lock->fl_flags & FL_SLEEP) ?
+			0 : LDLM_FL_BLOCK_NOWAIT;
+		einfo.ei_cb_cp = ll_flock_completion_ast_async;
+		get_file(file);
 
-	if (rc2 && file_lock->fl_type != F_UNLCK) {
-		einfo.ei_mode = LCK_NL;
-		md_enqueue(sbi->ll_md_exp, &einfo, &flock, op_data,
-			   &lockh, flags);
-		rc = rc2;
+		rc = md_enqueue_async(sbi->ll_md_exp, &einfo,
+				      ll_flock_upcall, op_data, &flock, flags);
+		if (rc) {
+			fput(file);
+			OBD_FREE_PTR(cb_data);
+		} else {
+			rc = FILE_LOCK_DEFERRED;
+		}
+	} else {
+		if (file_lock->fl_type == F_UNLCK &&
+		    flags != LDLM_FL_TEST_LOCK) {
+			/* We unlock kernel lock before ldlm one to avoid race
+			 * with reordering of unlock & lock responses from
+			 * server.*/
+			rc = ll_file_flock_lock(file, file_lock);
+			if (rc) {
+				CDEBUG(D_ERROR,
+				       "local unlock failed rc=%d\n", rc);
+				OBD_FREE_PTR(cb_data);
+				GOTO(out, rc);
+			}
+		}
+
+		rc = md_enqueue(sbi->ll_md_exp, &einfo, &flock, op_data,
+				&lockh, flags);
+		OBD_FREE_PTR(cb_data);
+
+		if (!(flags & LDLM_FL_TEST_LOCK) && fl_type == F_UNLCK)
+			CFS_FAIL_TIMEOUT(OBD_FAIL_LLITE_FLOCK_UNLOCK_RACE, 3);
+
+		if (!rc && file_lock->fl_type != F_UNLCK &&
+		    !(flags & LDLM_FL_TEST_LOCK)) {
+			int rc2;
+
+			rc2 = ll_file_flock_lock(file, file_lock);
+
+			if (rc2) {
+				einfo.ei_mode = LCK_NL;
+				md_enqueue(sbi->ll_md_exp, &einfo, &flock,
+					   op_data, &lockh, flags);
+				rc = rc2;
+			}
+		}
 	}
-
+out:
 	ll_finish_md_op_data(op_data);
 
         RETURN(rc);
