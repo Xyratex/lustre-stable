@@ -930,7 +930,6 @@ test_28() {
 	fail ost1
 
 	sleep 2
-	cancel_lru_locks OST0000-osc
 	wait $pid || error "dd failed"
 }
 run_test 28 "lock replay should be ordered: waiting after granted"
