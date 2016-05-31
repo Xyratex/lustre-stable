@@ -717,7 +717,7 @@ static int lod_check_and_reserve_ost(const struct lu_env *env,
 	/*
 	 * do not put >1 objects on a single OST
 	 */
-	if (speed && lod_qos_is_ost_used(env, ost_idx, stripe_idx))
+	if (lod_qos_is_ost_used(env, ost_idx, stripe_idx))
 		goto out_return;
 
 	o = lod_qos_declare_object_on(env, m, ost_idx, th);
