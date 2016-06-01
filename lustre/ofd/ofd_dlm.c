@@ -265,7 +265,7 @@ int ofd_intent_policy(struct ldlm_namespace *ns, struct ldlm_lock **lockp,
 	if (flags & LDLM_FL_RESENT) {
 		rc = LDLM_ITER_CONTINUE;
 	} else {
-		__u64 tmpflags = 0;
+		__u64 tmpflags = LDLM_FL_INTENT_ONLY;
 		rc = policy(lock, &tmpflags, 0, &err, NULL);
 		check_res_locked(res);
 	}
