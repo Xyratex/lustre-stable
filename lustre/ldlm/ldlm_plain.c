@@ -147,21 +147,30 @@ int ldlm_process_plain_lock(struct ldlm_lock *lock, __u64 *flags,
 	LASSERT(list_empty(&res->lr_converting));
 	INIT_LIST_HEAD(&rpc_list);
 
+restart:
         if (!first_enq) {
                 LASSERT(work_list != NULL);
-                rc = ldlm_plain_compat_queue(&res->lr_granted, lock, NULL);
-                if (!rc)
-                        RETURN(LDLM_ITER_STOP);
-                rc = ldlm_plain_compat_queue(&res->lr_waiting, lock, NULL);
-                if (!rc)
-                        RETURN(LDLM_ITER_STOP);
+		rc = ldlm_plain_compat_queue(&res->lr_granted, lock, &rpc_list);
+		if (rc)
+			rc = ldlm_plain_compat_queue(&res->lr_waiting, lock,
+						     &rpc_list);
+		if (!rc) {
+			rc = ldlm_send_blast_locked(lock, flags, err,
+						    &rpc_list);
+			if (rc == -ERESTART) {
+				GOTO(restart, rc);
+			} else if (rc != 0) {
+				ldlm_discard_bl_list(&rpc_list);
+				RETURN(rc);
+			}
+			RETURN(LDLM_ITER_STOP);
+		}
 
                 ldlm_resource_unlink_lock(lock);
                 ldlm_grant_lock(lock, work_list);
                 RETURN(LDLM_ITER_CONTINUE);
         }
 
- restart:
         rc = ldlm_plain_compat_queue(&res->lr_granted, lock, &rpc_list);
         rc += ldlm_plain_compat_queue(&res->lr_waiting, lock, &rpc_list);
 
@@ -174,12 +183,15 @@ int ldlm_process_plain_lock(struct ldlm_lock *lock, __u64 *flags,
                  * re-ordered!  Causes deadlock, because ASTs aren't sent! */
 		if (list_empty(&lock->l_res_link))
                         ldlm_resource_add_lock(res, &res->lr_waiting, lock);
-                unlock_res(res);
-                rc = ldlm_run_ast_work(ldlm_res_to_ns(res), &rpc_list,
-                                       LDLM_WORK_BL_AST);
-                lock_res(res);
-		if (rc == -ERESTART)
+
+		rc = ldlm_send_blast_locked(lock, flags, err, &rpc_list);
+		if (rc == -ERESTART) {
 			GOTO(restart, rc);
+		} else if (rc != 0) {
+			ldlm_discard_bl_list(&rpc_list);
+			RETURN(rc);
+		}
+
                 *flags |= LDLM_FL_BLOCK_GRANTED;
         } else {
                 ldlm_resource_unlink_lock(lock);

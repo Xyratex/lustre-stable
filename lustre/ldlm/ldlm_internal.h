@@ -182,6 +182,12 @@ void ldlm_handle_bl_callback(struct ldlm_namespace *ns,
                              struct ldlm_lock_desc *ld, struct ldlm_lock *lock);
 
 #ifdef HAVE_SERVER_SUPPORT
+int ldlm_send_blast_locked(struct ldlm_lock *lock, __u64 *flags,
+			   ldlm_error_t *err,
+			   struct list_head *rpc_list);
+
+void ldlm_discard_bl_list(struct list_head *bl_list);
+
 /* ldlm_plain.c */
 int ldlm_process_plain_lock(struct ldlm_lock *lock, __u64 *flags,
 			    int first_enq, ldlm_error_t *err,
