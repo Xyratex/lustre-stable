@@ -368,36 +368,44 @@ test_17() {
 run_test 17 "timeout bulk get, don't evict client (2732)"
 
 test_18a() {
-    [ -z ${ost2_svc} ] && skip_env "needs 2 osts" && return 0
+	[ -z ${ost2_svc} ] && skip_env "needs 2 osts" && return 0
+	check_mds_journal_by_ost_nr 2
+	[ $? -ne 0 ] && skip_env "skipping the test due to insufficient" \
+		"journal size" && return
+	local SAMPLE_FILE=$TMP/$FUNCNAME.$SAMPLE_NAME
+	do_facet_random_file client $SAMPLE_FILE 20K ||
+		error_noexit "Create random file $SAMPLE_FILE"
 
-    local SAMPLE_FILE=$TMP/$FUNCNAME.$SAMPLE_NAME
-    do_facet_random_file client $SAMPLE_FILE 20K    || error_noexit "Create random file $SAMPLE_FILE"
+	do_facet client mkdir -p $DIR/$tdir
+	f=$DIR/$tdir/$tfile
 
-    do_facet client mkdir -p $DIR/$tdir
-    f=$DIR/$tdir/$tfile
+	cancel_lru_locks osc
+	pgcache_empty ||
+		{ error_noexit "failed pgcache_empty"; return 1 ; }
 
-    cancel_lru_locks osc
-    pgcache_empty || return 1
+	# 1 stripe on ost2
+	$LFS setstripe -i 1 -c 1 $f
+	stripe_index=$($LFS getstripe -i $f)
+	if [ $stripe_index -ne 1 ]; then
+		$LFS getstripe $f
+		error "$f: stripe_index $stripe_index != 1" && return
+	fi
 
-    # 1 stripe on ost2
-    $LFS setstripe -i 1 -c 1 $f
-    stripe_index=$($LFS getstripe -i $f)
-    if [ $stripe_index -ne 1 ]; then
-        $LFS getstripe $f
-        error "$f: stripe_index $stripe_index != 1" && return
-    fi
-
-    do_facet client cp $SAMPLE_FILE $f
-    sync
-    local osc2dev=`lctl get_param -n devices | grep ${ost2_svc}-osc- | egrep -v 'MDT' | awk '{print $1}'`
-    $LCTL --device $osc2dev deactivate || return 3
-    # my understanding is that there should be nothing in the page
-    # cache after the client reconnects?     
-    rc=0
-    pgcache_empty || rc=2
-    $LCTL --device $osc2dev activate
-    rm -f $f $TMP/$tfile
-    return $rc
+	do_facet client cp $SAMPLE_FILE $f
+	sync
+	local osc2dev=$($LCTL get_param -n devices | grep ${ost2_svc}-osc- |
+			egrep -v 'MDT' | awk '{print $1}')
+	$LCTL --device $osc2dev deactivate ||
+		{ error_noexit "failed to deactivate device $osc2dev";
+			return 3 ; }
+	# my understanding is that there should be nothing in the page
+	# cache after the client reconnects?
+	rc=0
+	pgcache_empty || rc=2
+	$LCTL --device $osc2dev activate ||
+			error "failed to activate device $osc2dev"
+	rm -f $f $TMP/$tfile
+	return $rc
 }
 run_test 18a "manual ost invalidate clears page cache immediately"
 
