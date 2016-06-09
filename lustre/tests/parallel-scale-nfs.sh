@@ -12,6 +12,7 @@ fi
 . ${CONFIG:=$LUSTRE/tests/cfg/$NAME.sh}
 init_logging
 
+racer=$LUSTRE/tests/racer/racer.sh
 . $LUSTRE/tests/setup-nfs.sh
 
 check_and_setup_lustre
@@ -125,5 +126,11 @@ test_mdtestfpp() {
         run_mdtest "fpp" $NFS_CLIMNTPT
 }
 run_test mdtestfpp "mdtestfpp"
+
+test_racer_on_nfs() {
+	$racer $NFS_CLIMNTPT
+}
+run_test racer_on_nfs "racer on NFS client"
+
 complete $SECONDS
 exit_status
