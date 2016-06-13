@@ -46,6 +46,7 @@
 #include <sys/mman.h>
 #include <sys/vfs.h>
 #include <sys/ioctl.h>
+#include <sys/file.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -393,6 +394,13 @@ int main(int argc, char **argv)
 			if (fd == -1) {
 				save_errno = errno;
 				perror("create stripe file");
+				exit(save_errno);
+			}
+			break;
+		case 'j':
+			if (flock(fd, LOCK_EX) == -1) {
+				save_errno = errno;
+				perror("flock()");
 				exit(save_errno);
 			}
 			break;
