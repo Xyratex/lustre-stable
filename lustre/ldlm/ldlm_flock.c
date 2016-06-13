@@ -981,7 +981,6 @@ int ldlm_flock_blocking_ast(struct ldlm_lock *lock, struct ldlm_lock_desc *desc,
 void ldlm_flock_policy_wire18_to_local(const ldlm_wire_policy_data_t *wpolicy,
                                        ldlm_policy_data_t *lpolicy)
 {
-        memset(lpolicy, 0, sizeof(*lpolicy));
         lpolicy->l_flock.start = wpolicy->l_flock.lfw_start;
         lpolicy->l_flock.end = wpolicy->l_flock.lfw_end;
         lpolicy->l_flock.pid = wpolicy->l_flock.lfw_pid;
@@ -995,7 +994,6 @@ void ldlm_flock_policy_wire18_to_local(const ldlm_wire_policy_data_t *wpolicy,
 void ldlm_flock_policy_wire21_to_local(const ldlm_wire_policy_data_t *wpolicy,
                                        ldlm_policy_data_t *lpolicy)
 {
-        memset(lpolicy, 0, sizeof(*lpolicy));
         lpolicy->l_flock.start = wpolicy->l_flock.lfw_start;
         lpolicy->l_flock.end = wpolicy->l_flock.lfw_end;
         lpolicy->l_flock.pid = wpolicy->l_flock.lfw_pid;
