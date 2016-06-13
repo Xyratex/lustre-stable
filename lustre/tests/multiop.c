@@ -43,6 +43,7 @@
 #include <sys/stat.h>
 #include <sys/mman.h>
 #include <sys/vfs.h>
+#include <sys/file.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -279,6 +280,13 @@ int main(int argc, char **argv)
                                 exit(save_errno);
                         }
                         break;
+		case 'F':
+			if (flock(fd, LOCK_EX) == -1) {
+				save_errno = errno;
+				perror("flock()");
+				exit(save_errno);
+			}
+			break;
                 case 'G':
                         gid = atoi(commands+1);
                         if (ioctl(fd, LL_IOC_GROUP_LOCK, gid) == -1) {
