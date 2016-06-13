@@ -253,7 +253,6 @@ restart:
 void ldlm_ibits_policy_wire_to_local(const ldlm_wire_policy_data_t *wpolicy,
                                      ldlm_policy_data_t *lpolicy)
 {
-        memset(lpolicy, 0, sizeof(*lpolicy));
         lpolicy->l_inodebits.bits = wpolicy->l_inodebits.bits;
 }
 
