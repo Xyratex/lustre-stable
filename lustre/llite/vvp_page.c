@@ -313,27 +313,41 @@ static void vvp_page_completion_write(const struct lu_env *env,
 }
 
 /**
- * Implements cl_page_operations::cpo_make_ready() method.
+ * Implements cl_page_operations::cpo_make_ready_start() method.
  *
  * This is called to yank a page from the transfer cache and to send it out as
- * a part of transfer. This function try-locks the page. If try-lock failed,
- * page is owned by some concurrent IO, and should be skipped (this is bad,
- * but hopefully rare situation, as it usually results in transfer being
- * shorter than possible).
+ * a part of transfer. This function is used to lock all pages from the extent.
+ *
+ * \retval 0      success, page is locked
+ *
+ */
+static int vvp_page_make_ready_start(const struct lu_env *env,
+				     const struct cl_page_slice *slice)
+{
+	struct page *vmpage = cl2vm_page(slice);
+
+	lock_page(vmpage);
+
+	return 0;
+}
+
+/**
+ * Implements cl_page_operations::cpo_make_ready_end() method.
+ *
+ * This is called to yank a page from the transfer cache and to send it out as
+ * a part of transfer. The page is already locked by
+ * vvp_page_make_ready_start().
  *
  * \retval 0      success, page can be placed into transfer
  *
- * \retval -EAGAIN page is either used by concurrent IO has been
- * truncated. Skip it.
  */
-static int vvp_page_make_ready(const struct lu_env *env,
-			       const struct cl_page_slice *slice)
+static int vvp_page_make_ready_end(const struct lu_env *env,
+				   const struct cl_page_slice *slice)
 {
 	struct page *vmpage = cl2vm_page(slice);
 	struct cl_page *pg = slice->cpl_page;
 	int result = 0;
 
-	lock_page(vmpage);
 	if (clear_page_dirty_for_io(vmpage)) {
 		LASSERT(pg->cp_state == CPS_CACHED);
 		/* This actually clears the dirty bit in the radix
@@ -403,12 +417,14 @@ static const struct cl_page_operations vvp_page_ops = {
 		[CRT_READ] = {
 			.cpo_prep       = vvp_page_prep_read,
 			.cpo_completion = vvp_page_completion_read,
-			.cpo_make_ready = vvp_page_fail,
+			.cpo_make_ready_start = vvp_page_fail,
+			.cpo_make_ready_end  = vvp_page_fail,
 		},
 		[CRT_WRITE] = {
 			.cpo_prep       = vvp_page_prep_write,
 			.cpo_completion = vvp_page_completion_write,
-			.cpo_make_ready = vvp_page_make_ready,
+			.cpo_make_ready_start = vvp_page_make_ready_start,
+			.cpo_make_ready_end = vvp_page_make_ready_end,
 		},
 	},
 };

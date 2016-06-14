@@ -936,10 +936,34 @@ EXPORT_SYMBOL(cl_page_completion);
  * \pre  pg->cp_state == CPS_CACHED
  * \post pg->cp_state == CPS_PAGEIN || pg->cp_state == CPS_PAGEOUT
  *
- * \see cl_page_operations::cpo_make_ready()
+ * \see cl_page_operations::cpo_make_ready_start/end()
  */
-int cl_page_make_ready(const struct lu_env *env, struct cl_page *pg,
-                       enum cl_req_type crt)
+int cl_page_make_ready_start(const struct lu_env *env, struct cl_page *pg,
+			     enum cl_req_type crt)
+{
+	const struct cl_page_slice *sli;
+        int result = 0;
+
+	PINVRNT(env, pg, crt < CRT_NR);
+
+	ENTRY;
+	if (crt >= CRT_NR)
+		RETURN(-EINVAL);
+
+	list_for_each_entry(sli, &pg->cp_layers, cpl_linkage) {
+		if (sli->cpl_ops->io[crt].cpo_make_ready_start != NULL)
+			result = (*sli->cpl_ops->io[crt].cpo_make_ready_start)
+								(env, sli);
+		if (result != 0)
+			break;
+	}
+
+	RETURN(result);
+}
+EXPORT_SYMBOL(cl_page_make_ready_start);
+
+int cl_page_make_ready_end(const struct lu_env *env, struct cl_page *pg,
+			   enum cl_req_type crt)
 {
 	const struct cl_page_slice *sli;
 	int result = 0;
@@ -951,9 +975,9 @@ int cl_page_make_ready(const struct lu_env *env, struct cl_page *pg,
 		RETURN(-EINVAL);
 
 	list_for_each_entry(sli, &pg->cp_layers, cpl_linkage) {
-		if (sli->cpl_ops->io[crt].cpo_make_ready != NULL)
-			result = (*sli->cpl_ops->io[crt].cpo_make_ready)(env,
-									 sli);
+		if (sli->cpl_ops->io[crt].cpo_make_ready_end != NULL)
+			result = (*sli->cpl_ops->io[crt].cpo_make_ready_end)
+								(env, sli);
 		if (result != 0)
 			break;
 	}
@@ -966,7 +990,7 @@ int cl_page_make_ready(const struct lu_env *env, struct cl_page *pg,
         CL_PAGE_HEADER(D_TRACE, env, pg, "%d %d\n", crt, result);
         RETURN(result);
 }
-EXPORT_SYMBOL(cl_page_make_ready);
+EXPORT_SYMBOL(cl_page_make_ready_end);
 
 /**
  * Called if a pge is being written back by kernel's intention.
