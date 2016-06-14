@@ -80,7 +80,9 @@ ldlm_plain_compat_queue(struct list_head *queue, struct ldlm_lock *req,
 
 	lockmode_verify(req_mode);
 
-	list_for_each_entry(lock, queue, l_res_link) {
+	list_for_each(tmp, queue) {
+		lock = list_entry(tmp, struct ldlm_lock, l_res_link);
+
 		/* We stop walking the queue if we hit ourselves so we don't
 		 * take conflicting locks enqueued after us into account,
 		 * or we'd wait forever. */
