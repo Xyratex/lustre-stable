@@ -51,8 +51,9 @@ static int osc_extent_wait(const struct lu_env *env, struct osc_extent *ext,
 			   enum osc_extent_state state);
 static void osc_ap_completion(const struct lu_env *env, struct client_obd *cli,
 			      struct osc_async_page *oap, int sent, int rc);
-static int osc_make_ready(const struct lu_env *env, struct osc_async_page *oap,
-			  int cmd);
+static struct osc_async_page* osc_make_ready(const struct lu_env *env,
+					     struct osc_extent *ext,
+					     int cmd);
 static int osc_refresh_count(const struct lu_env *env,
 			     struct osc_async_page *oap, int cmd);
 static int osc_io_unplug_async(const struct lu_env *env,
@@ -1034,10 +1035,8 @@ static int osc_extent_make_ready(const struct lu_env *env,
 				 struct osc_extent *ext)
 {
 	struct osc_async_page *oap;
-	struct osc_async_page *last = NULL;
+	struct osc_async_page *last;
 	struct osc_object *obj = ext->oe_obj;
-	unsigned int page_count = 0;
-	int rc;
 	ENTRY;
 
 	/* we're going to grab page lock, so object lock must not be taken. */
@@ -1048,31 +1047,7 @@ static int osc_extent_make_ready(const struct lu_env *env,
 
 	OSC_EXTENT_DUMP(D_CACHE, ext, "make ready\n");
 
-	list_for_each_entry(oap, &ext->oe_pages, oap_pending_item) {
-		++page_count;
-		if (last == NULL || last->oap_obj_off < oap->oap_obj_off)
-			last = oap;
-
-		/* checking ASYNC_READY is race safe */
-		if ((oap->oap_async_flags & ASYNC_READY) != 0)
-			continue;
-
-		rc = osc_make_ready(env, oap, OBD_BRW_WRITE);
-		switch (rc) {
-		case 0:
-			spin_lock(&oap->oap_lock);
-			oap->oap_async_flags |= ASYNC_READY;
-			spin_unlock(&oap->oap_lock);
-			break;
-		case -EALREADY:
-			LASSERT((oap->oap_async_flags & ASYNC_READY) != 0);
-			break;
-		default:
-			LASSERTF(0, "unknown return code: %d\n", rc);
-		}
-	}
-
-	LASSERT(page_count == ext->oe_nr_pages);
+	last = osc_make_ready(env, ext, OBD_BRW_WRITE);
 	LASSERT(last != NULL);
 	/* the last page is the only one we need to refresh its count by
 	 * the size of file. */
@@ -1206,20 +1181,58 @@ static inline int osc_is_ready(struct osc_object *osc)
 	       list_empty_marker(&(OSC)->oo_reading_exts),		       \
 	       ##args)
 
-static int osc_make_ready(const struct lu_env *env, struct osc_async_page *oap,
-			  int cmd)
+static struct osc_async_page* osc_make_ready(const struct lu_env *env,
+					     struct osc_extent *ext,
+					     int cmd)
 {
-	struct osc_page *opg  = oap2osc_page(oap);
-	struct cl_page  *page = oap2cl_page(oap);
-	int result;
-
-	LASSERT(cmd == OBD_BRW_WRITE); /* no cached reads */
-
+	int rc;
+	struct osc_async_page *oap, *next;
+	struct osc_async_page *last = NULL;
+	unsigned int page_count = 0;
+	struct list_head ready_list = LIST_HEAD_INIT(ready_list);
 	ENTRY;
-	result = cl_page_make_ready(env, page, CRT_WRITE);
-	if (result == 0)
-		opg->ops_submit_time = cfs_time_current();
-	RETURN(result);
+
+	list_for_each_entry(oap, &ext->oe_pages, oap_pending_item) {
+		struct cl_page  *page = oap2cl_page(oap);
+
+		/* checking ASYNC_READY is race safe */
+		if ((oap->oap_async_flags & ASYNC_READY) != 0)
+			continue;
+
+		LASSERT(list_empty(&oap->oap_rpc_item));
+		list_add_tail(&oap->oap_rpc_item, &ready_list);
+		cl_page_make_ready_start(env, page, CRT_WRITE);
+	}
+
+	list_for_each_entry_safe(oap, next, &ready_list, oap_rpc_item) {
+		struct osc_page *opg  = oap2osc_page(oap);
+		struct cl_page  *page = oap2cl_page(oap);
+
+		++page_count;
+		if (last == NULL || last->oap_obj_off < oap->oap_obj_off)
+			last = oap;
+
+		rc = cl_page_make_ready_end(env, page, CRT_WRITE);
+		list_del_init(&oap->oap_rpc_item);
+		if (rc == 0)
+			opg->ops_submit_time = cfs_time_current();
+		switch (rc) {
+		case 0:
+			spin_lock(&oap->oap_lock);
+			oap->oap_async_flags |= ASYNC_READY;
+			spin_unlock(&oap->oap_lock);
+			break;
+		case -EALREADY:
+			LASSERT((oap->oap_async_flags & ASYNC_READY) != 0);
+			break;
+		default:
+			LASSERTF(0, "unknown return code: %d\n", rc);
+		}
+	}
+
+	LASSERT(page_count == ext->oe_nr_pages);
+
+	RETURN(last);
 }
 
 static int osc_refresh_count(const struct lu_env *env,
