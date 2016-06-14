@@ -979,8 +979,10 @@ struct cl_page_operations {
                  *
                  * \see cl_page_make_ready()
                  */
-                int  (*cpo_make_ready)(const struct lu_env *env,
-                                       const struct cl_page_slice *slice);
+		int  (*cpo_make_ready_start)(const struct lu_env *env,
+					     const struct cl_page_slice *);
+		int  (*cpo_make_ready_end)(const struct lu_env *env,
+					   const struct cl_page_slice *slice);
         } io[CRT_NR];
         /**
          * Tell transfer engine that only [to, from] part of a page should be
@@ -2779,8 +2781,10 @@ int  cl_page_prep       (const struct lu_env *env, struct cl_io *io,
                          struct cl_page *pg, enum cl_req_type crt);
 void cl_page_completion (const struct lu_env *env,
                          struct cl_page *pg, enum cl_req_type crt, int ioret);
-int  cl_page_make_ready (const struct lu_env *env, struct cl_page *pg,
-                         enum cl_req_type crt);
+int  cl_page_make_ready_start (const struct lu_env *env, struct cl_page *pg,
+			       enum cl_req_type crt);
+int  cl_page_make_ready_end (const struct lu_env *env, struct cl_page *pg,
+			     enum cl_req_type crt);
 int  cl_page_cache_add  (const struct lu_env *env, struct cl_io *io,
                          struct cl_page *pg, enum cl_req_type crt);
 void cl_page_clip       (const struct lu_env *env, struct cl_page *pg,

@@ -983,10 +983,28 @@ EXPORT_SYMBOL(cl_page_completion);
  * \pre  pg->cp_state == CPS_CACHED
  * \post pg->cp_state == CPS_PAGEIN || pg->cp_state == CPS_PAGEOUT
  *
- * \see cl_page_operations::cpo_make_ready()
+ * \see cl_page_operations::cpo_make_ready_start/end()
  */
-int cl_page_make_ready(const struct lu_env *env, struct cl_page *pg,
-                       enum cl_req_type crt)
+int cl_page_make_ready_start(const struct lu_env *env, struct cl_page *pg,
+			     enum cl_req_type crt)
+{
+        int rc;
+
+	PINVRNT(env, pg, crt < CRT_NR);
+
+	ENTRY;
+	if (crt >= CRT_NR)
+		RETURN(-EINVAL);
+
+	rc = CL_PAGE_INVOKE(env, pg, CL_PAGE_OP(io[crt].cpo_make_ready_start),
+			    (const struct lu_env *,
+			     const struct cl_page_slice *));
+	RETURN(rc);
+}
+EXPORT_SYMBOL(cl_page_make_ready_start);
+
+int cl_page_make_ready_end(const struct lu_env *env, struct cl_page *pg,
+			   enum cl_req_type crt)
 {
         int result;
 
@@ -995,7 +1013,9 @@ int cl_page_make_ready(const struct lu_env *env, struct cl_page *pg,
         ENTRY;
 	if (crt >= CRT_NR)
 		RETURN(-EINVAL);
-        result = CL_PAGE_INVOKE(env, pg, CL_PAGE_OP(io[crt].cpo_make_ready),
+
+	result = CL_PAGE_INVOKE(env, pg,
+				CL_PAGE_OP(io[crt].cpo_make_ready_end),
                                 (const struct lu_env *,
                                  const struct cl_page_slice *));
         if (result == 0) {
@@ -1005,7 +1025,7 @@ int cl_page_make_ready(const struct lu_env *env, struct cl_page *pg,
         CL_PAGE_HEADER(D_TRACE, env, pg, "%d %d\n", crt, result);
         RETURN(result);
 }
-EXPORT_SYMBOL(cl_page_make_ready);
+EXPORT_SYMBOL(cl_page_make_ready_end);
 
 /**
  * Called if a pge is being written back by kernel's intention.
