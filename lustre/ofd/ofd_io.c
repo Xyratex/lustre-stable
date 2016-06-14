@@ -568,7 +568,7 @@ ofd_commitrw_write(const struct lu_env *env, struct obd_export *exp,
 	struct ofd_object	*fo = info->fti_obj;
 	struct dt_object	*o;
 	struct thandle		*th;
-	int			 rc = 0;
+	int			 rc = 0, rc1;
 	int			 retries = 0;
 	int			 i;
 	struct filter_export_data *fed = &exp->exp_filter_data;
@@ -663,7 +663,9 @@ out_stop:
 	}
 
 	CFS_FAIL_TIMEOUT(OBD_FAIL_TGT_CLIENT_DEL, 10);
-	ofd_trans_stop(env, ofd, th, rc);
+	rc1 = ofd_trans_stop(env, ofd, th, rc);
+	if (!rc)
+		rc = rc1;
 	if (rc == -ENOSPC && retries++ < 3) {
 		CDEBUG(D_INODE, "retry after force commit, retries:%d\n",
 		       retries);

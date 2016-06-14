@@ -47,7 +47,7 @@ int ofd_record_write(const struct lu_env *env, struct ofd_device *ofd,
 		     struct dt_object *dt, struct lu_buf *buf, loff_t *off)
 {
 	struct thandle	*th;
-	int		 rc;
+	int		 rc, rc1;
 
 	ENTRY;
 
@@ -63,7 +63,9 @@ int ofd_record_write(const struct lu_env *env, struct ofd_device *ofd,
 		if (rc == 0)
 			rc = dt_record_write(env, dt, buf, off, th);
 	}
-	dt_trans_stop(env, ofd->ofd_osd, th);
+	rc1 = dt_trans_stop(env, ofd->ofd_osd, th);
+	if (!rc)
+		rc = rc1;
 
 	RETURN(rc);
 }

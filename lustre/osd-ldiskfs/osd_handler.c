@@ -1100,6 +1100,7 @@ static int osd_trans_stop(const struct lu_env *env, struct thandle *th)
 	oh->ot_quota_trans = NULL;
 
         if (oh->ot_handle != NULL) {
+		int rc1;
                 handle_t *hdl = oh->ot_handle;
 
                 /*
@@ -1121,9 +1122,11 @@ static int osd_trans_stop(const struct lu_env *env, struct thandle *th)
 
                 oh->ot_handle = NULL;
                 OSD_CHECK_SLOW_TH(oh, oti->oti_dev,
-                                  rc = ldiskfs_journal_stop(hdl));
-                if (rc != 0)
-                        CERROR("Failure to stop transaction: %d\n", rc);
+                                  rc1 = ldiskfs_journal_stop(hdl));
+                if (rc1 != 0)
+                        CERROR("Failure to stop transaction: %d\n", rc1);
+                if (!rc)
+			rc = rc1;
         } else {
                 OBD_FREE_PTR(oh);
         }
