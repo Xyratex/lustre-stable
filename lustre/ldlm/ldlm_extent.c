@@ -451,7 +451,10 @@ ldlm_extent_compat_queue(struct list_head *queue, struct ldlm_lock *req,
 			if (!work_list || (*flags & LDLM_FL_BLOCK_NOWAIT)) {
 				rc = interval_is_overlapped(tree->lit_root,
 							    &ex);
-				if (rc && (*flags & LDLM_FL_BLOCK_NOWAIT)) {
+				/* Non-blocking group locks do NOT consider
+				 * non-group locks blocking. */
+				if (rc && (*flags & LDLM_FL_BLOCK_NOWAIT)
+				    && req_mode != LCK_GROUP) {
 					compat = -EWOULDBLOCK;
 					goto destroylock;
 				} else if (rc) {
