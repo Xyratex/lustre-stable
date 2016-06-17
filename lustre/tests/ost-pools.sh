@@ -1200,7 +1200,6 @@ test_20() {
     check_file_not_in_pool $dir3/file3 $POOL2
 
     check_file_not_in_pool $dir2/file4 $POOL
-    check_file_not_in_pool $dir2/file4 $POOL2
 
     rm -rf $dir1
 

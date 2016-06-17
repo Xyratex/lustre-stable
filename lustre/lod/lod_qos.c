@@ -1356,19 +1356,25 @@ static int lod_qos_parse_config(const struct lu_env *env,
 	       v1->lmm_stripe_size, v1->lmm_stripe_count,
 	       v1->lmm_stripe_offset);
 
-	if (v1->lmm_magic == LOV_MAGIC_V3) {
+	if (v1->lmm_magic == LOV_MAGIC_V3 || lo->ldo_pool) {
+		char *pool_name = NULL;
 		if (buf->lb_len < sizeof(*v3)) {
 			CERROR("wrong size: %u\n", (unsigned) buf->lb_len);
 			RETURN(-EINVAL);
 		}
 
-		v3 = buf->lb_buf;
-		lod_object_set_pool(lo, v3->lmm_pool_name);
+		if (v1->lmm_magic == LOV_MAGIC_V3) {
+			v3 = buf->lb_buf;
+			pool_name = v3->lmm_pool_name;
+			lod_object_set_pool(lo, pool_name);
+		} else if (lo->ldo_pool) {
+			pool_name = lo->ldo_pool;
+		}
 
 		/* In the function below, .hs_keycmp resolves to
 		 * pool_hashkey_keycmp() */
 		/* coverity[overrun-buffer-val] */
-		pool = lod_find_pool(d, v3->lmm_pool_name);
+		pool = lod_find_pool(d, pool_name);
 		if (pool != NULL) {
 			if (lo->ldo_def_stripe_offset !=
 			    (typeof(v1->lmm_stripe_offset))(-1)) {
