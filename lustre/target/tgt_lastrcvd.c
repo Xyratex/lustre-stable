@@ -677,6 +677,10 @@ int tgt_client_del(const struct lu_env *env, struct obd_export *exp)
 
 	LASSERT(ted->ted_lcd);
 
+	/* Do not erase record for recoverable client. */
+	if (exp->exp_obd->obd_fail)
+		RETURN(0);
+
 	/* XXX if lcd_uuid were a real obd_uuid, I could use obd_uuid_equals */
 	if (!strcmp((char *)ted->ted_lcd->lcd_uuid,
 		    (char *)tgt->lut_obd->obd_uuid.uuid) ||
@@ -694,10 +698,6 @@ int tgt_client_del(const struct lu_env *env, struct obd_export *exp)
 		       tgt->lut_obd->obd_name, ted->ted_lr_idx);
 		LBUG();
 	}
-
-	/* Do not erase record for recoverable client. */
-	if (exp->exp_flags & OBD_OPT_FAILOVER)
-		RETURN(0);
 
 	/* Make sure the server's last_transno is up to date.
 	 * This should be done before zeroing client slot so last_transno will
