@@ -108,11 +108,18 @@ mpi_threads_per_client=${mpi_threads_per_client:-2}
 
 iozone_SIZE=${iozone_SIZE:-262144} # 256m
 
-mpirun=$(which mpirun)
+mpirun=${MPIRUN:-$(which mpirun)}
 
 ha_info()
 {
 	echo "$0: $(date +%H:%M:%S' '%s):" "$@"
+}
+
+ha_log()
+{
+	local nodes=${1// /,}
+	shift
+	ha_on $nodes "lctl mark $*"
 }
 
 ha_error()
@@ -161,9 +168,13 @@ declare -a  ha_mpi_load_tags=(
     ior
     simul
 )
+declare     ha_ior_params=${IORP:-" -b $ior_blockSize -t 2m -w -W -T 1"}
+declare     ha_simul_params=${SIMULP:-" -n 10"}
+declare     ha_mpirun_options=${MPIRUN_OPTIONS:-""}
+
 declare -a  ha_mpi_load_cmds=(
-    "$IOR -b $ior_blockSize -o {}/f.ior -t 2m -w -W -T 1"
-    "$SIMUL -n 10 -d {}"
+    "$IOR -o {}/f.ior $ha_ior_params"
+    "$SIMUL $ha_simul_params -d {}"
 )
 declare -a  ha_nonmpi_load_tags=(
     dd
@@ -342,7 +353,8 @@ ha_repeat_mpi_load()
         {
             ha_on ${ha_clients[0]} mkdir -p "$dir" &&
             ha_on ${ha_clients[0]} chmod a+xwr $dir &&
-            ha_on ${ha_clients[0]} "su mpiuser sh -c \" $mpirun -np $((${#ha_clients[@]} * mpi_threads_per_client )) $machines $cmd \" " &&
+		ha_on ${ha_clients[0]} "su mpiuser sh -c \" $mpirun $ha_mpirun_options \
+			-np $((${#ha_clients[@]} * mpi_threads_per_client )) $machines $cmd \" " &&
             ha_on ${ha_clients[0]} rm -rf "$dir";
         } >>"$log" 2>&1 || rc=$?
 
@@ -607,6 +619,8 @@ ha_main()
 {
     ha_process_arguments "$@"
 
+	ha_log "${ha_clients[*]} ${ha_servers[*]}" \
+		"START: $0: $(date +%H:%M:%S' '%s)"
     trap ha_trap_exit EXIT
     mkdir "$ha_tmp_dir"
     ha_on ${ha_clients[0]} mkdir "$ha_test_dir"
@@ -626,6 +640,8 @@ ha_main()
     if [ -e "$ha_fail_file" ]; then
         exit 1
     else
+		ha_log "${ha_clients[*]} ${ha_servers[*]}" \
+			"END: $0: $(date +%H:%M:%S' '%s)"
         exit 0
     fi
 }
