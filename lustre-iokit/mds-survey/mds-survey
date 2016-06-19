@@ -58,31 +58,31 @@ basedir="tests"
 mdtbasedir="MDT%04x-"
 
 create_directories () {
-    local host=$1
-    local devno=$2
-    local ndir=$3
-    local rfile=$4
-    local mdtidx=$5
-    local idx
+	local host=$1
+	local devno=$2
+	local ndir=$3
+	local rfile=$4
+	local mdtidx=$5
+	local idx
 
-    for ((idx = 0; idx < $ndir; idx++)); do
-        if (( idx == 0 )); then
-            dirname="$(printf "${mdtbasedir}" $mdtidx)${basedir}"
-        else
-            dirname="$(printf "${mdtbasedir}" $mdtidx)${basedir}${idx}"
-        fi
-        remote_shell $host $lctl --device $devno test_mkdir /$dirname > $rfile 2>&1
-        while read line; do
-            echo "$line" | grep -q 'error: test_mkdir'
-            if [ $?  -eq 0 ]; then
-                cat $rfile >&2
-                echo "ERROR: fail test_mkdir" >&2
-                echo "ERROR"
-                return
-            fi
-        done < $rfile
-    done
-    echo $basedir
+	for ((idx = 0; idx < $ndir; idx++)); do
+		if (( idx == 0 )); then
+			dirname="$(printf "${mdtbasedir}" $mdtidx)${basedir}"
+		else
+			dirname="$(printf "${mdtbasedir}" $mdtidx)${basedir}${idx}"
+		fi
+		remote_shell $host $lctl --device $devno test_mkdir /$dirname > $rfile 2>&1
+		while read line; do
+			echo "$line" | grep -q 'error: test_mkdir'
+			if [ $?  -eq 0 ]; then
+				cat $rfile >&2
+				echo "ERROR: fail test_mkdir" >&2
+				echo "ERROR: fail test_mkdir"
+				return
+			fi
+		done < $rfile
+	done
+	echo $basedir
 }
 
 destroy_directories () {
@@ -252,19 +252,19 @@ print_summary "$(date) $0 from $(hostname)"
 # create directories
 tmpf="${workf}_tmp"
 for ((idx = 0; idx < $ndevs; idx++)); do
-    host=${host_names[$idx]}
-    devno=${devnos[$idx]}
-    client_name="${host}:${client_names[$idx]}"
-    mdtidx=${client_indexes[$idx]}
-    echo "=============> Create $dir_count directories on $client_name" >> $workf
-    destroy_directories $host $devno $dir_count $tmpf $mdtidx
-    ret=`create_directories $host $devno $dir_count $tmpf $mdtidx`
-    cat $tmpf >> $workf
-    rm $tmpf
-    if [ $ret = "ERROR" ]; then
-        print_summary "created directories on $client_name failed"
-        cleanup 1
-    fi
+	host=${host_names[$idx]}
+	devno=${devnos[$idx]}
+	client_name="${host}:${client_names[$idx]}"
+	mdtidx=${client_indexes[$idx]}
+	echo "=======> Create $dir_count directories on $client_name" >> $workf
+	destroy_directories $host $devno $dir_count $tmpf $mdtidx
+	ret=$(create_directories $host $devno $dir_count $tmpf $mdtidx)
+	cat $tmpf >> $workf
+	rm $tmpf
+	if [ $ret = "ERROR" ]; then
+		print_summary "created directories on $client_name failed"
+		cleanup 1
+	fi
 done
 
 snap=1
