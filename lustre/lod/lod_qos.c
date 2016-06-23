@@ -733,6 +733,7 @@ static int lod_check_and_reserve_ost(const struct lu_env *env,
 	 */
 	lod_qos_ost_in_use(env, stripe_idx, ost_idx);
 	stripe[stripe_idx] = o;
+	OBD_FAIL_TIMEOUT(OBD_FAIL_MDS_LOV_CREATE_RACE, 2);
 	stripe_idx++;
 	*s_idx = stripe_idx;
 
