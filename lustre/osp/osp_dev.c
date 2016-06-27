@@ -1319,6 +1319,9 @@ static int osp_import_event(struct obd_device *obd, struct obd_import *imp,
 		break;
 	case IMP_EVENT_INACTIVE:
 		d->opd_imp_active = 0;
+		spin_lock(&obd->obd_dev_lock);
+		d->opd_obd->obd_inactive = 1;
+		spin_unlock(&obd->obd_dev_lock);
 		if (d->opd_connect_mdt)
 			break;
 
@@ -1334,6 +1337,9 @@ static int osp_import_event(struct obd_device *obd, struct obd_import *imp,
 			d->opd_new_connection = 1;
 		d->opd_imp_connected = 1;
 		d->opd_imp_seen_connected = 1;
+		spin_lock(&obd->obd_dev_lock);
+		d->opd_obd->obd_inactive = 0;
+		spin_unlock(&obd->obd_dev_lock);
 		if (d->opd_connect_mdt)
 			break;
 		wake_up(&d->opd_pre_waitq);
