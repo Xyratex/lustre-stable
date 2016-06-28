@@ -422,8 +422,8 @@ test_10() {
 
 	dd if=/dev/zero of=$TDIR/$tfile count=10 || error "dd failed"
 
-	#define OBD_FAIL_OSC_DELAY_IO            0x413
-	$LCTL set_param fail_val=60 fail_loc=0x413
+	#define OBD_FAIL_OSC_DELAY_IO            0x414
+	$LCTL set_param fail_val=60 fail_loc=0x414
 	cancel_lru_locks OST0000-osc &
 	sleep 2
 	facet_failover ost1 || error "failover: $?"

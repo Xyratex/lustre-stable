@@ -2368,8 +2368,8 @@ test_131() {
 	dd if=/dev/zero of=$DIR/$tfile count=1 || error "dd failed"
 
 	# another IO under the same lock
-	#define OBD_FAIL_OSC_DELAY_IO            0x413
-	$LCTL set_param fail_val=4 fail_loc=0x80000413
+	#define OBD_FAIL_OSC_DELAY_IO            0x414
+	$LCTL set_param fail_val=4 fail_loc=0x80000414
 	dd if=/dev/zero of=$DIR/$tfile count=1 conv=notrunc oflag=dsync &
 	local pid=$!
 	sleep 1
