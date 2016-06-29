@@ -67,9 +67,17 @@
 #
 # WORKLOADS
 #
-#   Each client runs the same set of MPI and non-MPI workloads.  These
+#   Each client runs set of MPI and non-MPI workloads. These
 #   applications are run in short loops so that their exit status can be waited
 #   for and checked within reasonable time by ha_wait_loads.
+#   The set of MPI and non-MPI workloads are configurable by parameters:
+#	ha_mpi_loads
+#		default set: dd, tar, iozone
+#	ha_nonmpi_loads
+#		default set: ior, simul.
+#
+#   The number of clients run MPI loads is configured by parameter
+#   ha_mpi_instances. Only One client runs MPI workloads by default.
 #
 # PROCESS STRUCTURE AND IPC
 #
@@ -152,6 +160,7 @@ declare     ha_power_down_cmd=${POWER_DOWN:-"pm -0"}
 declare     ha_power_up_cmd=${POWER_UP:-"pm -1"}
 declare     ha_failback_delay=${DELAY:-5}
 declare     ha_failback_cmd=${FAILBACK:-""}
+declare     ha_stripe_params=${STRIPEPARAMS:-"-c 0"}
 declare -a  ha_clients
 declare -a  ha_servers
 declare -a  ha_victims
@@ -164,23 +173,29 @@ declare     ha_stop_signals="SIGINT SIGTERM SIGHUP"
 declare     ha_load_timeout=$((60 * 10))
 declare     ha_workloads_only=false
 declare     ha_workloads_dry_run=false
-declare -a  ha_mpi_load_tags=(
-    ior
-    simul
-)
-declare     ha_ior_params=${IORP:-" -b $ior_blockSize -t 2m -w -W -T 1"}
-declare     ha_simul_params=${SIMULP:-" -n 10"}
+
+declare     ha_mpi_instances=${ha_mpi_instances:-1}
+
+declare     ha_mpi_loads=${ha_mpi_loads="ior simul"}
+declare -a  ha_mpi_load_tags=($ha_mpi_loads)
+
+declare     ha_ior_params=${IORP:-'" -b $ior_blockSize -t 2m -w -W -T 1"'}
+declare     ha_simul_params=${SIMULP:-'" -n 10"'}
 declare     ha_mpirun_options=${MPIRUN_OPTIONS:-""}
 
-declare -a  ha_mpi_load_cmds=(
-    "$IOR -o {}/f.ior $ha_ior_params"
-    "$SIMUL $ha_simul_params -d {}"
+eval ha_params_ior=($ha_ior_params)
+eval ha_params_simul=($ha_simul_params)
+
+declare ha_nparams_ior=${#ha_params_ior[@]}
+declare ha_nparams_simul=${#ha_params_simul[@]}
+
+declare -A  ha_mpi_load_cmds=(
+    [ior]="$IOR -o {}/f.ior {params}"
+    [simul]="$SIMUL {params} -d {}"
 )
-declare -a  ha_nonmpi_load_tags=(
-    dd
-    tar
-    iozone
-)
+
+declare     ha_nonmpi_loads=${ha_nonmpi_loads="dd tar iozone"}
+declare -a  ha_nonmpi_load_tags=($ha_nonmpi_loads)
 declare -a  ha_nonmpi_load_cmds=(
     "dd if=/dev/zero of={}/f.dd bs=1M count=256"
     "tar cf - /etc | tar xf - -C {}"
@@ -331,17 +346,20 @@ ha_dump_logs()
 
 ha_repeat_mpi_load()
 {
-    local load=$1
-    local status=$2
-    local tag=${ha_mpi_load_tags[$load]}
-    local cmd=${ha_mpi_load_cmds[$load]}
-    local dir=$ha_test_dir/$tag
-    local log=$ha_tmp_dir/$tag
+	local client=$1
+	local load=$2
+	local status=$3
+	local parameter=$4
+	local tag=${ha_mpi_load_tags[$load]}
+	local cmd=${ha_mpi_load_cmds[$tag]}
+	local dir=$ha_test_dir/$client-$tag
+	local log=$ha_tmp_dir/$client-$tag
     local rc=0
     local nr_loops=0
     local start_time=$(date +%s)
 
     cmd=${cmd//"{}"/$dir}
+	cmd=${cmd//"{params}"/$parameter}
 
     ha_info "Starting $tag"
 
@@ -351,11 +369,11 @@ ha_repeat_mpi_load()
     fi
     while [ ! -e "$ha_stop_file" ] && ((rc == 0)); do
         {
-            ha_on ${ha_clients[0]} mkdir -p "$dir" &&
-            ha_on ${ha_clients[0]} chmod a+xwr $dir &&
-		ha_on ${ha_clients[0]} "su mpiuser sh -c \" $mpirun $ha_mpirun_options \
+		ha_on $client mkdir -p "$dir" &&
+		ha_on $client chmod a+xwr $dir &&
+		ha_on $client "su mpiuser sh -c \" $mpirun $ha_mpirun_options \
 			-np $((${#ha_clients[@]} * mpi_threads_per_client )) $machines $cmd \" " &&
-            ha_on ${ha_clients[0]} rm -rf "$dir";
+			ha_on $client rm -rf "$dir";
         } >>"$log" 2>&1 || rc=$?
 
         ha_info rc=$rc
@@ -381,6 +399,8 @@ ha_start_mpi_loads()
     local load
     local tag
     local status
+	local n
+	local nparam
 
     if ! [ "$MPILIB" == mpich2 ]; then
         for client in ${ha_clients[@]}; do
@@ -394,12 +414,26 @@ ha_start_mpi_loads()
         done
     fi
 
-    for ((load = 0; load < ${#ha_mpi_load_tags[@]}; load++)); do
-        tag=${ha_mpi_load_tags[$load]}
-        status=$ha_status_file_prefix-$tag
-        ha_repeat_mpi_load $load $status &
-        ha_status_files+=("$status")
-    done
+	# ha_mpi_instances defines the number of
+	# clients start mpi loads; should be <= ${#ha_clients[@]}
+	local inst=$ha_mpi_instances
+	(( inst <= ${#ha_clients[@]} )) || inst=${#ha_clients[@]}
+ 
+	for ((n = 0; n < $inst; n++)); do
+		client=${ha_clients[n]}
+		for ((load = 0; load < ${#ha_mpi_load_tags[@]}; load++)); do
+			tag=${ha_mpi_load_tags[$load]}
+			status=$ha_status_file_prefix-$tag-$client
+			# ha_nparams_ior
+			# ha_nparams_simul
+			local num=ha_nparams_$tag
+			nparam=$((n % num))
+			local aref=ha_params_$tag[nparam]
+			local parameter=${!aref}
+			ha_repeat_mpi_load $client $load $status "$parameter" &
+				ha_status_files+=("$status")
+		done
+	done
 }
 
 ha_repeat_nonmpi_load()
@@ -488,10 +522,25 @@ ha_wait_loads()
               ha_info "$ha_stop_file found! Stop."
               break
         fi
-        until [ -e "$file" ] ||
-              (($(date +%s) >= end)); do
-            ha_sleep 1 >/dev/null
-        done
+	#
+	# Wait status file created during ha_load_timeout.
+	# Existing file guarantees that some application
+	# is completed. If no status file was created
+	# this function guarantees that we allow
+	# applications to continue after/before
+	# failover/failback during ha_load_timeout time.
+	#
+	until [ -e "$file" ] || (($(date +%s) >= end)); do
+		#
+		# check ha_stop_file again, it could appear
+		# during ha_load_timeout
+		#
+		if [ -e "$ha_stop_file" ]; then
+			ha_info "$ha_stop_file found! Stop."
+			break
+		fi
+		ha_sleep 1 >/dev/null
+	done
     done
 }
 
@@ -624,6 +673,7 @@ ha_main()
     trap ha_trap_exit EXIT
     mkdir "$ha_tmp_dir"
     ha_on ${ha_clients[0]} mkdir "$ha_test_dir"
+	ha_on ${ha_clients[0]} /usr/bin/lfs setstripe $ha_stripe_params $ha_test_dir
 
     ha_start_loads
     ha_wait_loads
