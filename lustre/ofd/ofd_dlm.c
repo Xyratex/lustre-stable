@@ -146,6 +146,14 @@ static enum interval_iter ofd_intent_cb(struct interval_node *n, void *args)
 		break;
 	}
 
+	/* l_export can be null in race with eviction - In that case, we will
+	   not find any locks in this interval */
+	if (!v) {
+		CDEBUG(D_DLMTRACE, "No lock found for interval - probably due"
+				   " to an eviction.\n");
+		return INTERVAL_ITER_CONT;
+	}
+
 	/*
 	 * This check is for lock taken in ofd_destroy_by_fid() that does
 	 * not have l_glimpse_ast set. So the logic is: if there is a lock
