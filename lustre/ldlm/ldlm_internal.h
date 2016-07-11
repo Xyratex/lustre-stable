@@ -104,6 +104,7 @@ enum {
         LDLM_CANCEL_NO_WAIT = 1 << 4,/* Cancel locks w/o blocking (neither
                                       * sending nor waiting for any rpcs) */
 	LDLM_CANCEL_LRUR_NO_WAIT = 1 << 5, /* LRUR + NO_WAIT */
+	LDLM_CANCEL_AGED_NO_WAIT = 1 << 6, /* AGED + NO_WAIT */
 };
 
 int ldlm_cancel_lru(struct ldlm_namespace *ns, int nr,
