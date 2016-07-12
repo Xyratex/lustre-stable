@@ -5533,6 +5533,68 @@ test_92() {
 }
 run_test 92 "Race MDT->OST reconnection with create"
 
+test_93()
+{
+	IMAGESIZE=3298534883328
+
+	if [ $(facet_fstype $SINGLEMDS) != ldiskfs ]; then
+		skip "Only applicable to ldiskfs-based MDTs"
+		return
+	fi
+
+	stopall
+	# We need MDT size 3072G, because it is smallest
+	# partition that can store 2GB inodes
+	do_facet $SINGLEMDS "mkdir -p $TMP/$tdir"
+	local mdsimgname=$TMP/$tdir/lustre-mdt
+	do_facet $SINGLEMDS "rm -f $mdsimgname"
+	do_facet $SINGLEMDS "touch $mdsimgname"
+	do_facet $SINGLEMDS "$TRUNCATE $mdsimgname $IMAGESIZE"
+	local mdsdev=$(do_facet $SINGLEMDS "losetup -f")
+	do_facet $SINGLEMDS "losetup $mdsdev $mdsimgname"
+
+	local mds_opts="$(mkfs_opts mds1 ${mdsdev}) --device-size=$IMAGESIZE
+		--mkfsoptions='-i 1024 -O large_xattr,^resize_inode,meta_bg'"
+	add mds1 $mds_opts --mgs --reformat $mdsdev || exit error "format mds"
+	add ost1 $(mkfs_opts ost1 $(ostdevname 1)) --index=$i \
+			--reformat $(ostdevname 1) $(ostvdevname 1)
+
+	start $SINGLEMDS ${mdsdev} $MDS_MOUNT_OPTS || error "Can't start mds"
+	start_ost || error "start ost failed"
+	mount_client $MOUNT || error "mount client failed"
+
+	mkdir -p $DIR/$tdir || error "mkdir fail"
+	local pathes=`do_facet $SINGLEMDS "ls /sys/fs/ldiskfs/*/inode_goal"`
+	echo pathes: $pathes
+	for goal_path in $pathes ; do
+		do_facet $SINGLEMDS  "echo 2147483947 >> $goal_path";
+	done
+	for goal_path in $pathes ; do
+		do_facet $SINGLEMDS  "cat $goal_path";
+	done
+
+	touch $DIR/$tdir/$tfile
+
+	#Add > 5k bytes to xattr
+	for i in $(seq 30); do
+		ln $DIR/$tdir/$tfile $DIR/$tdir/$(printf %0255d $i) ||
+			error "Can't make link"
+	done
+
+	umount_client $MOUNT
+	stop_ost
+	stop_mds
+
+	local inode_num=$(do_facet $SINGLEMDS "$DEBUGFS -R"`
+		`"'stat ROOT/$tdir/$tfile' $mdsimgname"`
+		`| awk '/link =/ {print $4}' |`
+		`sed -e 's/>//' -e 's/<//' -e 's/\"//')
+	echo inode num: $inode_num
+	rm -rf $TMP/$tdir
+	[ $inode_num -ge 2147483947 ] || error "inode number too small"
+}
+run_test 93 "Access xattr for inodes number  > 2G"
+
 if ! combined_mgs_mds ; then
 	stop mgs
 fi
