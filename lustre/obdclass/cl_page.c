@@ -418,6 +418,7 @@ struct cl_page *cl_vmpage_page(struct page *vmpage, struct cl_object *obj)
 
 	page = (struct cl_page *)vmpage->private;
 	if (page != NULL) {
+		LASSERT(cl_object_same(page->cp_obj, obj));
 		cl_page_get_trust(page);
 		LASSERT(page->cp_type == CPT_CACHEABLE);
 	}
