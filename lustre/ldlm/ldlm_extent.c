@@ -751,6 +751,7 @@ int ldlm_process_extent_lock(struct ldlm_lock *lock, __u64 *flags,
 	struct list_head rpc_list;
 	int rc, rc2;
 	int contended_locks;
+	__u64 orig_flags = *flags;
 	ENTRY;
 
 	LASSERT(lock->l_granted_mode != lock->l_req_mode);
@@ -763,6 +764,7 @@ int ldlm_process_extent_lock(struct ldlm_lock *lock, __u64 *flags,
 
 restart:
 	contended_locks = 0;
+	*flags = orig_flags;
         if (!first_enq) {
 		struct list_head *tmp;
 		tmp = *flags & LDLM_FL_INTENT_ONLY ? NULL : &rpc_list;
