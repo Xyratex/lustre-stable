@@ -267,43 +267,32 @@ ldlm_extent_internal_policy_waiting(struct ldlm_lock *req,
 static void ldlm_extent_policy(struct ldlm_resource *res,
 			       struct ldlm_lock *lock, __u64 *flags)
 {
-	struct ldlm_extent new_ex = { .start = 0, .end = OBD_OBJECT_EOF };
+        struct ldlm_extent new_ex = { .start = 0, .end = OBD_OBJECT_EOF };
 
-	if (lock->l_export == NULL)
-		/*
-		 * this is local lock taken by server (e.g., as a part of
-		 * OST-side locking, or unlink handling). Expansion doesn't
-		 * make a lot of sense for local locks, because they are
-		 * dropped immediately on operation completion and would only
-		 * conflict with other threads.
-		 */
-		return;
+        if (lock->l_export == NULL)
+                /*
+                 * this is local lock taken by server (e.g., as a part of
+                 * OST-side locking, or unlink handling). Expansion doesn't
+                 * make a lot of sense for local locks, because they are
+                 * dropped immediately on operation completion and would only
+                 * conflict with other threads.
+                 */
+                return;
 
-	if (lock->l_policy_data.l_extent.start == 0 &&
-	    lock->l_policy_data.l_extent.end == OBD_OBJECT_EOF)
-		/* fast-path whole file locks */
-		return;
+        if (lock->l_policy_data.l_extent.start == 0 &&
+            lock->l_policy_data.l_extent.end == OBD_OBJECT_EOF)
+                /* fast-path whole file locks */
+                return;
 
-	/* Because reprocess_queue zeroes flags and uses it to return
-	 * LDLM_FL_LOCK_CHANGED, we must check for the NO_EXPANSION flag
-	 * in the lock flags rather than the 'flags' argument */
-	if (likely(!(lock->l_flags & LDLM_FL_NO_EXPANSION))) {
-		ldlm_extent_internal_policy_granted(lock, &new_ex);
-		ldlm_extent_internal_policy_waiting(lock, &new_ex);
-	} else {
-		LDLM_DEBUG(lock, "Not expanding manually requested lock.\n");
-		new_ex.start = lock->l_policy_data.l_extent.start;
-		new_ex.end = lock->l_policy_data.l_extent.end;
-		/* In case the request is not on correct boundaries, we call
-		 * fixup. (normally called in ldlm_extent_internal_policy_*) */
-		ldlm_extent_internal_policy_fixup(lock, &new_ex, 0);
-	}
+        ldlm_extent_internal_policy_granted(lock, &new_ex);
+        ldlm_extent_internal_policy_waiting(lock, &new_ex);
 
-	if (!ldlm_extent_equal(&new_ex, &lock->l_policy_data.l_extent)) {
-		*flags |= LDLM_FL_LOCK_CHANGED;
-		lock->l_policy_data.l_extent.start = new_ex.start;
-		lock->l_policy_data.l_extent.end = new_ex.end;
-	}
+        if (new_ex.start != lock->l_policy_data.l_extent.start ||
+            new_ex.end != lock->l_policy_data.l_extent.end) {
+                *flags |= LDLM_FL_LOCK_CHANGED;
+                lock->l_policy_data.l_extent.start = new_ex.start;
+                lock->l_policy_data.l_extent.end = new_ex.end;
+        }
 }
 
 static int ldlm_check_contention(struct ldlm_lock *lock, int contended_locks)
@@ -447,16 +436,10 @@ ldlm_extent_compat_queue(struct list_head *queue, struct ldlm_lock *req,
                                 continue;
                         }
 
-			/* We've found a blocking lock, return. */
-			if (!work_list || (*flags & LDLM_FL_BLOCK_NOWAIT)) {
-				rc = interval_is_overlapped(tree->lit_root,
-							    &ex);
-				if (rc && (*flags & LDLM_FL_BLOCK_NOWAIT)) {
-					compat = -EWOULDBLOCK;
-					goto destroylock;
-				} else if (rc) {
+                        if (!work_list) {
+                                rc = interval_is_overlapped(tree->lit_root,&ex);
+                                if (rc)
                                         RETURN(0);
-				}
                         } else {
                                 interval_search(tree->lit_root, &ex,
                                                 ldlm_extent_compat_cb, &data);
@@ -615,11 +598,6 @@ ldlm_extent_compat_queue(struct list_head *queue, struct ldlm_lock *req,
 
                         if (!work_list)
                                 RETURN(0);
-
-			if (*flags & LDLM_FL_BLOCK_NOWAIT) {
-				compat = -EWOULDBLOCK;
-				goto destroylock;
-			}
 
                         /* don't count conflicting glimpse locks */
                         if (lock->l_req_mode == LCK_PR &&

@@ -504,8 +504,6 @@ int ofd_fid_fini(const struct lu_env *env, struct ofd_device *ofd);
 extern struct ldlm_valblock_ops ofd_lvbo;
 
 /* ofd_dlm.c */
-int ofd_dlm_init(void);
-void ofd_dlm_exit(void);
 int ofd_intent_policy(struct ldlm_namespace *ns, struct ldlm_lock **lockp,
 		      void *req_cookie, ldlm_mode_t mode, __u64 flags,
 		      void *data);

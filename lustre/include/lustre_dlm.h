@@ -580,8 +580,8 @@ struct ldlm_glimpse_work {
 					   * glimpse callback request */
 };
 
-/** The ldlm_glimpse_work was slab allocated & must be freed accordingly.*/
-#define LDLM_GL_WORK_SLAB_ALLOCATED 0x1
+/** The ldlm_glimpse_work is allocated on the stack and should not be freed. */
+#define LDLM_GL_WORK_NOFREE 0x1
 
 /** Interval node data for each LDLM_EXTENT lock. */
 struct ldlm_interval {
