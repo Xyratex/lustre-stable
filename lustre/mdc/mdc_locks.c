@@ -507,26 +507,6 @@ static struct ptlrpc_request *mdc_intent_getattr_pack(struct obd_export *exp,
         RETURN(req);
 }
 
-static struct ptlrpc_request *ldlm_enqueue_pack(struct obd_export *exp)
-{
-        struct ptlrpc_request *req;
-        int rc;
-        ENTRY;
-
-        req = ptlrpc_request_alloc(class_exp2cliimp(exp), &RQF_LDLM_ENQUEUE);
-        if (req == NULL)
-                RETURN(ERR_PTR(-ENOMEM));
-
-        rc = ldlm_prep_enqueue_req(exp, req, NULL, 0);
-        if (rc) {
-                ptlrpc_request_free(req);
-                RETURN(ERR_PTR(rc));
-        }
-
-        ptlrpc_request_set_replen(req);
-        RETURN(req);
-}
-
 static int mdc_finish_enqueue(struct obd_export *exp,
                               struct ptlrpc_request *req,
                               struct ldlm_enqueue_info *einfo,
@@ -753,7 +733,7 @@ resend:
         else if (it->it_op & (IT_GETATTR | IT_LOOKUP))
                 req = mdc_intent_getattr_pack(exp, it, op_data);
         else if (it->it_op == IT_READDIR)
-                req = ldlm_enqueue_pack(exp);
+                req = ldlm_enqueue_pack(exp, 0);
 	else if (it->it_op & IT_GETXATTR)
 		req = mdc_intent_getxattr_pack(exp, it, op_data);
         else {
