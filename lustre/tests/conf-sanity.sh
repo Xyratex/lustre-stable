@@ -2592,8 +2592,8 @@ test_41a() { #bug 14134
 		return
 	fi
 
-        local rc
-        local MDSDEV=$(mdsdevname ${SINGLEMDS//mds/})
+	combined_mgs_mds ||
+		{ skip "needs combined MGT and MDT device" && return 0; }
 
 	start_mdt 1 -o nosvc -n
 	if [ $MDSCOUNT -ge 2 ]; then
@@ -2615,7 +2615,6 @@ test_41a() { #bug 14134
         stop_mds -f || return 202
         stop_mds -f || return 203
         unload_modules_conf || return 204
-        return $rc
 }
 run_test 41a "mount mds with --nosvc and --nomgs"
 
