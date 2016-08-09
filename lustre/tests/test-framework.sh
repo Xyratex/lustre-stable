@@ -5997,8 +5997,18 @@ oos_full() {
 	return $OSCFULL
 }
 
-pool_list () {
-   do_facet mgs lctl pool_list $1
+list_pool() {
+	echo -e "$(do_facet $SINGLEMDS $LCTL pool_list $1 2>/dev/null |
+			sed '1d')"
+}
+
+check_pool_not_exist() {
+	local fsname=${1%%.*}
+	local poolname=${1##$fsname.}
+	[[ $# -ne 1 ]] && return 0
+	[[ x$poolname = x ]] &&  return 0
+	list_pool $fsname | grep -w $1 && return 1
+	return 0
 }
 
 create_pool() {
@@ -6047,8 +6057,7 @@ remove_pool_from_list () {
 
 destroy_pool_int() {
     local ost
-    local OSTS=$(do_facet $SINGLEMDS lctl pool_list $1 | \
-        awk '$1 !~ /^Pool:/ {print $1}')
+	local OSTS=$(list_pool $1)
     for ost in $OSTS; do
         do_facet mgs lctl pool_remove $1 $ost
     done
@@ -6064,7 +6073,8 @@ destroy_pool() {
 
 	local RC
 
-	pool_list $fsname.$poolname || return $?
+	check_pool_not_exist $fsname.$poolname
+	[[ $? -eq 0 ]] && return 0
 
 	destroy_pool_int $fsname.$poolname
 	RC=$?
@@ -6086,8 +6096,6 @@ destroy_pools () {
     local fsname=${1:-$FSNAME}
     local poolname
     local listvar=${fsname}_CREATED_POOLS
-
-    pool_list $fsname
 
     [ x${!listvar} = x ] && return 0
 
