@@ -634,6 +634,10 @@ static int llog_osd_next_block(const struct lu_env *env,
 	if (len == 0 || len & (LLOG_CHUNK_SIZE - 1))
 		RETURN(-EINVAL);
 
+	if (loghandle->lgh_hdr->llh_flags & LLOG_F_IS_PLAIN &&
+	    loghandle->lgh_ctxt->loc_idx == LLOG_CHANGELOG_ORIG_CTXT)
+		OBD_FAIL_TIMEOUT(OBD_FAIL_LLOG, 5);
+
 	CDEBUG(D_OTHER, "looking for log index %u (cur idx %u off "LPU64")\n",
 	       next_idx, *cur_idx, *cur_offset);
 
