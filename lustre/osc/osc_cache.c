@@ -1263,6 +1263,10 @@ static struct osc_async_page* osc_make_ready(const struct lu_env *env,
 	list_for_each_entry(oap, &ext->oe_pages, oap_pending_item) {
 		struct cl_page  *page = oap2cl_page(oap);
 
+		++page_count;
+		if (last == NULL || last->oap_obj_off < oap->oap_obj_off)
+			last = oap;
+
 		/* checking ASYNC_READY is race safe */
 		if ((oap->oap_async_flags & ASYNC_READY) != 0)
 			continue;
@@ -1275,10 +1279,6 @@ static struct osc_async_page* osc_make_ready(const struct lu_env *env,
 	list_for_each_entry_safe(oap, next, &ready_list, oap_rpc_item) {
 		struct osc_page *opg  = oap2osc_page(oap);
 		struct cl_page  *page = oap2cl_page(oap);
-
-		++page_count;
-		if (last == NULL || last->oap_obj_off < oap->oap_obj_off)
-			last = oap;
 
 		rc = cl_page_make_ready_end(env, page, CRT_WRITE);
 		list_del_init(&oap->oap_rpc_item);
