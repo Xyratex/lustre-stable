@@ -457,6 +457,7 @@ mdd_changelog_llog_cancel(const struct lu_env *env, struct mdd_device *mdd,
         if (ctxt == NULL)
                 return -ENXIO;
 
+	mutex_lock(&ctxt->loc_mutex);
 	spin_lock(&mdd->mdd_cl.mc_lock);
 	cur = (long long)mdd->mdd_cl.mc_index;
 	spin_unlock(&mdd->mdd_cl.mc_lock);
@@ -485,6 +486,7 @@ mdd_changelog_llog_cancel(const struct lu_env *env, struct mdd_device *mdd,
 
 	rc = llog_cancel(env, ctxt, (struct llog_cookie *)&endrec, 0);
 out:
+	mutex_unlock(&ctxt->loc_mutex);
         llog_ctxt_put(ctxt);
         return rc;
 }
