@@ -2125,7 +2125,9 @@ int ldlm_work_gl_ast_lock(struct ptlrpc_request_set *rqset, void *opaq)
 
 	LDLM_LOCK_RELEASE(lock);
 
-	if ((gl_work->gl_flags & LDLM_GL_WORK_NOFREE) == 0)
+	if ((gl_work->gl_flags & LDLM_GL_WORK_SLAB_ALLOCATED))
+		OBD_SLAB_FREE_PTR(gl_work, ldlm_glimpse_work_kmem);
+	else if ((gl_work->gl_flags & LDLM_GL_WORK_NOFREE) == 0)
 		OBD_FREE_PTR(gl_work);
 
 	RETURN(rc);
