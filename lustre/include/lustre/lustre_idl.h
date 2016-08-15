@@ -1326,6 +1326,7 @@ extern void lustre_swab_ptlrpc_body(struct ptlrpc_body *pb);
 #define OBD_CONNECT_OPEN_BY_FID	0x20000000000000ULL /* open by fid won't pack
 						       name in request */
 #define OBD_CONNECT_UNLINK_CLOSE 0x100000000000000ULL/* close file in unlink */
+#define OBD_CONNECT_LOCK_AHEAD  0x1000000000000000ULL /* lock ahead */
 
 /* XXX README XXX:
  * Please DO NOT add flag values here before first ensuring that this same
@@ -1390,6 +1391,8 @@ extern void lustre_swab_ptlrpc_body(struct ptlrpc_body *pb);
 				OBD_CONNECT_LIGHTWEIGHT | OBD_CONNECT_LVB_TYPE|\
 				OBD_CONNECT_LAYOUTLOCK | OBD_CONNECT_FID | \
 				OBD_CONNECT_PINGLESS)
+#define OST_CONNECT_SUPPORTED_LA (OST_CONNECT_SUPPORTED |\
+				  OBD_CONNECT_LOCK_AHEAD)
 #define ECHO_CONNECT_SUPPORTED (0)
 #define MGS_CONNECT_SUPPORTED  (OBD_CONNECT_VERSION | OBD_CONNECT_AT | \
 				OBD_CONNECT_FULL20 | OBD_CONNECT_IMP_RECOV | \
@@ -2832,6 +2835,12 @@ static inline int ldlm_extent_contain(const struct ldlm_extent *ex1,
 				      const struct ldlm_extent *ex2)
 {
 	return ex1->start <= ex2->start && ex1->end >= ex2->end;
+}
+
+static inline int ldlm_extent_equal(const struct ldlm_extent *ex1,
+			     const struct ldlm_extent *ex2)
+{
+	return ex1->start == ex2->start && ex1->end == ex2->end;
 }
 
 struct ldlm_inodebits {

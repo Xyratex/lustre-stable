@@ -546,6 +546,9 @@ int obd_alloc_fail(const void *ptr, const char *name, const char *type,
 #define OBD_FAIL_UPDATE_OBJ_NET			0x1700
 #define OBD_FAIL_UPDATE_OBJ_NET_REP		0x1701
 
+/* OFD_DLM */
+#define OBD_FAIL_OFD_DLM_GL_WORK_ALLOC		0x1800
+
 /* DT */
 #define OBD_FAIL_DT_DECLARE_ATTR_GET		0x2000
 #define OBD_FAIL_DT_ATTR_GET			0x2001
