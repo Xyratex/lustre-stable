@@ -6115,7 +6115,7 @@ destroy_pool() {
 }
 
 destroy_pools () {
-    local fsname=${1:-$FSNAME}
+	local fsname=$1
     local poolname
     local listvar=${fsname}_CREATED_POOLS
 
@@ -6127,10 +6127,12 @@ destroy_pools () {
     done
 }
 
-cleanup_pools () {
-    local fsname=${1:-$FSNAME}
-    trap 0
-    destroy_pools $fsname
+destroy_test_pools () {
+	trap 0
+	local fsname=$1
+	destroy_pools $fsname || true
+	rm -rf $DIR/d*.${TESTSUITE}
+	[ -z $POOL_ROOT ] || rm -rf $POOL_ROOT
 }
 
 gather_logs () {

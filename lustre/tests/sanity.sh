@@ -11955,6 +11955,7 @@ test_220() { #LU-325
 	do_facet ost$((OSTIDX + 1)) lctl set_param fail_val=-1
 	#define OBD_FAIL_OST_ENOINO              0x229
 	do_facet ost$((OSTIDX + 1)) lctl set_param fail_loc=0x229
+	trap "destroy_test_pools $FSNAME" EXIT
 	create_pool $FSNAME.$TESTNAME || return 1
 	do_facet mgs $LCTL pool_add $FSNAME.$TESTNAME $OST || return 2
 
@@ -12860,6 +12861,7 @@ test_252() {
 			osp.$mdtosc_proc1.rsrvd_size_nwm_mb)
 	echo "prev high watermark $last_wm_h, prev normal watermark $last_wm_n"
 
+	trap "destroy_test_pools $FSNAME" EXIT
 	create_pool $FSNAME.$TESTNAME || return 1
 	do_facet mgs $LCTL pool_add $FSNAME.$TESTNAME $ost_name || return 2
 

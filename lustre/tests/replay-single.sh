@@ -2648,6 +2648,7 @@ run_test 85a "check the cancellation of unused locks during recovery(IBITS)"
 test_85b() { #bug 16774
     lctl set_param -n ldlm.cancel_unused_locks_before_replay "1"
 
+	trap "destroy_test_pools $FSNAME" EXIT
 	create_pool $FSNAME.$TESTNAME || return 1
     do_facet mgs $LCTL pool_add $FSNAME.$TESTNAME $FSNAME-OST0000 || return 2
 

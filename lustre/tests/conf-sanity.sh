@@ -5277,6 +5277,7 @@ test_88_set_params() {
 	    "$LCTL get_param -n llite.$fsname*.max_read_ahead_mb"   \
 	    "$fsname.llite.max_read_ahead_mb"                       \
 	    "64"
+	trap "destroy_test_pools $fsname" EXIT
 	create_pool $fsname.pool1 || error "create pool failed"
 	do_facet mgs $LCTL pool_add $fsname.pool1 OST0000 ||
 		error "pool_add failed"
