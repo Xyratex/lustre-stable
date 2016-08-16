@@ -13026,6 +13026,19 @@ test_258()
 }
 run_test 258 "i_size updates from BRW should be atomic"
 
+test_259() {
+	local file=$DIR/$tfile
+
+# define OBD_FAIL_TGT_RCVD_EIO		 0x717
+	$SETSTRIPE -c 1 -i 0 $file || error "setstripe failed"
+
+	do_facet ost1 "$LCTL set_param fail_loc=0x717"
+	dd if=/dev/zero of=$file bs=4096 oflag=direct count=1 && error "write should failed"
+	do_facet ost1 "$LCTL set_param fail_loc=0"
+	rm -f $file
+}
+run_test 259 "io should fail after last_rcvd update fail"
+
 test_400a() { # LU-1606, was conf-sanity test_74
 	local extra_flags=''
 	local out=$TMP/$tfile
