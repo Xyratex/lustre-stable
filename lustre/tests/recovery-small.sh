@@ -2423,6 +2423,44 @@ test_130b() {
 }
 run_test 130b "enqueue resend on a stale inode"
 
+test_130c() {
+	remote_mds_nodsh && skip "remote MDS with nodsh" && return
+
+	sync
+	echo XXX > $DIR/$tfile
+
+	cancel_lru_locks mdc
+
+	# Trigger writeback on $tfile.
+	#
+	# we need to race with unlink, unlink must complete before we will
+	# take a DLM lock, otherwise unlink will wait until intent will
+	# complete; but later than intent starts so that intent found
+	# the object
+#define OBD_FAIL_MDS_INTENT_DELAY		0x160
+	set_nodes_failloc "$(mdts_nodes)" 0x80000160
+	sync &
+	T130_PID=$!
+	sleep 2
+
+	rm $DIR/$tfile
+
+	# drop the reply so that resend happens on an unlinked file.
+#define OBD_FAIL_MDS_LDLM_REPLY_NET	 0x157
+	set_nodes_failloc "$(mdts_nodes)" 0x80000157
+
+	# let the reply to be dropped
+	sleep 10
+
+#define OBD_FAIL_SRV_ENOENT              0x217
+	set_nodes_failloc "$(mdts_nodes)" 0x80000217
+
+	wait $T130_PID
+
+	return 0
+}
+run_test 130c "layout intent resend on a stale inode"
+
 test_131() {
 	rm -f $DIR/$tfile
 	# get a lock on client so that export would reach the stale list
