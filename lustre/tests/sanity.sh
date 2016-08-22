@@ -12724,9 +12724,9 @@ test_242() {
 		echo Dumping log pattern: $dpath
 	fi
         # check is done on MDS
-	l1=$(do_facet $SINGLEMDS "dmesg | grep dumping" | awk  '/dumping log to / { s=$5 } END { print s }')
+	l1=$(do_facet $SINGLEMDS "dmesg | grep dumping" | awk  '/dumping log to / { s=$NF } END { print s }')
         do_facet $SINGLEMDS "lctl set_param trigger_watchdog=1"
-	l2=$(do_facet $SINGLEMDS "dmesg | grep dumping" | awk  '/dumping log to / { s=$5 } END { print s }')
+	l2=$(do_facet $SINGLEMDS "dmesg | grep dumping" | awk  '/dumping log to / { s=$NF } END { print s }')
 
 	if [ "$l1" != "$l2" ] ; then
 		echo "Lustre log was dumped to $l2 on $SINGLEMDS"
