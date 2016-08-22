@@ -2048,6 +2048,7 @@ out_lock:
 out:
 	if (likely(no_reply == 0))
 		no_reply = !target_committed_to_req(req) && trans_info.oti_wait;
+	CFS_FAIL_TIMEOUT(OBD_FAIL_PTLRPC_BULK_REPLY, obd_timeout + 5);
 	if (unlikely(no_reply)) {
 		req->rq_no_reply = 1;
 		/* reply out callback would free */

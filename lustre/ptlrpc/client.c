@@ -1713,6 +1713,11 @@ int ptlrpc_check_set(const struct lu_env *env, struct ptlrpc_request_set *set)
                             req->rq_waiting || req->rq_wait_ctx) {
                                 int status;
 
+				if (CFS_FAIL_PRECHECK(OBD_FAIL_PTLRPC_BULK_REPLY) &&
+				    req->rq_bulk &&  req->rq_resend)
+					CFS_FAIL_TIMEOUT_RESET(OBD_FAIL_PTLRPC_BULK_REPLY,
+							       0, obd_timeout);
+
 				if (!ptlrpc_unregister_reply(req, 1)) {
 					ptlrpc_unregister_bulk(req, 1);
 					continue;

@@ -436,6 +436,26 @@ test_10() {
 }
 run_test 10 "conflicting PW & PR locks on a client"
 
+test_11() {
+	rm -f $TDIR/$tfile-*
+
+	local at_max=$(do_facet ost1 "$LCTL get_param -n at_max")
+	#define OBD_FAIL_PTLRPC_BULK_REPLY       0x524
+	do_facet ost1 $LCTL set_param fail_val=3 fail_loc=0x10000524
+	$LCTL set_param fail_loc=0x0000524
+	do_facet ost1 "$LCTL set_param at_max=$TIMEOUT"
+	dd if=/dev/zero of=$TDIR/$tfile-1 bs=1024 count=1 conv=fdatasync &
+	sleep 4
+	dd if=/dev/zero of=$TDIR/$tfile-2 bs=1024 count=1 conv=fdatasync
+
+	wait
+	do_facet ost1 "$LCTL set_param at_max=$at_max"
+	rm -f $TDIR/$tfile-*
+
+	return 0
+}
+run_test 11 "delayed reply on client"
+
 complete $SECONDS
 check_and_cleanup_lustre
 exit_status
