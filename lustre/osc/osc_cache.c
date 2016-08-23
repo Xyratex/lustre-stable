@@ -1271,17 +1271,17 @@ static struct osc_async_page* osc_make_ready(const struct lu_env *env,
 		if ((oap->oap_async_flags & ASYNC_READY) != 0)
 			continue;
 
-		LASSERT(list_empty(&oap->oap_rpc_item));
-		list_add_tail(&oap->oap_rpc_item, &ready_list);
+		LASSERT(list_empty(&oap->oap_make_ready_item));
+		list_add_tail(&oap->oap_make_ready_item, &ready_list);
 		cl_page_make_ready_start(env, page, CRT_WRITE);
 	}
 
-	list_for_each_entry_safe(oap, next, &ready_list, oap_rpc_item) {
+	list_for_each_entry_safe(oap, next, &ready_list, oap_make_ready_item) {
 		struct osc_page *opg  = oap2osc_page(oap);
 		struct cl_page  *page = oap2cl_page(oap);
 
 		rc = cl_page_make_ready_end(env, page, CRT_WRITE);
-		list_del_init(&oap->oap_rpc_item);
+		list_del_init(&oap->oap_make_ready_item);
 		if (rc == 0)
 			opg->ops_submit_time = ktime_get();
 		switch (rc) {
@@ -2376,6 +2376,7 @@ int osc_prep_async_page(struct osc_object *osc, struct osc_page *ops,
 
 	INIT_LIST_HEAD(&oap->oap_pending_item);
 	INIT_LIST_HEAD(&oap->oap_rpc_item);
+	INIT_LIST_HEAD(&oap->oap_make_ready_item);
 
 	spin_lock_init(&oap->oap_lock);
 	CDEBUG(D_INFO, "oap %p page %p obj off %llu\n",

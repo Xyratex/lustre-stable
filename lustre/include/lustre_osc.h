@@ -77,6 +77,7 @@ struct osc_async_page {
 
 	struct list_head	oap_pending_item;
 	struct list_head	oap_rpc_item;
+	struct list_head        oap_make_ready_item;
 
 	loff_t			oap_obj_off;
 	unsigned		oap_page_off;
