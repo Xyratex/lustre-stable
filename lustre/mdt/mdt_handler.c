@@ -2385,13 +2385,10 @@ static int mdt_object_lock0(struct mdt_thread_info *info, struct mdt_object *o,
 				   MDS_INODELOCK_LAYOUT);
                         ibits |= MDS_INODELOCK_LOOKUP;
                 } else {
-			LASSERTF(!(ibits &
-				 (MDS_INODELOCK_UPDATE | MDS_INODELOCK_PERM |
-				  MDS_INODELOCK_LAYOUT)),
-				"%s: wrong bit "LPX64" for remote obj "DFID"\n",
-				mdt_obd_name(info->mti_mdt), ibits,
-				PFID(mdt_object_fid(o)));
-                        LASSERT(ibits & MDS_INODELOCK_LOOKUP);
+			if ((ibits & (MDS_INODELOCK_UPDATE |
+			    MDS_INODELOCK_PERM | MDS_INODELOCK_LAYOUT)) ||
+			    !(ibits & MDS_INODELOCK_LOOKUP))
+				RETURN(-EREMOTE);
                 }
                 /* No PDO lock on remote object */
                 LASSERT(lh->mlh_type != MDT_PDO_LOCK);
