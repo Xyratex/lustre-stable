@@ -18,7 +18,6 @@ init_logging
 ALWAYS_EXCEPT=""
 
 NFSVERSION=3
-EXPORT_OPTS="rw"
 
 build_test_filter
 check_and_setup_lustre
@@ -27,6 +26,7 @@ check_and_setup_lustre
 cleanup_mount $MOUNT
 # mount lustre on mds
 lustre_client=${NFS_SERVER:-$(facet_active_host $SINGLEMDS)}
+SINGLECLIENT=${SINGLECLIENT:-$HOSTNAME}
 NFS_CLIENT=${NFS_CLIENT:-$SINGLECLIENT}
 NFS_CLIENT=$(exclude_items_from_list $NFS_CLIENT $lustre_client)
 CL_MNT_OPT=""
@@ -35,8 +35,8 @@ zconf_mount_clients $lustre_client $MOUNT "$CL_MNT_OPT" ||
 
 assert_DIR
 
-NFS_MNT=$MOUNT
-LUSTRE_MNT=$MOUNT
+NFS_MNT=${NFS_MNT:-$MOUNT}
+LUSTRE_MNT=${LUSTRE_MNT:-$MOUNT}
 LOCKF=lockfile
 [ -z $NFS_CLIENT ] && error "NFS_CLIENT is empty"
 
@@ -65,7 +65,7 @@ nfs_start() {
 	    exit
 	fi
 
-	echo "NFS server mounted"
+	echo "NFS server and client are mounted"
 	do_node $lustre_client chmod a+xrw $LUSTRE_MNT
 	do_node $NFS_CLIENT "flock $NFS_MNT/$LOCKF -c 'echo test lock obtained'"
 }
@@ -79,13 +79,22 @@ cleanup_client3() {
 test_1a() {
 	[ -z $TEST_DIR_LTP_FLOCK ] && \
 		skip_env "TEST_DIR_LTP_FLOCK is empty" && return
+
+	local rc=0
 	nfs_start || return 1
-	for i in $(do_node $NFS_CLIENT "ls $TEST_DIR_LTP_FLOCK|sort")
+	for i in $(do_node $NFS_CLIENT "ls $TEST_DIR_LTP_FLOCK/flock0* |sort") \
+		$(do_node $NFS_CLIENT "ls $TEST_DIR_LTP_FLOCK/fcntl*_64 | \
+		grep -v fcntl16 | sort")
 	do
-		do_node $NFS_CLIENT \
-			"export TMPDIR=$NFS_MNT;$TEST_DIR_LTP_FLOCK/$i"
+		do_node $NFS_CLIENT "export TMPDIR=$NFS_MNT; $i"
+		rc=$?
+		[ $rc -eq 0 ] || break
 	done
 	nfs_stop
+	zconf_umount $lustre_client $LUSTRE_MNT force ||
+		error_noexit false "failed to umount lustre on $lustre_client"
+
+	[ $rc -eq 0 ] || error "$i failed: rc=$rc"
 }
 run_test 1a "LTP testsuite"
 
@@ -95,8 +104,14 @@ test_1b() {
 	[ x$LOCKTESTS = x ] &&
 		{ skip_env "locktests not found" && return; }
 	nfs_start || return 1
+
+	local rc=0
 	do_node $NFS_CLIENT "$LOCKTESTS -n 50 -f $NFS_MNT/locktests"
-	nfs_stop
+	rc=$?
+ 	nfs_stop
+	zconf_umount $lustre_client $LUSTRE_MNT force ||
+		error_noexit false "failed to umount lustre on $lustre_client"
+	return $rc
 }
 run_test 1b "locktests"
 
