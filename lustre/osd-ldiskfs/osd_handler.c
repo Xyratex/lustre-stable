@@ -1396,15 +1396,13 @@ static int osd_ro(const struct lu_env *env, struct dt_device *d)
 #ifdef HAVE_DEV_SET_RDONLY
 	CERROR("*** setting %s read-only ***\n", osd_dt_dev(d)->od_svname);
 
-	CDEBUG(D_IOCTL | D_HA, "set dev %lx rdonly\n", (long)dev);
-	dev_set_rdonly(dev);
-	/* we need to be sure all fs modification exist on journal
-	 * and later may restored */
 	if (jdev && (jdev != dev)) {
 		CDEBUG(D_IOCTL | D_HA, "set journal dev %lx rdonly\n",
 		       (long)jdev);
 		dev_set_rdonly(jdev);
 	}
+	CDEBUG(D_IOCTL | D_HA, "set dev %lx rdonly\n", (long)dev);
+	dev_set_rdonly(dev);
 #else
 	CERROR("%s: %lx CANNOT BE SET READONLY: rc = %d\n",
 	       osd_dt_dev(d)->od_svname, (long)dev, rc);
