@@ -1387,7 +1387,6 @@ static int osd_ro(const struct lu_env *env, struct dt_device *d)
 	struct block_device *dev = sb->s_bdev;
 #ifdef HAVE_DEV_SET_RDONLY
 	struct block_device *jdev = LDISKFS_SB(sb)->journal_bdev;
-	journal_t *journal = LDISKFS_SB(sb)->s_journal;
 	int rc = 0;
 #else
 	int rc = -EOPNOTSUPP;
@@ -1396,29 +1395,20 @@ static int osd_ro(const struct lu_env *env, struct dt_device *d)
 
 #ifdef HAVE_DEV_SET_RDONLY
 	CERROR("*** setting %s read-only ***\n", osd_dt_dev(d)->od_svname);
-	/* freeze a fs - code based on ext4_freeze function */
-	jbd2_journal_lock_updates(journal);
-	rc = jbd2_journal_flush(journal);
-	if (rc < 0)
-		goto out;
-#ifdef HAVE_LDISKFS_COMMIT_SUPER
-	rc = ldiskfs_commit_super(sb, 1);
-	if (rc < 0)
-		goto out;
-#endif
+
+	CDEBUG(D_IOCTL | D_HA, "set dev %lx rdonly\n", (long)dev);
+	dev_set_rdonly(dev);
+	/* we need to be sure all fs modification exist on journal
+	 * and later may restored */
 	if (jdev && (jdev != dev)) {
 		CDEBUG(D_IOCTL | D_HA, "set journal dev %lx rdonly\n",
 		       (long)jdev);
 		dev_set_rdonly(jdev);
 	}
-	CDEBUG(D_IOCTL | D_HA, "set dev %lx rdonly\n", (long)dev);
-	dev_set_rdonly(dev);
-out:
-	jbd2_journal_unlock_updates(journal);
+#else
+	CERROR("%s: %lx CANNOT BE SET READONLY: rc = %d\n",
+	       osd_dt_dev(d)->od_svname, (long)dev, rc);
 #endif
-	if (rc)
-		CERROR("%s: %lx CANNOT BE SET READONLY: rc = %d\n",
-			osd_dt_dev(d)->od_svname, (long)dev, rc);
 	RETURN(rc);
 }
 
