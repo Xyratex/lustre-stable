@@ -5521,6 +5521,23 @@ test_92() {
 }
 run_test 92 "Race MDT->OST reconnection with create"
 
+test_98()
+{
+	local mountopt
+	local temp=$MDS_MOUNT_OPTS
+
+	setup
+	check_mount || error "mount failed"
+	mountopt="user_xattr"
+	for ((x = 1; x <= 400; x++)); do
+		mountopt="$mountopt,user_xattr"
+	done
+	remount_client $mountopt $MOUNT  2>&1 | grep "too long" ||
+		error "Buffer overflow check failed"
+	cleanup || error "cleanup failed"
+}
+run_test 98 "Buffer-overflow check while parsing mount_opts"
+
 test_100() {
 	reformat
 	start_mgsmds || error "MGS and MDS start failed"
