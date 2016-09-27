@@ -5632,6 +5632,28 @@ test_101()
 }
 run_test 101 "Access xattr for inodes number  > 2G"
 
+test_102() {
+	local cmp=0
+	local dir=$DIR1/$tdir
+	local dev=$FSNAME-OST0000-osc-MDT0000
+	start_mds || error "MDT start fail"
+	start_ost
+	mount_client $MOUNT	setupall
+	mkdir -p $dir
+#define OBD_FAIL_MDS_OSP_CLP_ORNS_FAIL	   0x164
+	do_facet $SINGLEMDS $LCTL set_param fail_loc=0x80000164
+	createmany -o $dir/$tfile-%d 50000&
+	cmp=$!
+	do_facet $SINGLEMDS $LCTL --device $dev deactivate
+	do_facet $SINGLEMDS $LCTL --device $dev activate
+	#wait $cmp || error "createmany failed"
+	touch $dir/$tfile || error "cannot create file"
+	wait $cmp
+	rm -rf $dir || error "cannot remove dir $tdir"
+	cleanup
+}
+run_test 102 "Correctly handle errors in osp_precreate_cleanup_orphans"
+
 if ! combined_mgs_mds ; then
 	stop mgs
 fi

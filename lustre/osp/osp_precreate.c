@@ -644,6 +644,8 @@ static int osp_precreate_cleanup_orphans(struct lu_env *env,
 	imp = d->opd_obd->u.cli.cl_import;
 	LASSERT(imp);
 
+	if (OBD_FAIL_CHECK(OBD_FAIL_MDS_OSP_CLP_ORNS_FAIL))
+		GOTO(out, rc = -ENOMEM);
 	req = ptlrpc_request_alloc(imp, &RQF_OST_CREATE);
 	if (req == NULL)
 		GOTO(out, rc = -ENOMEM);
