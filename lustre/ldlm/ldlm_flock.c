@@ -970,12 +970,19 @@ ldlm_flock_completion_ast_async(struct ldlm_lock *lock, __u64 flags, void *data)
 		}
 
 		if (args->fa_flags & FA_FL_CANCELED ||
-		    lock->l_granted_mode == LCK_MINMODE) {
+		    ((flags & LDLM_FL_BLOCKED_MASK) == 0 &&
+		     lock->l_granted_mode == LCK_MINMODE)) {
 			LDLM_DEBUG(lock, "client-side granted canceled lock");
 			ldlm_flock_destroy(lock, args->fa_mode,
 					   LDLM_FL_WAIT_NOREPROC);
 			GOTO(out, rc = -EIO);
 		}
+	}
+
+	if (flags & LDLM_FL_BLOCKED_MASK) {
+		LDLM_DEBUG(lock, "client-side enqueue returned a blocked lock");
+		args = NULL;
+		GOTO(out, rc = 0);
 	}
 
 	if (data != NULL)
