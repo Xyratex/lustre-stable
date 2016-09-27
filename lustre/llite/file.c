@@ -2084,9 +2084,10 @@ static int ll_flock_upcall(void *cookie, int err)
 		lock_res_and_lock(lock);
 		args = lock->l_ast_data;
 		lock->l_ast_data = NULL;
-		args->fa_err = err;
 		unlock_res_and_lock(lock);
 
+		if (args != NULL)
+			args->fa_err = err;
 		ll_flock_run_flock_cb(args);
 	}
 
@@ -2099,12 +2100,16 @@ ll_flock_completion_ast_async(struct ldlm_lock *lock, __u64 flags, void *data)
 	struct ldlm_flock_info *args;
 	ENTRY;
 
-	if (flags & LDLM_FL_BLOCKED_MASK) {
-		LDLM_DEBUG(lock, "client-side enqueue returned a blocked lock");
-		RETURN(0);
+	args = ldlm_flock_completion_ast_async(lock, flags, data);
+	if (args != NULL && args->fa_flags & FA_FL_CANCELED) {
+		/* lock was cancelled in a race */
+		struct file_lock *flc = &args->fa_flc;
+		struct file *file = args->fa_file;
+		struct inode *inode = file->f_path.dentry->d_inode;
+
+		ll_file_flock_async_unlock(inode, flc);
 	}
 
-	args = ldlm_flock_completion_ast_async(lock, flags, data);
 	ll_flock_run_flock_cb(args);
 
 	RETURN(0);
