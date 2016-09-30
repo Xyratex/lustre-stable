@@ -1112,6 +1112,11 @@ static int mdt_getattr_internal(struct mdt_thread_info *info,
 	if (OBD_FAIL_CHECK(OBD_FAIL_MDS_GETATTR_PACK))
 		RETURN(err_serious(-ENOMEM));
 
+	if (OBD_FAIL_PRECHECK(OBD_FAIL_MDS_GETATTR_NET)) {
+		/* Don`t let early reply prolong wait for client */
+		req->rq_deadline += obd_timeout;
+		OBD_FAIL_TIMEOUT(OBD_FAIL_MDS_GETATTR_NET, obd_timeout);
+	}
 	repbody = req_capsule_server_get(pill, &RMF_MDT_BODY);
 
 	ma->ma_valid = 0;
