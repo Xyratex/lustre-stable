@@ -2093,7 +2093,7 @@ static int osd_mkdir(struct osd_thread_info *info, struct osd_object *obj,
 {
         int result;
         struct osd_thandle *oth;
-        __u32 mode = (attr->la_mode & (S_IFMT | S_IRWXUGO | S_ISVTX));
+	__u32 mode = (attr->la_mode & (S_IFMT | S_IRWXUGO | S_ISVTX | S_ISGID));
 
         LASSERT(S_ISDIR(attr->la_mode));
 
