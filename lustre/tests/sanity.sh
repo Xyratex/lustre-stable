@@ -5410,6 +5410,22 @@ test_72b() { # bug 24226 -- keep mode setting when size is not changing
 }
 run_test 72b "Test that we keep mode setting if without file data changed (bug 24226)"
 
+test_72c() {
+	local group
+	local mode
+
+	mkdir $DIR/$tdir
+	chown $RUNAS_ID:$RUNAS_GID $DIR/$tdir
+	chmod g+s $DIR/$tdir
+	mkdir $DIR/$tdir/$tdir
+	group=$(stat -c '%g' $DIR/$tdir/$tdir)
+	mode=$(stat -c '%A' $DIR/$tdir/$tdir)
+	echo "group: $group, mode: $mode"
+	[ "$group" == "$RUNAS_GID" ] || error "wrong group"
+	grep -q s <<< "$mode" || error "not sgid"
+}
+run_test 72c "test that SGID rules work for directories"
+
 # bug 3462 - multiple simultaneous MDC requests
 test_73() {
 	[ $PARALLEL == "yes" ] && skip "skip parallel run" && return
