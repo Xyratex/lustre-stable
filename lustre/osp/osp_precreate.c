@@ -108,6 +108,8 @@ static int osp_statfs_interpret(const struct lu_env *env,
 	RETURN(0);
 out:
 	/* couldn't update statfs, try again as soon as possible */
+	d->opd_statfs_fresh_till = cfs_time_shift(-1);
+	d->opd_statfs_update_in_progress = 0;
 	wake_up(&d->opd_pre_waitq);
 	if (req->rq_import_generation == imp->imp_generation)
 		CDEBUG(D_CACHE, "%s: couldn't update statfs: rc = %d\n",
@@ -892,6 +894,10 @@ static int osp_precreate_thread(void *_arg)
 		 * need to be connected to OST
 		 */
 		while (osp_precreate_running(d)) {
+			if (d->opd_pre_recovering &&
+			    d->opd_imp_connected) {
+				break;
+			}
 			l_wait_event(d->opd_pre_waitq,
 				     !osp_precreate_running(d) ||
 				     d->opd_new_connection,
@@ -902,6 +908,7 @@ static int osp_precreate_thread(void *_arg)
 
 			d->opd_new_connection = 0;
 			d->opd_got_disconnected = 0;
+			d->opd_statfs_fresh_till = cfs_time_shift(-1);
 			break;
 		}
 
@@ -924,14 +931,17 @@ static int osp_precreate_thread(void *_arg)
 			}
 		}
 
-		osp_statfs_update(d);
+		if (osp_statfs_need_update(d))
+			osp_statfs_update(d);
 
 		/*
 		 * Clean up orphans or recreate missing objects.
 		 */
 		rc = osp_precreate_cleanup_orphans(&env, d);
-		if (rc != 0)
+		if (rc != 0) {
+			schedule_timeout_interruptible(cfs_time_seconds(1));
 			continue;
+		}
 		/*
 		 * connected, can handle precreates now
 		 */
