@@ -50,5 +50,4 @@ rhel6.5/ext4-bitmap-hold.patch
 rhel6.3/ext4-speed-up-releasing-blocks-on-commit.patch
 rhel6.3/ext4-notalloc_under_idatasem.patch
 rhel6.5/export-write-super.patch
-rhel6.5/ext4-fix-journal-quota.patch
 rhel6.5/ext4_s_max_ext_tree_depth.patch
