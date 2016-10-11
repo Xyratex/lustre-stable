@@ -211,6 +211,7 @@ declare -a  ha_nonmpi_load_cmds=(
     "tar cf - /etc | tar xf - -C {}"
     "iozone -a -e -+d -s $iozone_SIZE {}/f.iozone"
 )
+declare     ha_check_attrs="find {} -type f -ls 2>&1 | grep -e '?'"
 
 ha_usage()
 {
@@ -367,43 +368,50 @@ ha_repeat_mpi_load()
 	local cmd=${ha_mpi_load_cmds[$tag]}
 	local dir=$ha_test_dir/$client-$tag
 	local log=$ha_tmp_dir/$client-$tag
-    local rc=0
-    local nr_loops=0
-    local start_time=$(date +%s)
+	local rc=0
+	local rccheck=0
+	local nr_loops=0
+	local start_time=$(date +%s)
+	local check_attrs=${ha_check_attrs//"{}"/$dir}
 
-    cmd=${cmd//"{}"/$dir}
+	cmd=${cmd//"{}"/$dir}
 	cmd=${cmd//"{params}"/$parameter}
 
-    ha_info "Starting $tag"
+	ha_info "Starting $tag"
 
-    local machines=""
-    if ! [ "$MPILIB" == mpich2 ]; then
-        machines="-machinefile $ha_machine_file"
-    fi
-    while [ ! -e "$ha_stop_file" ] && ((rc == 0)); do
-        {
+	local machines=""
+	if ! [ "$MPILIB" == mpich2 ]; then
+		machines="-machinefile $ha_machine_file"
+	fi
+	while [ ! -e "$ha_stop_file" ] && ((rc == 0)) && ((rccheck == 0)); do
+		{
 		ha_on $client mkdir -p "$dir" &&
 		ha_on $client chmod a+xwr $dir &&
 		ha_on $client "su mpiuser sh -c \" $mpirun $ha_mpirun_options \
-			-np $((${#ha_clients[@]} * mpi_threads_per_client )) $machines $cmd \" " &&
-			ha_on $client rm -rf "$dir";
-        } >>"$log" 2>&1 || rc=$?
+			-np $((${#ha_clients[@]} * mpi_threads_per_client ))  \
+			$machines $cmd \" " || rc=$?
+		ha_on ${ha_clients[0]} "$check_attrs   &&                     \
+					sleep 60 &&                           \
+					$check_attrs " && rccheck=1
+		((rc == 0)) && ((rccheck == 0)) &&
+		ha_on $client rm -rf "$dir";
+		} >>"$log" 2>&1
 
-        ha_info rc=$rc
+		ha_info rc=$rc rccheck=$rccheck
 
-        if ((rc != 0)); then
-            touch "$ha_fail_file"
-            touch "$ha_stop_file"
-            ha_dump_logs "${ha_clients[*]} ${ha_servers[*]}"
-        fi
-        echo $rc >"$status"
+		if (( (rc + rccheck) != 0 )); then
+			touch "$ha_fail_file"
+			touch "$ha_stop_file"
+			ha_dump_logs "${ha_clients[*]} ${ha_servers[*]}"
+		fi
+		echo $rc >"$status"
 
-        nr_loops=$((nr_loops + 1))
-    done
+		nr_loops=$((nr_loops + 1))
+	done
 
-    avg_loop_time=$((($(date +%s) - start_time) / nr_loops))
+	avg_loop_time=$((($(date +%s) - start_time) / nr_loops))
 
-    ha_info "$tag stopped: rc $rc avg loop time $avg_loop_time"
+	ha_info "$tag stopped: rc $rc avg loop time $avg_loop_time"
 }
 
 ha_start_mpi_loads()
@@ -459,31 +467,39 @@ ha_repeat_nonmpi_load()
     local dir=$ha_test_dir/$client-$tag
     local log=$ha_tmp_dir/$client-$tag
     local rc=0
-    local nr_loops=0
-    local start_time=$(date +%s)
+	local rccheck=0
+	local nr_loops=0
+	local start_time=$(date +%s)
+	local check_attrs=${ha_check_attrs//"{}"/$dir}
 
-    cmd=${cmd//"{}"/$dir}
+	cmd=${cmd//"{}"/$dir}
 
-    ha_info "Starting $tag on $client"
+	ha_info "Starting $tag on $client"
 
-    while [ ! -e "$ha_stop_file" ] && ((rc == 0)); do
-        ha_on $client "mkdir -p $dir &&                                     \
-                       $cmd &&                                              \
-                       rm -rf $dir" >>"$log" 2>&1 || rc=$?
+	while [ ! -e "$ha_stop_file" ] && ((rc == 0)); do
+		ha_on $client "mkdir -p $dir &&                               \
+			$cmd"              >>"$log" 2>&1 || rc=$?
 
-        if ((rc != 0)); then
-            ha_dump_logs "${ha_clients[*]} ${ha_servers[*]}"
-            touch "$ha_fail_file"
-            touch "$ha_stop_file"
-        fi
-        echo $rc >"$status"
+		ha_on $client "$check_attrs   &&                              \
+			sleep 60 &&                                           \
+			$check_attrs "          >>"$log"  2>&1 && rccheck=1 ||
+        	ha_on $client "rm -rf $dir"      >>"$log"  2>&1
 
-        nr_loops=$((nr_loops + 1))
-    done
+		ha_info rc=$rc rccheck=$rccheck
 
-    avg_loop_time=$((($(date +%s) - start_time) / nr_loops))
+		if (( (rc + rccheck) != 0 )); then
+			ha_dump_logs "${ha_clients[*]} ${ha_servers[*]}"
+			touch "$ha_fail_file"
+			touch "$ha_stop_file"
+		fi
+		echo $rc >"$status"
 
-    ha_info "$tag on $client stopped: rc $rc avg loop time ${avg_loop_time}s"
+		nr_loops=$((nr_loops + 1))
+	done
+
+	avg_loop_time=$((($(date +%s) - start_time) / nr_loops))
+
+	ha_info "$tag on $client stopped: rc $rc avg loop time ${avg_loop_time}s"
 }
 
 ha_start_nonmpi_loads()
@@ -692,9 +708,9 @@ ha_main()
 
 	ha_log "${ha_clients[*]} ${ha_servers[*]}" \
 		"START: $0: $(date +%H:%M:%S' '%s)"
-    trap ha_trap_exit EXIT
-    mkdir "$ha_tmp_dir"
-    ha_on ${ha_clients[0]} mkdir "$ha_test_dir"
+	trap ha_trap_exit EXIT
+	mkdir "$ha_tmp_dir"
+	ha_on ${ha_clients[0]} mkdir "$ha_test_dir"
 	ha_on ${ha_clients[0]} /usr/bin/lfs setstripe $ha_stripe_params $ha_test_dir
 
     ha_start_loads
