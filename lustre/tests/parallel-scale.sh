@@ -144,6 +144,11 @@ test_statahead () {
 }
 run_test statahead "statahead test, multiple clients"
 
+test_fio () {
+	run_fio
+}
+run_test fio "fio"
+
 [ $(facet_fstype $SINGLEMDS) = zfs -o $(facet_fstype "ost1") = zfs ] &&
 	SLOW=$ZFSSLOW
 
