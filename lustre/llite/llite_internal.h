@@ -533,6 +533,7 @@ struct ll_sb_info {
 
 	/* root squash */
 	struct root_squash_info	  ll_squash;
+	struct path		  ll_mnt;
 };
 
 #define LL_DEFAULT_MAX_RW_CHUNK      (32 * 1024 * 1024)

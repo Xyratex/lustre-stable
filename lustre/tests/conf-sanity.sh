@@ -2944,22 +2944,21 @@ test_44() { # 16317
 run_test 44 "mounted client proc entry exists"
 
 test_45() { #17310
-        setup
-        check_mount || return 2
-        stop_mds
-        df -h $MOUNT &
-        log "sleep 60 sec"
-        sleep 60
-#define OBD_FAIL_PTLRPC_LONG_REPL_UNLINK   0x50f
-        do_facet client "$LCTL set_param fail_loc=0x50f fail_val=0"
-        log "sleep 10 sec"
-        sleep 10
-        manual_umount_client --force || return 3
-        do_facet client "$LCTL set_param fail_loc=0x0"
-        start_mds
-        mount_client $MOUNT || return 4
-        cleanup
-        return 0
+	setup
+	check_mount || error "check_mount"
+	stop_mds || error "Unable to stop MDS"
+	df -h $MOUNT &
+	log "sleep 60 sec"
+	sleep 60
+	#define OBD_FAIL_PTLRPC_LONG_REPL_UNLINK	0x50f
+	do_facet client "$LCTL set_param fail_loc=0x8000050f"
+	log "sleep 10 sec"
+	sleep 10
+	manual_umount_client --force || error "manual_umount_client failed"
+	do_facet client "$LCTL set_param fail_loc=0x0"
+	start_mds || error "unable to start MDS"
+	mount_client $MOUNT || error "mount_client $MOUNT failed"
+	cleanup || error "cleanup failed with $?"
 }
 run_test 45 "long unlink handling in ptlrpcd"
 
