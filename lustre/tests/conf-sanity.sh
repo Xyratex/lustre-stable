@@ -5640,8 +5640,8 @@ test_102() {
 	start_ost
 	mount_client $MOUNT	setupall
 	mkdir -p $dir
-#define OBD_FAIL_MDS_OSP_CLP_ORNS_FAIL	   0x164
-	do_facet $SINGLEMDS $LCTL set_param fail_loc=0x80000164
+#define OBD_FAIL_MDS_OSP_CLP_ORNS_FAIL	   0x165
+	do_facet $SINGLEMDS $LCTL set_param fail_loc=0x80000165
 	createmany -o $dir/$tfile-%d 50000&
 	cmp=$!
 	do_facet $SINGLEMDS $LCTL --device $dev deactivate
