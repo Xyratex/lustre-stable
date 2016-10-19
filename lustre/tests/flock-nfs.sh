@@ -82,10 +82,15 @@ test_1a() {
 
 	local rc=0
 	nfs_start || return 1
-	for i in $(do_node $NFS_CLIENT "ls $TEST_DIR_LTP_FLOCK/flock0* |sort") \
-		$(do_node $NFS_CLIENT "ls $TEST_DIR_LTP_FLOCK/fcntl*_64 | \
-		grep -v fcntl16 | sort")
-	do
+
+	local subtests=${LTP_subtests:-"\
+		$(do_node $NFS_CLIENT ls $TEST_DIR_LTP_FLOCK/flock0* | sort) \
+		$(do_node $NFS_CLIENT ls $TEST_DIR_LTP_FLOCK/fcntl*_64 | \
+		grep -v fcntl16 | sort)"}
+
+
+	for i in $subtests; do
+		echo Subtest : $i
 		do_node $NFS_CLIENT "export TMPDIR=$NFS_MNT; $i"
 		rc=$?
 		[ $rc -eq 0 ] || break
