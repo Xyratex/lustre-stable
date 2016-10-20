@@ -354,6 +354,35 @@ The IEM support is added and tested for 2.5.x version of Lustre.
 					</action>
 				</actions>
 			</rule>
+			<rule provider="lustre" id="ef26bc0b-d751-48d0-9be2-ca8273294250" class="system">
+				<patterns>
+					<pattern>RIP: @ANYSTRING:rip_info@</pattern>
+					<pattern>&lt;@NUMBER@&gt;RIP @ANYSTRING:rip_info@</pattern>
+				</patterns>
+			<examples>
+			<example>
+				<test_message program='patternize'>RIP: 0010:[ffffffff8136cb80] [ffffffff8136cb80] strlen+0x0/0x30</test_message>
+				<test_values>
+					<test_value name="rip_info">0010:[ffffffff8136cb80] [ffffffff8136cb80] strlen+0x0/0x30</test_value>
+				</test_values>
+				<test_message program='patternize'>&lt;1&gt;RIP  [ffffffff812957f6] __list_add+0x26/0xa0</test_message>
+				<test_values>
+				<test_value name="rip_info">[ffffffff812957f6] __list_add+0x26/0xa0</test_value>
+				</test_values>
+			</example>
+			</examples>
+				<tags>
+					<tag>RIP</tag>
+					<tag>iem_reinject</tag>
+				</tags>
+				<actions>
+					<action>
+						<values>
+							<value name="MESSAGE">IEC: 026000013: RIP: { "rip_info": "$rip_info" }</value>
+						</values>
+					</action>
+				</actions>
+			</rule>
 		</rules>
 	</ruleset>
 
