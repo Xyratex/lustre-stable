@@ -480,7 +480,7 @@ find $RPM_BUILD_ROOT%{_libdir}/@PACKAGE@/ -name \*.la -delete
 echo '%{_libdir}/lustre/tests/*' >>lustre-tests.files
 echo '%{_bindir}/mcreate' >>lustre-tests.files
 echo '%{_bindir}/munlink' >>lustre-tests.files
-%if %{with lustre_modules}
+%if !%{with lustre_modules}
 echo '%{?rootdir}/lib/modules/%{kversion}/%{modules_fs_path}/llog_test.ko' >>lustre-tests.files
 %endif
 %endif
