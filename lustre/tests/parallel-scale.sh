@@ -153,6 +153,11 @@ test_statahead () {
 }
 run_test statahead "statahead test, multiple clients"
 
+test_rr_alloc () {
+	run_rr_alloc
+}
+run_test rr_alloc "Checking even file distribution over OSTs in RR policy"
+
 test_fio () {
 	run_fio
 }
