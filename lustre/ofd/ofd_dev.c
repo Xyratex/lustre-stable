@@ -1722,11 +1722,14 @@ static int ofd_quotactl(struct tgt_session_info *tsi)
 static inline int prolong_timeout(struct ptlrpc_request *req)
 {
 	struct ptlrpc_service_part *svcpt = req->rq_rqbd->rqbd_svcpt;
+	unsigned int req_timeout;
 
 	if (AT_OFF)
 		return obd_timeout / 2;
 
-	return at_est2timeout(at_get(&svcpt->scp_at_estimate));
+	req_timeout = req->rq_deadline - req->rq_arrival_time.tv_sec;
+	return max(at_est2timeout(at_get(&svcpt->scp_at_estimate)),
+		   req_timeout);
 }
 
 static void ofd_prolong_extent_locks(struct tgt_session_info *tsi,
