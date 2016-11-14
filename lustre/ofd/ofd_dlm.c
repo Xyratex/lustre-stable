@@ -379,6 +379,11 @@ static int __ofd_intent_policy_la(struct ldlm_namespace *ns,
 	/* this will update the LVB */
 	rc = ldlm_glimpse_locks(res, &arg.gl_list);
 
+	/* discard rc from ldlm_glimpse_locks.  We eventually need to add
+	 * proper error handling for this function, but for now, we do the same
+	 * as other callers and ignore the rc. */
+	rc = 0;
+
 	lock_res(res);
 	*reply_lvb = *res_lvb;
 	unlock_res(res);
