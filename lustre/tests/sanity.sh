@@ -5039,6 +5039,37 @@ test_64c() {
 }
 run_test 64c "verify grant shrink ========================------"
 
+test_64d() {
+	local tgt=$($LCTL dl | grep "0000-osc-[^mM]" | awk '{print $4}')
+	local dirty_mb=$($LCTL get_param -n osc.${tgt}.max_dirty_mb)
+	local rpcs_in_flight=$($LCTL get_param -n osc.${tgt}.max_rpcs_in_flight)
+	local pages_per_rpc=$($LCTL get_param -n osc.${tgt}.max_pages_per_rpc)
+	local page_size=$(get_page_size client)
+	local max_grant=$((pages_per_rpc * page_size * rpcs_in_flight))
+	[[ $max_grant -lt $((dirty_mb * 1024 * 1024)) ]] && \
+		max_grant=$((dirty_mb * 1024 * 1024))
+
+	rm -f $DIR/$tfile
+	$SETSTRIPE $DIR/$tfile -i 0 -c 1
+	dd if=/dev/zero of=$DIR/$tfile bs=1M count=1000 &
+	ddpid=$!
+
+	while true
+	do
+		local cur_grant=$($LCTL get_param -n osc.${tgt}.cur_grant_bytes)
+		if [ $cur_grant -gt $max_grant ]
+		then
+			kill $ddpid
+			error "cur_grant_bytes $cur_grant is too big, \
+limit is $max_grant"
+		fi
+		kill -0 $ddpid
+		[[ $? -ne 0 ]] && break;
+		sleep 2
+	done
+}
+run_test 64d "check grant limit exceed ========================="
+
 # bug 1414 - set/get directories' stripe info
 test_65a() {
 	[ $PARALLEL == "yes" ] && skip "skip parallel run" && return
