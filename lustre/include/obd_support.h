@@ -416,6 +416,7 @@ int obd_alloc_fail(const void *ptr, const char *name, const char *type,
 #define OBD_FAIL_PTLRPC_LONG_BOTH_UNLINK 0x51c
 #define OBD_FAIL_PTLRPC_OST_BULK_CB1	 0x520
 #define OBD_FAIL_PTLRPC_OST_BULK_CB2	 0x521
+#define OBD_FAIL_PTLRPC_DELAY_INTR       0x522
 
 #define OBD_FAIL_OBD_PING_NET            0x600
 #define OBD_FAIL_OBD_LOG_CANCEL_NET      0x601

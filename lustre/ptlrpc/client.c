@@ -1703,6 +1703,7 @@ int ptlrpc_check_set(const struct lu_env *env, struct ptlrpc_request_set *set)
                 if (req->rq_intr && (req->rq_timedout || req->rq_waiting ||
                                      req->rq_wait_ctx)) {
                         req->rq_status = -EINTR;
+			OBD_FAIL_TIMEOUT(OBD_FAIL_OST_WRITE_DELAY, cfs_fail_val);
                         ptlrpc_rqphase_move(req, RQ_PHASE_INTERPRET);
                         GOTO(interpret, req->rq_status);
                 }

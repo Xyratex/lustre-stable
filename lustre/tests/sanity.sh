@@ -13142,6 +13142,23 @@ test_259() {
 }
 run_test 259 "io should fail after last_rcvd update fail"
 
+test_261() {
+	local file=$DIR/$tfile
+	touch $file || return 1
+	multiop_bg_pause $file O_c || return 2
+	local pid=$!
+	sleep 1
+	drop_request "kill -USR1 $pid"
+
+#define OBD_FAIL_OST_WRITE_DELAY	 0x236
+	$LCTL set_param fail_val=10 fail_loc=0x236
+	kill -9 $pid
+	wait $pid
+
+	return 0
+}
+run_test 261 "signal vs resend race"
+
 test_400a() { # LU-1606, was conf-sanity test_74
 	local extra_flags=''
 	local out=$TMP/$tfile
