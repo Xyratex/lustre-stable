@@ -2636,7 +2636,6 @@ void ptlrpc_resend_req(struct ptlrpc_request *req)
 	}
 
         lustre_msg_set_handle(req->rq_reqmsg, &(struct lustre_handle){ 0 });
-        req->rq_status = -EAGAIN;
 
         req->rq_resend = 1;
         req->rq_net_err = 0;
