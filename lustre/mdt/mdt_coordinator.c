@@ -1708,9 +1708,11 @@ int hsm_cancel_all_actions(struct mdt_device *mdt,
 
 			/* find object by FID */
 			obj = mdt_hsm_get_md_hsm(mti, &car->car_hai->hai_fid, &mh);
-			if (IS_ERR(obj))
+			if (IS_ERR(obj)) {
 				/* object removed */
-				goto out;
+				mdt_cdt_put_request(car);
+				continue;
+			}
 
 			mutex_lock(&cdt->cdt_restore_lock);
 			crh = hsm_restore_hdl_find(cdt, &car->car_hai->hai_fid);
@@ -1721,11 +1723,10 @@ int hsm_cancel_all_actions(struct mdt_device *mdt,
 			/* just give back layout lock, and put down
 			 * put down the obj ref count at goto out;
 			 */
-			if (!IS_ERR(obj) && crh != NULL)
+			if (crh != NULL) {
 				mdt_object_unlock(mti, obj, &crh->crh_lh, 1);
-
-			if (crh != NULL)
 				OBD_SLAB_FREE_PTR(crh, mdt_hsm_cdt_kmem);
+			}
 		}
 		/* 1. it is possible to safely call mdt_hsm_agent_send()
 		 * (ie without a deadlock on cdt_request_lock), because the
