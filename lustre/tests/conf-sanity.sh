@@ -5533,7 +5533,7 @@ test_92() {
 }
 run_test 92 "Race MDT->OST reconnection with create"
 
-test_93()
+test_101()
 {
 	IMAGESIZE=3298534883328
 
@@ -5593,7 +5593,7 @@ test_93()
 	rm -rf $TMP/$tdir
 	[ $inode_num -ge 2147483947 ] || error "inode number too small"
 }
-run_test 93 "Access xattr for inodes number  > 2G"
+run_test 101 "Access xattr for inodes number  > 2G"
 
 if ! combined_mgs_mds ; then
 	stop mgs
