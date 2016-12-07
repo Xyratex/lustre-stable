@@ -50,3 +50,4 @@ ext4-bh_leak.patch
 ext4-memleak_in_xattr.patch
 ext4-bh_leak_ext4_expand_extra_isize_ea.patch
 ext4-speed-up-releasing-blocks-on-commit.patch
+ext4-initialize-fsync-transaction-ids-in-ext4_new_inode.patch

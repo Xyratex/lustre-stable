@@ -1,0 +1,34 @@
+commit 688f869ce3bdc892daa993534dc6df18c95df931
+Author: Theodore Ts'o <tytso@mit.edu>
+Date:   Wed Mar 16 17:16:31 2011 -0400
+
+    ext4: Initialize fsync transaction ids in ext4_new_inode()
+    
+    When allocating a new inode, we need to make sure i_sync_tid and
+    i_datasync_tid are initialized.  Otherwise, one or both of these two
+    values could be left initialized to zero, which could potentially
+    result in BUG_ON in jbd2_journal_commit_transaction.
+    
+    (This could happen by having journal->commit_request getting set to
+    zero, which could wake up the kjournald process even though there is
+    no running transaction, which then causes a BUG_ON via the
+    J_ASSERT(j_ruinning_transaction != NULL) statement.
+    
+    Signed-off-by: "Theodore Ts'o" <tytso@mit.edu>
+
+diff --git a/fs/ext4/ialloc.c b/fs/ext4/ialloc.c
+index 2fd3b0e..a679a48 100644
+--- a/fs/ext4/ialloc.c
++++ b/fs/ext4/ialloc.c
+@@ -1054,6 +1054,11 @@ got:
+ 		}
+ 	}
+ 
++	if (ext4_handle_valid(handle)) {
++		ei->i_sync_tid = handle->h_transaction->t_tid;
++		ei->i_datasync_tid = handle->h_transaction->t_tid;
++	}
++
+ 	err = ext4_mark_inode_dirty(handle, inode);
+ 	if (err) {
+ 		ext4_std_error(sb, err);
