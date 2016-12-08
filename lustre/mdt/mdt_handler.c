@@ -4170,8 +4170,6 @@ static void mdt_fini(const struct lu_env *env, struct mdt_device *m)
         struct obd_device *obd = mdt2obd_dev(m);
         ENTRY;
 
-	next->md_ops->mdo_iocontrol(env, next, OBD_IOC_PAUSE_LFSCK, 0, NULL);
-
         target_recovery_fini(obd);
 
         ping_evictor_stop();

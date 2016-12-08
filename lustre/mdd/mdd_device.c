@@ -817,7 +817,7 @@ static int mdd_process_config(const struct lu_env *env,
         struct mdd_device *m    = lu2mdd_dev(d);
         struct dt_device  *dt   = m->mdd_child;
         struct lu_device  *next = &dt->dd_lu_dev;
-        int rc;
+	int rc, rc2;
         ENTRY;
 
         switch (cfg->lcfg_command) {
@@ -839,6 +839,8 @@ static int mdd_process_config(const struct lu_env *env,
 	case LCFG_PRE_CLEANUP:
 		rc = next->ld_ops->ldo_process_config(env, next, cfg);
 		mdd_generic_thread_stop(&m->mdd_orph_cleanup_thread);
+		rc2 = lfsck_stop(env, m->mdd_bottom, true);
+		rc = rc != 0 ? rc : rc2;
 		break;
 	case LCFG_CLEANUP:
 		rc = next->ld_ops->ldo_process_config(env, next, cfg);
