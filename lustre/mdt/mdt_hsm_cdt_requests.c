@@ -222,9 +222,6 @@ static void mdt_cdt_init_request_tree(struct cdt_req_progress *crp)
 	crp->crp_root = NULL;
 	crp->crp_cnt = 0;
 	crp->crp_max = 0;
-	/* crp_status = 1 indicates hsm action is started
-	 * and made 0 once the action completes */
-	crp->crp_status = 1;
 }
 
 /** Allocate/init a agent request and its sub-structures.
@@ -256,7 +253,6 @@ struct cdt_agent_req *mdt_cdt_alloc_request(__u64 compound_id, __u32 archive_id,
 	car->car_req_start = cfs_time_current_sec();
 	car->car_req_update = car->car_req_start;
 	car->car_uuid = *uuid;
-	init_waitqueue_head(&car->car_waitq);
 	OBD_ALLOC(car->car_hai, hai->hai_len);
 	if (car->car_hai == NULL) {
 		OBD_SLAB_FREE_PTR(car, mdt_hsm_car_kmem);
