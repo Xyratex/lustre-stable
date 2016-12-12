@@ -150,15 +150,36 @@ get_mdt_devices() {
 }
 
 search_copytools() {
-	local agents=${1:-$(facet_active_host $SINGLEAGT)}
-	do_nodesv $agents "pgrep -x $HSMTOOL_BASE"
+	local hosts=${1:-$(facet_active_host $SINGLEAGT)}
+	do_nodesv $hosts "pgrep -x $HSMTOOL_BASE"
 }
 
-search_and_kill_copytool() {
-	local agents=${1:-$(facet_active_host $SINGLEAGT)}
+kill_copytools() {
+	local hosts=${1:-$(facet_active_host $SINGLEAGT)}
 
-	echo "Killing existing copytools on $agents"
-	do_nodesv $agents "killall -q $HSMTOOL_BASE" || true
+	echo "Killing existing copytools on $hosts"
+	do_nodesv $hosts "killall -q $HSMTOOL_BASE" || true
+}
+
+wait_copytools() {
+	local hosts=${1:-$(facet_active_host $SINGLEAGT)}
+	local wait_timeout=200
+	local wait_start=$SECONDS
+	local wait_end=$((wait_start + wait_timeout))
+
+	while ((SECONDS < wait_end)); do
+		sleep 2
+		if ! search_copytools $hosts; then
+			echo "copytools stopped in $((SECONDS - wait_start))s"
+			return 0
+		fi
+
+		echo "copytools still running on $hosts"
+	done
+
+	echo "copytools failed to stop in ${wait_timeout}s"
+
+	return 1
 }
 
 copytool_monitor_setup() {
@@ -290,11 +311,8 @@ copytool_cleanup() {
 	local param
 	local -a state
 
-	[ -z "${hsm_root// /}" ] && error "copytool_cleanup: hsm_root empty!"
-
-	do_nodesv $agt_hosts "pkill -INT -x $HSMTOOL_BASE" || return 0
-	sleep 1
-	echo "Copytool is stopped on $agents"
+	kill_copytools $agt_hosts
+	wait_copytools $agt_hosts || error "copytools failed to stop"
 
 	# Clean all CDTs orphans requests from previous tests that
 	# would otherwise need to timeout to clear.
@@ -746,8 +764,7 @@ init_agt_vars
 get_mdt_devices
 
 # cleanup from previous bad setup
-search_and_kill_copytool
-
+kill_copytools
 # for recovery tests, coordinator needs to be started at mount
 # so force it
 # the lustre conf must be without hsm on (like for sanity.sh)
