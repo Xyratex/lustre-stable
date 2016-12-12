@@ -8261,6 +8261,14 @@ test_120() { # LU-11130
 }
 run_test 120 "cross-target rename should not create bad symlinks"
 
+test_121() {
+	stopall
+	start_mgsmds || error "MGS MDS Start failed"
+	fail mgs
+	stop_mds || error "Stopping MDSes failed"
+}
+run_test 121 "fail mgs"
+
 test_122() {
 	[ $MDSCOUNT -lt 2 ] && skip "needs >= 2 MDTs" && return
 	[[ $(lustre_version_code ost1) -ge $(version_code 2.11.53) ]] ||
