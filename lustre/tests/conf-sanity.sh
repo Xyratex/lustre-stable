@@ -5521,6 +5521,14 @@ test_92() {
 }
 run_test 92 "Race MDT->OST reconnection with create"
 
+test_93() {
+	stopall
+	start_mgsmds || error "MGS MDS Start failed"
+	fail mgs
+	stop_mds || error "Stopping MDSes failed"
+}
+run_test 93 "fail mgs"
+
 test_98()
 {
 	local mountopt
