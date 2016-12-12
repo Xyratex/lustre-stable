@@ -7806,6 +7806,14 @@ test_108b() {
 }
 run_test 108b "migrate from ZFS to ldiskfs"
 
+test_117() {
+	stopall
+	start_mgsmds || error "MGS MDS Start failed"
+	fail mgs
+	stop_mds || error "Stopping MDSes failed"
+}
+run_test 117 "fail mgs"
+
 #
 # set number of permanent parameters
 #

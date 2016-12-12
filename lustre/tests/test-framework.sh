@@ -697,12 +697,24 @@ load_modules_local() {
 }
 
 load_modules () {
+	local facets
+	local facet
+	local failover
 	load_modules_local
 	# bug 19124
 	# load modules on remote nodes optionally
 	# lustre-tests have to be installed on these nodes
 	if $LOAD_MODULES_REMOTE; then
 		local list=$(comma_list $(remote_nodes_list))
+
+		# include failover nodes in case they are not in the list yet
+		facets=$(get_facets)
+		for facet in ${facets//,/ }; do
+			failover=$(facet_failover_host $facet)
+			[ -n "$list" ] && [[ ! "$list" =~ "$failover" ]] &&
+				list="$list,$failover"
+		done
+
 		if [ -n "$list" ]; then
 			echo "loading modules on: '$list'"
 			do_rpc_nodes "$list" load_modules_local
@@ -3276,11 +3288,14 @@ facet_failover() {
 		if ! combined_mgs_mds &&
 			list_member ${affecteds[index]} mgs; then
 			mount_facet mgs || error "Restart of mgs failed"
+			affecteds[index]=$(exclude_items_from_list \
+			    ${affecteds[index]} mgs)
 		fi
 		# FIXME; has to be changed to mount all facets concurrently
-		affected=$(exclude_items_from_list ${affecteds[index]} mgs)
-		echo mount facets: ${affecteds[index]}
-		mount_facets ${affecteds[index]}
+		if [ -n "${affecteds[index]}" ]; then
+			echo mount facets: ${affecteds[index]}
+			mount_facets ${affecteds[index]}
+		fi
 	done
 }
 
@@ -3560,10 +3575,17 @@ facet_host() {
 facet_failover_host() {
 	local facet=$1
 	local varname
+	local temp
 
 	var=${facet}failover_HOST
 	if [ -n "${!var}" ]; then
 		echo ${!var}
+		return
+	fi
+
+	if combined_mgs_mds && [ $facet == "mgs" ]; then
+		temp=mds1failover_HOST
+		echo ${!temp}
 		return
 	fi
 
@@ -3604,8 +3626,9 @@ detect_active() {
 	# on other cases active facet is $facet
 	[[ $dev = $(do_node $failover \
 			lctl get_param -n *.$svc.mntdev 2>/dev/null) ]] &&
-		echo ${facet}failover && return
-
+				((combined_mgs_mds && [[ $facet == "mgs" ]]) &&
+				echo mds1failover || echo ${facet}failover) &&
+				return
 	echo $facet
 }
 
@@ -3662,8 +3685,6 @@ facet_passive_host() {
 change_active() {
     local facetlist=$1
     local facet
-
-    facetlist=$(exclude_items_from_list $facetlist mgs)
 
     for facet in ${facetlist//,/ }; do
     local failover=${facet}failover
@@ -4742,12 +4763,12 @@ init_facets_vars () {
 
 	if ! remote_mds_nodsh; then
 		for num in $(seq $MDSCOUNT); do
-			DEVNAME=`mdsdevname $num`
+			DEVNAME=$(mdsdevname $num)
 			init_facet_vars mds$num $DEVNAME $MDS_MOUNT_OPTS
 		done
 	fi
 
-	combined_mgs_mds || init_facet_vars mgs $(mgsdevname) $MGS_MOUNT_OPTS
+	init_facet_vars mgs $(mgsdevname) $MGS_MOUNT_OPTS
 
 	if ! remote_ost_nodsh; then
 		for num in $(seq $OSTCOUNT); do
