@@ -24,7 +24,7 @@ EXTRA_PROGRAMS = wirecheck
 if UTILS
 # mount only finds helpers in /sbin
 rootsbin_PROGRAMS = mount.lustre
-sbin_PROGRAMS = lctl wiretest l_getidentity llverfs llverdev \
+sbin_PROGRAMS = lctl wiretest l_getidentity llverfs llverdev lshowmount \
 	llog_reader lr_reader lustre_rsync \
 	ll_recover_lost_found_objs ltrack_stats ll_decode_filter_fid
 if SERVER
@@ -70,6 +70,9 @@ lustre_rsync_DEPENDENCIES := $(LIBPTLCTL) liblustreapi.a
 ll_recover_lost_found_objs_SOURCES = ll_recover_lost_found_objs.c
 ll_recover_lost_found_objs_LDADD := $(LIBPTLCTL)
 ll_recover_lost_found_objs_DEPENDENCIES := $(LIBPTLCTL)
+
+lshowmount_SOURCES = lshowmount.c nidlist.c nidlist.h
+lshowmount_LDADD :=  liblustreapi.a
 
 if EXT2FS_DEVEL
 EXT2FSLIB = -lext2fs

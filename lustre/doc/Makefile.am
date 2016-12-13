@@ -45,7 +45,7 @@ MANFILES = lustre.7 lfs.1 mount.lustre.8 lctl.8 \
 	lfs-hsm.1 llapi_hsm_state_get.3 llapi_hsm_state_set.3 l_adsidentity.8 \
 	lustre_routes_config.8 lustre_routes_conversion.8 \
 	llapi_path2parent.3 llapi_fd2parent.3
-SERVER_MANFILES = mkfs.lustre.8 tunefs.lustre.8
+SERVER_MANFILES = mkfs.lustre.8 tunefs.lustre.8 lshowmount.8
 
 if SERVER
 MANFILES += $(SERVER_MANFILES)
