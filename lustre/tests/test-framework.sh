@@ -503,11 +503,10 @@ load_modules_local() {
 	load_module ../libcfs/libcfs/libcfs
 	# Prevent local MODOPTS_LIBCFS being passed as part of environment
 	# variable to remote nodes
-        unset MODOPTS_LIBCFS
+	unset MODOPTS_LIBCFS
+	set_default_debug
 
-    [ "$PTLDEBUG" ] && lctl set_param debug="$PTLDEBUG"
-    [ "$SUBSYSTEM" ] && lctl set_param subsystem_debug="${SUBSYSTEM# }"
-    load_module ../lnet/lnet/lnet
+	load_module ../lnet/lnet/lnet
 	case $NETTYPE in
 	o2ib)
 		LNETLND="o2iblnd/ko2iblnd"
