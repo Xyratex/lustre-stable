@@ -5420,6 +5420,7 @@ run_test 88b "test lctl clear_conf one config"
 
 test_89() {
 	local had_config
+	local size_mb
 
 	[ "$MDSCOUNT" -lt 2 ] && { skip "mdt count < 2"; return 0; }
 
@@ -5436,17 +5437,24 @@ test_89() {
 	# 56 (144)setup     0:lustre-MDT0001-osp-MDT0000  1:...  2:...
 	# 57 (136)modify_mdc_tgts add 0:lustre-MDT0000-mdtlov  1:...  2:1  3:1
 	# duplicate modify_mds_tgts caused crashes
+	debug_size_save
+	# using larger debug_mb size to avoid lctl dk log truncation
+	size_mb=$((DEBUG_SIZE_SAVED * 4))
 	for i in `seq 1 3`; do
 		stop_mdt 2
 		# though config processing stops after failed attach and setup
 		# it will proceed after the failed command after each writeconf
 		# this is the original scenario of the issue
-		do_facet mds2 "$TUNEFS --writeconf $(mdsdevname 2)" > /dev/null 2>&1
+		do_facet mds2 "$TUNEFS --writeconf $(mdsdevname 2)" \
+				> /dev/null 2>&1
+		do_facet mds1 "$LCTL set_param debug_mb=$size_mb"
 		start_mdt 2
-		while [ -z "$(do_facet mds1 $LCTL dk|grep Processed\ log\ $FSNAME-MDT0000)" ] ; do
+		while [ -z "$(do_facet mds1 $LCTL dk | \
+				grep Processed\ log\ $FSNAME-MDT0000)" ] ; do
 			sleep 1
 		done
 	done
+	debug_size_restore
 
 	[ -z "$had_config" ] && do_facet mds1 lctl set_param debug=-config
 
