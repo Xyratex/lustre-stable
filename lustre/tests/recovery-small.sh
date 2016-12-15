@@ -425,7 +425,7 @@ test_16() {
 }
 run_test 16 "timeout bulk put, don't evict client (2732)"
 
-test_17() {
+test_17a() {
     local at_max_saved=0
 
     remote_ost_nodsh && skip "remote OST with nodsh" && return 0
@@ -459,7 +459,69 @@ test_17() {
     [ $at_max_saved -ne 0 ] && at_max_set $at_max_saved ost1
     return 0
 }
-run_test 17 "timeout bulk get, don't evict client (2732)"
+run_test 17a "timeout bulk get, don't evict client (2732)"
+
+test_17b() {
+	[ $CLIENTCOUNT -lt 2 ] && skip "two clients are needed" && return 0
+	local -a clients=(${CLIENTS//,/ })
+	local client1=${clients[0]}
+	local client2=${clients[1]}
+	local p="$TMP/$TESTSUITE-$TESTNAME.parameters"
+	local ldlm_enqueue_min=$(do_facet ost1 find /sys -name ldlm_enqueue_min)
+	[ -z "$ldlm_enqueue_min" ] && skip "missing /sys/.../ldlm_enqueue_min" &&
+	return 0
+
+	$LFS setstripe -i 0 -c 1 -S 1048576 $DIR/$tfile
+	$LFS setstripe -i 0 -c 1 -S 1048576 $DIR/${tfile}2
+
+	# tune at_min, bulk_timeout, ldlm_enqueue_min and at_history
+	# to have the test run faster
+	save_lustre_params client,ost1 "at_min" > $p
+	do_facet client "$LCTL set_param at_min=10"
+	do_facet ost1 "$LCTL set_param at_min=10"
+
+	save_lustre_params client,ost1 "at_history" >> $p
+	do_facet client "$LCTL set_param at_history=60"
+	do_facet ost1 "$LCTL set_param at_history=60"
+
+	save_lustre_params ost1 "bulk_timeout" >> $p
+	do_facet ost1 "$LCTL set_param bulk_timeout=30"
+	local ldlm_enqueue_min_save=$(cat $ldlm_enqueue_min)
+	do_facet ost1 "echo 20 > /sys/module/ptlrpc/parameters/ldlm_enqueue_min"
+
+	# get service estimate expanded
+	#define OBD_FAIL_OST_BRW_PAUSE_PACK		 0x224
+	do_facet ost1 "$LCTL set_param fail_loc=0x80000224"
+	do_facet ost1 "$LCTL set_param fail_val=60"
+	dd if=/dev/zero of=$DIR/$tfile bs=1M count=1 conv=fdatasync
+
+	# let current worst service estimate to get closer to obliteration
+	sleep $((60 - 15))
+
+	# start i/o and simulate bulk transfer loss
+	#define OBD_FAIL_PTLRPC_OST_BULK_CB3	 0x523
+	$LCTL set_param fail_loc=0x80000523
+	dd if=/dev/zero of=$DIR/$tfile bs=1M count=1 conv=fdatasync,notrunc &
+	local writedd=$!
+
+	# start lock conflict handling
+	sleep 5
+	do_node $client2 "dd if=$DIR/$tfile of=/dev/null bs=1M count=1" &
+	local readdd=$!
+
+	# obliterate the worst service estimate
+	sleep 12
+	dd if=/dev/zero of=$DIR/${tfile}2 bs=1M count=1
+
+	wait $writedd
+	[[ $? == 0 ]] || error "write failed"
+	wait $readdd
+	[[ $? == 0 ]] || error "read failed"
+
+	restore_lustre_params <$p
+	do_facet ost1 "echo $ldlm_enqueue_min_save > $ldlm_enqueue_min"
+}
+run_test 17b "timeout bulk get, dont evict client (3582)"
 
 test_18a() {
     [ -z ${ost2_svc} ] && skip_env "needs 2 osts" && return 0

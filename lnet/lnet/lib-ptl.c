@@ -37,6 +37,7 @@
 #define DEBUG_SUBSYSTEM S_LNET
 
 #include <lnet/lib-lnet.h>
+#include <lustre_lib.h>
 
 /* NB: add /proc interfaces in upcoming patches */
 int	portal_rotor	= LNET_PTL_ROTOR_HASH_RT;
@@ -569,6 +570,12 @@ lnet_ptl_match_md(struct lnet_match_info *info, struct lnet_msg *msg)
 	CDEBUG(D_NET, "Request from %s of length %d into portal %d "
 	       "MB="LPX64"\n", libcfs_id2str(info->mi_id),
 	       info->mi_rlength, info->mi_portal, info->mi_mbits);
+
+	if (OST_BULK_PORTAL == info->mi_portal &&
+	    CFS_FAIL_CHECK(OBD_FAIL_PTLRPC_OST_BULK_CB3))
+		/* discard the md, used to simulate a bulk transfer
+		 * loss on wire */
+		return LNET_MATCHMD_DROP;
 
 	if (info->mi_portal >= the_lnet.ln_nportals) {
 		CERROR("Invalid portal %d not in [0-%d]\n",
