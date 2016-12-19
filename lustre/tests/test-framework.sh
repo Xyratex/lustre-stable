@@ -6082,11 +6082,13 @@ create_pool() {
 	RC=$?
 	[[ $RC -ne 0 ]] && return $RC
 
-	for num in $(seq $MDSCOUNT); do
-		wait_update_facet mds$num \
-			"lctl get_param -n lov.$fsname-*.pools.$poolname \
-			2>/dev/null || echo foo" "" || error "mds$num:" \
-			"pool_new failed $pool"
+	for mds_id in $(seq $MDSCOUNT); do
+		local mdt_id=$((mds_id-1))
+		local lodname=$fsname-MDT$(printf "%04x" $mdt_id)-mdtlov
+		wait_update_facet mds$mds_id \
+			"lctl get_param -n lod.$lodname.pools.$poolname \
+				2>/dev/null || echo foo" "" ||
+			error "mds$mds_id: pool_new failed $pool"
 	done
 	wait_update $HOSTNAME "lctl get_param -n lov.$fsname-*.pools.$poolname \
 		2>/dev/null || echo foo" "" || error "pool_new failed $pool"
@@ -6137,11 +6139,13 @@ destroy_pool() {
 	destroy_pool_int $fsname.$poolname
 	RC=$?
 	[[ $RC -ne 0 ]] && return $RC
-	for num in $(seq $MDSCOUNT); do
-		wait_update_facet mds$num \
-			"lctl get_param -n lov.$fsname-*.pools.$poolname \
-			2>/dev/null || echo foo" "foo" || error "mds$num:" \
-			"destroy pool failed $1"
+	for mds_id in $(seq $MDSCOUNT); do
+		local mdt_id=$((mds_id-1))
+		local lodname=$fsname-MDT$(printf "%04x" $mdt_id)-mdtlov
+		wait_update_facet mds$mds_id \
+			"lctl get_param -n lod.$lodname.pools.$poolname \
+				2>/dev/null || echo foo" "foo" ||
+			error "mds$num: destroy pool failed $1"
 	done
 	wait_update $HOSTNAME "lctl get_param -n lov.$fsname-*.pools.$poolname \
 		2>/dev/null || echo foo" "foo" || error "destroy pool failed $1"
@@ -7149,11 +7153,13 @@ pool_add_targets() {
 			$FSNAME.$pool $FSNAME-OST[$first-$last/$step]
 
 	# wait for OSTs to be added to the pool
-	for num in $(seq $MDSCOUNT); do
-		wait_update_facet mds$num \
-				"lctl get_param -n lov.$FSNAME-*.pools.$pool \
-				| sort -u | tr '\n' ' ' " "$t" || {
-			error_noexit "mds$num:Add to pool failed"
+	for mds_id in $(seq $MDSCOUNT); do
+		local mdt_id=$((mds_id-1))
+		local lodname=$FSNAME-MDT$(printf "%04x" $mdt_id)-mdtlov
+		wait_update_facet mds$mds_id \
+			"lctl get_param -n lod.$lodname.pools.$pool |
+				sort -u | tr '\n' ' ' " "$t" || {
+			error_noexit "mds$mds_id:Add to pool failed"
 			return 3
 		}
 	done
@@ -7295,10 +7301,14 @@ pool_remove_first_target() {
 	local pname="lov.$FSNAME-*.pools.$pool"
 	local t=$($LCTL get_param -n $pname | head -n1)
 	do_facet mgs $LCTL pool_remove $FSNAME.$pool $t
-	for num in $(seq $MDSCOUNT); do
-		wait_update_facet mds$num \
-			"lctl get_param -n $pname | grep $t" "" || {
-			error_noexit "mds$num:$t not removed from $FSNAME.$pool"
+	for mds_id in $(seq $MDSCOUNT); do
+		local mdt_id=$((mds_id-1))
+		local lodname=$FSNAME-MDT$(printf "%04x" $mdt_id)-mdtlov
+		wait_update_facet mds$mds_id \
+			"lctl get_param -n lod.$lodname.pools.$pool |
+				grep $t" "" || {
+			error_noexit "mds$mds_id:$t not removed from" \
+			"$FSNAME.$pool"
 			return 2
 		}
 	done
@@ -7317,10 +7327,12 @@ pool_remove_all_targets() {
 	do
 		do_facet mgs $LCTL pool_remove $FSNAME.$pool $t
 	done
-	for num in $(seq $MDSCOUNT); do
-		wait_update_facet mds$num "lctl get_param -n $pname" "" || {
-			error_noexit "mds$num:Pool $FSNAME.$pool cannot be" \
-			"drained"
+	for mds_id in $(seq $MDSCOUNT); do
+		local mdt_id=$((mds_id-1))
+		local lodname=$FSNAME-MDT$(printf "%04x" $mdt_id)-mdtlov
+		wait_update_facet mds$mds_id "lctl get_param -n \
+			lod.$lodname.pools.$pool" "" || {
+			error_noexit "mds$mds_id:Pool $pool not drained"
 			return 4
 		}
 	done
