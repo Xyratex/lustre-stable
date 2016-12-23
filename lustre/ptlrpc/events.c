@@ -121,6 +121,10 @@ void reply_in_callback(lnet_event_t *ev)
                 DEBUG_REQ(D_NET, req, "unlink");
                 goto out_wake;
         }
+	if (req->rq_xid != ev->match_bits) {
+		DEBUG_REQ(D_NET, req, "late reply");
+		goto out_wake;
+	}
 
         if (ev->mlength < ev->rlength ) {
                 CDEBUG(D_RPCTRACE, "truncate req %p rpc %d - %d+%d\n", req,
