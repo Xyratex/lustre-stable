@@ -3773,9 +3773,7 @@ test_56() {
 	[[ $(lustre_version_code $SINGLEMDS) -le $(version_code 2.1.0) ]] &&
 		skip "Need MDS version greater than 2.1.0" && return
 
-	for num in $(seq 1 $MDSCOUNT); do
-		format_mdt $num
-	done
+	formatall
 	add ost1 $(mkfs_opts ost1 $(ostdevname 1)) --index=10000 --reformat \
 		$(ostdevname 1) $(ostvdevname 1)
 	add ost2 $(mkfs_opts ost2 $(ostdevname 2)) --index=1000 --reformat \
