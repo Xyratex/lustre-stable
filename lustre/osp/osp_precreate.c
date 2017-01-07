@@ -912,7 +912,8 @@ static int osp_precreate_thread(void *_arg)
 		 */
 		while (osp_precreate_running(d)) {
 			if (d->opd_pre_recovering &&
-			    d->opd_imp_connected) {
+			    d->opd_imp_connected &&
+			    !d->opd_got_disconnected) {
 				break;
 			}
 			l_wait_event(d->opd_pre_waitq,
