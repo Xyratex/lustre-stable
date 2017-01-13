@@ -304,9 +304,9 @@ mxlnd_put_idle_tx(kmx_ctx_t *tx)
 	spin_unlock(&kmxlnd_data.kmx_tx_idle_lock);
 
 	if (lntmsg[0] != NULL)
-		lnet_finalize(kmxlnd_data.kmx_ni, lntmsg[0], result);
+		lnet_finalize(lntmsg[0], result);
 	if (lntmsg[1] != NULL)
-		lnet_finalize(kmxlnd_data.kmx_ni, lntmsg[1], result);
+		lnet_finalize(lntmsg[1], result);
 	return 0;
 }
 
@@ -1993,9 +1993,9 @@ failed_1:
         return;
 
 failed_0:
-        CNETERR("no tx avail\n");
-        lnet_finalize(ni, lntmsg, -EIO);
-        return;
+	CNETERR("no tx avail\n");
+	lnet_finalize(lntmsg, -EIO);
+	return;
 }
 
 /**
@@ -2518,7 +2518,8 @@ mxlnd_recv (lnet_ni_t *ni, void *private, lnet_msg_t *lntmsg, int delayed,
                 mxlnd_conn_decref(conn);
         }
 
-        if (finalize == 1) lnet_finalize(kmxlnd_data.kmx_ni, lntmsg, 0);
+	if (finalize == 1)
+		lnet_finalize(lntmsg, 0);
 
         /* we received a credit, see if we can use it to send a msg */
         if (credit) mxlnd_check_sends(peer);
@@ -3379,8 +3380,10 @@ cleanup:
                 CDEBUG(D_NET, "leaving for rx (0x%llx)\n", seq);
         }
 
-        if (lntmsg[0] != NULL) lnet_finalize(kmxlnd_data.kmx_ni, lntmsg[0], result);
-        if (lntmsg[1] != NULL) lnet_finalize(kmxlnd_data.kmx_ni, lntmsg[1], result);
+	if (lntmsg[0] != NULL)
+		lnet_finalize(lntmsg[0], result);
+	if (lntmsg[1] != NULL)
+		lnet_finalize(lntmsg[1], result);
 
         if (conn != NULL && credit == 1) mxlnd_check_sends(peer);
 

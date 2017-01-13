@@ -496,9 +496,9 @@ kqswnal_tx_done_in_thread_context (kqswnal_tx_t *ktx)
 
         kqswnal_put_idle_tx (ktx);
 
-        lnet_finalize (kqswnal_data.kqn_ni, lnetmsg0, status0);
-        if (lnetmsg1 != NULL)
-                lnet_finalize (kqswnal_data.kqn_ni, lnetmsg1, status1);
+	lnet_finalize(lnetmsg0, status0);
+	if (lnetmsg1 != NULL)
+		lnet_finalize(lnetmsg1, status1);
 }
 
 void
@@ -877,14 +877,14 @@ kqswnal_rdma (kqswnal_rx_t *krx, lnet_msg_t *lntmsg,
         LASSERT (krx->krx_rpc_reply_needed);
         LASSERT (krx->krx_rpc_reply.msg.status != 0);
 
-        if (len == 0) {
-                /* data got truncated to nothing. */
-                lnet_finalize(kqswnal_data.kqn_ni, lntmsg, 0);
-                /* Let kqswnal_rx_done() complete the RPC with success */
-                krx->krx_rpc_reply.msg.status = 0;
-                return (0);
-        }
-        
+	if (len == 0) {
+		/* data got truncated to nothing. */
+		lnet_finalize(lntmsg, 0);
+		/* Let kqswnal_rx_done() complete the RPC with success */
+		krx->krx_rpc_reply.msg.status = 0;
+		return 0;
+	}
+
         /* NB I'm using 'ktx' just to map the local RDMA buffers; I'm not
            actually sending a portals message with it */
         ktx = kqswnal_get_idle_tx();
@@ -1241,19 +1241,18 @@ kqswnal_send (lnet_ni_t *ni, void *private, lnet_msg_t *lntmsg)
 
                 kqswnal_put_idle_tx (ktx);
 
-                if (state == KTX_GETTING && repmsg != NULL) {
-                        /* We committed to reply, but there was a problem
-                         * launching the GET.  We can't avoid delivering a
-                         * REPLY event since we committed above, so we
-                         * pretend the GET succeeded but the REPLY
-                         * failed. */
-                        rc = 0;
-                        lnet_finalize (kqswnal_data.kqn_ni, lntmsg, 0);
-                        lnet_finalize (kqswnal_data.kqn_ni, repmsg, -EIO);
-                }
-                
+		if (state == KTX_GETTING && repmsg != NULL) {
+			/* We committed to reply, but there was a problem
+			 * launching the GET.  We can't avoid delivering a
+			 * REPLY event since we committed above, so we
+			 * pretend the GET succeeded but the REPLY
+			 * failed. */
+			rc = 0;
+			lnet_finalize(lntmsg, 0);
+			lnet_finalize(repmsg, -EIO);
+		}
         }
-        
+
 	atomic_dec(&kqswnal_data.kqn_pending_txs);
         return (rc == 0 ? 0 : -EIO);
 }
@@ -1649,9 +1648,9 @@ kqswnal_recv (lnet_ni_t     *ni,
                                    krx->krx_npages, krx->krx_kiov, 
                                    msg_offset, mlen);
 
-        lnet_finalize(ni, lntmsg, 0);
-        kqswnal_rx_decref(krx);
-        return 0;
+	lnet_finalize(lntmsg, 0);
+	kqswnal_rx_decref(krx);
+	return 0;
 }
 
 int

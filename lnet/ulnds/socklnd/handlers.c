@@ -224,9 +224,9 @@ usocklnd_read_msg(usock_conn_t *conn, int *cont_flag)
                 break;
 
         case UC_RX_LNET_PAYLOAD:
-                /* payload all received */
+		/* payload all received */
 
-                lnet_finalize(conn->uc_peer->up_ni, conn->uc_rx_lnetmsg, 0);
+		lnet_finalize(conn->uc_rx_lnetmsg, 0);
 
                 cookie = conn->uc_rx_msg.ksm_zc_cookies[0];
                 if (cookie != 0)

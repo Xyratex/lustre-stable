@@ -411,7 +411,7 @@ kranal_tx_done (kra_tx_t *tx, int completion)
 		if (lnetmsg[i] == NULL)
 			continue;
 
-		lnet_finalize(kranal_data.kra_ni, lnetmsg[i], completion);
+		lnet_finalize(lnetmsg[i], completion);
 	}
 }
 
@@ -772,9 +772,9 @@ kranal_reply(lnet_ni_t *ni, kra_conn_t *conn, lnet_msg_t *lntmsg)
         return;
 
  failed_1:
-        kranal_tx_done(tx, -EIO);
+	kranal_tx_done(tx, -EIO);
  failed_0:
-        lnet_finalize(ni, lntmsg, -EIO);
+	lnet_finalize(lntmsg, -EIO);
 }
 
 int
@@ -832,9 +832,9 @@ kranal_recv (lnet_ni_t *ni, void *private, lnet_msg_t *lntmsg,
                         }
                         buffer = ((char *)iov->iov_base) + offset;
                 }
-                rc = kranal_consume_rxmsg(conn, buffer, mlen);
-                lnet_finalize(ni, lntmsg, (rc == 0) ? 0 : -EIO);
-                return 0;
+		rc = kranal_consume_rxmsg(conn, buffer, mlen);
+		lnet_finalize(lntmsg, (rc == 0) ? 0 : -EIO);
+		return 0;
 
         case RANAL_MSG_PUT_REQ:
                 tx = kranal_new_tx_msg(RANAL_MSG_PUT_ACK);

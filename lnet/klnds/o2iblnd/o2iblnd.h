@@ -1113,7 +1113,7 @@ void kiblnd_map_rx_descs(kib_conn_t *conn);
 void kiblnd_unmap_rx_descs(kib_conn_t *conn);
 int kiblnd_map_tx(lnet_ni_t *ni, kib_tx_t *tx,
                   kib_rdma_desc_t *rd, int nfrags);
-void kiblnd_unmap_tx(lnet_ni_t *ni, kib_tx_t *tx);
+void kiblnd_unmap_tx(kib_tx_t *tx);
 void kiblnd_pool_free_node(kib_pool_t *pool, struct list_head *node);
 struct list_head *kiblnd_pool_alloc_node(kib_poolset_t *ps);
 
@@ -1153,7 +1153,7 @@ void kiblnd_close_conn (kib_conn_t *conn, int error);
 void kiblnd_close_conn_locked (kib_conn_t *conn, int error);
 
 void kiblnd_launch_tx (lnet_ni_t *ni, kib_tx_t *tx, lnet_nid_t nid);
-void kiblnd_txlist_done(lnet_ni_t *ni, struct list_head *txlist, int status);
+void kiblnd_txlist_done(struct list_head *txlist, int status);
 
 void kiblnd_qp_event(struct ib_event *event, void *arg);
 void kiblnd_cq_event(struct ib_event *event, void *arg);

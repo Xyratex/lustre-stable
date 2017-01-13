@@ -172,9 +172,9 @@ usocklnd_tear_peer_conn(usock_conn_t *conn)
         if (!decref_flag)
                 return;
 
-        if (rx_lnetmsg != NULL)
-                lnet_finalize(ni, rx_lnetmsg, -EIO);
-        
+	if (rx_lnetmsg != NULL)
+		lnet_finalize(rx_lnetmsg, -EIO);
+
         usocklnd_destroy_txlist(ni, &zombie_txs);
 
         usocklnd_conn_decref(conn);
@@ -559,8 +559,8 @@ usocklnd_destroy_tx(lnet_ni_t *ni, usock_tx_t *tx)
 
         LIBCFS_FREE (tx, tx->tx_size);
 
-        if (lnetmsg != NULL) /* NOOP and hello go without lnetmsg */
-                lnet_finalize(ni, lnetmsg, rc);
+	if (lnetmsg != NULL) /* NOOP and hello go without lnetmsg */
+		lnet_finalize(lnetmsg, rc);
 }
 
 void
@@ -612,10 +612,10 @@ usocklnd_destroy_conn(usock_conn_t *conn)
 {
         LASSERT (conn->uc_peer == NULL || conn->uc_ni == NULL);
 
-        if (conn->uc_rx_state == UC_RX_LNET_PAYLOAD) {
-                LASSERT (conn->uc_peer != NULL);
-                lnet_finalize(conn->uc_peer->up_ni, conn->uc_rx_lnetmsg, -EIO);
-        }
+	if (conn->uc_rx_state == UC_RX_LNET_PAYLOAD) {
+		LASSERT(conn->uc_peer != NULL);
+		lnet_finalize(conn->uc_rx_lnetmsg, -EIO);
+	}
 
 	if (!list_empty(&conn->uc_tx_list)) {
                 LASSERT (conn->uc_peer != NULL);
