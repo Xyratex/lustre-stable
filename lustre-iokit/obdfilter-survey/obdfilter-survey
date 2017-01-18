@@ -383,7 +383,9 @@ if [ $case == "network" ]; then
         exit 1
     fi
     # Now start client setup
+    set +e
     osc_names_str=$($lctl dl| grep osc | grep -v mdt | grep UP)
+    set -e
     if [ -n "$osc_names_str" ]; then
         echo "The existing setup must be cleaned";
         exit 0;
