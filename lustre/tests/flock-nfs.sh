@@ -149,10 +149,9 @@ test_3a() {
 	echo "umount -f /mnt/mds1"
 	stop mds1 -f || error "MDS umount failed"
 	echo "umount -f $LUSTRE_MNT"
-	do_node $lustre_client "umount -f $LUSTRE_MNT"
-	wait
-	do_node $lustre_client "umount -f $LUSTRE_MNT" || \
+	do_node $lustre_client "umount -f $LUSTRE_MNT" ||
 		error "client umount failed"
+	wait
 	stopall -f || error "cleanup failed"
 	check_and_setup_lustre
 }
@@ -168,9 +167,9 @@ test_3b() {
 	do_node $lustre_client "umount -f $LUSTRE_MNT"
 	nfs_stop
 	cleanup_client3
-	do_node $lustre_client "umount -f $LUSTRE_MNT"
+	do_node $lustre_client "umount -f $LUSTRE_MNT" ||
+		error "client umount failed"
 	wait
-	do_node $lustre_client "umount -f $LUSTRE_MNT" || error "client umount failed"
 	stopall -f || error "cleanup failed"
 	check_and_setup_lustre
 }
