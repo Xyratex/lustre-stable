@@ -936,7 +936,7 @@ test_8() {
 }
 run_test 8 "Test default archive number"
 
-test_9() {
+test_9A() { # was test_9
 	mkdir -p $DIR/$tdir
 	local f=$DIR/$tdir/$tfile
 	local fid=$(copy_file /etc/passwd $f)
@@ -951,7 +951,7 @@ test_9() {
 
 	copytool_cleanup
 }
-run_test 9 "Use of explict archive number, with dedicated copytool"
+run_test 9A "Use of explict archive number, with dedicated copytool"
 
 test_9a() {
 	needclients 3 || return 0
