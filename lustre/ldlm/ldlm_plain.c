@@ -127,17 +127,10 @@ ldlm_plain_compat_queue(struct list_head *queue, struct ldlm_lock *req,
  * This function looks for any conflicts for \a lock in the granted or
  * waiting queues. The lock is granted if no conflicts are found in
  * either queue.
- *
- * If \a first_enq is 0 (ie, called from ldlm_reprocess_queue):
- *   - blocking ASTs have already been sent
- *
- * If \a first_enq is 1 (ie, called from ldlm_lock_enqueue):
- *   - blocking ASTs have not been sent yet, so list of conflicting locks
- *     would be collected and ASTs sent.
  */
 int ldlm_process_plain_lock(struct ldlm_lock *lock, __u64 *flags,
-			    int first_enq, ldlm_error_t *err,
-			    struct list_head *work_list)
+			    enum ldlm_process_intention intention,
+			    ldlm_error_t *err, struct list_head *work_list)
 {
 	struct ldlm_resource *res = lock->l_resource;
 	struct list_head rpc_list;
@@ -149,7 +142,7 @@ int ldlm_process_plain_lock(struct ldlm_lock *lock, __u64 *flags,
 	LASSERT(list_empty(&res->lr_converting));
 	INIT_LIST_HEAD(&rpc_list);
 
-        if (!first_enq) {
+	if (intention == LDLM_PROCESS_RESCAN) {
                 LASSERT(work_list != NULL);
                 rc = ldlm_plain_compat_queue(&res->lr_granted, lock, NULL);
                 if (!rc)
@@ -163,31 +156,27 @@ int ldlm_process_plain_lock(struct ldlm_lock *lock, __u64 *flags,
                 RETURN(LDLM_ITER_CONTINUE);
         }
 
+	LASSERT((intention == LDLM_PROCESS_ENQUEUE && work_list == NULL) ||
+		(intention == LDLM_PROCESS_RECOVERY && work_list != NULL));
  restart:
         rc = ldlm_plain_compat_queue(&res->lr_granted, lock, &rpc_list);
         rc += ldlm_plain_compat_queue(&res->lr_waiting, lock, &rpc_list);
 
         if (rc != 2) {
-                /* If either of the compat_queue()s returned 0, then we
-                 * have ASTs to send and must go onto the waiting list.
-                 *
-                 * bug 2322: we used to unlink and re-add here, which was a
-                 * terrible folly -- if we goto restart, we could get
-                 * re-ordered!  Causes deadlock, because ASTs aren't sent! */
-		if (list_empty(&lock->l_res_link))
-                        ldlm_resource_add_lock(res, &res->lr_waiting, lock);
-                unlock_res(res);
-                rc = ldlm_run_ast_work(ldlm_res_to_ns(res), &rpc_list,
-                                       LDLM_WORK_BL_AST);
-                lock_res(res);
+		rc = ldlm_handle_conflict_lock(lock, flags, &rpc_list, 0);
 		if (rc == -ERESTART)
 			GOTO(restart, rc);
-                *flags |= LDLM_FL_BLOCK_GRANTED;
-        } else {
-                ldlm_resource_unlink_lock(lock);
-                ldlm_grant_lock(lock, NULL);
-        }
-        RETURN(0);
+		*err = rc;
+	} else {
+		ldlm_resource_unlink_lock(lock);
+		ldlm_grant_lock(lock, work_list);
+		rc = 0;
+	}
+
+	if (!list_empty(&rpc_list))
+		ldlm_discard_bl_list(&rpc_list);
+
+	RETURN(rc);
 }
 #endif /* HAVE_SERVER_SUPPORT */
 
