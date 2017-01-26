@@ -6072,14 +6072,10 @@ check_pool_not_exist() {
 create_pool() {
 	local fsname=${1%%.*}
 	local poolname=${1##$fsname.}
-	local pool=$1
 
-	check_pool_not_exist $pool
+	do_facet mgs lctl pool_new $1
 	local RC=$?
-	[[ $RC -ne 0 ]] && echo "pool: $pool already exists" && return $RC
-
-	do_facet mgs lctl pool_new $pool 2>/dev/null
-	RC=$?
+	# get param should return err unless pool is created
 	[[ $RC -ne 0 ]] && return $RC
 
 	for mds_id in $(seq $MDSCOUNT); do
@@ -6088,12 +6084,12 @@ create_pool() {
 		wait_update_facet mds$mds_id \
 			"lctl get_param -n lod.$lodname.pools.$poolname \
 				2>/dev/null || echo foo" "" ||
-			error "mds$mds_id: pool_new failed $pool"
+			error "mds$mds_id: pool_new failed $1"
 	done
 	wait_update $HOSTNAME "lctl get_param -n lov.$fsname-*.pools.$poolname \
-		2>/dev/null || echo foo" "" || error "pool_new failed $pool"
+		2>/dev/null || echo foo" "" || error "pool_new failed $1"
 
-	add_pool_to_list $pool
+	add_pool_to_list $1
 	return $RC
 }
 

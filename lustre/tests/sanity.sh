@@ -11987,7 +11987,7 @@ test_220() { #LU-325
 	#define OBD_FAIL_OST_ENOINO              0x229
 	do_facet ost$((OSTIDX + 1)) lctl set_param fail_loc=0x229
 	trap "destroy_test_pools $FSNAME" EXIT
-	create_pool $FSNAME.$TESTNAME || return 1
+	do_facet mgs $LCTL pool_new $FSNAME.$TESTNAME || return 1
 	do_facet mgs $LCTL pool_add $FSNAME.$TESTNAME $OST || return 2
 
 	$SETSTRIPE $DIR/$tdir -i $OSTIDX -c 1 -p $FSNAME.$TESTNAME
@@ -12893,7 +12893,7 @@ test_252() {
 	echo "prev high watermark $last_wm_h, prev normal watermark $last_wm_n"
 
 	trap "destroy_test_pools $FSNAME" EXIT
-	create_pool $FSNAME.$TESTNAME || return 1
+	do_facet mgs $LCTL pool_new $FSNAME.$TESTNAME || return 1
 	do_facet mgs $LCTL pool_add $FSNAME.$TESTNAME $ost_name || return 2
 
 	# Wait for client to see a OST at pool
