@@ -144,6 +144,8 @@ struct mdd_thread_info {
 	struct lu_attr            mti_tattr;
 	/** used to set c/mtime */
 	struct lu_attr            mti_la_for_fix;
+	/* Only used in mdd_object_start */
+	struct lu_attr            mti_la_for_start;
 	/* mti_ent and mti_key must be conjoint,
 	* then mti_ent::lde_name will be mti_key. */
 	struct lu_dirent	  mti_ent;

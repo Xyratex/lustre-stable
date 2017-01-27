@@ -164,7 +164,7 @@ static int mdd_object_start(const struct lu_env *env, struct lu_object *o)
 
 	if (lu_object_exists(o)) {
 		struct mdd_object *mdd_obj = lu2mdd_obj(o);
-		struct lu_attr *attr = MDD_ENV_VAR(env, cattr);
+		struct lu_attr *attr = MDD_ENV_VAR(env, la_for_start);
 
 		rc = mdd_la_get(env, mdd_obj, attr, BYPASS_CAPA);
 		if (rc == 0)
