@@ -85,21 +85,21 @@ test_1a() {
 
 	local subtests=${LTP_subtests:-"\
 		$(do_node $NFS_CLIENT ls $TEST_DIR_LTP_FLOCK/flock0* | sort) \
-		$(do_node $NFS_CLIENT ls $TEST_DIR_LTP_FLOCK/fcntl*_64 | \
-		grep -v fcntl16 | sort)"}
+		$(do_node $NFS_CLIENT ls $TEST_DIR_LTP_FLOCK/fcntl*_64| sort)"}
 
 
 	for i in $subtests; do
 		echo Subtest : $i
-		do_node $NFS_CLIENT "export TMPDIR=$NFS_MNT; $i"
+		do_node $NFS_CLIENT "export TMPDIR=$NFS_MNT; \
+			export PATH=$PATH:$TEST_DIR_LTP_FLOCK; $i"
 		rc=$?
-		[ $rc -eq 0 ] || break
+		[ $rc -eq 0 ] || [ $rc -eq 32 ] || break
 	done
 	nfs_stop
 	zconf_umount $lustre_client $LUSTRE_MNT force ||
 		error_noexit false "failed to umount lustre on $lustre_client"
 
-	[ $rc -eq 0 ] || error "$i failed: rc=$rc"
+	[ $rc -eq 0 ] || [ $rc -eq 32 ] || error "$i failed: rc=$rc"
 }
 run_test 1a "LTP testsuite"
 
