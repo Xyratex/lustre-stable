@@ -198,17 +198,16 @@ add_pool() {
 }
 
 create_pool_nofail() {
-    create_pool $FSNAME.$1
-    if [[ $? != 0 ]]; then
-        error "Pool creation of $1 failed"
-    fi
+	create_pool $FSNAME.$1
+	[[ $? -ne 0 ]] && error "Pool creation of $1 failed"
+	return 0
 }
 
 create_pool_fail() {
-    create_pool $FSNAME.$1
-    if [[ $? == 0 ]]; then
-        error "Pool creation of $1 succeeded; should have failed"
-    fi
+	create_pool $FSNAME.$1
+	[[ $? -ne 0 ]] || error "Pool creation of $1 succeeded; " \
+		"should have failed"
+	return 0
 }
 
 set_destroy_pools_trap() {
@@ -258,7 +257,7 @@ run_test 1e "Create a pool with a 1000 char pool name; should fail"
 
 test_1f() {
 	set_destroy_pools_trap
-	do_facet mgs lctl pool_new .$POOL 2>/dev/null
+	create_pool .$POOL
     [[ $? -ne 0 ]] ||
         error "pool_new did not fail even though fs-name was missing"
 }
@@ -266,7 +265,7 @@ run_test 1f "pool_new should fail if fs-name is missing"
 
 test_1g() {
 	set_destroy_pools_trap
-	do_facet mgs lctl pool_new $POOL 2>/dev/null
+	create_pool $POOL
     [[ $? -ne 0 ]] ||
         error "pool_new did not fail even though fs-name was missing"
 }
@@ -274,7 +273,7 @@ run_test 1g "pool_new should fail if fs-name is missing"
 
 test_1h() {
 	set_destroy_pools_trap
-	do_facet mgs lctl pool_new ${FSNAME}. 2>/dev/null
+	create_pool ${FSNAME}.
     [[ $? -ne 0 ]] ||
         error "pool_new did not fail even though pool name was missing"
 }
@@ -282,7 +281,7 @@ run_test 1h "pool_new should fail if poolname is missing"
 
 test_1i() {
 	set_destroy_pools_trap
-	do_facet mgs lctl pool_new . 2>/dev/null
+	create_pool .
     [[ $? -ne 0 ]] ||
         error "pool_new did not fail even if pool and fs-name were missing"
 }
@@ -290,7 +289,7 @@ run_test 1i "pool_new should fail if poolname and fs-name are missing"
 
 test_1j() {
 	set_destroy_pools_trap
-	do_facet mgs lctl pool_new ${FSNAME},$POOL 2>/dev/null
+	create_pool ${FSNAME},$POOL
     [[ $? -ne 0 ]] ||
         error "pool_new did not fail even though pool name format was wrong"
 }
@@ -298,7 +297,7 @@ run_test 1j "pool_new should fail if poolname format is wrong"
 
 test_1k() {
 	set_destroy_pools_trap
-	do_facet mgs lctl pool_new ${FSNAME}/$POOL 2>/dev/null
+	create_pool ${FSNAME}/$POOL
     [[ $? -ne 0 ]] ||
         error "pool_new did not fail even though pool name format was wrong"
 }
@@ -307,7 +306,7 @@ run_test 1k "pool_new should fail if poolname format is wrong"
 test_1m() {
 	set_destroy_pools_trap
     create_pool_nofail $POOL2
-	do_facet mgs lctl pool_new ${FSNAME}.$POOL2 2>/dev/null
+	create_pool ${FSNAME}.$POOL2
     [[ $? -ne 0 ]] ||
         error "pool_new did not fail even though $POOL2 existed"
     destroy_pool $POOL2
@@ -692,19 +691,19 @@ test_7b()
 {
 	set_destroy_pools_trap
 	# No fsname
-	do_facet mgs lctl pool_new qwerty
+	create_pool qwerty
 	[ $? -ne 22 ] && error "can create a pool with no fsname"
 
 	# No pool name
-	do_facet mgs lctl pool_new $FSNAME.
+	create_pool $FSNAME.
 	[ $? -ne 22 ] && error "can create a pool with no name"
 
 	# Invalid character
-	do_facet mgs lctl pool_new $FSNAME.0123456789^bdef
+	create_pool $FSNAME.0123456789^bdef
 	[ $? -ne 22 ] && error "can create a pool with an invalid name"
 
 	# Too long
-	do_facet mgs lctl pool_new $FSNAME.0123456789abdefg
+	create_pool $FSNAME.0123456789abdefg
 	[ $? -ne 36 ] && error "can create a pool with a name too long"
 
 	return 0
