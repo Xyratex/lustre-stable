@@ -5689,6 +5689,23 @@ test_103() {
 }
 run_test 103 "check file creation for ro and rw bind mnt pt"
 
+test_104() {
+	setup
+
+	# add unknown configuration parameter.
+	local PARAM="$FSNAME-OST0000.ost.unknown_param=50"
+	do_facet mgs "$LCTL conf_param $PARAM"
+	cleanup
+	load_modules
+
+	# unknown param should be ignored while mounting.
+	setup
+
+	cleanup || error "cleanup failed with $?"
+}
+run_test 104 "Unknown config param should not fail target mounting"
+
+
 if ! combined_mgs_mds ; then
 	stop mgs
 fi
