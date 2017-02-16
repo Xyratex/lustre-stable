@@ -2554,6 +2554,8 @@ typedef enum {
         PDL_POLICY_ROUND        = 3,
         /* the specified CPU core is preferred, but not enforced */
         PDL_POLICY_PREFERRED    = 4,
+	/* special separate thread */
+	PDL_POLICY_SPECIAL      = 5,
 } pdl_policy_t;
 
 /* ptlrpc/ptlrpcd.c */

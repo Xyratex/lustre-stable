@@ -1253,7 +1253,7 @@ static int osc_lock_enqueue(const struct lu_env *env,
                                           obj->oo_oinfo->loi_kms_valid,
                                           osc_lock_upcall,
                                           ols, einfo, &ols->ols_handle,
-                                          PTLRPCD_SET, 1, ols->ols_agl);
+					  ols->ols_agl);
                         if (result != 0) {
 				if (ols->ols_agl)
 					cl_lock_user_del(env, lock);

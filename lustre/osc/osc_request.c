@@ -2260,8 +2260,7 @@ int osc_enqueue_base(struct obd_export *exp, struct ldlm_res_id *res_id,
 		     struct ost_lvb *lvb, int kms_valid,
 		     obd_enqueue_update_f upcall, void *cookie,
 		     struct ldlm_enqueue_info *einfo,
-		     struct lustre_handle *lockh,
-		     struct ptlrpc_request_set *rqset, int async, int agl)
+		     struct lustre_handle *lockh, int agl)
 {
 	struct obd_device *obd = exp->exp_obd;
 	struct ptlrpc_request *req = NULL;
@@ -2318,10 +2317,6 @@ int osc_enqueue_base(struct obd_export *exp, struct ldlm_res_id *res_id,
                         RETURN(-ECANCELED);
                 } else if (osc_set_lock_data_with_check(matched, einfo)) {
                         *flags |= LDLM_FL_LVB_READY;
-                        /* addref the lock only if not async requests and PW
-                         * lock is matched whereas we asked for PR. */
-                        if (!rqset && einfo->ei_mode != mode)
-                                ldlm_lock_addref(lockh, LCK_PR);
                         if (intent) {
                                 /* I would like to be able to ASSERT here that
                                  * rss <= kms, but I can't, for reasons which
@@ -2336,8 +2331,7 @@ int osc_enqueue_base(struct obd_export *exp, struct ldlm_res_id *res_id,
 
                         if (einfo->ei_mode != mode)
                                 ldlm_lock_decref(lockh, LCK_PW);
-                        else if (rqset)
-                                /* For async requests, decref the lock. */
+			else
                                 ldlm_lock_decref(lockh, einfo->ei_mode);
                         LDLM_LOCK_PUT(matched);
                         RETURN(ELDLM_OK);
@@ -2369,38 +2363,27 @@ int osc_enqueue_base(struct obd_export *exp, struct ldlm_res_id *res_id,
         *flags &= ~LDLM_FL_BLOCK_GRANTED;
 
         rc = ldlm_cli_enqueue(exp, &req, einfo, res_id, policy, flags, lvb,
-			      sizeof(*lvb), LVB_T_OST, lockh, async);
-        if (rqset) {
-                if (!rc) {
-                        struct osc_enqueue_args *aa;
-                        CLASSERT (sizeof(*aa) <= sizeof(req->rq_async_args));
-                        aa = ptlrpc_req_async_args(req);
-                        aa->oa_ei = einfo;
-                        aa->oa_exp = exp;
-                        aa->oa_flags  = flags;
-                        aa->oa_upcall = upcall;
-                        aa->oa_cookie = cookie;
-                        aa->oa_lvb    = lvb;
-                        aa->oa_lockh  = lockh;
-                        aa->oa_agl    = !!agl;
+			      sizeof(*lvb), LVB_T_OST, lockh, 1);
+	if (!rc) {
+		struct osc_enqueue_args *aa;
+		CLASSERT (sizeof(*aa) <= sizeof(req->rq_async_args));
+		aa = ptlrpc_req_async_args(req);
+		aa->oa_ei = einfo;
+		aa->oa_exp = exp;
+		aa->oa_flags  = flags;
+		aa->oa_upcall = upcall;
+		aa->oa_cookie = cookie;
+		aa->oa_lvb    = lvb;
+		aa->oa_lockh  = lockh;
+		aa->oa_agl    = !!agl;
 
-                        req->rq_interpret_reply =
-                                (ptlrpc_interpterer_t)osc_enqueue_interpret;
-                        if (rqset == PTLRPCD_SET)
-                                ptlrpcd_add_req(req, PDL_POLICY_ROUND, -1);
-                        else
-                                ptlrpc_set_add_req(rqset, req);
-                } else if (intent) {
-                        ptlrpc_req_finished(req);
-                }
-                RETURN(rc);
-        }
-
-        rc = osc_enqueue_fini(req, lvb, upcall, cookie, flags, agl, rc);
-        if (intent)
-                ptlrpc_req_finished(req);
-
-        RETURN(rc);
+		req->rq_interpret_reply =
+			(ptlrpc_interpterer_t)osc_enqueue_interpret;
+		ptlrpcd_add_req(req, PDL_POLICY_SPECIAL, -1);
+	} else if (intent) {
+		ptlrpc_req_finished(req);
+	}
+	RETURN(rc);
 }
 
 int osc_match_base(struct obd_export *exp, struct ldlm_res_id *res_id,
