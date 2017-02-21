@@ -1090,7 +1090,7 @@ static int set_blockdev_tunables(char *source, struct mount_opts *mop)
 		while (--dev > real_path && isdigit(*dev))
 			*dev = 0;
 
-		if (strncmp(real_path, "/dev/md_", 8) == 0)
+		if (strncmp(real_path, "/dev/md", 7) == 0 && dev[0] == 'p')
 			*dev = 0;
 	}
 
