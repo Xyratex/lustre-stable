@@ -13066,7 +13066,7 @@ test_255() {
 	$SETSTRIPE -c 1 -i 0 $file || error "setstripe failed"
 	$SETSTRIPE -c 1 -i 0 "$file"_2 || error "setstripe failed"
 	dd if=/dev/zero of="$file"_2 bs=1k count=1
-#define OBD_FAIL_TGT_CLIENT_DEL       0x716
+#define OBD_FAIL_TGT_CLIENT_DEL2       0x716
 	do_facet ost1 $LCTL set_param fail_loc=0x00000716
 
 	dd if=/dev/zero of=$file bs=1k count=1 conv=fsync &

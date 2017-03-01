@@ -662,7 +662,7 @@ out_stop:
 		cb_registered = true;
 	}
 
-	CFS_FAIL_TIMEOUT(OBD_FAIL_TGT_CLIENT_DEL, 10);
+	CFS_FAIL_TIMEOUT(OBD_FAIL_TGT_CLIENT_DEL2, 10);
 	rc1 = ofd_trans_stop(env, ofd, th, rc);
 	if (!rc)
 		rc = rc1;

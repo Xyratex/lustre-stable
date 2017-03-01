@@ -472,6 +472,10 @@ out:
 	OBD_FREE_PTR(ccb);
 }
 
+/**
+ * Add commit callback function, it returns a non-zero value to inform
+ * caller to use sync transaction if necessary.
+ */
 int tgt_last_commit_cb_add(struct thandle *th, struct lu_target *tgt,
 			   struct obd_export *exp, __u64 transno)
 {
@@ -502,7 +506,9 @@ int tgt_last_commit_cb_add(struct thandle *th, struct lu_target *tgt,
 		/* report failure to force synchronous operation */
 		return -EPERM;
 
-	return rc;
+	/* if exp_need_sync is set, return non-zero value to force
+	 * a sync transaction. */
+	return rc ? rc : exp->exp_need_sync;
 }
 EXPORT_SYMBOL(tgt_last_commit_cb_add);
 
@@ -699,6 +705,9 @@ int tgt_client_del(const struct lu_env *env, struct obd_export *exp)
 		LBUG();
 	}
 
+	if (OBD_FAIL_CHECK(OBD_FAIL_TGT_CLIENT_DEL))
+		RETURN(0);
+
 	/* Make sure the server's last_transno is up to date.
 	 * This should be done before zeroing client slot so last_transno will
 	 * be in server data or in client data in case of failure */
@@ -709,7 +718,7 @@ int tgt_client_del(const struct lu_env *env, struct obd_export *exp)
 		       ted->ted_lcd->lcd_uuid, rc);
 		RETURN(rc);
 	}
-	CFS_FAIL_TIMEOUT(OBD_FAIL_TGT_CLIENT_DEL, 5);
+	CFS_FAIL_TIMEOUT(OBD_FAIL_TGT_CLIENT_DEL2, 5);
 
 	th = tgt_client_data_update_start(env, exp);
 	if (IS_ERR(th))
