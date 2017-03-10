@@ -131,7 +131,6 @@ struct osp_device {
 	int				 opd_pre_grow_slow;
 	/* cleaning up orphans or recreating missing objects */
 	int				 opd_pre_recovering;
-	int				 osp_pre_delorphan_sent;
 
 	/*
 	 * OST synchronization
