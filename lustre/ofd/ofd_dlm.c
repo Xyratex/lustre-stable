@@ -83,25 +83,31 @@ void ofd_dlm_exit(void)
  *
  * The interval_callback_t is part of interval_iterate_reverse() and is called
  * for each interval in tree. The OFD interval callback searches for locks
- * covering extents beyond the given args->size. This is used to decide if LVB
- * data is outdated.
+ * covering extents beyond the given args->size. This is used to decide if the
+ * size is too small and needs to be updated.  Note that we are only interested
+ * in growing the size, as truncate is the only operation which can shrink it,
+ * and it is handled differently.  This is why we only look at locks beyond the
+ * current size.
  *
  * It finds the highest lock (by starting point) in this interval, and adds it
  * to the list of locks to glimpse.  We must glimpse a list of locks - rather
- * than only the highest lock on the file - because lock ahead creates extent
+ * than only the highest lock on the file - because lockahead creates extent
  * locks in advance of IO, and so breaks the assumption that the holder of the
  * highest lock knows the current file size.
  *
  * This assumption is normally true because locks which are created as part of
- * IO - rather than in advance of it - are guaranteed to be 'active', IE,
- * involved in IO, and the highest 'active' lock always knows the current file
- * size, because it is either not changing or the holder of that lock is
- * responsible for updating it.
+ * IO - rather than in advance of it - are guaranteed to be 'active', i.e.,
+ * involved in IO, and the holder of the highest 'active' lock always knows the
+ * current file size, because the size is either not changing or the holder of
+ * that lock is responsible for updating it.
  *
- * So we need only glimpse until we find the first 'active' lock.
- * Unfortunately, there is no way to know if a lock ahead/speculative lock is
- * 'active' from the server side.  So we must glimpse all speculative locks we
- * find and merge their LVBs.
+ * So we need only glimpse until we find the first client with an 'active'
+ * lock.
+ *
+ * Unfortunately, there is no way to know if a manually requested/speculative
+ * lock is 'active' from the server side.  So when we see a speculative lock,
+ * we must send a glimpse to the holder unless we have already sent a glimpse
+ * to the holder of that lock.
  *
  * However, *all* non-speculative locks are active.  So we can stop glimpsing
  * as soon as we find a non-speculative lock.  Currently, all speculative locks
@@ -109,7 +115,8 @@ void ofd_dlm_exit(void)
  * enforced by an assertion in osc_lock_init, which references this comment.
  *
  * If that ever changes, we will either need to find a new way to identify
- * active locks or we will need to glimpse all PW locks.
+ * active locks or we will need to consider all PW locks (we will still only
+ * glimpse one per client).
  *
  * Note that it is safe to glimpse only the 'top' lock from each interval
  * because ofd_intent_cb is only called for PW extent locks, and for PW locks,
@@ -127,14 +134,15 @@ static enum interval_iter ofd_intent_cb_la(struct interval_node *n, void *args)
 {
 	struct ldlm_interval		*node = (struct ldlm_interval *)n;
 	struct ofd_intent_args_la	*arg = args;
-	__u64				 size = arg->size;
-	struct ldlm_lock		*v = NULL;
+	__u64				size = arg->size;
+	struct ldlm_lock		*victim_lock = NULL;
 	struct ldlm_lock		*lck;
 	struct ldlm_glimpse_work	*gl_work = NULL;
+	int rc = 0;
 
 	/* If the interval is lower than the current file size, just break. */
 	if (interval_high(n) <= size)
-		return INTERVAL_ITER_STOP;
+		GOTO(out, rc = INTERVAL_ITER_STOP);
 
 	/* Find the 'victim' lock from this interval */
 	list_for_each_entry(lck, &node->li_group, l_sl_policy) {
@@ -147,7 +155,7 @@ static enum interval_iter ofd_intent_cb_la(struct interval_node *n, void *args)
 		if (arg->liblustre)
 			arg->liblustre = 0;
 
-		v = LDLM_LOCK_GET(lck);
+		victim_lock = LDLM_LOCK_GET(lck);
 
 		/* the same policy group - every lock has the
 		 * same extent, so needn't do it any more */
@@ -156,10 +164,10 @@ static enum interval_iter ofd_intent_cb_la(struct interval_node *n, void *args)
 
 	/* l_export can be null in race with eviction - In that case, we will
 	 * not find any locks in this interval */
-	if (!v) {
+	if (!victim_lock) {
 		CDEBUG(D_DLMTRACE, "No lock found for interval - probably due"
 				    " to an eviction.\n");
-		return INTERVAL_ITER_CONT;
+		GOTO(out, rc = INTERVAL_ITER_CONT);
 	}
 
 	/*
@@ -169,11 +177,28 @@ static enum interval_iter ofd_intent_cb_la(struct interval_node *n, void *args)
 	 * Hence, if you are grabbing DLM locks on the server, always set
 	 * non-NULL glimpse_ast (e.g., ldlm_request.c::ldlm_glimpse_ast()).
 	 */
-	if (v->l_glimpse_ast == NULL) {
-		LDLM_DEBUG(v, "no l_glimpse_ast");
+	if (victim_lock->l_glimpse_ast == NULL) {
+		LDLM_DEBUG(victim_lock, "no l_glimpse_ast");
 		arg->no_glimpse_ast = 1;
-		LDLM_LOCK_RELEASE(v);
-		return INTERVAL_ITER_STOP;
+		GOTO(out_release, rc = INTERVAL_ITER_STOP);
+	}
+
+	/* If NO_EXPANSION is not set, this is an active lock, and we don't need
+	 * to glimpse any further once we've glimpsed the client holding this
+	 * lock.  So set us up to stop.  See comment above this function. */
+	if (!(victim_lock->l_flags & LDLM_FL_NO_EXPANSION))
+		rc = INTERVAL_ITER_STOP;
+	else
+		rc = INTERVAL_ITER_CONT;
+
+	/* Check to see if we're already set up to send a glimpse to this
+	 * client; if so, don't add this lock to the glimpse list - We need
+	 * only glimpse each client once. (And if we know that client holds
+	 * an active lock, we can stop glimpsing.  So keep the rc set in the
+	 * check above.) */
+	list_for_each_entry(gl_work, &arg->gl_list, gl_list) {
+		if (gl_work->gl_lock->l_export == victim_lock->l_export)
+			GOTO(out_release, rc);
 	}
 
 	if (!OBD_FAIL_CHECK(OBD_FAIL_OFD_DLM_GL_WORK_ALLOC))
@@ -182,11 +207,11 @@ static enum interval_iter ofd_intent_cb_la(struct interval_node *n, void *args)
 
 	if (!gl_work) {
 		arg->error = -ENOMEM;
-		return INTERVAL_ITER_STOP;
+		GOTO(out_release, rc = INTERVAL_ITER_STOP);
 	}
 
 	/* Populate the gl_work structure. */
-	gl_work->gl_lock = v;
+	gl_work->gl_lock = victim_lock;
 	list_add_tail(&gl_work->gl_list, &arg->gl_list);
 	/* There is actually no need for a glimpse descriptor when glimpsing
 	 * extent locks */
@@ -195,12 +220,14 @@ static enum interval_iter ofd_intent_cb_la(struct interval_node *n, void *args)
 	 * must be freed in a slab-aware manner. */
 	gl_work->gl_flags = LDLM_GL_WORK_SLAB_ALLOCATED;
 
-	/* If NO_EXPANSION is not set, this is an active lock, and we don't need
-	 * to glimpse any further.  See comment above this function. */
-	if (!(v->l_flags & LDLM_FL_NO_EXPANSION))
-		return INTERVAL_ITER_STOP;
-	else
-		return INTERVAL_ITER_CONT;
+	GOTO(out, rc);
+
+out_release:
+	/* If the victim doesn't go on the glimpse list, we must release it */
+	LDLM_LOCK_RELEASE(victim_lock);
+
+out:
+	return rc;
 }
 
 /**
@@ -377,12 +404,7 @@ static int __ofd_intent_policy_la(struct ldlm_namespace *ns,
 	}
 
 	/* this will update the LVB */
-	rc = ldlm_glimpse_locks(res, &arg.gl_list);
-
-	/* discard rc from ldlm_glimpse_locks.  We eventually need to add
-	 * proper error handling for this function, but for now, we do the same
-	 * as other callers and ignore the rc. */
-	rc = 0;
+	ldlm_glimpse_locks(res, &arg.gl_list);
 
 	lock_res(res);
 	*reply_lvb = *res_lvb;
