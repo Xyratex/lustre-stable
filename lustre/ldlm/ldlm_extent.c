@@ -287,7 +287,7 @@ static void ldlm_extent_policy(struct ldlm_resource *res,
 	/* Because reprocess_queue zeroes flags and uses it to return
 	 * LDLM_FL_LOCK_CHANGED, we must check for the NO_EXPANSION flag
 	 * in the lock flags rather than the 'flags' argument */
-	if (likely(!(lock->l_flags & LDLM_FL_NO_EXPANSION))) {
+	if (likely(!(lock->l_flags & LDLM_FL_NO_EXPANSION_MASK))) {
 		ldlm_extent_internal_policy_granted(lock, &new_ex);
 		ldlm_extent_internal_policy_waiting(lock, &new_ex);
 	} else {

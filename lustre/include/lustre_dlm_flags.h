@@ -139,6 +139,16 @@
 #define ldlm_clear_cancel_on_block(_l)  LDLM_CLEAR_FLAG((_l), 1ULL << 23)
 
 /**
+ * Used to request NO_EXPANSION behavior on real I/O requests, rather than
+ * speculative lock requests, which require different handling of
+ * LDLM_FL_BLOCK_NOWAIT.
+ * */
+#define LDLM_FL_NO_EXPANSION_IO  0x0000000010000000ULL /* bit  28 */
+#define ldlm_is_do_not_expand_io(_l)     LDLM_TEST_FLAG((_l), 1ULL << 28)
+#define ldlm_set_do_not_expand_io(_l)    LDLM_SET_FLAG((_l), 1ULL << 28)
+#define ldlm_clear_do_not_expand_io(_l) LDLM_CLEAR_FLAG((_l), 1ULL << 28)
+
+/**
  * Do not expand this lock.  Grant it only on the extent requested.
  * Used for client controlled lock ahead.
  * */
@@ -378,6 +388,10 @@
 #define LDLM_FL_GONE_MASK		(LDLM_FL_DESTROYED		|\
 					 LDLM_FL_FAILED)
 
+/** l_flag bits which request no extent expansion server side */
+#define LDLM_FL_NO_EXPANSION_MASK	(LDLM_FL_NO_EXPANSION		|\
+					 LDLM_FL_NO_EXPANSION_IO)
+
 /** l_flags bits marked as "inherit" bits */
 /* Flags inherited from wire on enqueue/reply between client/server. */
 /* NO_TIMEOUT flag to force ldlm_lock_match() to wait with no timeout. */
@@ -385,7 +399,7 @@
 #define LDLM_FL_INHERIT_MASK            (LDLM_FL_CANCEL_ON_BLOCK	|\
 					 LDLM_FL_NO_TIMEOUT		|\
 					 LDLM_FL_TEST_LOCK              |\
-					 LDLM_FL_NO_EXPANSION)
+					 LDLM_FL_NO_EXPANSION_MASK)
 
 /** flags returned in @flags parameter on ldlm_lock_enqueue,
  * to be re-constructed on re-send */
