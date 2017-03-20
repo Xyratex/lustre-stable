@@ -4359,6 +4359,45 @@ test_404() {
 }
 run_test 404 "Inactive MDT does not block requests for active MDTs"
 
+test_405() {
+	needclients 2 || return 0
+	# test needs a running copytool
+	copytool_setup
+
+	mkdir -p $DIR/$tdir
+
+	local f=$DIR/$tdir/$tfile
+	local f2=$DIR2/$tdir/$tfile
+	local fid
+	fid=$(make_custom_file_for_progress $f 39 1000000)
+	[ $? != 0 ] && skip "not enough free space" && return
+
+	$LFS hsm_archive --archive $HSM_ARCHIVE_NUMBER $f
+	wait_request_state $fid ARCHIVE SUCCEED
+	$LFS hsm_release $f
+
+#define OBD_FAIL_MDS_HSM_CDT_DELAY      0x166
+	do_facet $SINGLEMDS $LCTL set_param fail_val=5 fail_loc=0x166
+
+	md5sum $f &
+	# 1st request holds layout lock while appropriate
+	# RESTORE record is still not added to llog
+	md5sum $f2 &
+	sleep 2
+
+	# after umount hsm_actions->O/x/x log shouldn't have
+	# double RESTORE records like below
+	#[0x200000401:0x1:0x0]...0x58d03a0d/0x58d03a0c action=RESTORE...WAITING
+	#[0x200000401:0x1:0x0]...0x58d03a0c/0x58d03a0d action=RESTORE...WAITING
+	sleep 30 &&
+		do_facet $SINGLEMDS "$LCTL get_param $HSM_PARAM.actions"&
+	fail $SINGLEMDS
+
+	wait
+	copytool_cleanup
+}
+run_test 405 "Check for double RESTORE records in llog"
+
 test_500()
 {
 	# Stop the existing copytool

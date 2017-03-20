@@ -468,6 +468,7 @@ int mdt_hsm_add_actions(struct mdt_thread_info *mti,
 			mutex_unlock(&cdt->cdt_restore_lock);
 		}
 record:
+		OBD_FAIL_TIMEOUT(OBD_FAIL_MDS_HSM_CDT_DELAY, cfs_fail_val);
 		/* record request */
 		rc = mdt_agent_record_add(mti->mti_env, mdt, *compound_id,
 					  archive_id, flags, hai);
