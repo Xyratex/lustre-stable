@@ -464,6 +464,12 @@ int mdt_hsm_add_actions(struct mdt_thread_info *mti,
 			mdt_object_put(mti->mti_env, obj);
 
 			mutex_lock(&cdt->cdt_restore_lock);
+			if (unlikely(cdt->cdt_state == CDT_STOPPED)) {
+				mutex_unlock(&cdt->cdt_restore_lock);
+				mdt_object_unlock(mti, obj, &crh->crh_lh, 1);
+				OBD_SLAB_FREE_PTR(crh, mdt_hsm_cdt_kmem);
+				GOTO(out, rc = -EAGAIN);
+			}
 			list_add_tail(&crh->crh_list, &cdt->cdt_restore_hdl);
 			mutex_unlock(&cdt->cdt_restore_lock);
 		}
