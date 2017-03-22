@@ -5750,6 +5750,32 @@ test_105()
 }
 run_test 105 "check failover after replace_nids"
 
+test_106() {
+	local repeat=5
+
+	reformat
+	setupall
+	mkdir -p $DIR/$tdir || error "create $tdir failed"
+	lfs setstripe -c 1 -i 0 $DIR/$tdir
+#define OBD_FAIL_CAT_RECORDS                        0x1313
+	do_facet mds1 $LCTL set_param fail_loc=0x1313 fail_val=$repeat
+
+	for ((i = 1; i <= $repeat; i++)); do
+
+		#one full plain llog
+		createmany -o $DIR/$tdir/f- 64768
+
+		createmany -u $DIR/$tdir/f- 64768
+	done
+	wait_delete_completed $((TIMEOUT * 7))
+#ASSERTION osp_sync_thread() ( thread->t_flags != SVC_RUNNING ) failed
+#shows that osp code is buggy
+	do_facet mds1 $LCTL set_param fail_loc=0 fail_val=0
+
+	cleanupall
+}
+run_test 106 "check osp llog processing when catalog is wrapped"
+
 test_108() {
 	# a modification of test 5c
 	local rc=0

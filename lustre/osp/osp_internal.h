@@ -166,6 +166,8 @@ struct osp_device {
 	__u64				 opd_syn_last_processed_id;
 	struct osp_id_tracker		*opd_syn_tracker;
 	struct list_head		 opd_syn_ontrack;
+	/* last processed catalog index */
+	int				 opd_sync_last_catalog_idx;
 
 	/*
 	 * statfs related fields: OSP maintains it on its own

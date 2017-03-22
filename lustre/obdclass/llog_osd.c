@@ -990,9 +990,12 @@ static int llog_osd_open(const struct lu_env *env, struct llog_handle *handle,
 		GOTO(out_name, rc = PTR_ERR(o));
 
 	/* No new llog is expected but doesn't exist */
-	if (open_param != LLOG_OPEN_NEW && !dt_object_exists(o))
+	if (open_param != LLOG_OPEN_NEW && !dt_object_exists(o)) {
+		CDEBUG(D_INFO, "%s: llog FID: "DFID" obj %p doesn`t exist\n",
+		       o->do_lu.lo_dev->ld_obd->obd_name,
+		       PFID(lu_object_fid(&o->do_lu)), o);
 		GOTO(out_put, rc = -ENOENT);
-
+	}
 	fid_to_logid(&lgi->lgi_fid, &handle->lgh_id);
 	handle->lgh_obj = o;
 	handle->private_data = los;
