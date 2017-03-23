@@ -213,6 +213,7 @@ int ofd_precreate_objects(const struct lu_env *env, struct ofd_device *ofd,
 	struct lu_fid		*fid = &info->fti_fid;
 	obd_id			 tmp;
 	int			 rc;
+	int			 rc2;
 	int			 i;
 	int			 objects = 0;
 	int			 nr_saved = nr;
@@ -348,7 +349,12 @@ int ofd_precreate_objects(const struct lu_env *env, struct ofd_device *ofd,
 				     &info->fti_buf, &info->fti_off, th);
 	}
 trans_stop:
-	ofd_trans_stop(env, ofd, th, rc);
+	rc2 = ofd_trans_stop(env, ofd, th, rc);
+	if (rc2)
+		CERROR("%s: failed to stop transaction: rc = %d\n",
+			ofd_name(ofd), rc2);
+	if (!rc)
+		rc = rc2;
 out:
 	for (i = 0; i < nr_saved; i++) {
 		fo = batch[i];
@@ -449,6 +455,7 @@ int ofd_attr_set(const struct lu_env *env, struct ofd_object *fo,
 	struct ofd_mod_data	*fmd;
 	int			 ff_needed = 0;
 	int			 rc;
+	int			 rc2;
 	ENTRY;
 
 	ofd_write_lock(env, fo);
@@ -511,7 +518,13 @@ int ofd_attr_set(const struct lu_env *env, struct ofd_object *fo,
 				  XATTR_NAME_FID, 0, th, BYPASS_CAPA);
 
 stop:
-	ofd_trans_stop(env, ofd, th, rc);
+	rc2 = ofd_trans_stop(env, ofd, th, rc);
+	if (rc2)
+		CERROR("%s: failed to stop transaction: rc = %d\n",
+			ofd_name(ofd), rc2);
+	if (!rc)
+		rc = rc2;
+
 unlock:
 	ofd_write_unlock(env, fo);
 	RETURN(rc);
@@ -547,6 +560,7 @@ int ofd_object_punch(const struct lu_env *env, struct ofd_object *fo,
 	struct thandle		*th;
 	int			 ff_needed = 0;
 	int			 rc;
+	int			 rc2;
 
 	ENTRY;
 
@@ -619,7 +633,12 @@ int ofd_object_punch(const struct lu_env *env, struct ofd_object *fo,
 				  XATTR_NAME_FID, 0, th, BYPASS_CAPA);
 
 stop:
-	ofd_trans_stop(env, ofd, th, rc);
+	rc2 = ofd_trans_stop(env, ofd, th, rc);
+	if (rc2 != 0)
+		CERROR("%s: failed to stop transaction: rc = %d\n",
+			ofd_name(ofd), rc2);
+	if (!rc)
+		rc = rc2;
 unlock:
 	ofd_write_unlock(env, fo);
 	RETURN(rc);
@@ -645,6 +664,7 @@ int ofd_object_destroy(const struct lu_env *env, struct ofd_object *fo,
 	struct ofd_device	*ofd = ofd_obj2dev(fo);
 	struct thandle		*th;
 	int			 rc = 0;
+	int			 rc2;
 
 	ENTRY;
 
@@ -676,7 +696,12 @@ int ofd_object_destroy(const struct lu_env *env, struct ofd_object *fo,
 	dt_ref_del(env, ofd_object_child(fo), th);
 	dt_destroy(env, ofd_object_child(fo), th);
 stop:
-	ofd_trans_stop(env, ofd, th, rc);
+	rc2 = ofd_trans_stop(env, ofd, th, rc);
+	if (rc2)
+		CERROR("%s failed to stop transaction: %d\n",
+			ofd_name(ofd), rc2);
+	if (!rc)
+		rc = rc2;
 unlock:
 	ofd_write_unlock(env, fo);
 	RETURN(rc);
