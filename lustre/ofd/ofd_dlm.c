@@ -201,7 +201,7 @@ static enum interval_iter ofd_intent_cb_la(struct interval_node *n, void *args)
 			GOTO(out_release, rc);
 	}
 
-	if (!OBD_FAIL_CHECK(OBD_FAIL_OFD_DLM_GL_WORK_ALLOC))
+	if (!OBD_FAIL_CHECK(OBD_FAIL_OST_GL_WORK_ALLOC))
 		OBD_SLAB_ALLOC_PTR_GFP(gl_work, ldlm_glimpse_work_kmem,
 				       GFP_ATOMIC);
 
