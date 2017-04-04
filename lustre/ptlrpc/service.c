@@ -1690,6 +1690,8 @@ static int ptlrpc_server_request_add(struct ptlrpc_service_part *svcpt,
 		spin_lock_bh(&exp->exp_rpc_lock);
 		orig = ptlrpc_server_check_resend_in_progress(req);
 		if (orig && likely(atomic_inc_not_zero(&orig->rq_refcount))) {
+			int linked;
+
 			spin_unlock_bh(&exp->exp_rpc_lock);
 
 			/* When the client resend request and the server has
@@ -1698,11 +1700,13 @@ static int ptlrpc_server_request_add(struct ptlrpc_service_part *svcpt,
 			 *  request deadlines. */
 
 			spin_lock(&orig->rq_rqbd->rqbd_svcpt->scp_at_lock);
-			if (likely(orig->rq_at_linked))
+			linked = orig->rq_at_linked;
+			if (likely(linked))
 				ptlrpc_at_remove_timed(orig);
 			spin_unlock(&orig->rq_rqbd->rqbd_svcpt->scp_at_lock);
 			orig->rq_deadline = req->rq_deadline;
-			ptlrpc_at_add_timed(orig);
+			if (likely(linked))
+				ptlrpc_at_add_timed(orig);
 			ptlrpc_server_drop_request(orig);
 			ptlrpc_nrs_req_finalize(req);
 			RETURN(-EBUSY);
