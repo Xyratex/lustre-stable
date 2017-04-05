@@ -1847,7 +1847,7 @@ t32_test() {
 		error_noexit "Setting MDT \"failover.node\""
 		return 1
 	}
-	create_pool $fsname.interop || {
+	$r $LCTL pool_new $fsname.interop || {
 		error_noexit "Setting \"interop\""
 		return 1
 	}
