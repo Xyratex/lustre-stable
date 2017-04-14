@@ -935,7 +935,7 @@ static int lustre_start_lwp(struct super_block *sb)
 	cfg->cfg_callback = client_lwp_config_process;
 	cfg->cfg_instance = sb;
 
-	rc = lustre_process_log(sb, logname, cfg, LCFG_LOG_START);
+	rc = lustre_process_log(sb, logname, cfg);
 out:
 	if (lwpname != NULL)
 		OBD_FREE(lwpname, MTI_NAME_MAXLEN);
@@ -1242,7 +1242,7 @@ static int server_start_targets(struct super_block *sb)
 	/* Start targets using the llog named for the target */
 	memset(&cfg, 0, sizeof(cfg));
 	cfg.cfg_callback = class_config_llog_handler;
-	rc = lustre_process_log(sb, lsi->lsi_svname, &cfg, LCFG_LOG_START);
+	rc = lustre_process_log(sb, lsi->lsi_svname, &cfg);
 	if (rc) {
 		CERROR("failed to start server %s: %d\n",
 		       lsi->lsi_svname, rc);
@@ -1293,18 +1293,6 @@ static int server_start_targets(struct super_block *sb)
 			lu_context_exit(&session_ctx);
 			lu_context_fini(&session_ctx);
 		}
-	}
-
-	if (!rc) {
-		/*
-		 * params log must be processed after ldo_prepare.
-		 * Can be executed after server_notify_target(),
-		 * server_calc_timeout() and obd_notify().
-		 */
-		rc = lustre_process_log(sb, lsi->lsi_svname, &cfg, LCFG_PARAMS_START);
-		if (rc)
-			CERROR("%s: can't process params llog: rc = %d\n",
-				obd->obd_name, rc);
 	}
 
 	/* abort recovery only on the complete stack:

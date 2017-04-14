@@ -71,12 +71,9 @@ static void (*kill_super_cb)(struct super_block *sb);
  * @param cfg Since the same mgc may be used to follow multiple config logs
  *   (e.g. ost1, ost2, client), the config_llog_instance keeps the state for
  *   this log, and is added to the mgc's list of logs to follow.
- * @param cmd Allows process two types of config llog depending on
- *   parameter value: LCFG_LOG_START - process main llog file,
- *   LCFG_LOG_PARAMS - process params llog file
  */
 int lustre_process_log(struct super_block *sb, char *logname,
-		       struct config_llog_instance *cfg, int cmd)
+                     struct config_llog_instance *cfg)
 {
         struct lustre_cfg *lcfg;
         struct lustre_cfg_bufs *bufs;
@@ -97,7 +94,7 @@ int lustre_process_log(struct super_block *sb, char *logname,
         lustre_cfg_bufs_set_string(bufs, 1, logname);
         lustre_cfg_bufs_set(bufs, 2, cfg, sizeof(*cfg));
         lustre_cfg_bufs_set(bufs, 3, &sb, sizeof(sb));
-	lcfg = lustre_cfg_new(cmd, bufs);
+        lcfg = lustre_cfg_new(LCFG_LOG_START, bufs);
 	if (lcfg == NULL)
 		GOTO(out, rc = -ENOMEM);
 	rc = obd_process_config(mgc, sizeof(*lcfg), lcfg);

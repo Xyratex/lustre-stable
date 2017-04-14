@@ -349,16 +349,12 @@ static int config_log_add(struct obd_device *obd, char *logname,
 			GOTO(out_err, rc = PTR_ERR(sptlrpc_cld));
                 }
         }
-
-	params_cld = config_log_find(PARAMS_FILENAME, NULL);
-	if (params_cld == NULL) {
-		params_cld = config_params_log_add(obd, cfg, sb);
-		if (IS_ERR(params_cld)) {
-			rc = PTR_ERR(params_cld);
-			CERROR("%s: can't create params log: rc = %d\n",
-			       obd->obd_name, rc);
-			GOTO(out_err1, rc);
-		}
+	params_cld = config_params_log_add(obd, cfg, sb);
+	if (IS_ERR(params_cld)) {
+		rc = PTR_ERR(params_cld);
+		CERROR("%s: can't create params log: rc = %d\n",
+		       obd->obd_name, rc);
+		GOTO(out_err1, rc);
 	}
 
 	cld = do_config_log_add(obd, logname, CONFIG_T_CONFIG, cfg, sb);
@@ -2005,26 +2001,6 @@ static int mgc_process_config(struct obd_device *obd, obd_count len, void *buf)
                 rc = sptlrpc_process_config(lcfg);
                 break;
         }
-	case LCFG_PARAMS_START: {
-		struct config_llog_data *cld;
-
-		logname = lustre_cfg_string(lcfg, 1);
-		cfg = (struct config_llog_instance *)lustre_cfg_buf(lcfg, 2);
-
-		CDEBUG(D_MGC, "parse_log params from %d\n",
-		       cfg->cfg_last_idx);
-
-		cld = config_log_find(logname, cfg);
-		if (cld == NULL) {
-			rc = -ENOENT;
-			break;
-		}
-
-		if (cld->cld_params != NULL)
-			mgc_requeue_add(cld->cld_params);
-		config_log_put(cld);
-		break;
-	}
         case LCFG_LOG_START: {
                 struct config_llog_data *cld;
                 struct super_block *sb;
@@ -2060,6 +2036,15 @@ static int mgc_process_config(struct obd_device *obd, obd_count len, void *buf)
 			rc = -ETIMEDOUT;
 		else
 			rc = cld->cld_rc;
+
+		if (rc == 0 && cld->cld_params != NULL) {
+			mgc_requeue_add(cld->cld_params);
+			/* params log is optional but we also need to wait here because
+			 * some subsystems should be enabled before end of recovery.
+			 * For example hsm.  */
+			wait_for_completion_timeout(&cld->cld_params->cld_received,
+				cfs_time_seconds(lcfg_log_start_timeout));
+		}
 		config_log_put(cld);
 		break;
         }
