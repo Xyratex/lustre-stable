@@ -2694,8 +2694,7 @@ void _ldlm_lock_debug(struct ldlm_lock *lock,
         char *nid = "local";
 
 	/* on server-side resource of lock doesn't change */
-	if ((lock->l_flags & LDLM_FL_NS_SRV) != 0 ||
-	    spin_is_locked(&lock->l_lock)) {
+	if ((lock->l_flags & LDLM_FL_NS_SRV) != 0) {
 		if (lock->l_resource != NULL)
 			resource = ldlm_resource_getref(lock->l_resource);
 	} else if (spin_trylock(&lock->l_lock)) {
