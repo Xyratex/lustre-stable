@@ -375,8 +375,13 @@ int ptlrpc_register_bulk(struct ptlrpc_request *req)
 			      LNET_MD_OP_GET : LNET_MD_OP_PUT);
 		ptlrpc_fill_bulk_md(&md, desc, posted_md);
 
-		rc = LNetMEAttach(desc->bd_portal, peer, mbits, 0,
+		if (posted_md > 0 && posted_md + 1 == total_md &&
+		    OBD_FAIL_CHECK(OBD_FAIL_PTLRPC_BULK_ATTACH)) {
+			rc = -ENOMEM;
+		} else {
+			rc = LNetMEAttach(desc->bd_portal, peer, mbits, 0,
 				  LNET_UNLINK, LNET_INS_AFTER, &me_h);
+		}
 		if (rc != 0) {
 			CERROR("%s: LNetMEAttach failed x%llu/%d: rc = %d\n",
 			       desc->bd_import->imp_obd->obd_name, mbits,

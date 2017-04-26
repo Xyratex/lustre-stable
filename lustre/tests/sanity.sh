@@ -17908,6 +17908,27 @@ test_413() {
 }
 run_test 413 "mkdir on less full MDTs"
 
+test_414() {
+	local osts=$(get_facets OST)
+	local list=$(comma_list $(osts_nodes))
+	local p="$TMP/$TESTSUITE-$TESTNAME.parameters"
+
+	save_lustre_params $osts "obdfilter.*.brw_size" > $p
+	set_osd_param $list '' brw_size 4M
+
+	echo "remount client to enable large RPC size"
+	remount_client $MOUNT || error "remount_client failed"
+
+#define OBD_FAIL_PTLRPC_BULK_ATTACH      0x521
+	$LCTL set_param fail_loc=0x80000521
+	dd if=/dev/zero of=$DIR/$tfile bs=2M count=2 oflag=sync
+
+	rm -f $DIR/$tfile
+	restore_lustre_params < $p
+	remount_client $MOUNT || error "remount_client failed"
+}
+run_test 414 "simulate ENOMEM in ptlrpc_register_bulk()"
+
 prep_801() {
 	[[ $(lustre_version_code mds1) -lt $(version_code 2.9.55) ]] ||
 	[[ $(lustre_version_code ost1) -lt $(version_code 2.9.55) ]] &&
