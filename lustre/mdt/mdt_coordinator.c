@@ -139,10 +139,6 @@ struct hsm_scan_data {
 		int			 hal_used_sz;
 		struct hsm_action_list	*hal;
 	} *request;
-	/* records to be canceled */
-	int				 max_cookie;	/** vector size */
-	int				 cookie_cnt;	/** used count */
-	__u64				*cookies;
 };
 
 /**
@@ -161,7 +157,7 @@ static int mdt_coordinator_cb(const struct lu_env *env,
 			      struct llog_rec_hdr *hdr,
 			      void *data)
 {
-	const struct llog_agent_req_rec	*larr;
+	struct llog_agent_req_rec	*larr;
 	struct hsm_scan_data		*hsd;
 	struct hsm_action_item		*hai;
 	struct mdt_device		*mdt;
@@ -289,7 +285,9 @@ static int mdt_coordinator_cb(const struct lu_env *env,
 		break;
 	}
 	case ARS_STARTED: {
+		struct hsm_progress_kernel pgs;
 		struct cdt_agent_req *car;
+		cfs_time_t now = cfs_time_current_sec();
 		cfs_time_t last;
 
 		/* we search for a running request
@@ -306,74 +304,57 @@ static int mdt_coordinator_cb(const struct lu_env *env,
 
 		/* test if request too long, if yes cancel it
 		 * the same way the copy tool acknowledge a cancel request */
-		if ((last + cdt->cdt_active_req_timeout)
-		     < cfs_time_current_sec()) {
-			struct hsm_progress_kernel pgs;
+		if (now <= last + cdt->cdt_active_req_timeout)
+			RETURN(0);
 
-			dump_llog_agent_req_rec("mdt_coordinator_cb(): "
-						"request timeouted, start "
-						"cleaning", larr);
-			/* a too old cancel request just needs to be removed
-			 * this can happen, if copy tool does not support cancel
-			 * for other requests, we have to remove the running
-			 * request and notify the copytool
+		dump_llog_agent_req_rec("request timed out, start cleaning",
+					larr);
+		/*
+		 * a too old cancel request just needs to be removed
+		 * this can happen, if copy tool does not support
+		 * cancel for other requests, we have to remove the
+		 * running request and notify the copytool
+		 */
+		pgs.hpk_fid = larr->arr_hai.hai_fid;
+		pgs.hpk_cookie = larr->arr_hai.hai_cookie;
+		pgs.hpk_extent = larr->arr_hai.hai_extent;
+		pgs.hpk_flags = HP_FLAG_COMPLETED;
+		pgs.hpk_errval = ENOSYS;
+		pgs.hpk_data_version = 0;
+
+		/*
+		 * update request state, but do not record in llog, to
+		 * avoid deadlock on cdt_llog_lock
+		 */
+		rc = mdt_hsm_update_request_state(hsd->mti, &pgs, 0);
+		if (rc)
+			CERROR("%s: cannot cleanup timed out request: "
+				DFID" for cookie "LPX64" action=%s\n",
+				mdt_obd_name(mdt),
+				PFID(&pgs.hpk_fid), pgs.hpk_cookie,
+				hsm_copytool_action2name(
+					larr->arr_hai.hai_action));
+
+		if (rc == -ENOENT) {
+			/*
+			 * The request no longer exists, forget
+			 * about it, and do not send a cancel request
+			 * to the client, for which an error will be
+			 * sent back, leading to an endless cycle of
+			 * cancellation.
 			 */
-			pgs.hpk_fid = larr->arr_hai.hai_fid;
-			pgs.hpk_cookie = larr->arr_hai.hai_cookie;
-			pgs.hpk_extent = larr->arr_hai.hai_extent;
-			pgs.hpk_flags = HP_FLAG_COMPLETED;
-			pgs.hpk_errval = ENOSYS;
-			pgs.hpk_data_version = 0;
-			/* update request state, but do not record in llog, to
-			 * avoid deadlock on cdt_llog_lock
-			 */
-			rc = mdt_hsm_update_request_state(hsd->mti, &pgs, 0);
-			if (rc)
-				CERROR("%s: Cannot cleanup timeouted request: "
-				       DFID" for cookie "LPX64" action=%s\n",
-				       mdt_obd_name(mdt),
-				       PFID(&pgs.hpk_fid), pgs.hpk_cookie,
-				       hsm_copytool_action2name(
-						     larr->arr_hai.hai_action));
-
-			if (rc == -ENOENT) {
-				/* The request no longer exists, forget
-				 * about it, and do not send a cancel request
-				 * to the client, for which an error will be
-				 * sent back, leading to an endless cycle of
-				 * cancellation. */
-				RETURN(LLOG_DEL_RECORD);
-			}
-
-			/* add the cookie to the list of record to be
-			 * canceled by caller */
-			if (hsd->max_cookie == (hsd->cookie_cnt - 1)) {
-				__u64 *ptr, *old_ptr;
-				int old_sz, new_sz, new_cnt;
-
-				/* need to increase vector size */
-				old_sz = sizeof(__u64) * hsd->max_cookie;
-				old_ptr = hsd->cookies;
-
-				new_cnt = 2 * hsd->max_cookie;
-				new_sz = sizeof(__u64) * new_cnt;
-
-				OBD_ALLOC(ptr, new_sz);
-				if (!ptr) {
-					CERROR("%s: Cannot allocate memory "
-					       "(%d o) for cookie vector\n",
-					       mdt_obd_name(mdt), new_sz);
-					RETURN(-ENOMEM);
-				}
-				memcpy(ptr, hsd->cookies, old_sz);
-				hsd->cookies = ptr;
-				hsd->max_cookie = new_cnt;
-				OBD_FREE(old_ptr, old_sz);
-			}
-			hsd->cookies[hsd->cookie_cnt] =
-						       larr->arr_hai.hai_cookie;
-			hsd->cookie_cnt++;
+			RETURN(LLOG_DEL_RECORD);
 		}
+
+		/* XXX A cancel request cannot be cancelled. */
+		if (larr->arr_hai.hai_action == HSMA_CANCEL)
+			RETURN(0);
+		larr->arr_status = ARS_CANCELED;
+		larr->arr_req_change = now;
+		rc = llog_write(hsd->mti->mti_env, llh, hdr, hdr->lrh_index);
+		if (rc < 0)
+			CERROR("%s: cannot update agent log: rc = %d\n",
+				mdt_obd_name(mdt), rc);
 		break;
 	}
 	case ARS_FAILED:
@@ -458,10 +439,6 @@ static int mdt_coordinator(void *data)
 	CDEBUG(D_HSM, "%s: coordinator thread starting, pid=%d\n",
 	       mdt_obd_name(mdt), current_pid());
 
-	/* timeouted cookie vector initialization */
-	hsd.max_cookie = 0;
-	hsd.cookie_cnt = 0;
-	hsd.cookies = NULL;
 	/* we use a copy of cdt_max_requests in the cb, so if cdt_max_requests
 	 * increases due to a change from /proc we do not overflow the
 	 * hsd.request[] vector
@@ -522,16 +499,6 @@ static int mdt_coordinator(void *data)
 			}
 		}
 
-		/* create canceled cookie vector for an arbitrary size
-		 * if needed, vector will grow during llog scan
-		 */
-		hsd.max_cookie = 10;
-		hsd.cookie_cnt = 0;
-		OBD_ALLOC(hsd.cookies, hsd.max_cookie * sizeof(__u64));
-		if (!hsd.cookies) {
-			rc = -ENOMEM;
-			goto clean_cb_alloc;
-		}
 		hsd.request_cnt = 0;
 
 		rc = cdt_llog_process(mti->mti_env, mdt,
@@ -539,23 +506,7 @@ static int mdt_coordinator(void *data)
 		if (rc < 0)
 			goto clean_cb_alloc;
 
-		CDEBUG(D_HSM, "Found %d requests to send and %d"
-			      " requests to cancel\n",
-		       hsd.request_cnt, hsd.cookie_cnt);
-		/* first we cancel llog records of the timeouted requests */
-		if (hsd.cookie_cnt > 0) {
-			rc = mdt_agent_record_update(mti->mti_env, mdt,
-						     hsd.cookies,
-						     hsd.cookie_cnt,
-						     ARS_CANCELED);
-			if (rc)
-				CERROR("%s: mdt_agent_record_update() failed, "
-				       "rc=%d, cannot update status to %s "
-				       "for %d cookies\n",
-				       mdt_obd_name(mdt), rc,
-				       agent_req_status2name(ARS_CANCELED),
-				       hsd.cookie_cnt);
-		}
+		CDEBUG(D_HSM, "found %d requests to send\n", hsd.request_cnt);
 
 		if (list_empty(&cdt->cdt_agents)) {
 			CDEBUG(D_HSM, "no agent available, "
@@ -638,14 +589,6 @@ static int mdt_coordinator(void *data)
 			kuc_free(hal, hsd.request[i].hal_used_sz);
 		}
 clean_cb_alloc:
-		/* free cookie vector allocated for/by callback */
-		if (hsd.cookies) {
-			OBD_FREE(hsd.cookies, hsd.max_cookie * sizeof(__u64));
-			hsd.max_cookie = 0;
-			hsd.cookie_cnt = 0;
-			hsd.cookies = NULL;
-		}
-
 		/* free hal allocated by callback */
 		for (i = 0; i < hsd.max_requests; i++) {
 			if (hsd.request[i].hal) {
@@ -665,9 +608,6 @@ clean_cb_alloc:
 out:
 	if (hsd.request)
 		OBD_FREE(hsd.request, hsd.request_sz);
-
-	if (hsd.cookies)
-		OBD_FREE(hsd.cookies, hsd.max_cookie * sizeof(__u64));
 
 	if (cdt->cdt_state == CDT_STOPPING) {
 		/* request comes from /proc path, so we need to clean cdt
@@ -1482,8 +1422,7 @@ int mdt_hsm_update_request_state(struct mdt_thread_info *mti,
 		       " on fid="DFID"\n",
 		       mdt_obd_name(mdt),
 		       pgs->hpk_cookie, PFID(&pgs->hpk_fid));
-		if (car == NULL)
-			RETURN(-ENOENT);
+
 		RETURN(PTR_ERR(car));
 	}
 
@@ -1614,10 +1553,9 @@ static int mdt_cancel_all_cb(const struct lu_env *env,
 	    larr->arr_status == ARS_STARTED) {
 		larr->arr_status = ARS_CANCELED;
 		larr->arr_req_change = cfs_time_current_sec();
-		rc = mdt_agent_llog_update_rec(env, hcad->mdt, llh, larr);
-		if (rc == 0)
-			RETURN(LLOG_DEL_RECORD);
+		rc = llog_write(env, llh, hdr, hdr->lrh_index);
 	}
+
 	RETURN(rc);
 }
 
