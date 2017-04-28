@@ -83,13 +83,17 @@ rmultiop_stop() {
 }
 
 get_version() {
-    local var=${SINGLEMDS}_svc
-    local client=$1
-    local file=$2
-    local fid
+	local var=${SINGLEMDS}_svc
+	local client=$1
+	local file=$2
+	local fid=$(do_node $client $LFS path2fid $file)
+	local objver=$(do_facet $SINGLEMDS $LCTL --device ${!var} \
+		getobjversion \\\"$fid\\\")
 
-    fid=$(do_node $client $LFS path2fid $file)
-    do_facet $SINGLEMDS $LCTL --device ${!var} getobjversion \\\"$fid\\\"
+	# Must not fail in cases where there is negative test.
+	[[ $file != *NONEXIST* ]] && [[ -z $objver ]] &&
+		error "object version is empty."
+	echo $objver
 }
 
 #save COS setting
@@ -97,7 +101,7 @@ cos_param_file=$TMP/rvbr-cos-params
 save_lustre_params $(get_facets MDS) "mdt.*.commit_on_sharing" > $cos_param_file
 
 test_0a() {
-        get_version $CLIENT1 $DIR/$tdir/1a || true
+        get_version $CLIENT1 $DIR/$tdir/NONEXIST || true
 }
 run_test 0a "getversion for non existent file shouldn't cause kernel panic"
 
