@@ -528,7 +528,7 @@ static int mdt_coordinator(void *data)
 	 */
 	hsd.max_requests = cdt->cdt_max_requests;
 	request_sz = hsd.max_requests * sizeof(*hsd.request);
-	OBD_ALLOC(hsd.request, request_sz);
+	OBD_ALLOC_LARGE(hsd.request, request_sz);
 	if (!hsd.request)
 		GOTO(out, rc = -ENOMEM);
 
@@ -571,10 +571,10 @@ static int mdt_coordinator(void *data)
 			/* cdt_max_requests has changed,
 			 * we need to allocate a new buffer
 			 */
-			OBD_FREE(hsd.request, request_sz);
+			OBD_FREE_LARGE(hsd.request, request_sz);
 			hsd.max_requests = cdt->cdt_max_requests;
 			request_sz = hsd.max_requests * sizeof(*hsd.request);
-			OBD_ALLOC(hsd.request, request_sz);
+			OBD_ALLOC_LARGE(hsd.request, request_sz);
 			if (!hsd.request) {
 				rc = -ENOMEM;
 				break;
@@ -660,7 +660,7 @@ out:
 	set_cdt_state(cdt, CDT_STOPPING, NULL);
 
 	if (hsd.request)
-		OBD_FREE(hsd.request, request_sz);
+		OBD_FREE_LARGE(hsd.request, request_sz);
 
 	mdt_hsm_cdt_cleanup(mdt);
 
