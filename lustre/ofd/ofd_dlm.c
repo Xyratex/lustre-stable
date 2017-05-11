@@ -317,7 +317,7 @@ static int __ofd_intent_policy_la(struct ldlm_namespace *ns,
 	if (flags & LDLM_FL_RESENT) {
 		rc = LDLM_ITER_CONTINUE;
 	} else {
-		__u64 tmpflags = LDLM_FL_INTENT_ONLY;
+		__u64 tmpflags = 0;
 		rc = policy(lock, &tmpflags, 0, &err, NULL);
 		check_res_locked(res);
 	}
@@ -566,7 +566,7 @@ static int __ofd_intent_policy(struct ldlm_namespace *ns,
 	if (flags & LDLM_FL_RESENT) {
 		rc = LDLM_ITER_CONTINUE;
 	} else {
-		__u64 tmpflags = LDLM_FL_INTENT_ONLY;
+		__u64 tmpflags = 0;
 		rc = policy(lock, &tmpflags, 0, &err, NULL);
 		check_res_locked(res);
 	}
