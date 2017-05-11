@@ -526,6 +526,12 @@ run_test 17b "timeout bulk get, dont evict client (3582)"
 test_18a() {
     [ -z ${ost2_svc} ] && skip_env "needs 2 osts" && return 0
 
+	local active=$(do_facet $SINGLEMDS \
+			$LCTL get_param -n lov.*md*.target_obd |
+			grep "OST0001" | awk '{print $3}')
+	if [ "x$active" == "x" ] || [ $active = "INACTIVE" ]; then
+		skip_env "OST0001 is not active, check setup" && return
+	fi
 	do_facet_create_file client $TMP/$tfile 20K ||
 		{ error_noexit "Create file $TMP/$tfile" ; return 0; }
 
