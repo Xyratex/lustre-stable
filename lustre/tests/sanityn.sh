@@ -2942,7 +2942,11 @@ nrs_write_read() {
 }
 
 test_77a() { #LU-3266
-	do_facet $SINGLEMDS lctl set_param ost.OSS.*.nrs_policies="fifo"
+	local rc
+	do_nodes $(comma_list $(osts_nodes)) $LCTL set_param \
+		ost.OSS.*.nrs_policies="fifo" || rc=$?
+	[[ $rc -eq 3 ]] && skip "no NRS exists" && return
+	[[ $rc -ne 0 ]] && error "failed to set fifo policy"
 	nrs_write_read
 
 	return 0
@@ -2951,13 +2955,24 @@ run_test 77a "check FIFO NRS policy"
 
 
 test_77b() { #LU-3266
-	do_facet $SINGLEMDS lctl set_param ost.OSS.*.nrs_policies="crrn"
-	do_facet $SINGLEMDS lctl set_param ost.OSS.*.nrs_crrn_quantum=1
+	local rc
+
+	do_nodes $(comma_list $(osts_nodes)) $LCTL set_param \
+		ost.OSS.*.nrs_policies="crrn" || rc=$?
+	[[ $rc -eq 3 ]] && skip "no NRS exists" && return
+	[[ $rc -ne 0 ]] && error "failed to set crrn policy"
+
+	do_nodes $(comma_list $(osts_nodes)) $LCTL set_param \
+		ost.OSS.*.nrs_crrn_quantum=1 || rc=$?
+	[[ $rc -eq 3 ]] && skip "no NRS exists" && return
+	[[ $rc -ne 0 ]] && error "failed to set crrn_quantum to 1"
 
 	echo "policy: crr-n, crrn_quantum 1"
 	nrs_write_read
 
-	do_facet $SINGLEMDS lctl set_param ost.OSS.*.nrs_crrn_quantum=64
+	do_nodes $(comma_list $(osts_nodes)) $LCTL set_param \
+		ost.OSS.*.nrs_crrn_quantum=64 || rc=$?
+	[[ $rc -ne 0 ]] && error "failed to set crrn_quantum to 64"
 
 	echo "policy: crr-n, crrn_quantum 64"
 	nrs_write_read
@@ -2969,39 +2984,34 @@ run_test 77b "check CRR-N NRS policy"
 orr_trr() {
 	local policy=$1
 
-	for i in $(seq 1 $OSTCOUNT)
-	do
-		do_facet ost"$i" lctl set_param \
-			ost.OSS.ost_io.nrs_policies=$policy
-		do_facet ost"$i" lctl set_param \
-			ost.OSS.*.nrs_"$policy"_quantum=1
-		do_facet ost"$i" lctl set_param \
-			ost.OSS.*.nrs_"$policy"_offset_type="physical"
-		do_facet ost"$i" lctl set_param \
-			ost.OSS.*.nrs_"$policy"_supported="reads"
-	done
+	do_nodes $(comma_list $(osts_nodes)) $LCTL set_param \
+		ost.OSS.ost_io.nrs_policies=$policy || return $?
+	do_nodes $(comma_list $(osts_nodes)) $LCTL set_param \
+		ost.OSS.*.nrs_"$policy"_quantum=1 || return $?
+	do_nodes $(comma_list $(osts_nodes)) $LCTL set_param \
+		ost.OSS.*.nrs_"$policy"_offset_type="physical" || return $?
+	do_nodes $(comma_list $(osts_nodes)) $LCTL set_param \
+		ost.OSS.*.nrs_"$policy"_supported="reads" || return $?
 
 	echo "policy: $policy, ${policy}_quantum 1, ${policy}_offset_type \
 				physical, ${policy}_supported reads"
 	nrs_write_read
 
-	for i in $(seq 1 $OSTCOUNT)
-	do
-		do_facet ost"$i" lctl set_param \
-			ost.OSS.*.nrs_${policy}_supported="writes"
-		do_facet ost"$i" lctl set_param \
-			ost.OSS.*.nrs_${policy}_quantum=64
-	done
+	do_nodes $(comma_list $(osts_nodes)) $LCTL set_param \
+		ost.OSS.*.nrs_${policy}_supported="writes" || return $?
+	do_nodes $(comma_list $(osts_nodes)) $LCTL set_param \
+		ost.OSS.*.nrs_${policy}_quantum=64 || return $?
+
 	echo "policy: $policy, ${policy}_quantum 64, \
 		${policy}_offset_type physical, ${policy}_supported writes"
 	nrs_write_read
-	for i in $(seq 1 $OSTCOUNT)
-	do
-		do_facet ost"$i" lctl set_param \
-			ost.OSS.*.nrs_${policy}_supported="reads_and_writes"
-		do_facet ost"$i" lctl set_param \
-			ost.OSS.*.nrs_${policy}_offset_type="logical"
-	done
+
+	do_nodes $(comma_list $(osts_nodes)) $LCTL set_param \
+		ost.OSS.*.nrs_${policy}_supported="reads_and_writes" ||
+		return $?
+	do_nodes $(comma_list $(osts_nodes)) $LCTL set_param \
+		ost.OSS.*.nrs_${policy}_offset_type="logical" || return $?
+
 	echo "policy: $policy, ${policy}_quantum 64, \
 		${policy}_offset_type logical, ${policy}_supported reads_and_writes"
 	nrs_write_read
@@ -3010,13 +3020,19 @@ orr_trr() {
 }
 
 test_77c() { #LU-3266
-	orr_trr "orr"
+	local rc
+	orr_trr "orr" || rc=$?
+	[[ $rc -eq 3 ]] && skip "no NRS exists" && return
+	[[ $rc -ne 0 ]] && error "orr_trr failed rc:$rc"
 	return 0
 }
 run_test 77c "check ORR NRS policy"
 
 test_77d() { #LU-3266
-	orr_trr "trr"
+	local rc
+	orr_trr "trr" || rc=$?
+	[[ $rc -eq 3 ]] && skip "no NRS exists" && return
+	[[ $rc -ne 0 ]] && error "orr_trr failed rc:$rc"
 	return 0
 }
 run_test 77d "check TRR nrs policy"
@@ -3033,13 +3049,11 @@ tbf_rule_operate()
 }
 
 test_77e() {
-	for i in $(seq 1 $OSTCOUNT)
-	do
-		do_facet ost"$i" lctl set_param \
-			ost.OSS.ost_io.nrs_policies="tbf\ nid"
-		[ $? -ne 0 ] &&
-			error "failed to set TBF policy"
-	done
+	local rc
+	do_nodes $(comma_list $(osts_nodes)) $LCTL set_param \
+		ost.OSS.ost_io.nrs_policies="tbf\ nid" || rc=$?
+	[[ $rc -eq 3 ]] && skip "no NRS exists" && return
+	[[ $rc -ne 0 ]] && error "failed to set TBF NID policy"
 
 	# Only operate rules on ost1 since OSTs might run on the same OSS
 	# Add some rules
@@ -3063,34 +3077,33 @@ test_77e() {
 	nrs_write_read
 
 	# Cleanup the TBF policy
-	for i in $(seq 1 $OSTCOUNT)
-	do
-		do_facet ost"$i" lctl set_param \
-			ost.OSS.ost_io.nrs_policies="fifo"
-		[ $? -ne 0 ] &&
-			error "failed to set policy back to fifo"
-	done
+	do_nodes $(comma_list $(osts_nodes)) $LCTL set_param \
+		ost.OSS.ost_io.nrs_policies="fifo" || rc=$?
+	[[ $rc -ne 0 ]] && error "failed to set policy back to fifo"
+
 	nrs_write_read
 	return 0
 }
 run_test 77e "check TBF NID nrs policy"
 
 test_77f() {
+	local rc
+
+	do_nodes $(comma_list $(osts_nodes)) $LCTL set_param \
+		ost.OSS.ost_io.nrs_policies="tbf\ jobid" || rc=$?
+	[[ $rc -eq 3 ]] && skip "no NRS exists" && return
+	[[ $rc -ne 0 ]] && error "failed to set TBF JOBID policy"
+
 	# Configure jobid_var
 	local saved_jobid_var=$($LCTL get_param -n jobid_var)
+	rc=$?
+	[[ $rc -eq 3 ]] && skip "jobid_var not found" && return
+	[[ $rc -ne 0 ]] && error "failed to get param jobid_var"
 	if [ $saved_jobid_var != procname_uid ]; then
 		set_conf_param_and_check client			\
 			"$LCTL get_param -n jobid_var"		\
 			"$FSNAME.sys.jobid_var" procname_uid
 	fi
-
-	for i in $(seq 1 $OSTCOUNT)
-	do
-		do_facet ost"$i" lctl set_param \
-			ost.OSS.ost_io.nrs_policies="tbf\ jobid"
-		[ $? -ne 0 ] &&
-			error "failed to set TBF policy"
-	done
 
 	# Only operate rules on ost1 since OSTs might run on the same OSS
 	# Add some rules
@@ -3112,16 +3125,14 @@ test_77f() {
 	nrs_write_read "$RUNAS"
 
 	# Cleanup the TBF policy
-	for i in $(seq 1 $OSTCOUNT)
-	do
-		do_facet ost"$i" lctl set_param \
-			ost.OSS.ost_io.nrs_policies="fifo"
-		[ $? -ne 0 ] &&
-			error "failed to set policy back to fifo"
-	done
+	do_nodes $(comma_list $(osts_nodes)) $LCTL set_param \
+		ost.OSS.ost_io.nrs_policies="fifo" || rc=$?
+	[[ $rc -ne 0 ]] && error "failed to set policy back to fifo"
+
 	nrs_write_read "$RUNAS"
 
 	local current_jobid_var=$($LCTL get_param -n jobid_var)
+	[[ $? -ne 0 ]] && error "failed to get param jobid_var"
 	if [ $saved_jobid_var != $current_jobid_var ]; then
 		set_conf_param_and_check client			\
 			"$LCTL get_param -n jobid_var"		\
@@ -3132,63 +3143,52 @@ test_77f() {
 run_test 77f "check TBF JobID nrs policy"
 
 test_77g() {
-	for i in $(seq 1 $OSTCOUNT)
-	do
-		do_facet ost"$i" lctl set_param \
-			ost.OSS.ost_io.nrs_policies="tbf\ nid"
-		[ $? -ne 0 ] &&
-			error "failed to set TBF policy"
-	done
+	local rc
 
-	for i in $(seq 1 $OSTCOUNT)
-	do
-		do_facet ost"$i" lctl set_param \
-			ost.OSS.ost_io.nrs_policies="tbf\ jobid"
-		[ $? -ne 0 ] &&
-			error "failed to set TBF policy"
-	done
+	do_nodes $(comma_list $(osts_nodes)) $LCTL set_param \
+		ost.OSS.ost_io.nrs_policies="tbf\ nid" || rc=$?
+	[[ $rc -eq 3 ]] && skip "no NRS exists" && return
+	[[ $rc -ne 0 ]] && error "failed to set TBF NID policy"
+
+	do_nodes $(comma_list $(osts_nodes)) $LCTL set_param \
+		ost.OSS.ost_io.nrs_policies="tbf\ jobid" || rc=$?
+	[[ $rc -ne 0 ]] && error "failed to set TBF JOBID policy"
 
 	# Add a rule that only valid for Jobid TBF. If direct change between
 	# TBF types is not supported, this operation will fail.
 	tbf_rule_operate ost1 "start\ dd_runas\ {dd.$RUNAS_ID}\ 50"
 
 	# Cleanup the TBF policy
-	for i in $(seq 1 $OSTCOUNT)
-	do
-		do_facet ost"$i" lctl set_param \
-			ost.OSS.ost_io.nrs_policies="fifo"
-		[ $? -ne 0 ] &&
-			error "failed to set policy back to fifo"
-	done
+	do_nodes $(comma_list $(osts_nodes)) $LCTL set_param \
+		ost.OSS.ost_io.nrs_policies="fifo" || rc=$?
+	[[ $rc -ne 0 ]] && error "failed to set policy back to fifo"
+
 	return 0
 }
 run_test 77g "Change TBF type directly"
 
 test_78() { #LU-6673
 	local rc
-	for i in $(seq 1 $OSTCOUNT)
-	do
-		do_facet ost"$i" lctl set_param \
-			ost.OSS.ost_io.nrs_policies="orr" &
-		do_facet ost"$i" lctl set_param \
-			ost.OSS.*.nrs_orr_quantum=1
-		rc=$?
-		# Valid return codes are:
-		# 0: Tuning succeeded
-		# ENODEV: Policy is still stopped
-		# EAGAIN: Policy is being initialized
-		[ $rc -eq 0 -o $rc -eq 19 -o $rc -eq 11 ] ||
-			error "Expected set_param to return 0|ENODEV|EAGAIN"
-	done
 
+	do_nodes $(comma_list $(osts_nodes)) \
+		$LCTL set_param ost.OSS.ost_io.nrs_policies="orr" &
+	do_nodes $(comma_list $(osts_nodes)) \
+		$LCTL set_param ost.OSS.*.nrs_orr_quantum=1 || rc=$?
+	[[ $rc -eq 3 ]] && skip "no NRS exists" && return
+	# Valid return codes are:
+	# 0: Tuning succeeded
+	# ENODEV: Policy is still stopped
+	# EAGAIN: Policy is being initialized
+	[ $rc -eq 0 -o $rc -eq 19 -o $rc -eq 11 ] ||
+		error "Expected set_param to return 0|ENODEV|EAGAIN"
+
+	wait
+	rc=0
 	# Cleanup the ORR policy
-	for i in $(seq 1 $OSTCOUNT)
-	do
-		do_facet ost"$i" lctl set_param \
-			ost.OSS.ost_io.nrs_policies="fifo"
-		[ $? -ne 0 ] &&
-			error "failed to set policy back to fifo"
-	done
+	do_nodes $(comma_list $(osts_nodes)) $LCTL set_param \
+		ost.OSS.ost_io.nrs_policies="fifo" || rc=$?
+	[[ $rc -ne 0 ]] && error "failed to set policy back to fifo"
+
 	return 0
 }
 run_test 78 "Enable policy and specify tunings right away"
