@@ -262,14 +262,19 @@ static int osp_init_last_objid(const struct lu_env *env, struct osp_device *osp)
 	/* object will be released in device cleanup path */
 	if (osi->osi_attr.la_size >=
 	    sizeof(osi->osi_id) * (osp->opd_index + 1)) {
-		osp_objid_buf_prep(&osi->osi_lb, &osi->osi_off, &fid->f_oid,
+		osp_objid_buf_prep(&osi->osi_lb, &osi->osi_off, &osi->osi_id,
 				   osp->opd_index);
 		rc = dt_record_read(env, dto, &osi->osi_lb, &osi->osi_off);
 		if (rc != 0)
 			GOTO(out, rc);
+		/* In case of idif bits 32-48 go to f_seq
+		 * (see osp_init_last_seq). So don't care
+		 * about u64->u32 convertion. */
+		fid->f_oid = osi->osi_id;
 	} else {
+		osi->osi_id = 0;
 		fid->f_oid = 0;
-		osp_objid_buf_prep(&osi->osi_lb, &osi->osi_off, &fid->f_oid,
+		osp_objid_buf_prep(&osi->osi_lb, &osi->osi_off, &osi->osi_id,
 				   osp->opd_index);
 		rc = osp_write_local_file(env, osp, dto, &osi->osi_lb,
 					  osi->osi_off);
@@ -322,6 +327,8 @@ static int osp_init_last_seq(const struct lu_env *env, struct osp_device *osp)
 		rc = dt_record_read(env, dto, &osi->osi_lb, &osi->osi_off);
 		if (rc != 0)
 			GOTO(out, rc);
+		if (fid_is_idif(fid))
+			fid->f_seq = fid_idif_seq(osi->osi_id, osp->opd_index);
 	} else {
 		fid->f_seq = 0;
 		osp_objseq_buf_prep(&osi->osi_lb, &osi->osi_off, &fid->f_seq,
@@ -369,7 +376,7 @@ static int osp_last_used_init(const struct lu_env *env, struct osp_device *osp)
 
 	rc = osp_init_last_seq(env, osp);
 	if (rc < 0) {
-		CERROR("%s: Can not get ids %d from old objid!\n",
+		CERROR("%s: Can not get sequence %d from old objseq!\n",
 		       osp->opd_obd->obd_name, rc);
 		GOTO(out, rc);
 	}
@@ -638,13 +645,8 @@ static int osp_statfs(const struct lu_env *env, struct dt_device *dev,
 	 */
 
 	spin_lock(&d->opd_pre_lock);
-	LASSERTF(fid_seq(&d->opd_pre_last_created_fid) ==
-		 fid_seq(&d->opd_pre_used_fid),
-		 "last_created "DFID", next_fid "DFID"\n",
-		 PFID(&d->opd_pre_last_created_fid),
-		 PFID(&d->opd_pre_used_fid));
-	sfs->os_fprecreated = fid_oid(&d->opd_pre_last_created_fid) -
-			      fid_oid(&d->opd_pre_used_fid);
+	sfs->os_fprecreated = osp_fid_diff(&d->opd_pre_last_created_fid,
+					   &d->opd_pre_used_fid);
 	sfs->os_fprecreated -= d->opd_pre_reserved;
 	spin_unlock(&d->opd_pre_lock);
 

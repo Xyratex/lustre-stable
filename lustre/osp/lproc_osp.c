@@ -403,11 +403,22 @@ static int osp_prealloc_next_id_seq_show(struct seq_file *m, void *data)
 {
 	struct obd_device *obd = m->private;
 	struct osp_device *osp = lu2osp_dev(obd->obd_lu_dev);
+	struct lu_fid *fid;
+	obd_id id;
 
 	if (osp == NULL)
 		return 0;
 
-	return seq_printf(m, "%u\n", fid_oid(&osp->opd_pre_used_fid) + 1);
+	fid = &osp->opd_pre_used_fid;
+	if (fid_is_idif(fid)) {
+		id = fid_idif_id(fid_seq(fid), fid_oid(fid), fid_ver(fid));
+		id++;
+	} else {
+		id = unlikely(fid_oid(fid) == LUSTRE_DATA_SEQ_MAX_WIDTH) ?
+			1 : fid_oid(fid) + 1;
+	}
+
+	return seq_printf(m, "%llu\n", id);
 }
 LPROC_SEQ_FOPS_RO(osp_prealloc_next_id);
 
@@ -423,11 +434,18 @@ static int osp_prealloc_last_id_seq_show(struct seq_file *m, void *data)
 {
 	struct obd_device *obd = m->private;
 	struct osp_device *osp = lu2osp_dev(obd->obd_lu_dev);
+	struct lu_fid *fid;
+	obd_id id;
 
 	if (osp == NULL)
 		return 0;
 
-	return seq_printf(m, "%u\n", fid_oid(&osp->opd_pre_last_created_fid));
+	fid = &osp->opd_pre_last_created_fid;
+	id = fid_is_idif(fid) ?
+			 fid_idif_id(fid_seq(fid), fid_oid(fid), fid_ver(fid)) :
+			 fid_oid(fid);
+
+	return seq_printf(m, "%llu\n", id);
 }
 LPROC_SEQ_FOPS_RO(osp_prealloc_last_id);
 
@@ -443,11 +461,16 @@ static int osp_prealloc_next_seq_seq_show(struct seq_file *m, void *data)
 {
 	struct obd_device *obd = m->private;
 	struct osp_device *osp = lu2osp_dev(obd->obd_lu_dev);
+	struct lu_fid *fid;
 
 	if (osp == NULL)
 		return 0;
 
-	return seq_printf(m, LPX64"\n", fid_seq(&osp->opd_pre_used_fid));
+	fid = &osp->opd_pre_used_fid;
+	seq_printf(m, "%#llx\n", fid_is_idif(fid) ?
+		   fid_seq(fid) & (~0xffff) : fid_seq(fid));
+
+	return 0;
 }
 LPROC_SEQ_FOPS_RO(osp_prealloc_next_seq);
 
@@ -463,12 +486,16 @@ static int osp_prealloc_last_seq_seq_show(struct seq_file *m, void *data)
 {
 	struct obd_device *obd = m->private;
 	struct osp_device *osp = lu2osp_dev(obd->obd_lu_dev);
+	struct lu_fid *fid;
 
 	if (osp == NULL)
 		return 0;
 
-	return seq_printf(m, LPX64"\n",
-			fid_seq(&osp->opd_pre_last_created_fid));
+	fid = &osp->opd_pre_last_created_fid;
+	seq_printf(m, "%#llx\n", fid_is_idif(fid) ?
+		   fid_seq(fid) & (~0xffff) : fid_seq(fid));
+
+	return 0;
 }
 LPROC_SEQ_FOPS_RO(osp_prealloc_last_seq);
 

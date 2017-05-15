@@ -833,7 +833,13 @@ static inline int fid_to_ostid(const struct lu_fid *fid, struct ost_id *ostid)
 /* Check whether the fid is for LAST_ID */
 static inline bool fid_is_last_id(const struct lu_fid *fid)
 {
-	return fid_oid(fid) == 0;
+	if (fid_oid(fid) != 0)
+		return false;
+
+	if (fid_is_idif(fid) && ((fid_seq(fid) & 0xFFFF) != 0))
+		return false;
+
+	return true;
 }
 
 /**
