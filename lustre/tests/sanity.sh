@@ -13409,6 +13409,29 @@ test_404() { # LU-6601
 }
 run_test 404 "validate manual {de}activated works properly for OSPs"
 
+test_405() {
+	local mdt_idx
+
+	test_mkdir -p $DIR/$tdir
+	if [[ $MDSCOUNT -gt 1 ]]; then
+		mdt_idx=$($LFS getdirstripe -i $DIR/$tdir)
+	else
+		mdt_idx=0
+	fi
+
+	#define OBD_FAIL_MDS_READPAGE_PACK 0x105
+	do_facet mds$((mdt_idx+1)) lctl set_param fail_loc=0x80000105
+
+	log "expecting ENOMEM"
+	ls $DIR/$tdir && error "should have failed"
+
+	log "not expecting any error (such as EIO)"
+	ls $DIR/$tdir || error "should have succeeded"
+
+	rmdir $DIR/$tdir
+}
+run_test 405 "failed readdir should not persist"
+
 #
 # tests that do cleanup/setup should be run at the end
 #
