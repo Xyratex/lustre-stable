@@ -199,6 +199,8 @@ static int ll_dir_filler(void *_hash, struct page *page0)
 		nrdpgs = (request->rq_bulk->bd_nob_transferred +
 			  PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;
 		SetPageUptodate(page0);
+	} else {
+		truncate_complete_page(page0->mapping, page0);
 	}
 	unlock_page(page0);
 	ptlrpc_req_finished(request);
