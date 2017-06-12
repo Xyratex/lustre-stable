@@ -1185,6 +1185,9 @@ mount_facet() {
 	local mntpt=$(facet_mntpt $facet)
 	local opts="${!opt} $@"
 
+	[[ $dev == "mgsfailover_dev" ]] && combined_mgs_mds &&
+		dev=mds1failover_dev
+
 	if [ $(facet_fstype $facet) == ldiskfs ] &&
 	   ! do_facet $facet test -b ${!dev}; then
 		opts=$(csa_add "$opts" -o loop)
