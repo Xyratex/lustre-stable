@@ -1858,6 +1858,9 @@ mount_facet() {
 
 	module_loaded lustre || load_modules
 
+	[[ $dev == "mgsfailover_dev" ]] && combined_mgs_mds &&
+		dev=mds1failover_dev
+
 	case $fstype in
 	ldiskfs)
 		if dm_flakey_supported $facet; then
