@@ -108,12 +108,12 @@ test_connectathon() {
 run_test connectathon "connectathon"
 
 test_iorssf() {
-	run_ior "ssf" $NFS_CLIMNTPT
+	run_ior "ssf" $NFS_CLIMNTPT $NFS_SRVMNTPT
 }
 run_test iorssf "iorssf"
 
 test_iorfpp() {
-	run_ior "fpp" $NFS_CLIMNTPT
+	run_ior "fpp" $NFS_CLIMNTPT $NFS_SRVMNTPT
 }
 run_test iorfpp "iorfpp"
 

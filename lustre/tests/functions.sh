@@ -556,7 +556,18 @@ run_ior() {
 	local type=${1:-"ssf"}
 	local dir=${2:-$DIR}
 	local testdir=$dir/d0.ior.$type
+	local nfs_srvmntpt=$3
+
+	if [ "$NFSCLIENT" ]; then
+		[[ -n $nfs_srvmntpt ]] ||
+			{ error "NFSCLIENT mode, but nfs exported dir"\
+				"is not set!" && return 1; }
+	fi
+
 	IOR=${IOR:-$(which IOR 2> /dev/null || true)}
+	[ x$IOR = x ] &&
+		{ skip_env "IOR not found" && return; }
+
 	# threads per client
 	ior_THREADS=${ior_THREADS:-2}
 	ior_iteration=${ior_iteration:-1}
@@ -579,8 +590,6 @@ run_ior() {
 		*)	error "Incorrect block unit should be one of [kKmMgG]"
 			;;
 	esac
-	[ x$IOR = x ] &&
-        { skip_env "IOR not found" && return; }
 
 	# calculate the space in bytes
 	local space=$(df -B 1 -P $dir | tail -n 1 | awk '{ print $4 }')
@@ -604,7 +613,7 @@ run_ior() {
     # mpi_run uses mpiuser
     chmod 0777 $testdir
     if [ "$NFSCLIENT" ]; then
-        setstripe_nfsserver $testdir -c -1 ||
+	setstripe_nfsserver $testdir $nfs_srvmntpt -c -1 ||
             { error "setstripe on nfsserver failed" && return 1; }
     else
         $LFS setstripe $testdir -c -1 ||
