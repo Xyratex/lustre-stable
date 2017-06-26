@@ -3337,6 +3337,10 @@ struct llog_cookie {
         __u32                   lgc_padding;
 } __attribute__((packed));
 
+/* We can`t use union at llog_cookie cause it increase size of structure,
+ * use workaround */
+#define lgc_offset lgc_lgl.lgl_oi.oi.oi_id
+
 /** llog protocol */
 enum llogd_rpc_ops {
         LLOG_ORIGIN_HANDLE_CREATE       = 501,

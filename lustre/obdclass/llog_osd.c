@@ -309,7 +309,7 @@ static int llog_osd_declare_write_rec(const struct lu_env *env,
  *				the full llog record to write. This is
  *				the beginning of buffer to write, the length
  *				of buffer is stored in \a rec::lrh_len
- * \param[out] reccookie	pointer to the cookie to return back if needed.
+ * \param[in,out] reccookie	pointer to the cookie to return back if needed.
  *				It is used for further cancel of this llog
  *				record.
  * \param[in]  idx		index of the llog record. If \a idx == -1 then
@@ -401,19 +401,19 @@ static int llog_osd_write_rec(const struct lu_env *env,
 			rc = dt_record_write(env, o, &lgi->lgi_buf,
 					     &lgi->lgi_off, th);
 			RETURN(rc);
-		} else if (loghandle->lgh_cur_idx > 0) {
+		} else if (reccookie != NULL && reccookie->lgc_index > 0) {
 			/**
-			 * The lgh_cur_offset can be used only if index is
+			 * The lgc_offset can be used only if index is
 			 * the same.
 			 */
-			if (idx != loghandle->lgh_cur_idx) {
+			if (idx != reccookie->lgc_index) {
 				CERROR("%s: modify index mismatch %d %d\n",
 				       o->do_lu.lo_dev->ld_obd->obd_name, idx,
-				       loghandle->lgh_cur_idx);
+				       reccookie->lgc_index);
 				RETURN(-EFAULT);
 			}
 
-			lgi->lgi_off = loghandle->lgh_cur_offset;
+			lgi->lgi_off = reccookie->lgc_offset;
 			CDEBUG(D_OTHER, "modify record "DOSTID": idx:%d, "
 			       "len:%u offset %llu\n",
 			       POSTID(&loghandle->lgh_id.lgl_oi), idx,

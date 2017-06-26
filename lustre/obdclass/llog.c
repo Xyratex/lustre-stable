@@ -278,6 +278,7 @@ static int llog_process_thread(void *arg)
 	struct llog_handle		*loghandle = lpi->lpi_loghandle;
 	struct llog_log_hdr		*llh = loghandle->lgh_hdr;
 	struct llog_process_cat_data	*cd  = lpi->lpi_catdata;
+	struct llog_thread_info		*lti;
 	char				*buf;
 	__u64				 cur_offset = LLOG_CHUNK_SIZE;
 	int				 rc = 0, index = 1, last_index;
@@ -287,6 +288,8 @@ static int llog_process_thread(void *arg)
 	ENTRY;
 
         LASSERT(llh);
+
+	lti = lpi->lpi_env == NULL ? NULL : llog_info(lpi->lpi_env);
 
         OBD_ALLOC(buf, LLOG_CHUNK_SIZE);
         if (!buf) {
@@ -401,15 +404,36 @@ repeat:
                                rec->lrh_index, rec->lrh_len,
                                (int)(buf + LLOG_CHUNK_SIZE - (char *)rec));
 
-			loghandle->lgh_cur_idx = rec->lrh_index;
+			/* lgh_cur_offset is used only at llog_test_3 */
 			loghandle->lgh_cur_offset = (char *)rec - (char *)buf +
 						    chunk_offset;
 
                         /* if set, process the callback on this record */
                         if (ext2_test_bit(index, llh->llh_bitmap)) {
+				struct llog_cookie *lgc;
+				__u64 tmp_off;
+				int tmp_idx;
+
+				if (lti != NULL) {
+					lgc = &lti->lgi_cookie;
+					/* store lu_env for recursive calls */
+					tmp_off = lgc->lgc_offset;
+					tmp_idx = lgc->lgc_index;
+					lgc->lgc_offset = (char *)rec -
+						(char *)buf + chunk_offset;
+					lgc->lgc_index = rec->lrh_index;
+				}
+				/* using lu_env for passing record offset to
+				 * llog_write through various callbacks */
 				rc = lpi->lpi_cb(lpi->lpi_env, loghandle, rec,
 						 lpi->lpi_cbdata);
+
 				last_called_index = index;
+
+				if (lti != NULL) {
+					lgc->lgc_offset = tmp_off;
+					lgc->lgc_index = tmp_idx;
+				}
 				if (rc == LLOG_PROC_BREAK) {
 					GOTO(out, rc);
 				} else if (rc == LLOG_DEL_RECORD) {
@@ -878,7 +902,7 @@ int llog_write(const struct lu_env *env, struct llog_handle *loghandle,
 {
 	struct dt_device	*dt;
 	struct thandle		*th;
-	int			 rc;
+	int			rc;
 
 	ENTRY;
 
@@ -901,7 +925,19 @@ int llog_write(const struct lu_env *env, struct llog_handle *loghandle,
 		GOTO(out_trans, rc);
 
 	down_write(&loghandle->lgh_lock);
-	rc = llog_write_rec(env, loghandle, rec, NULL, idx, th);
+	if (idx != LLOG_HEADER_IDX && idx != LLOG_NEXT_IDX) {
+		struct llog_thread_info *lti = llog_info(env);
+
+		/* cookie comes from llog_process_thread */
+		rc = llog_write_rec(env, loghandle, rec, &lti->lgi_cookie,
+				    rec->lrh_index, th);
+		/* upper layer didn`t pass cookie so change rc */
+		rc = (rc == 1 ? 0 : rc);
+
+	} else {
+		rc = llog_write_rec(env, loghandle, rec, NULL, idx, th);
+	}
+
 	up_write(&loghandle->lgh_lock);
 out_trans:
 	dt_trans_stop(env, dt, th);

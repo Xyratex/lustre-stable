@@ -57,6 +57,7 @@ struct llog_thread_info {
 	struct lu_buf			 lgi_buf;
 	loff_t				 lgi_off;
 	struct llog_logid_rec		 lgi_logid;
+	struct llog_cookie		 lgi_cookie;
 };
 
 extern struct lu_context_key llog_thread_key;
