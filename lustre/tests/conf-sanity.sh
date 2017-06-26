@@ -5713,6 +5713,28 @@ test_104() {
 }
 run_test 104 "Unknown config param should not fail target mounting"
 
+test_108() {
+	# a modification of test 5c
+	local rc=0
+	start_mds
+	start_ost
+
+	[ -d $MOUNT ] || mkdir -p $MOUNT
+
+	local oldfs="${FSNAME}"
+	FSNAME="wrongfs"
+	mount_client $MOUNT || true
+	FSNAME=${oldfs}
+
+	do_facet mgs "$LCTL get_param -n mgs.MGS.filesystems" |
+		grep -q "^wrongfs$" && { log "found wrongfs"; rc=11; }
+
+	cleanup_nocli  || rc=$?
+
+	return $rc
+}
+run_test 108 "failed client mount should not break MGS/filesystems"
+
 
 if ! combined_mgs_mds ; then
 	stop mgs
