@@ -1112,6 +1112,7 @@ static int osd_declare_write_commit(const struct lu_env *env,
 	bool			 ignore_quota = false;
 	long long		 quota_space = 0;
 	struct osd_fextent	 extent = { 0 };
+	bool			 mapped;
 	ENTRY;
 
         LASSERT(handle != NULL);
@@ -1126,7 +1127,10 @@ static int osd_declare_write_commit(const struct lu_env *env,
 		    lnb[i - 1].lnb_file_offset + lnb[i - 1].lnb_len)
 			extents++;
 
-		if (!osd_is_mapped(dt, lnb[i].lnb_file_offset, &extent))
+		mapped = osd_is_mapped(dt, lnb[i].lnb_file_offset, &extent);
+		if (mapped)
+			lnb[i].lnb_flags |= OBD_BRW_MAPPED;
+		else
 			quota_space += PAGE_CACHE_SIZE;
 
 		/* ignore quota for the whole request if any page is from
@@ -1215,7 +1219,6 @@ static int osd_write_commit(const struct lu_env *env, struct dt_object *dt,
         struct osd_device  *osd = osd_obj2dev(osd_dt_obj(dt));
         loff_t isize;
         int rc = 0, i;
-	struct osd_fextent extent = { 0 };
 
         LASSERT(inode);
 
@@ -1228,7 +1231,7 @@ static int osd_write_commit(const struct lu_env *env, struct dt_object *dt,
 
         for (i = 0; i < npages; i++) {
 		if (lnb[i].lnb_rc == -ENOSPC &&
-		    osd_is_mapped(dt, lnb[i].lnb_file_offset, &extent)) {
+		    ((lnb[i].lnb_flags & OBD_BRW_MAPPED) != 0)) {
 			/* Allow the write to proceed if overwriting an
 			 * existing block */
 			lnb[i].lnb_rc = 0;

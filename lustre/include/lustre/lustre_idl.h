@@ -1845,6 +1845,9 @@ extern void lustre_swab_obd_statfs (struct obd_statfs *os);
 				      * space for unstable pages; asking
 				      * it to sync quickly */
 
+#define OBD_BRW_MAPPED	0x80000UL	/* osd-ldiskfs internal, 
+					 * page mapped to real block */
+
 #define OBD_OBJECT_EOF LUSTRE_EOF
 
 #define OST_MIN_PRECREATE 32
