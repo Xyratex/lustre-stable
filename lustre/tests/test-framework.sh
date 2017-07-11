@@ -6009,6 +6009,9 @@ check_mds() {
 }
 
 reset_fail_loc () {
+	local clients=${CLIENTS:-$HOSTNAME}
+	do_nodes $clients "lctl set_param -n osc.*.pinger_recov=1 \
+			   2>/dev/null" || true
 	echo -n "Resetting fail_loc on all nodes..."
 	do_nodes $(comma_list $(nodes_list)) "lctl set_param -n fail_loc=0 \
 	    fail_val=0 2>/dev/null" || true
