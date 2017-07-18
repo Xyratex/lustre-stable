@@ -362,13 +362,17 @@ int mdt_hsm_agent_send(struct mdt_thread_info *mti,
 		if (!IS_ERR(obj)) {
 			mdt_object_put(mti->mti_env, obj);
 		} else if (PTR_ERR(obj) == -ENOENT) {
+			struct hsm_record_update update = {
+				.cookie = hai->hai_cookie,
+				.status = ARS_FAILED,
+			};
+
 			if (hai->hai_action == HSMA_REMOVE)
 				continue;
 
 			fail_request = true;
 			rc = mdt_agent_record_update(mti->mti_env, mdt,
-						     &hai->hai_cookie,
-						     1, ARS_FAILED);
+						     &update, 1);
 			if (rc < 0) {
 				CERROR("%s: mdt_agent_record_update() failed, "
 				       "cannot update status to %s for cookie "
@@ -386,14 +390,18 @@ int mdt_hsm_agent_send(struct mdt_thread_info *mti,
 
 		if (!mdt_hsm_is_action_compat(hai, hal->hal_archive_id,
 					      hal->hal_flags, &hsm)) {
+			struct hsm_record_update update = {
+				.cookie = hai->hai_cookie,
+				.status = ARS_FAILED,
+			};
+
 			/* incompatible request, we abort the request */
 			/* next time coordinator will wake up, it will
 			 * make the same compound with valid only
 			 * records */
 			fail_request = true;
 			rc = mdt_agent_record_update(mti->mti_env, mdt,
-						     &hai->hai_cookie,
-						     1, ARS_FAILED);
+						     &update, 1);
 			if (rc) {
 				CERROR("%s: mdt_agent_record_update() failed, "
 				       "cannot update status to %s for cookie "
@@ -652,4 +660,3 @@ const struct file_operations mdt_hsm_agent_fops = {
 	.llseek		= seq_lseek,
 	.release	= lprocfs_seq_release,
 };
-
