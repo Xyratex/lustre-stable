@@ -1352,7 +1352,7 @@ unlock:
 
 		/* restore in data FID done, we swap the layouts
 		 * only if restore is successfull */
-		if (pgs->hpk_errval == 0) {
+		if (pgs->hpk_errval == 0 && !IS_ERR(obj)) {
 			rc = hsm_swap_layouts(mti, &car->car_hai->hai_fid,
 					      &car->car_hai->hai_dfid, &mh);
 			if (rc) {
