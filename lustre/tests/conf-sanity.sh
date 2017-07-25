@@ -7806,7 +7806,6 @@ test_108b() {
 }
 run_test 108b "migrate from ZFS to ldiskfs"
 
-
 #
 # set number of permanent parameters
 #
@@ -8093,6 +8092,57 @@ test_116() {
 		grep -qw 'features.*extent' || error "extent should be enabled"
 }
 run_test 116 "big size MDT support"
+
+test_117() {
+	local had_config
+	local size_mb
+
+	[ "$MDSCOUNT" -lt 2 ] && { skip "mdt count < 2"; return 0; }
+
+	had_config=$(do_facet mds1 "$LCTL get_param debug|grep config")
+	do_facet mds1 "$LCTL set_param debug=+config"
+	do_facet mds1 "$LCTL dk > /dev/null"
+
+	setup
+	do_facet mds2 "$TUNEFS --writeconf $(mdsdevname 2)" > /dev/null 2>&1
+	# mount after writeconf will make "add osp" added to mdt0 config:
+	# 53 (224)marker  60 (flags=0x01, v2.5.1.0) lustre-MDT0001  'add osp'
+	# 54 (080)add_uuid  nid=...  0:  1:...
+	# 55 (144)attach    0:lustre-MDT0001-osp-MDT0000  1:osp  2:...
+	# 56 (144)setup     0:lustre-MDT0001-osp-MDT0000  1:...  2:...
+	# 57 (136)modify_mdc_tgts add 0:lustre-MDT0000-mdtlov  1:...  2:1  3:1
+	# duplicate modify_mds_tgts caused crashes
+	debug_size_save
+	# using larger debug_mb size to avoid lctl dk log truncation
+	size_mb=$((DEBUG_SIZE_SAVED * 4))
+	for i in `seq 1 3`; do
+		stop_mdt 2
+		# though config processing stops after failed attach and setup
+		# it will proceed after the failed command after each writeconf
+		# this is the original scenario of the issue
+		do_facet mds2 "$TUNEFS --writeconf $(mdsdevname 2)" \
+			> /dev/null 2>&1
+		do_facet mds1 "$LCTL set_param debug_mb=$size_mb"
+		start_mdt 2
+		local wait=0
+		local max_wait=300
+		local RC=1
+		while [ $wait -lt $max_wait ]; do
+			[ ! -z "$(do_facet mds1 $LCTL dk |
+				grep Processed\ log\ $FSNAME-MDT0000)" ] &&
+				RC=0; break;
+			sleep 1
+			wait=$(( wait + sleep))
+		done
+		[[ $RC -ne 0 ]] && error "Failed to process log for MDT0"
+	done
+	debug_size_restore
+
+	[ -z "$had_config" ] && do_facet mds1 lctl set_param debug=-config
+
+	reformat
+}
+run_test 117 "writeconf on mdt>0 shouldn't duplicate mdc/osp and crash"
 
 if ! combined_mgs_mds ; then
 	stop mgs
