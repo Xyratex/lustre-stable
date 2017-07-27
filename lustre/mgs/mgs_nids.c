@@ -596,7 +596,6 @@ static int delogname(char *logname, char *fsname, int *typ)
 
 int mgs_get_ir_logs(struct ptlrpc_request *req)
 {
-	struct lu_env     *env = req->rq_svc_thread->t_env;
 	struct mgs_device *mgs = exp2mgs_dev(req->rq_export);
         struct fs_db      *fsdb;
         struct mgs_config_body  *body;
@@ -626,9 +625,11 @@ int mgs_get_ir_logs(struct ptlrpc_request *req)
         if (rc)
                 RETURN(rc);
 
-	rc = mgs_find_or_make_fsdb(env, mgs, fsname, &fsdb);
-        if (rc)
-		RETURN(rc);
+	mutex_lock(&mgs->mgs_mutex);
+	fsdb = mgs_find_fsdb(mgs, fsname);
+	mutex_unlock(&mgs->mgs_mutex);
+	if (!fsdb)
+		RETURN(-ENOENT);
 
         bufsize = body->mcb_units << body->mcb_bits;
 	nrpages = (bufsize + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;

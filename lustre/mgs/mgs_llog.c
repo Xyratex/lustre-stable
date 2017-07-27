@@ -458,7 +458,8 @@ int mgs_find_or_make_fsdb(const struct lu_env *env,
         if (!fsdb)
 		RETURN(-ENOMEM);
 
-	if (!test_bit(FSDB_MGS_SELF, &fsdb->fsdb_flags)) {
+	if (!test_bit(FSDB_MGS_SELF, &fsdb->fsdb_flags) &&
+	    strcmp(PARAMS_FILENAME, name) != 0) {
                 /* populate the db from the client llog */
 		rc = mgs_get_fsdb_from_llog(env, mgs, fsdb);
                 if (rc) {
