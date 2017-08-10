@@ -2,7 +2,7 @@ Index: linux-stage/fs/ext4/ext4.h
 ===================================================================
 --- linux-stage.orig/fs/ext4/ext4.h
 +++ linux-stage/fs/ext4/ext4.h
-@@ -1136,11 +1136,14 @@ struct ext4_sb_info {
+@@ -1136,11 +1136,15 @@ struct ext4_sb_info {
  
  	/* tunables */
  	unsigned long s_stripe;
@@ -13,6 +13,7 @@ Index: linux-stage/fs/ext4/ext4.h
  	unsigned int s_mb_min_to_scan;
  	unsigned int s_mb_stats;
  	unsigned int s_mb_order2_reqs;
++	seqlock_t s_mb_prealloc_table_seqlock;
 +	unsigned long *s_mb_prealloc_table;
 +	unsigned long s_mb_prealloc_table_size;
  	unsigned int s_mb_group_prealloc;
@@ -49,7 +50,7 @@ Index: linux-stage/fs/ext4/mballoc.c
  /*
   * This is a special case for storages like raid5
   * we try to find stripe-aligned chunks for stripe-size requests
-@@ -2155,6 +2175,82 @@ static const struct seq_operations ext4_
+@@ -2155,6 +2175,94 @@ static const struct seq_operations ext4_
  	.show   = ext4_mb_seq_groups_show,
  };
  
@@ -85,7 +86,8 @@ Index: linux-stage/fs/ext4/mballoc.c
 +	char str[128];
 +	char *cur;
 +	char *end;
-+	unsigned long *new_table;
++	unsigned long *new_table, *old_table;
++	int old_table_size;
 +	int num = 0;
 +	int i = 0;
 +
@@ -111,20 +113,31 @@ Index: linux-stage/fs/ext4/mballoc.c
 +	new_table = kmalloc(num * sizeof(*new_table), GFP_KERNEL);
 +	if (new_table == NULL)
 +		return -ENOMEM;
-+	kfree(sbi->s_mb_prealloc_table);
 +	memset(new_table, 0, num * sizeof(*new_table));
++	write_seqlock(&sbi->s_mb_prealloc_table_seqlock);
++	old_table = sbi->s_mb_prealloc_table;
++	old_table_size = sbi->s_mb_prealloc_table_size;
 +	sbi->s_mb_prealloc_table = new_table;
 +	sbi->s_mb_prealloc_table_size = num;
 +	cur = str;
 +	end = str + cnt;
 +	while (cur < end && i < num) {
-+	while ((cur < end) && (*cur == ' ')) cur++;
++		while ((cur < end) && (*cur == ' '))
++			cur++;
 +		value = simple_strtol(cur, &cur, 0);
 +		if (ext4_mb_prealloc_table_add(sbi, value) == 0)
 +			++i;
 +	}
 +	if (i != num)
 +		sbi->s_mb_prealloc_table_size = i;
++	if (i == 0) {
++		sbi->s_mb_prealloc_table = old_table;
++		sbi->s_mb_prealloc_table_size = old_table_size;
++		kfree(new_table);
++	} else {
++		kfree(old_table);
++	}
++	write_sequnlock(&sbi->s_mb_prealloc_table_seqlock);
 +
 +	return cnt;
 +}
@@ -141,7 +154,7 @@ Index: linux-stage/fs/ext4/mballoc.c
  	unsigned offset;
  	unsigned max;
  	int ret;
-@@ -2380,26 +2476,61 @@ int ext4_mb_init(struct super_block *sb,
+@@ -2380,26 +2476,62 @@ int ext4_mb_init(struct super_block *sb,
  		i++;
  	} while (i <= sb->s_blocksize_bits + 1);
  
@@ -163,6 +176,7 @@ Index: linux-stage/fs/ext4/mballoc.c
  	sbi->s_mb_order2_reqs = MB_DEFAULT_ORDER2_REQS;
 -	sbi->s_mb_group_prealloc = MB_DEFAULT_GROUP_PREALLOC;
 +
++	seqlock_init(&sbi->s_mb_prealloc_table_seqlock);
 +	if (sbi->s_stripe == 0) {
 +		sbi->s_mb_prealloc_table_size = 10;
 +		i = sbi->s_mb_prealloc_table_size * sizeof(unsigned long);
@@ -262,7 +276,7 @@ Index: linux-stage/fs/ext4/mballoc.c
  	kfree(sbi->s_mb_offsets);
  	kfree(sbi->s_mb_maxs);
  	if (sbi->s_buddy_cache)
-@@ -2798,11 +2950,12 @@ static noinline_for_stack void
+@@ -2798,11 +2950,13 @@ static noinline_for_stack void
  ext4_mb_normalize_request(struct ext4_allocation_context *ac,
  				struct ext4_allocation_request *ar)
  {
@@ -275,9 +289,10 @@ Index: linux-stage/fs/ext4/mballoc.c
  	struct ext4_inode_info *ei = EXT4_I(ac->ac_inode);
 +	struct ext4_sb_info *sbi = EXT4_SB(ac->ac_sb);
  	struct ext4_prealloc_space *pa;
++	unsigned int seq;
  
  	/* do normalize only data requests, metadata requests
-@@ -2832,49 +2985,35 @@ ext4_mb_normalize_request(struct ext4_al
+@@ -2832,49 +2985,43 @@ ext4_mb_normalize_request(struct ext4_al
  	size = size << bsbits;
  	if (size < i_size_read(ac->ac_inode))
  		size = i_size_read(ac->ac_inode);
@@ -285,18 +300,40 @@ Index: linux-stage/fs/ext4/mballoc.c
  
 -	/* max size of free chunks */
 -	max = 2 << bsbits;
-+	start = wind = 0;
++	do {
++		seq = read_seqbegin(&sbi->s_mb_prealloc_table_seqlock);
  
 -#define NRL_CHECK_SIZE(req, size, max, chunk_size)	\
 -		(req <= (size) || max <= (chunk_size))
-+	/* let's choose preallocation window depending on file size */
-+	for (i = 0; i < sbi->s_mb_prealloc_table_size; i++) {
-+		if (size <= sbi->s_mb_prealloc_table[i]) {
-+			wind = sbi->s_mb_prealloc_table[i];
-+			break;
++		start = wind = 0;
++
++		/* let's choose preallocation window depending on file size */
++		for (i = 0; i < sbi->s_mb_prealloc_table_size; i++) {
++			if (size <= sbi->s_mb_prealloc_table[i]) {
++				wind = sbi->s_mb_prealloc_table[i];
++				break;
++			}
 +		}
-+	}
-+	size = wind;
++		if (i == 0 || sbi->s_mb_prealloc_table[i - 1] == 0)
++			continue;
++
++		size = wind;
++
++		if (wind == 0) {
++			__u64 tstart, tend;
++			/* file is quite large, we now preallocate with
++			 * the biggest configured window with regart to
++			 * logical offset */
++			wind = sbi->s_mb_prealloc_table[i - 1];
++			tstart = ac->ac_o_ex.fe_logical;
++			do_div(tstart, wind);
++			start = tstart * wind;
++			tend = ac->ac_o_ex.fe_logical + ac->ac_o_ex.fe_len - 1;
++			do_div(tend, wind);
++			tend = tend * wind + wind;
++			size = tend - start;
++		}
++	} while (read_seqretry(&sbi->s_mb_prealloc_table_seqlock, seq));
  
 -	/* first, try to predict filesize */
 -	/* XXX: should this table be tunable? */
@@ -331,20 +368,7 @@ Index: linux-stage/fs/ext4/mballoc.c
 -	} else {
 -		start_off = (loff_t)ac->ac_o_ex.fe_logical << bsbits;
 -		size	  = ac->ac_o_ex.fe_len << bsbits;
-+	if (wind == 0) {
-+		__u64 tstart, tend;
-+		/* file is quite large, we now preallocate with
-+		 * the biggest configured window with regart to
-+		 * logical offset */
-+		wind = sbi->s_mb_prealloc_table[i - 1];
-+		tstart = ac->ac_o_ex.fe_logical;
-+		do_div(tstart, wind);
-+		start = tstart * wind;
-+		tend = ac->ac_o_ex.fe_logical + ac->ac_o_ex.fe_len - 1;
-+		do_div(tend, wind);
-+		tend = tend * wind + wind;
-+		size = tend - start;
- 	}
+-	}
 -	orig_size = size = size >> bsbits;
 -	orig_start = start = start_off >> bsbits;
 +	orig_size = size;
