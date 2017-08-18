@@ -93,8 +93,8 @@ command_t cmdlist[] = {
         {"which_nid", jt_ptl_which_nid, 0, "choose a NID"
          "usage: which_nid NID [NID...]"},
 	{"replace_nids", jt_replace_nids, 0,
-	 "replace primary NIDs for a device\n"
-	 "usage: replace_nids <device> <nid1>[,nid2,nid3]"},
+	 "replace NIDs for a device\n"
+	 "usage: replace_nids <device> <nid1>[,nid2,nid3:nid4,nid5:nid6]"},
 	{"clear_conf", jt_clear_configs, 0,
 	 "clear config logs for a device or filesystem\n"
 	 "usage: clear_conf <device|fsname>"},
