@@ -4129,6 +4129,8 @@ test_66() {
 	echo "wrong nids list should not destroy the system"
 	do_facet mgs $LCTL replace_nids $FSNAME-OST0000 "wrong nids list" &&
 		error "wrong parse"
+	do_facet mgs $LCTL replace_nids $FSNAME-OST0000 "asdfasdf,asdfadf" &&
+		error "wrong parse"
 
 	echo "replace OST nid"
 	do_facet mgs $LCTL replace_nids $FSNAME-OST0000 $OST1_NID ||
@@ -4142,8 +4144,15 @@ test_66() {
 	do_facet mgs $LCTL replace_nids $FSNAME-MDT0000 "wrong nids list" &&
 		error "wrong parse"
 
+	local FAKE_NIDS="192.168.0.112@tcp1,192.168.0.112@tcp2"
+	local FAKE_FAILOVER="192.168.0.113@tcp1,192.168.0.113@tcp2"
+	local NIDS_AND_FAILOVER="$MDS_NID,$FAKE_NIDS:$FAKE_FAILOVER"
+	echo "set NIDs with failover"
+	do_facet mgs $LCTL replace_nids $FSNAME-MDT0000 $NIDS_AND_FAILOVER ||
+		error "replace nids failed"
+
 	echo "replace MDS nid"
-	do_facet mgs $LCTL replace_nids $FSNAME-MDT0000 $MDS_NID ||
+	do_facet mgs $LCTL replace_nids $FSNAME-MDT0000 "$MDS_NID,$FAKE_NIDS" ||
 		error "replace nids failed"
 
 	if ! combined_mgs_mds ; then
@@ -5713,6 +5722,34 @@ test_104() {
 }
 run_test 104 "Unknown config param should not fail target mounting"
 
+test_105()
+{
+	[ $MDSCOUNT -lt 2 ] && skip "needs >= 2 MDTs" && return
+	[ -z $mds2failover_HOST ] && skip "needs MDT failover setup" && return
+
+	setup
+	cleanup
+
+	load_modules
+	if combined_mgs_mds; then
+		start_mdt 1 "-o nosvc" ||
+			error "starting mds with nosvc option failed"
+	fi
+	local nid=$(do_facet mds2 $LCTL list_nids | head -1)
+	local failover_nid=$(do_node $mds2failover_HOST $LCTL list_nids | head -1)
+	do_facet mgs $LCTL replace_nids $FSNAME-MDT0001 $nid:$failover_nid
+	if combined_mgs_mds; then
+		stop_mdt 1
+	fi
+
+	setup
+	fail mds2
+	echo "lfs setdirstripe"
+	$LFS setdirstripe -i 1 $MOUNT/$tdir
+	echo ok
+}
+run_test 105 "check failover after replace_nids"
+
 test_108() {
 	# a modification of test 5c
 	local rc=0
@@ -5734,7 +5771,6 @@ test_108() {
 	return $rc
 }
 run_test 108 "failed client mount should not break MGS/filesystems"
-
 
 if ! combined_mgs_mds ; then
 	stop mgs
