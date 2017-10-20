@@ -246,6 +246,7 @@ int obd_alloc_fail(const void *ptr, const char *name, const char *type,
 #define OBD_FAIL_MDS_LOV_CREATE_RACE	 0x163
 #define OBD_FAIL_MDS_OSP_CLP_ORNS_FAIL	 0x165
 #define OBD_FAIL_MDS_HSM_CDT_DELAY	 0x166
+#define OBD_FAIL_MDS_HSM_SEND_RACE	 0x167
 
 /* layout lock */
 #define OBD_FAIL_MDS_NO_LL_GETATTR	 0x170

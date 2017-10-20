@@ -465,6 +465,22 @@ out_cancel:
 		/* set is_registered even if failure because we may have
 		 * partial work done */
 		is_registered = true;
+		if (CFS_FAIL_CHECK(OBD_FAIL_MDS_HSM_SEND_RACE)) {
+			if (agent_unregistered) {
+				schedule_timeout_and_set_state(TASK_UNINTERRUPTIBLE,
+							       msecs_to_jiffies(40 * 1000));
+				set_current_state(TASK_RUNNING);
+				mdt_hsm_add_hal(mti, hal, &uuid);
+			} else {
+				mdt_hsm_add_hal(mti, hal, &uuid);
+				schedule_timeout_and_set_state(TASK_UNINTERRUPTIBLE,
+							       msecs_to_jiffies(30 * 1000));
+				set_current_state(TASK_RUNNING);
+			}
+			rc = -ENOMEM;
+			GOTO(out, rc);
+		}
+
 		rc = mdt_hsm_add_hal(mti, hal, &uuid);
 		if (rc || agent_unregistered)
 			GOTO(out, rc);

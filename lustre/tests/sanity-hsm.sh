@@ -4502,6 +4502,26 @@ test_405() {
 }
 run_test 405 "Check for double RESTORE records in llog"
 
+test_406() {
+	copytool_setup
+
+	mkdir -p $DIR/$tdir
+	local f=$DIR/$tdir/$tfile
+
+	dd if=/dev/urandom of=$f bs=1M count=2
+
+	#define OBD_FAIL_MDS_HSM_SEND_RACE	0x167
+	do_facet $SINGLEMDS $LCTL set_param fail_loc=0x167
+	$LFS hsm_archive --archive $HSM_ARCHIVE_NUMBER $f&
+	sleep 5
+
+	kill_copytools
+
+	wait
+	copytool_cleanup
+}
+run_test 406 "Check for deadlock around cdt_request_lock"
+
 test_500()
 {
 	# Stop the existing copytool
