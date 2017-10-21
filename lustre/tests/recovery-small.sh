@@ -2548,6 +2548,32 @@ test_133() {
 }
 run_test 133 "don't fail on flock resend"
 
+test_134() {
+	[ $CLIENTCOUNT -lt 2 ] &&
+		skip "Need two or more clients, have $CLIENTCOUNT" && return 0
+	[ $MDSCOUNT -lt 2 ] && skip "needs >= 2 MDTs" && return
+
+	local -a clients=(${CLIENTS//,/ })
+	local client2=${clients[1]}
+
+	stop mds2
+
+	# have client2 to drop blocking callback
+#define OBD_FAIL_LDLM_BL_CALLBACK_NET			0x305
+	do_node $client2 $LCTL set_param fail_loc=0x305
+
+	# on ost1 start mgs_ir_update wakeups mgs_ir_notify thread
+	# which calls mgs_revoke_lock for recovery lock. As client2
+	# drops blocking asts, mgs_revoke_lock has to wait until lock
+	# callback timer expires.
+	facet_failover ost1
+
+	# mount used to timeout during config log processing due to
+	# mgs_revoke_lock delay on mgs
+	mount_facet mds2 || error "mount_facet mds2 failed"
+}
+run_test 134 "mount timeout due to lock callback timeout on mgs_revoke_lock"
+
 complete $SECONDS
 check_and_cleanup_lustre
 exit_status
