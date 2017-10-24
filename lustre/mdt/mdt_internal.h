@@ -179,6 +179,8 @@ struct coordinator {
 	__u64			 cdt_user_request_mask;
 	__u64			 cdt_group_request_mask;
 	__u64			 cdt_other_request_mask;
+
+	bool			 cdt_wakeup_coordinator;
 };
 
 /* mdt state flag bits */
