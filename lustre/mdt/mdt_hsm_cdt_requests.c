@@ -325,6 +325,13 @@ static struct cdt_agent_req *cdt_find_request_nolock(struct coordinator *cdt,
 	RETURN(found);
 }
 
+struct cdt_agent_req *mdt_cdt_find_request_nolock(struct coordinator *cdt,
+						     __u64 cookie,
+						     const struct lu_fid *fid)
+{
+	return cdt_find_request_nolock(cdt, cookie, fid);
+}
+
 /**
  * add a request to the list
  * \param cdt [IN] coordinator

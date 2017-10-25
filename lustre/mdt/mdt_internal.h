@@ -871,6 +871,9 @@ int mdt_cdt_add_request(struct coordinator *cdt, struct cdt_agent_req *new_car);
 struct cdt_agent_req *mdt_cdt_find_request(struct coordinator *cdt,
 					   const __u64 cookie,
 					   const struct lu_fid *fid);
+struct cdt_agent_req *mdt_cdt_find_request_nolock(struct coordinator *cdt,
+						     __u64 cookie,
+						     const struct lu_fid *fid);
 void mdt_cdt_get_work_done(struct cdt_agent_req *car, __u64 *done_sz);
 void mdt_cdt_get_request(struct cdt_agent_req *car);
 void mdt_cdt_put_request(struct cdt_agent_req *car);
@@ -902,7 +905,8 @@ struct mdt_object *mdt_hsm_get_md_hsm(struct mdt_thread_info *mti,
 				      struct md_hsm *hsm);
 /* actions/request helpers */
 int mdt_hsm_add_hal(struct mdt_thread_info *mti,
-		    struct hsm_action_list *hal, struct obd_uuid *uuid);
+		    struct hsm_action_list *hal, struct obd_uuid *uuid,
+		    int agent_unregistered);
 bool mdt_hsm_is_action_compat(const struct hsm_action_item *hai,
 			      const int hal_an, const __u64 rq_flags,
 			      const struct md_hsm *hsm);

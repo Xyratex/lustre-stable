@@ -1027,11 +1027,14 @@ int mdt_hsm_cdt_stop(struct mdt_device *mdt)
  * \param hal [IN] request
  * \param uuid [OUT] in case of CANCEL, the uuid of the agent
  *  which is running the CT
+ * \param agent_unregistered [IN] 1 means cdt_request_lock
+ *  hold in upper layer.
  * \retval 0 success
  * \retval -ve failure
  */
 int mdt_hsm_add_hal(struct mdt_thread_info *mti,
-		    struct hsm_action_list *hal, struct obd_uuid *uuid)
+		    struct hsm_action_list *hal, struct obd_uuid *uuid,
+		    int agent_unregistered)
 {
 	struct mdt_device	*mdt = mti->mti_mdt;
 	struct coordinator	*cdt = &mdt->mdt_coordinator;
@@ -1064,7 +1067,12 @@ int mdt_hsm_add_hal(struct mdt_thread_info *mti,
 			}
 
 			/* find the running request to set it canceled */
-			car = mdt_cdt_find_request(cdt, hai->hai_cookie, NULL);
+			if (agent_unregistered)
+				car = mdt_cdt_find_request_nolock(cdt,
+								  hai->hai_cookie,
+								  NULL);
+			else
+				car = mdt_cdt_find_request(cdt, hai->hai_cookie, NULL);
 			if (car != NULL) {
 				car->car_canceled = 1;
 				/* uuid has to be changed to the one running the

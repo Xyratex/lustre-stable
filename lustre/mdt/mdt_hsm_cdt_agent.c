@@ -470,9 +470,9 @@ out_cancel:
 				schedule_timeout_and_set_state(TASK_UNINTERRUPTIBLE,
 							       msecs_to_jiffies(40 * 1000));
 				set_current_state(TASK_RUNNING);
-				mdt_hsm_add_hal(mti, hal, &uuid);
+				mdt_hsm_add_hal(mti, hal, &uuid, agent_unregistered);
 			} else {
-				mdt_hsm_add_hal(mti, hal, &uuid);
+				mdt_hsm_add_hal(mti, hal, &uuid, agent_unregistered);
 				schedule_timeout_and_set_state(TASK_UNINTERRUPTIBLE,
 							       msecs_to_jiffies(30 * 1000));
 				set_current_state(TASK_RUNNING);
@@ -481,7 +481,7 @@ out_cancel:
 			GOTO(out, rc);
 		}
 
-		rc = mdt_hsm_add_hal(mti, hal, &uuid);
+		rc = mdt_hsm_add_hal(mti, hal, &uuid, agent_unregistered);
 		if (rc || agent_unregistered)
 			GOTO(out, rc);
 	}
