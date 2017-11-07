@@ -18167,6 +18167,33 @@ test_414() {
 }
 run_test 414 "simulate ENOMEM in ptlrpc_register_bulk()"
 
+test_418()
+{
+	[ $MDSCOUNT -lt 2 ] && skip "needs >= 2 MDTs" && return
+	mkdir $DIR/$tdir
+	test_mkdir -i 0 -c 2 $DIR/$tdir/dir
+
+	mkdir $DIR/$tdir/tgt1
+	test_mkdir -i 1 -c 1 $DIR/$tdir/tgt2
+
+	mkdir $DIR/$tdir/aux1
+	mkdir $DIR/$tdir/aux2
+
+	mv $DIR/$tdir/aux1 $DIR/$tdir/dir/ || error "rename aux1 failed"
+	mv $DIR/$tdir/aux2 $DIR/$tdir/dir/ || error "rename aux2 failed"
+
+	mv $DIR/$tdir/dir $DIR/$tdir/tgt1 || error "rename to tgt1 failed"
+	mv $DIR/$tdir/tgt1/dir $DIR/$tdir/tgt2 || error "rename to tgt2 failed"
+
+	local fid=$($LFS path2fid $DIR/$tdir/tgt2/dir | sed -e 's/[][]//g')
+	local pathnr=$($LFS fid2path $FSNAME $fid | wc -l)
+	[ $pathnr -eq 1 ] || {
+	    $LFS fid2path $FSNAME $fid
+	    error "more than one path to dir"
+	}
+}
+run_test 418 "rename striped directory"
+
 prep_801() {
 	[[ $(lustre_version_code mds1) -lt $(version_code 2.9.55) ]] ||
 	[[ $(lustre_version_code ost1) -lt $(version_code 2.9.55) ]] &&
@@ -18613,32 +18640,125 @@ test_805() {
 }
 run_test 805 "ZFS can remove from full fs"
 
-test_806()
+# Size-on-MDS test
+check_lsom_data()
 {
-	[ $MDSCOUNT -lt 2 ] && skip "needs >= 2 MDTs" && return
-	mkdir $DIR/$tdir
-	test_mkdir -i 0 -c 2 $DIR/$tdir/dir
+	local file=$1
+	local size=$($LFS getsom -s $file)
+	local expect=$(stat -c %s $file)
 
-	mkdir $DIR/$tdir/tgt1
-	test_mkdir -i 1 -c 1 $DIR/$tdir/tgt2
+	[[ $size == $expect ]] ||
+		error "$file expected size: $expect, got: $size"
 
-	mkdir $DIR/$tdir/aux1
-	mkdir $DIR/$tdir/aux2
-
-	mv $DIR/$tdir/aux1 $DIR/$tdir/dir/ || error "rename aux1 failed"
-	mv $DIR/$tdir/aux2 $DIR/$tdir/dir/ || error "rename aux2 failed"
-
-	mv $DIR/$tdir/dir $DIR/$tdir/tgt1 || error "rename to tgt1 failed"
-	mv $DIR/$tdir/tgt1/dir $DIR/$tdir/tgt2 || error "rename to tgt2 failed"
-
-	local fid=$($LFS path2fid $DIR/$tdir/tgt2/dir | sed -e 's/[][]//g')
-	local pathnr=$($LFS fid2path $FSNAME $fid | wc -l)
-	[ $pathnr -eq 1 ] || {
-	    $LFS fid2path $FSNAME $fid
-	    error "more than one path to dir"
-	}
+	local blocks=$($LFS getsom -b $file)
+	expect=$(stat -c %b $file)
+	[[ $blocks == $expect ]] ||
+		error "$file expected blocks: $expect, got: $blocks"
 }
-run_test 806 "rename striped directory"
+
+check_lsom_size()
+{
+	local size=$($LFS getsom -s $1)
+	local expect=$2
+
+	[[ $size == $expect ]] ||
+		error "$file expected size: $expect, got: $size"
+}
+
+test_806() {
+	[ $(lustre_version_code $SINGLEMDS) -lt $(version_code 2.11.52) ] &&
+		skip "Need MDS version at least 2.11.52" && return
+
+	local bs=1048576
+
+	touch $DIR/$tfile || error "touch $tfile failed"
+
+	local save="$TMP/$TESTSUITE-$TESTNAME.parameters"
+	save_lustre_params client "llite.*.xattr_cache" > $save
+	lctl set_param llite.*.xattr_cache=0
+	stack_trap "restore_lustre_params < $save" EXIT
+
+	# single-threaded write
+	echo "Test SOM for single-threaded write"
+	dd if=/dev/zero of=$DIR/$tfile bs=$bs count=1 ||
+		error "write $tfile failed"
+	check_lsom_size $DIR/$tfile $bs
+
+	local num=32
+	local size=$(($num * $bs))
+	local offset=0
+	local i
+
+	echo "Test SOM for single client muti-threaded($num) write"
+	$TRUNCATE $DIR/$tfile 0
+	for ((i = 0; i < $num; i++)); do
+		$MULTIOP $DIR/$tfile Oz${offset}w${bs}c &
+		local pids[$i]=$!
+		offset=$((offset + $bs))
+	done
+	for (( i=0; i < $num; i++ )); do
+		wait ${pids[$i]}
+	done
+	check_lsom_size $DIR/$tfile $size
+
+	$TRUNCATE $DIR/$tfile 0
+	for ((i = 0; i < $num; i++)); do
+		offset=$((offset - $bs))
+		$MULTIOP $DIR/$tfile Oz${offset}w${bs}c &
+		local pids[$i]=$!
+	done
+	for (( i=0; i < $num; i++ )); do
+		wait ${pids[$i]}
+	done
+	check_lsom_size $DIR/$tfile $size
+
+	# multi-client wirtes
+	num=$(get_node_count ${CLIENTS//,/ })
+	size=$(($num * $bs))
+	offset=0
+	i=0
+
+	echo "Test SOM for muti-client ($num) writes"
+	$TRUNCATE $DIR/$tfile 0
+	for client in ${CLIENTS//,/ }; do
+		do_node $client $MULTIOP $DIR/$tfile Oz${offset}w${bs}c &
+		local pids[$i]=$!
+		i=$((i + 1))
+		offset=$((offset + $bs))
+	done
+	for (( i=0; i < $num; i++ )); do
+		wait ${pids[$i]}
+	done
+	check_lsom_size $DIR/$tfile $offset
+
+	i=0
+	$TRUNCATE $DIR/$tfile 0
+	for client in ${CLIENTS//,/ }; do
+		offset=$((offset - $bs))
+		do_node $client $MULTIOP $DIR/$tfile Oz${offset}w${bs}c &
+		local pids[$i]=$!
+		i=$((i + 1))
+	done
+	for (( i=0; i < $num; i++ )); do
+		wait ${pids[$i]}
+	done
+	check_lsom_size $DIR/$tfile $size
+
+	# verify truncate
+	echo "Test SOM for truncate"
+	$TRUNCATE $DIR/$tfile 1048576
+	check_lsom_size $DIR/$tfile 1048576
+	$TRUNCATE $DIR/$tfile 1234
+	check_lsom_size $DIR/$tfile 1234
+
+	# verify SOM blocks count
+	echo "Verify SOM block count"
+	$TRUNCATE $DIR/$tfile 0
+	$MULTIOP $DIR/$tfile oO_TRUNC:O_RDWR:w1048576YSc ||
+		error "failed to write file $tfile"
+	check_lsom_data $DIR/$tfile
+}
+run_test 806 "Verify Lazy Size on MDS"
 
 #
 # tests that do cleanup/setup should be run at the end
