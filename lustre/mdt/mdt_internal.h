@@ -489,6 +489,8 @@ struct cdt_req_progress {
 						 *   vectors */
 	int			 crp_cnt;	/**< # of used nodes */
 	int			 crp_max;	/**< # of allocated nodes */
+	__u8			 crp_status;	/**< Flag to indicate hsm
+						 * action is in progress */
 };
 
 struct cdt_agent_req {
@@ -504,6 +506,9 @@ struct cdt_agent_req {
 	struct hsm_action_item	*car_hai;          /**< req. to the agent */
 	struct cdt_req_progress	 car_progress;     /**< track data mvt
 						    *   progress */
+	/* wait queue for requests pending on a CT which is in process
+	 * of unregistering, mostly used in unregister path */
+	wait_queue_head_t	 car_waitq;
 };
 extern struct kmem_cache *mdt_hsm_car_kmem;
 
@@ -837,9 +842,7 @@ int mdt_hsm_agent_register_mask(struct mdt_thread_info *info,
 				const struct obd_uuid *uuid,
 				__u32 archive_mask);
 int mdt_hsm_agent_unregister(struct mdt_thread_info *info,
-					const struct obd_uuid *uuid);
-int mdt_hsm_agent_unregister_cancel_actions(struct mdt_thread_info *info,
-					const struct obd_uuid *uuid);
+	const struct obd_uuid *uuid, int cl_evicted, int cancel_ha_requests);
 int mdt_hsm_agent_update_statistics(struct coordinator *cdt,
 				    int succ_rq, int fail_rq, int new_rq,
 				    const struct obd_uuid *uuid);
@@ -848,7 +851,7 @@ int mdt_hsm_find_best_agent(struct coordinator *cdt, __u32 archive,
 int mdt_hsm_agent_send(struct mdt_thread_info *mti, struct hsm_action_list *hal,
 		       bool purge, int agent_unregistered);
 int hsm_cancel_all_actions(struct mdt_device *mdt,
-	const struct obd_uuid *uuid, int agent_unregistered);
+	const struct obd_uuid *uuid, int cl_evicted, int agent_unregistered);
 int mdt_hsm_coordinator_update(struct mdt_thread_info *mti,
 			       struct hsm_progress_kernel *pgs);
 /* mdt/mdt_hsm_cdt_client.c */

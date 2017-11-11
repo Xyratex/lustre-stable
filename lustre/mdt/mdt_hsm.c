@@ -165,35 +165,6 @@ out:
 	RETURN(rc);
 }
 
-/**
- * unregister a copy tool and cancel all hsm actions
- * enqueued on the copy tool. This is kind of wrapper
- * combined with mdt_hsm_agent_unregister() and
- * hsm_cancel_all_actions()
- * \param mti [IN] MDT context
- * \param uuid [IN] uuid to be unregistered
- * \retval 0 success
- * \retval -ve failure
- */
-int mdt_hsm_agent_unregister_cancel_actions(
-	struct mdt_thread_info *mti, const struct obd_uuid *uuid)
-{
-	struct mdt_device	*mdt = mti->mti_mdt;
-	int rc = 0;
-	ENTRY;
-
-	rc = mdt_hsm_agent_unregister(mti, uuid);
-	if (rc)
-		GOTO(out, rc);
-
-	rc = hsm_cancel_all_actions(mdt, uuid, 1);
-	if (rc)
-		GOTO(out, rc);
-out:
-	return rc;
-
-}
-
 int mdt_hsm_ct_unregister(struct tgt_session_info *tsi)
 {
 	struct mdt_thread_info	*info;
@@ -208,8 +179,9 @@ int mdt_hsm_ct_unregister(struct tgt_session_info *tsi)
 		GOTO(out, rc = -EPERM);
 
 	/* XXX: directly include this function here? */
-	rc = mdt_hsm_agent_unregister_cancel_actions(
-		info, &tsi->tsi_exp->exp_client_uuid);
+	/* 3rd arg = 0, client is not evicted
+	 * 4th arg = 1, call hsm_cancel_all_actions() */
+	rc = mdt_hsm_agent_unregister(info, &tsi->tsi_exp->exp_client_uuid, 0, 1);
 out:
 	mdt_thread_info_fini(info);
 	RETURN(rc);

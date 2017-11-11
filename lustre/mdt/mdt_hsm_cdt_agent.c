@@ -184,13 +184,17 @@ int mdt_hsm_agent_register_mask(struct mdt_thread_info *mti,
  * unregister a copy tool
  * \param mti [IN] MDT context
  * \param uuid [IN] uuid to be unregistered
+ * \param cl_evicted [IN] indicates client eviction
+ * if cl_evicted = 1, client got evicted and
+ * cl_evicted = 0, copy tool got killed, no eviction
  * \retval 0 success
  * \retval -ve failure
  */
 int mdt_hsm_agent_unregister(struct mdt_thread_info *mti,
-				const struct obd_uuid *uuid)
+	const struct obd_uuid *uuid, int cl_evicted, int cancel_ha_requests)
 {
 	struct coordinator	*cdt = &mti->mti_mdt->mdt_coordinator;
+	struct mdt_device	*mdt = mti->mti_mdt;
 	struct hsm_agent	*ha;
 	int			 rc = 0;
 	ENTRY;
@@ -213,6 +217,11 @@ int mdt_hsm_agent_unregister(struct mdt_thread_info *mti,
 	if (ha->ha_archive_cnt != 0)
 		OBD_FREE(ha->ha_archive_id,
 			 ha->ha_archive_cnt * sizeof(*ha->ha_archive_id));
+
+	/* 4th arg = 1, indicates copy tool agent is un registered
+	 * This is required to avoid double unregistration call */
+	if (cancel_ha_requests)
+		hsm_cancel_all_actions(mdt, uuid, cl_evicted, 1);
 
 	OBD_FREE_PTR(ha);
 
@@ -331,13 +340,10 @@ int mdt_hsm_agent_send(struct mdt_thread_info *mti,
 	struct hsm_action_list	*buf = NULL;
 	struct hsm_action_item	*hai;
 	struct obd_uuid		 uuid;
-	int			 len = 0, i, rc = 0;
+	int			 len, i, rc = 0;
 	bool			 fail_request;
 	bool			 is_registered = false;
 	ENTRY;
-
-	if (agent_unregistered)
-		goto out_cancel;
 
 	rc = mdt_hsm_find_best_agent(cdt, hal->hal_archive_id, &uuid);
 	if (rc) {
@@ -454,20 +460,19 @@ int mdt_hsm_agent_send(struct mdt_thread_info *mti,
 	if (fail_request)
 		GOTO(out_buf, rc = 0);
 
-out_cancel:
 	/* Cancel memory registration is useless for purge
 	 * non registration avoid a deadlock :
 	 * in case of failure we have to take the write lock
 	 * to remove entry which conflict with the read loack needed
 	 * by purge
 	 */
-	if (!purge || agent_unregistered) {
+	if (!purge) {
 		/* set is_registered even if failure because we may have
 		 * partial work done */
 		is_registered = true;
 		rc = mdt_hsm_add_hal(mti, hal, &uuid);
-		if (rc || agent_unregistered)
-			GOTO(out, rc);
+		if (rc)
+			GOTO(out_buf, rc);
 	}
 
 	/* Uses the ldlm reverse import; this rpc will be seen by
@@ -481,7 +486,10 @@ out_cancel:
 		CERROR("%s: agent uuid (%s) not found, unregistering:"
 		       " rc = %d\n",
 		       mdt_obd_name(mdt), obd_uuid2str(&uuid), rc);
-		mdt_hsm_agent_unregister(mti, &uuid);
+		if (!agent_unregistered)
+		/* 3rd arg = 0, client is not evicted
+		 * 4th arg = 0, dont call hsm_cancel_all_actions() */
+			mdt_hsm_agent_unregister(mti, &uuid, 0, 0);
 		GOTO(out, rc);
 	}
 
@@ -501,11 +509,14 @@ out_cancel:
 	if (rc == -EPIPE) {
 		CDEBUG(D_HSM, "Lost connection to agent '%s', unregistering\n",
 		       obd_uuid2str(&uuid));
-		mdt_hsm_agent_unregister(mti, &uuid);
+		if (!agent_unregistered)
+		/* 3rd arg = 0, client is not evicted
+		 * 4th arg = 0, dont call hsm_cancel_all_actions() */
+			mdt_hsm_agent_unregister(mti, &uuid, 0, 0);
 	}
 
 out:
-	if (rc != 0 && is_registered) {
+	if (rc != 0 && (is_registered || agent_unregistered)) {
 		/* in case of error, we have to unregister requests */
 		hai = hai_first(hal);
 		for (i = 0; i < hal->hal_count; i++, hai = hai_next(hai)) {
@@ -516,7 +527,7 @@ out:
 	}
 
 out_buf:
-	if (buf != NULL && buf != hal)
+	if (buf != hal)
 		kuc_free(buf, len);
 
 	RETURN(rc);
