@@ -179,9 +179,7 @@ int mdt_hsm_ct_unregister(struct tgt_session_info *tsi)
 		GOTO(out, rc = -EPERM);
 
 	/* XXX: directly include this function here? */
-	/* 3rd arg = 0, client is not evicted
-	 * 4th arg = 1, call hsm_cancel_all_actions() */
-	rc = mdt_hsm_agent_unregister(info, &tsi->tsi_exp->exp_client_uuid, 0, 1);
+	rc = mdt_hsm_agent_unregister(info, &tsi->tsi_exp->exp_client_uuid);
 out:
 	mdt_thread_info_fini(info);
 	RETURN(rc);

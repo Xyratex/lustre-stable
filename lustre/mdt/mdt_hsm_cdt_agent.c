@@ -184,19 +184,15 @@ int mdt_hsm_agent_register_mask(struct mdt_thread_info *mti,
  * unregister a copy tool
  * \param mti [IN] MDT context
  * \param uuid [IN] uuid to be unregistered
- * \param cl_evicted [IN] indicates client eviction
- * if cl_evicted = 1, client got evicted and
- * cl_evicted = 0, copy tool got killed, no eviction
  * \retval 0 success
  * \retval -ve failure
  */
 int mdt_hsm_agent_unregister(struct mdt_thread_info *mti,
-	const struct obd_uuid *uuid, int cl_evicted, int cancel_ha_requests)
+			     const struct obd_uuid *uuid)
 {
 	struct coordinator	*cdt = &mti->mti_mdt->mdt_coordinator;
-	struct mdt_device	*mdt = mti->mti_mdt;
 	struct hsm_agent	*ha;
-	int			 rc = 0;
+	int			 rc;
 	ENTRY;
 
 	/* no coordinator started, so we cannot serve requests */
@@ -217,12 +213,6 @@ int mdt_hsm_agent_unregister(struct mdt_thread_info *mti,
 	if (ha->ha_archive_cnt != 0)
 		OBD_FREE(ha->ha_archive_id,
 			 ha->ha_archive_cnt * sizeof(*ha->ha_archive_id));
-
-	/* 4th arg = 1, indicates copy tool agent is un registered
-	 * This is required to avoid double unregistration call */
-	if (cancel_ha_requests)
-		hsm_cancel_all_actions(mdt, uuid, cl_evicted, 1);
-
 	OBD_FREE_PTR(ha);
 
 	GOTO(out, rc = 0);
@@ -320,9 +310,6 @@ int mdt_hsm_find_best_agent(struct coordinator *cdt, __u32 archive,
  * \param mti [IN] context
  * \param hal [IN] request (can be a kuc payload)
  * \param purge [IN] purge mode (no record)
- * \param agent_unregistered [IN] unregistartion state
- * agent_unregistered = 1, already unregistered
- * agent_unregistered = 0, Yet to be unregistered
  * \retval 0 success
  * \retval -ve failure
  * This function supposes:
@@ -332,7 +319,7 @@ int mdt_hsm_find_best_agent(struct coordinator *cdt, __u32 archive,
  *  before when building the hal
  */
 int mdt_hsm_agent_send(struct mdt_thread_info *mti,
-	struct hsm_action_list *hal, bool purge, int agent_unregistered)
+		       struct hsm_action_list *hal, bool purge)
 {
 	struct obd_export	*exp;
 	struct mdt_device	*mdt = mti->mti_mdt;
@@ -486,10 +473,7 @@ int mdt_hsm_agent_send(struct mdt_thread_info *mti,
 		CERROR("%s: agent uuid (%s) not found, unregistering:"
 		       " rc = %d\n",
 		       mdt_obd_name(mdt), obd_uuid2str(&uuid), rc);
-		if (!agent_unregistered)
-		/* 3rd arg = 0, client is not evicted
-		 * 4th arg = 0, dont call hsm_cancel_all_actions() */
-			mdt_hsm_agent_unregister(mti, &uuid, 0, 0);
+		mdt_hsm_agent_unregister(mti, &uuid);
 		GOTO(out, rc);
 	}
 
@@ -509,14 +493,11 @@ int mdt_hsm_agent_send(struct mdt_thread_info *mti,
 	if (rc == -EPIPE) {
 		CDEBUG(D_HSM, "Lost connection to agent '%s', unregistering\n",
 		       obd_uuid2str(&uuid));
-		if (!agent_unregistered)
-		/* 3rd arg = 0, client is not evicted
-		 * 4th arg = 0, dont call hsm_cancel_all_actions() */
-			mdt_hsm_agent_unregister(mti, &uuid, 0, 0);
+		mdt_hsm_agent_unregister(mti, &uuid);
 	}
 
 out:
-	if (rc != 0 && (is_registered || agent_unregistered)) {
+	if (rc != 0 && is_registered) {
 		/* in case of error, we have to unregister requests */
 		hai = hai_first(hal);
 		for (i = 0; i < hal->hal_count; i++, hai = hai_next(hai)) {

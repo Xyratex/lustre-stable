@@ -546,9 +546,8 @@ static int mdt_coordinator(void *data)
 			}
 			memcpy(hal, hsd.request[i].hal,
 			       hsd.request[i].hal_used_sz);
-			/* 4th arg = 0, which indicates copy tool
-			 * yet to be un-registered */
-			rc = mdt_hsm_agent_send(mti, hal, 0, 0);
+
+			rc = mdt_hsm_agent_send(mti, hal, 0);
 			/* if failure, we suppose it is temporary
 			 * if the copy tool failed to do the request
 			 * it has to use hsm_progress
@@ -1181,9 +1180,9 @@ out:
  * \retval -ve failure
  */
 static int hsm_cdt_request_completed(struct mdt_thread_info *mti,
-				struct hsm_progress_kernel *pgs,
-				struct cdt_agent_req *car,
-				enum agent_req_status *status)
+				     struct hsm_progress_kernel *pgs,
+				     const struct cdt_agent_req *car,
+				     enum agent_req_status *status)
 {
 	const struct lu_env	*env = mti->mti_env;
 	struct mdt_device	*mdt = mti->mti_mdt;
@@ -1384,15 +1383,6 @@ unlock:
 	GOTO(out, rc);
 
 out:
-	/* Unregister copytool(CT) process is waiting on hai_waitq.
-	 * We should complete the hsm action running on a CT and
-	 * then unregister the CT if there is no other CT running
-	 * with same archive ID. This will make sure the process
-	 * eg: md5sum on archived and release file will not be
-	 * be stuck till time out*/
-	car->car_progress.crp_status = 0;
-	wake_up(&car->car_waitq);
-
 	if (obj != NULL && !IS_ERR(obj)) {
 		mo_changelog(env, CL_HSM, cl_flags,
 			     mdt_object_child(obj));
@@ -1571,11 +1561,8 @@ static int mdt_cancel_all_cb(const struct lu_env *env,
 /**
  * cancel all actions
  * \param obd [IN] MDT device
- * \param cl_evicted = 1, client evicted, cancel the requests
- * \param agent_unregistered = 1, already un registered
  */
-int hsm_cancel_all_actions(struct mdt_device *mdt,
-	const struct obd_uuid *uuid, int cl_evicted, int agent_unregistered)
+static int hsm_cancel_all_actions(struct mdt_device *mdt)
 {
 	struct mdt_thread_info		*mti;
 	struct coordinator		*cdt = &mdt->mdt_coordinator;
@@ -1583,11 +1570,8 @@ int hsm_cancel_all_actions(struct mdt_device *mdt,
 	struct hsm_action_list		*hal = NULL;
 	struct hsm_action_item		*hai;
 	struct hsm_cancel_all_data	 hcad;
-	int				 hal_sz = 0, hal_len, rc = 0;
+	int				 hal_sz = 0, hal_len, rc;
 	enum cdt_states			 save_state;
-	struct mdt_object		*obj = NULL;
-	struct md_hsm			 mh;
-
 	ENTRY;
 
 	/* retrieve coordinator context */
@@ -1604,10 +1588,6 @@ int hsm_cancel_all_actions(struct mdt_device *mdt,
 		/* request is not yet removed from list, it will be done
 		 * when copytool will return progress
 		 */
-
-		if (uuid != NULL &&
-			!obd_uuid_equals(&car->car_uuid, uuid))
-				continue;
 
 		if (car->car_hai->hai_action == HSMA_CANCEL) {
 			mdt_cdt_put_request(car);
@@ -1649,65 +1629,15 @@ int hsm_cancel_all_actions(struct mdt_device *mdt,
 		hai->hai_action = HSMA_CANCEL;
 		hal->hal_count = 1;
 
-		/* Give back the lay out lock in case of below condition */
-		if (cl_evicted &&
-			car->car_hai->hai_action == HSMA_RESTORE) {
-
-			struct cdt_restore_handle	*crh;
-
-			/* find object by FID */
-			obj = mdt_hsm_get_md_hsm(mti, &car->car_hai->hai_fid, &mh);
-			if (IS_ERR(obj))
-				/* object removed */
-				goto out;
-
-			mutex_lock(&cdt->cdt_restore_lock);
-			crh = mdt_hsm_restore_hdl_find(cdt,
-						       &car->car_hai->hai_fid);
-			if (crh != NULL)
-				list_del(&crh->crh_list);
-			mutex_unlock(&cdt->cdt_restore_lock);
-
-			/* just give back layout lock, and put down
-			 * put down the obj ref count at goto out;
-			 */
-			if (!IS_ERR(obj) && crh != NULL)
-				mdt_object_unlock(mti, obj, &crh->crh_lh, 1);
-
-			if (crh != NULL)
-				OBD_SLAB_FREE_PTR(crh, mdt_hsm_cdt_kmem);
-		}
-		/* 1. it is possible to safely call mdt_hsm_agent_send()
+		/* it is possible to safely call mdt_hsm_agent_send()
 		 * (ie without a deadlock on cdt_request_lock), because the
 		 * write lock is taken only if we are not in purge mode
 		 * (mdt_hsm_agent_send() does not call mdt_cdt_add_request()
-		 *  nor mdt_cdt_remove_request())
-		 *
-		 * 2. no conflict with cdt thread because cdt is disable and we
-		 * have the request lock
-		 *
-		 * 3. If it is called from unregister path then do not
-		 * unregister again. This happens in case of a specific
-		 * agent.
+		 *   nor mdt_cdt_remove_request())
 		 */
-		rc = mdt_hsm_agent_send(mti, hal, 1, agent_unregistered);
-		/* 1. Wait for the hsm operation to complete. Otherwise
-		 * process waiting on it will get hung.
-		 * ex: Operation "md5sum" on released file requires
-		 * file to be restored.
-		 *
-		 * 2. Dont wait if client is evicted as there is no
-		 * copytool exists to complete the hsm operation
-		 *
-		 * 3. rc < 0 is not considered in the below comparison
-		 * as "HSMA_CANCEL" is not yet designed/coded. So
-		 * even in case of rc == 0, cancel request would not
-		 * be processed. Please do the reqd when HSMA_CANCEL
-		 * is implemented
-		 */
-		if (uuid != NULL && !cl_evicted)
-			l_wait_condition(car->car_waitq,
-				car->car_progress.crp_status == 0);
+		/* no conflict with cdt thread because cdt is disable and we
+		 * have the request lock */
+		mdt_hsm_agent_send(mti, hal, 1);
 
 		mdt_cdt_put_request(car);
 	}
@@ -1722,11 +1652,6 @@ int hsm_cancel_all_actions(struct mdt_device *mdt,
 	rc = cdt_llog_process(mti->mti_env, mti->mti_mdt,
 			      mdt_cancel_all_cb, &hcad);
 out:
-	/* Put down the obj ref count, normally incase
-	 * of evicted client and for restore operation */
-	if (obj != NULL && !IS_ERR(obj))
-		mdt_object_put(mti->mti_env, obj);
-
 	/* enable coordinator */
 	cdt->cdt_state = save_state;
 
@@ -2041,10 +1966,7 @@ mdt_hsm_cdt_control_seq_write(struct file *file, const char __user *buffer,
 			cdt->cdt_state = CDT_DISABLE;
 		}
 	} else if (strcmp(kernbuf, CDT_PURGE_CMD) == 0) {
-	/* 3rd arg = 0 indicates client is not evicted
-	 * 4th arg = 0 indicates CT agent yet to be unregistered
-	 */
-		rc = hsm_cancel_all_actions(mdt, NULL, 0, 0);
+		rc = hsm_cancel_all_actions(mdt);
 	} else if (strcmp(kernbuf, CDT_HELP_CMD) == 0) {
 		usage = 1;
 	} else {
