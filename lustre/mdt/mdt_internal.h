@@ -50,7 +50,6 @@
 
 
 #include <libcfs/lucache.h>
-#include <lustre_net.h>
 #include <lustre/lustre_idl.h>
 #include <obd_class.h>
 #include <lustre_disk.h>
@@ -139,7 +138,7 @@ static inline char *cdt_mdt_state2str(int state)
  */
 struct coordinator {
 	wait_queue_head_t	 cdt_waitq;	     /**< cdt wait queue */
-	unsigned int		 cdt_flags;	     /**< cdt event flags */
+	bool			 cdt_event;	     /**< coordinator event */
 	struct lu_env		 cdt_env;	     /**< coordinator lustre
 						      * env */
 	struct lu_context	 cdt_session;	     /** session for lu_ucred */
