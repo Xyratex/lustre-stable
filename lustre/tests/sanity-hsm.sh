@@ -4192,6 +4192,41 @@ test_251() {
 }
 run_test 251 "Coordinator request timeout"
 
+test_253() {
+	local rc
+	# test needs a running copytool
+	copytool_setup
+
+	mkdir -p $DIR/$tdir
+	local f=$DIR/$tdir/$tfile
+
+	dd if=/dev/zero of=$f bs=1MB count=10
+	local fid=$(path2fid $f)
+
+	$LFS hsm_archive $f || error "could not archive file"
+	wait_request_state $fid ARCHIVE SUCCEED
+
+	# clear locks to discard inode data
+	cancel_lru_locks osc
+
+	#define OBD_FAIL_MDC_MERGE              0x807
+	$LCTL set_param fail_loc=0x807
+
+	#expect error here, instead of release with wrong size
+	$LFS hsm_release $f
+	rc=$?
+	if ((rc == 0)); then
+		file_size=$(stat -c '%s' $f)
+		if ((file_size != 10485760)); then
+			error "Wrong file size after hsm_release"
+		fi
+	else
+		echo "could not release file"
+	fi
+	copytool_cleanup
+}
+run_test 253 "Check for wrong file size after release"
+
 test_300() {
 	[ "$CLIENTONLY" ] && skip "CLIENTONLY mode" && return
 
