@@ -2114,8 +2114,13 @@ int ll_hsm_release(struct inode *inode)
 	if (IS_ERR(env))
 		GOTO(out, rc = PTR_ERR(env));
 
-	ll_merge_lvb(env, inode);
+	rc = ll_merge_lvb(env, inode);
 	cl_env_nested_put(&nest, env);
+
+	/* If error happen, we have the wrong size for a file.
+	 * Don't release it. */
+	if (rc != 0)
+		GOTO(out, rc);
 
 	/* Release the file.
 	 * NB: lease lock handle is released in mdc_hsm_release_pack() because
