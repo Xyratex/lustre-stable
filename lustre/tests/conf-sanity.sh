@@ -5751,7 +5751,7 @@ test_105()
 run_test 105 "check failover after replace_nids"
 
 test_106() {
-	local repeat=5
+	local repeat=3
 
 	reformat
 	setupall
@@ -5760,7 +5760,7 @@ test_106() {
 #define OBD_FAIL_CAT_RECORDS                        0x1313
 	do_facet mds1 $LCTL set_param fail_loc=0x1313 fail_val=$repeat
 
-	for ((i = 1; i <= $repeat; i++)); do
+	for ((i = 0; i <= $repeat; i++)); do
 
 		#one full plain llog
 		createmany -o $DIR/$tdir/f- 64768

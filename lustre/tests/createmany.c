@@ -95,7 +95,7 @@ int main(int argc, char ** argv)
                 end = end + time(NULL);
         }
 
-        while ((c = getopt(argc, argv, "omdl:r:")) != -1) {
+        while ((c = getopt(argc, argv, "omdl:r::u::")) != -1) {
                 switch(c) {
                 case 'o':
                         do_open++;
@@ -111,6 +111,7 @@ int main(int argc, char ** argv)
                         tgt = optarg;
                         break;
                 case 'r':
+                case 'u':
                         do_unlink++;
                         fmt_unlink = optarg;
                         break;
@@ -120,7 +121,7 @@ int main(int argc, char ** argv)
                 }
         }
 
-        if (do_open + do_mkdir + do_link + do_mknod != 1 ||
+        if (do_open + do_mkdir + do_link + do_mknod +do_unlink != 1 ||
             do_unlink > 1)
                 usage(argv[0]);
 
@@ -141,7 +142,7 @@ int main(int argc, char ** argv)
         start = last = now();
 
         has_fmt_spec = strchr(fmt, '%') != NULL;
-        if (do_unlink)
+        if (fmt_unlink)
                 unlink_has_fmt_spec = strchr(fmt_unlink, '%') != NULL;
 
         for (i = 0; i < count && time(NULL) < end; i++, begin++) {
@@ -171,7 +172,7 @@ int main(int argc, char ** argv)
                                 rc = errno;
                                 break;
                         }
-                } else {
+                } else if (do_mknod) {
                         rc = mknod(filename, S_IFREG| 0444, 0);
                         if (rc) {
                                 printf("mknod(%s) error: %s\n",
@@ -181,8 +182,9 @@ int main(int argc, char ** argv)
                         }
                 }
                 if (do_unlink) {
-                        filename = get_file_name(fmt_unlink, begin,
-                                      unlink_has_fmt_spec);
+			if (fmt_unlink)
+				filename = get_file_name(fmt_unlink, begin,
+							 unlink_has_fmt_spec);
                         rc = do_mkdir ? rmdir(filename) : unlink(filename);
                         if (rc) {
                                 printf("unlink(%s) error: %s\n",
