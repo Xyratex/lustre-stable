@@ -1665,6 +1665,8 @@ again:
 			cfs_hash_put(hs, next);
 			next  = NULL;
 		}
+		if (rc != 0)
+			break;
         }
 
 	if (start > 0 && rc == 0) {
