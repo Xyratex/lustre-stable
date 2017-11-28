@@ -1058,7 +1058,7 @@ static int mdt_hsm_cdt_start(struct mdt_device *mdt)
 	if (IS_ERR(task)) {
 		rc = PTR_ERR(task);
 		set_cdt_state(cdt, CDT_STOPPED, NULL);
-		OBD_FREE(thread_data.request, request_sz);
+		OBD_FREE_LARGE(thread_data.request, request_sz);
 		CERROR("%s: error starting coordinator thread: %d\n",
 		       mdt_obd_name(mdt), rc);
 	} else {
