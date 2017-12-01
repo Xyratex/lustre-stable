@@ -7063,6 +7063,19 @@ wait_dne_interconnect() {
 	fi
 }
 
+reconnect_ost() {
+	local ostidx=$1
+	local ostname=$($LFS osts | grep -e "^$ostidx:" |
+		  awk '{sub("_UUID", "", $2); print $2;}')
+	#assume one client
+	local ostcli=$($LCTL dl | grep "${ostname}-osc-f" | awk '{print $4;}')
+	local conn_uuid=$($LCTL get_param -n osc.${ostcli}.ost_conn_uuid)
+	local oscpath="osc.${ostcli}.import=connection=${conn_uuid}"
+
+	$LCTL set_param "${oscpath}"
+	wait_osc_import_state client ost$((ostidx + 1)) FULL
+}
+
 get_clientmdc_proc_path() {
     echo "${1}-mdc-*"
 }

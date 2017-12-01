@@ -2502,6 +2502,7 @@ out_lock:
 	if (desc)
 		ptlrpc_free_bulk(desc);
 out:
+	CFS_FAIL_TIMEOUT(OBD_FAIL_PTLRPC_BULK_REPLY, cfs_fail_val);
 	if (unlikely(no_reply || (exp->exp_obd->obd_no_transno && wait_sync))) {
 		req->rq_no_reply = 1;
 		/* reply out callback would free */

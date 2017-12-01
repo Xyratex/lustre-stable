@@ -434,6 +434,26 @@ test_10() {
 }
 run_test 10 "conflicting PW & PR locks on a client"
 
+test_11() {
+	local file=$TDIR/$tfile
+	local ostidx=1
+
+	rm -f $file
+	$LFS setstripe -c 1 -i $ostidx $file || error "Unable to lfs setstripe"
+
+	#define OBD_FAIL_PTLRPC_BULK_REPLY       0x524
+	do_facet ost$((ostidx + 1)) $LCTL set_param fail_val=5 fail_loc=0x524
+	$LCTL set_param fail_loc=0x524
+	dd if=/dev/zero of=$file bs=1k count=1 conv=fdatasync &
+	sleep 1
+
+	reconnect_ost $ostidx
+
+	wait
+	rm -f $file
+}
+run_test 11 "delayed reply on client"
+
 complete $SECONDS
 check_and_cleanup_lustre
 exit_status
