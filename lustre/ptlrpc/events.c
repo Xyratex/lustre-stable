@@ -114,6 +114,10 @@ void reply_in_callback(struct lnet_event *ev)
                 DEBUG_REQ(D_NET, req, "unlink");
                 goto out_wake;
         }
+	if (req->rq_bulk && req->rq_resend) {
+		DEBUG_REQ(D_NET, req, "late reply");
+		goto out_wake;
+	}
 
         if (ev->mlength < ev->rlength ) {
                 CDEBUG(D_RPCTRACE, "truncate req %p rpc %d - %d+%d\n", req,
