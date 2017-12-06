@@ -426,7 +426,13 @@ test_5b() {
 	fi
 
 	[ -d $MOUNT ] || mkdir -p $MOUNT
+
+	# tune lcfg_log_start_timeout to reduce expected timeout of mount_client
+	local timeout_saved=$(cat /sys/module/mgc/parameters/lcfg_log_start_timeout)
+	echo $TIMEOUT > /sys/module/mgc/parameters/lcfg_log_start_timeout
 	mount_client $MOUNT && rc=1
+	echo $timeout_saved > /sys/module/mgc/parameters/lcfg_log_start_timeout
+
 	grep " $MOUNT " /etc/mtab && \
 		error "$MOUNT entry in mtab after failed mount" && rc=11
 	umount_client $MOUNT
@@ -1347,8 +1353,12 @@ test_30b() {
 run_test 30b "Remove failover nids"
 
 test_31() { # bug 10734
+	# tune lcfg_log_start_timeout to reduce expected timeout of mount_client
+	local timeout_saved=$(cat /sys/module/mgc/parameters/lcfg_log_start_timeout)
+	echo $TIMEOUT > /sys/module/mgc/parameters/lcfg_log_start_timeout
 	# ipaddr must not exist
 	$MOUNT_CMD 4.3.2.1@tcp:/lustre $MOUNT || true
+	echo $timeout_saved > /sys/module/mgc/parameters/lcfg_log_start_timeout
 	cleanup
 }
 run_test 31 "Connect to non-existent node (shouldn't crash)"

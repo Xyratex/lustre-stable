@@ -1047,7 +1047,7 @@ static int mgc_blocking_ast(struct ldlm_lock *lock, struct ldlm_lock_desc *desc,
 /* Not sure where this should go... */
 /* This is the timeout value for MGS_CONNECT request plus a ping interval, such
  * that we can have a chance to try the secondary MGS if any. */
-#define  MGC_ENQUEUE_LIMIT (INITIAL_CONNECT_TIMEOUT + (AT_OFF ? 0 : at_min) \
+#define  MGC_CONNECT_LIMIT (INITIAL_CONNECT_TIMEOUT + (AT_OFF ? 0 : at_min) \
 				+ PING_INTERVAL)
 #define  MGC_TARGET_REG_LIMIT 10
 #define  MGC_SEND_PARAM_LIMIT 10
@@ -2085,7 +2085,12 @@ struct obd_ops mgc_obd_ops = {
 int __init mgc_init(void)
 {
 	if (lcfg_log_start_timeout == 0)
-		lcfg_log_start_timeout = 2 * MGC_ENQUEUE_LIMIT;
+		/*
+		 * have the timeout to cover connect and reconnect to
+		 * MSG and enqueue completion timeout which is 3 *
+		 * at_max as defined by ldlm_cp_timeout()
+		 */
+		lcfg_log_start_timeout = 2 * MGC_CONNECT_LIMIT + 3 * at_max;
 	return class_register_type(&mgc_obd_ops, NULL, true, NULL,
 				   LUSTRE_MGC_NAME, NULL);
 }
