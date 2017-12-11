@@ -13217,6 +13217,34 @@ test_261() {
 }
 run_test 261 "signal vs resend race"
 
+test_275() {
+	local file=$DIR/$tfile
+	local oss
+
+	oss=$(comma_list $(osts_nodes))
+
+	dd if=/dev/urandom of=$file bs=1M count=2
+	cancel_lru_locks osc
+
+	#lock 1
+	dd if=$file of=/dev/null bs=1M count=1 iflag=direct
+
+#define OBD_FAIL_LDLM_PAUSE_CANCEL2      0x31f
+	$LCTL set_param fail_loc=0x8000031f
+
+	cancel_lru_locks osc &
+	sleep 1
+
+#define OBD_FAIL_LDLM_PROLONG_PAUSE      0x32b
+	do_nodes $oss $LCTL set_param fail_loc=0x8000032b
+	#IO takes another lock, but matches the PENDING one
+        #and places it to the IO RPC
+	dd of=/dev/null if=$file bs=1M count=1 iflag=direct
+
+	return
+}
+run_test 275 "Read on a canceled duplicate lock"
+
 #LU-4825
 test_311() {
 	[ $(lustre_version_code $SINGLEMDS) -lt $(version_code 2.8.54) ] &&
