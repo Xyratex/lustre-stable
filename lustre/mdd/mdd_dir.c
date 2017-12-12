@@ -3463,28 +3463,6 @@ static int mdd_update_linkea_internal(const struct lu_env *env,
 		       PNAME(&lname), PFID(mdd_object_fid(mdd_tobj)));
 
 		if (declare) {
-			/* Remove source name from source directory */
-			/* Insert new fid with target name into target dir */
-			rc = mdo_declare_index_delete(env, pobj, lname.ln_name,
-						      handle);
-			if (rc != 0)
-				GOTO(next_put, rc);
-
-			rc = mdo_declare_index_insert(env, pobj,
-					mdd_object_fid(mdd_tobj),
-					mdd_object_type(mdd_tobj),
-					lname.ln_name, handle);
-			if (rc != 0)
-				GOTO(next_put, rc);
-
-			rc = mdo_declare_ref_add(env, mdd_tobj, handle);
-			if (rc)
-				GOTO(next_put, rc);
-
-			rc = mdo_declare_ref_del(env, mdd_sobj, handle);
-			if (rc)
-				GOTO(next_put, rc);
-		} else {
 			char *tmp_name = info->mti_key;
 
 			if (lname.ln_namelen >= sizeof(info->mti_key)) {
@@ -3512,6 +3490,36 @@ static int mdd_update_linkea_internal(const struct lu_env *env,
 			if (rc < 0 || !lu_fid_eq(&info->mti_fid,
 						 mdd_object_fid(mdd_sobj)))
 				GOTO(next_put, rc == -ENOENT ? 0 : rc);
+
+			/* Remove source name from source directory */
+			/* Insert new fid with target name into target dir */
+			rc = mdo_declare_index_delete(env, pobj, lname.ln_name,
+						      handle);
+			if (rc != 0)
+				GOTO(next_put, rc);
+
+			rc = mdo_declare_index_insert(env, pobj,
+					mdd_object_fid(mdd_tobj),
+					mdd_object_type(mdd_tobj),
+					lname.ln_name, handle);
+			if (rc != 0)
+				GOTO(next_put, rc);
+
+			rc = mdo_declare_ref_add(env, mdd_tobj, handle);
+			if (rc)
+				GOTO(next_put, rc);
+
+			rc = mdo_declare_ref_del(env, mdd_sobj, handle);
+			if (rc)
+				GOTO(next_put, rc);
+		} else {
+			char *tmp_name = info->mti_key;
+
+			/* Note: lname might be without \0 at the end, see
+			 * linkea_entry_unpack(), let's add extra \0 by
+			 * snprintf */
+			snprintf(tmp_name, sizeof(info->mti_key), "%.*s",
+				 lname.ln_namelen, lname.ln_name);
 
 			rc = __mdd_index_delete(env, pobj, tmp_name, 0, handle);
 			if (rc != 0)
