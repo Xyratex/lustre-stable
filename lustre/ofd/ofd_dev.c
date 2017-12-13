@@ -1723,10 +1723,14 @@ static void ofd_prolong_extent_locks(struct tgt_session_info *tsi,
 				LASSERT(lock->l_export == data->export);
 				ldlm_lock_prolong_one(lock, data);
 				LDLM_LOCK_PUT(lock);
-				RETURN_EXIT;
+				if (data->locks_cnt > 0)
+					RETURN_EXIT;
+				/* The lock was destroyed probably lets try
+				 * resource tree. */
+			} else {
+				lock->l_last_used = cfs_time_current();
+				LDLM_LOCK_PUT(lock);
 			}
-			lock->l_last_used = cfs_time_current();
-			LDLM_LOCK_PUT(lock);
 		}
 	}
 	ldlm_resource_prolong(data);
