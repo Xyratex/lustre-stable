@@ -1711,6 +1711,7 @@ static int mdt_getattr_name_lock(struct mdt_thread_info *info,
 				RETURN(rc);
 		}
 
+		OBD_FAIL_TIMEOUT(OBD_FAIL_MDS_STAT_DELAY, 10);
                 /* step 2: lookup child's fid by name */
                 fid_zero(child_fid);
 		rc = mdo_lookup(info->mti_env, mdt_object_child(parent), lname,

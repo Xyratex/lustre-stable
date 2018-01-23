@@ -248,6 +248,8 @@ extern char obd_jobid_var[];
 #define OBD_FAIL_MDS_TRACK_OVERFLOW	 0x162
 #define OBD_FAIL_MDS_LOV_CREATE_RACE	 0x163
 #define OBD_FAIL_MDS_HSM_CDT_DELAY	 0x164
+#define OBD_FAIL_MDS_STAT_DELAY	 	 0x165
+#define OBD_FAIL_MDS_LINKEA_DELAY 	 0x166
 
 /* layout lock */
 #define OBD_FAIL_MDS_NO_LL_GETATTR	 0x170

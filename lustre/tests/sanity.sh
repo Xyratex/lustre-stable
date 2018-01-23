@@ -17591,6 +17591,37 @@ test_319() {
 }
 run_test 319 "lost lease lock on migrate error"
 
+test_318() {
+	[ $MDSCOUNT -lt 2 ] && skip "needs >= 2 MDTs" && return 0
+
+	rm -rf $DIR/$tdir
+	mkdir -p $DIR/$tdir
+
+	local mdir_parent=$DIR/$tdir/d1
+	local mdir=$mdir_parent/d2
+	local mfile=$mdir/file
+	local hlink=$mdir_parent/hardlink
+
+	$LFS mkdir -i1 $mdir_parent || error "mkdir $mdir_parent fails"
+	$LFS mkdir -i0 $mdir || error "mkdir $mdir fails"
+
+	touch $mfile
+	ln $mfile $hlink
+
+	cancel_lru_locks mdc
+	ls $mdir_parent
+
+#define OBD_FAIL_MDS_LINKEA_DELAY 	 0x166
+	do_facet mds1 $LCTL set_param fail_loc=0x166
+	$LFS mv -m1 $mdir &
+
+	sleep 1
+	stat $mdir
+
+	wait
+}
+run_test 318 "migrate vs stat deadlock"
+
 test_fake_rw() {
 	local read_write=$1
 	if [ "$read_write" = "write" ]; then

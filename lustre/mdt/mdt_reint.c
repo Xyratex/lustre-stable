@@ -1499,6 +1499,10 @@ again:
 			GOTO(out, rc = -ENOMEM);
 		}
 
+
+		CFS_FAIL_TIMEOUT_RESET(OBD_FAIL_MDS_LINKEA_DELAY,
+				       OBD_FAIL_MDS_STAT_DELAY|OBD_FAIL_ONCE,
+				       5);
 		/* Since this needs to lock all of objects in linkea, to avoid
 		 * deadlocks, because it does not follow parent-child order as
 		 * other MDT operation, let's use try_lock here and if the lock
