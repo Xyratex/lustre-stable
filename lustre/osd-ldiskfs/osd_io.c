@@ -48,6 +48,8 @@
 #include <linux/types.h>
 /* prerequisite for linux/xattr.h */
 #include <linux/fs.h>
+#include <linux/mm.h>
+#include <linux/pagevec.h>
 
 /*
  * struct OBD_{ALLOC,FREE}*()
@@ -464,17 +466,24 @@ struct page *osd_get_page(struct dt_object *dt, loff_t offset, int rw)
 static int osd_bufs_put(const struct lu_env *env, struct dt_object *dt,
 			struct niobuf_local *lnb, int npages)
 {
+	struct pagevec pvec;
 	int i;
+
+	pagevec_init(&pvec, 0);
 
 	for (i = 0; i < npages; i++) {
 		if (lnb[i].lnb_page == NULL)
 			continue;
 		LASSERT(PageLocked(lnb[i].lnb_page));
 		unlock_page(lnb[i].lnb_page);
-		page_cache_release(lnb[i].lnb_page);
+		if (pagevec_add(&pvec, lnb[i].lnb_page) == 0)
+			pagevec_release(&pvec);
 		lu_object_put(env, &dt->do_lu);
 		lnb[i].lnb_page = NULL;
 	}
+
+	/* Release any partial pagevec */
+	pagevec_release(&pvec);
 
 	RETURN(0);
 }
