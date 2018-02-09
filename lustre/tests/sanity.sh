@@ -13250,6 +13250,25 @@ test_275() {
 }
 run_test 275 "Read on a canceled duplicate lock"
 
+test_276() {
+	remote_ost_nodsh && skip "remote OST with nodsh" && return
+	local pid
+
+	do_facet ost1 "(while true; do \
+		$LCTL get_param obdfilter.*.filesfree > /dev/null 2>&1; \
+		done) & pid=\\\$!; echo \\\$pid > $TMP/sanity_276_pid" &
+	pid=$!
+
+	for LOOP in $(seq 20); do
+		stop ost1
+		start ost1 $(ostdevname 1) $OST_MOUNT_OPTS
+	done
+	kill -9 $pid
+	do_facet ost1 "pid=\\\$(cat $TMP/sanity_276_pid); kill -9 \\\$pid; \
+		rm $TMP/sanity_276_pid"
+}
+run_test 276 "Race between mount and obd_statfs"
+
 test_280() {
 	remote_ost_nodsh && skip "remote OST with nodsh" && return
 	local before=`date +%s`

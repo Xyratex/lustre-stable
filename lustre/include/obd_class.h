@@ -1212,6 +1212,8 @@ static inline int obd_statfs(const struct lu_env *env, struct obd_export *exp,
         if (obd == NULL)
                 RETURN(-EINVAL);
 
+	OBD_CHECK_DEV_ACTIVE(obd);
+
         OBD_CHECK_DT_OP(obd, statfs, -EOPNOTSUPP);
         OBD_COUNTER_INCREMENT(obd, statfs);
 
