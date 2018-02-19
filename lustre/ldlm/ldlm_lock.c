@@ -1712,6 +1712,33 @@ out:
 	RETURN(ERR_PTR(rc));
 }
 
+#ifdef HAVE_SERVER_SUPPORT
+static ldlm_error_t ldlm_lock_enqueue_helper(struct ldlm_lock *lock,
+					     __u64 *flags)
+{
+	struct ldlm_resource *res = lock->l_resource;
+	ldlm_error_t rc = ELDLM_OK;
+	struct list_head rpc_list = LIST_HEAD_INIT(rpc_list);
+	ldlm_processing_policy policy;
+	ENTRY;
+
+        policy = ldlm_processing_policy_table[res->lr_type];
+restart:
+	policy(lock, flags, LDLM_PROCESS_ENQUEUE, &rc, &rpc_list);
+	if (rc == ELDLM_OK && lock->l_granted_mode != lock->l_req_mode &&
+	    res->lr_type != LDLM_FLOCK) {
+		rc = ldlm_handle_conflict_lock(lock, flags, &rpc_list);
+		if (rc == -ERESTART)
+			GOTO(restart, rc);
+	}
+
+	if (!list_empty(&rpc_list))
+		ldlm_discard_bl_list(&rpc_list);
+
+	RETURN(rc);
+}
+#endif
+
 /**
  * Enqueue (request) a lock.
  *
@@ -1729,9 +1756,6 @@ ldlm_error_t ldlm_lock_enqueue(struct ldlm_namespace *ns,
         struct ldlm_lock *lock = *lockp;
         struct ldlm_resource *res = lock->l_resource;
         int local = ns_is_client(ldlm_res_to_ns(res));
-#ifdef HAVE_SERVER_SUPPORT
-        ldlm_processing_policy policy;
-#endif
         ldlm_error_t rc = ELDLM_OK;
         struct ldlm_interval *node = NULL;
         ENTRY;
@@ -1851,8 +1875,7 @@ ldlm_error_t ldlm_lock_enqueue(struct ldlm_namespace *ns,
                 /* If no flags, fall through to normal enqueue path. */
         }
 
-        policy = ldlm_processing_policy_table[res->lr_type];
-	policy(lock, flags, LDLM_PROCESS_ENQUEUE, &rc, NULL);
+	rc = ldlm_lock_enqueue_helper(lock, flags);
         GOTO(out, rc);
 #else
         } else {
@@ -1885,6 +1908,7 @@ int ldlm_reprocess_queue(struct ldlm_resource *res, struct list_head *queue,
 	__u64 flags;
         int rc = LDLM_ITER_CONTINUE;
         ldlm_error_t err;
+	struct list_head bl_ast_list = LIST_HEAD_INIT(bl_ast_list);
         ENTRY;
 
         check_res_locked(res);
@@ -1894,14 +1918,23 @@ int ldlm_reprocess_queue(struct ldlm_resource *res, struct list_head *queue,
 	LASSERT(intention == LDLM_PROCESS_RESCAN ||
 		intention == LDLM_PROCESS_RECOVERY);
 
+restart:
 	list_for_each_safe(tmp, pos, queue) {
                 struct ldlm_lock *pending;
+		struct list_head rpc_list = LIST_HEAD_INIT(rpc_list);
+
 		pending = list_entry(tmp, struct ldlm_lock, l_res_link);
 
                 CDEBUG(D_INFO, "Reprocessing lock %p\n", pending);
 
                 flags = 0;
-		rc = policy(pending, &flags, intention, &err, work_list);
+		rc = policy(pending, &flags, intention, &err, &rpc_list);
+		if (pending->l_granted_mode == pending->l_req_mode ||
+		    res->lr_type == LDLM_FLOCK) {
+			list_splice(&rpc_list, work_list);
+		} else {
+			list_splice(&rpc_list, &bl_ast_list);
+		}
 		/*
 		 * When this is called from recovery done, we always want
 		 * to scan the whole list no matter what 'rc' is returned.
@@ -1910,6 +1943,22 @@ int ldlm_reprocess_queue(struct ldlm_resource *res, struct list_head *queue,
 		    intention == LDLM_PROCESS_RESCAN)
 			break;
         }
+
+	if (!list_empty(&bl_ast_list)) {
+		unlock_res(res);
+
+		LASSERT(intention == LDLM_PROCESS_RECOVERY);
+
+		rc = ldlm_run_ast_work(ldlm_res_to_ns(res), &bl_ast_list,
+				       LDLM_WORK_BL_AST);
+
+		lock_res(res);
+		if (rc == -ERESTART)
+			GOTO(restart, rc);
+	}
+
+	if (!list_empty(&bl_ast_list))
+		ldlm_discard_bl_list(&bl_ast_list);
 
         RETURN(intention == LDLM_PROCESS_RESCAN ? rc : LDLM_ITER_CONTINUE);
 }
@@ -1921,7 +1970,6 @@ int ldlm_reprocess_queue(struct ldlm_resource *res, struct list_head *queue,
  * \param[in] lock		The lock to be enqueued.
  * \param[out] flags		Lock flags for the lock to be enqueued.
  * \param[in] rpc_list		Conflicting locks list.
- * \param[in] grant_flags	extra flags when granting a lock.
  *
  * \retval -ERESTART:	Some lock was instantly canceled while sending
  * 			blocking ASTs, caller needs to re-check conflicting
@@ -1930,7 +1978,7 @@ int ldlm_reprocess_queue(struct ldlm_resource *res, struct list_head *queue,
  * \reval 0:		Lock is successfully added in waiting list.
  */
 int ldlm_handle_conflict_lock(struct ldlm_lock *lock, __u64 *flags,
-			      struct list_head *rpc_list, __u64 grant_flags)
+			      struct list_head *rpc_list)
 {
 	struct ldlm_resource *res = lock->l_resource;
 	int rc;
@@ -1979,7 +2027,7 @@ int ldlm_handle_conflict_lock(struct ldlm_lock *lock, __u64 *flags,
 
 		RETURN(rc);
 	}
-	*flags |= (LDLM_FL_BLOCK_GRANTED | grant_flags);
+	*flags |= LDLM_FL_BLOCK_GRANTED;
 
 	RETURN(0);
 }
