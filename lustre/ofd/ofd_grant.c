@@ -960,26 +960,12 @@ refresh:
 	/* When close to free space exhaustion, trigger a sync to force
 	 * writeback cache to consume required space immediately and release as
 	 * much space as possible. */
-	if (!obd->obd_recovering && force != 2 && left < OFD_GRANT_CHUNK) {
-		bool from_grant = true;
-		int  i;
-
-		/* That said, it is worth running a sync only if some pages did
-		 * not consume grant space on the client and could thus fail
-		 * with ENOSPC later in ofd_grant_check() */
-		for (i = 0; i < niocount; i++)
-			if (!(rnb[i].rnb_flags & OBD_BRW_FROM_GRANT))
-				from_grant = false;
-
-		if (!from_grant) {
-			/* at least one network buffer requires acquiring grant
-			 * space on the server */
-			spin_unlock(&ofd->ofd_grant_lock);
-			/* discard errors, at least we tried ... */
-			rc = dt_sync(env, ofd->ofd_osd);
-			force = 2;
-			goto refresh;
-		}
+	if (!obd->obd_recovering && force != 2 && (left >> 3) < OFD_GRANT_CHUNK) {
+		spin_unlock(&ofd->ofd_grant_lock);
+		/* discard errors, at least we tried ... */
+		rc = dt_sync(env, ofd->ofd_osd);
+		force = 2;
+		goto refresh;
 	}
 
 	/* extract incoming grant information provided by the client */
