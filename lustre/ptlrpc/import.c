@@ -1669,6 +1669,9 @@ int at_measured(struct adaptive_timeout *at, unsigned int val)
                    for proc only */
                 at->at_current = val;
 
+	if (OBD_FAIL_PRECHECK(OBD_FAIL_LDLM_BL_AST_PAUSE) && (val & 0xFF000000))
+		OBD_FAIL_TIMEOUT(OBD_FAIL_LDLM_BL_AST_PAUSE, cfs_fail_val + 1);
+
         if (at_max > 0)
                 at->at_current =  min(at->at_current, at_max);
         at->at_current =  max(at->at_current, at_min);

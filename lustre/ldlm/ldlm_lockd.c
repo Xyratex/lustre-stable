@@ -883,6 +883,7 @@ int ldlm_server_blocking_ast(struct ldlm_lock *lock,
 
         req->rq_interpret_reply = ldlm_cb_interpret;
 
+	OBD_FAIL_TIMEOUT(OBD_FAIL_LDLM_BL_AST_PAUSE, cfs_fail_val);
 	lock_res_and_lock(lock);
 	if (ldlm_is_destroyed(lock)) {
 		/* What's the point? */
