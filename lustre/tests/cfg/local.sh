@@ -31,11 +31,15 @@ MDSSIZE=${MDSSIZE:-200000}
 MDSOPT=${MDSOPT:-}
 MDS_FS_MKFS_OPTS=${MDS_FS_MKFS_OPTS:-}
 MDS_MOUNT_OPTS=${MDS_MOUNT_OPTS:-}
+# <facet_type>_MOUNT_FS_OPTS is the mount options specified when formatting
+# the underlying device by argument "--mountfsoptions"
+MDS_MOUNT_FS_OPTS=${MDS_MOUNT_FS_OPTS:-}
 
 MGSSIZE=${MGSSIZE:-$MDSSIZE}
 MGSOPT=${MGSOPT:-}
 MGS_FS_MKFS_OPTS=${MGS_FS_MKFS_OPTS:-}
 MGS_MOUNT_OPTS=${MGS_MOUNT_OPTS:-}
+MGS_MOUNT_FS_OPTS=${MGS_MOUNT_FS_OPTS:-}
 
 OSTCOUNT=${OSTCOUNT:-2}
 OSTDEVBASE=${OSTDEVBASE:-$TMP/${FSNAME}-ost}
@@ -43,6 +47,7 @@ OSTSIZE=${OSTSIZE:-200000}
 OSTOPT=${OSTOPT:-}
 OST_FS_MKFS_OPTS=${OST_FS_MKFS_OPTS:-}
 OST_MOUNT_OPTS=${OST_MOUNT_OPTS:-}
+OST_MOUNT_FS_OPTS=${OST_MOUNT_FS_OPTS:-}
 # Can specify individual ost devs with
 # OSTDEV1="/dev/sda"
 # on specific hosts with

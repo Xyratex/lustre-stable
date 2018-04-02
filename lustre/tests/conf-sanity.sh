@@ -5714,21 +5714,54 @@ test_103() {
 }
 run_test 103 "check file creation for ro and rw bind mnt pt"
 
-test_104() {
-	setup
+test_104() { # LU-6952
+	local mds_mountopts=$MDS_MOUNT_OPTS
+	local ost_mountopts=$OST_MOUNT_OPTS
+	local mds_mountfsopts=$MDS_MOUNT_FS_OPTS
+	local lctl_ver=$(do_facet $SINGLEMDS $LCTL --version |
+			awk '{ print $2 }')
 
-	# add unknown configuration parameter.
-	local PARAM="$FSNAME-OST0000.ost.unknown_param=50"
-	do_facet mgs "$LCTL conf_param $PARAM"
-	cleanup
-	load_modules
+	# specify "acl" in mount options used by mkfs.lustre
+	if [ -z "$MDS_MOUNT_FS_OPTS" ]; then
+		MDS_MOUNT_FS_OPTS="acl,user_xattr"
+	else
 
-	# unknown param should be ignored while mounting.
-	setup
+		MDS_MOUNT_FS_OPTS="${MDS_MOUNT_FS_OPTS},acl,user_xattr"
+	fi
 
-	cleanup || error "cleanup failed with $?"
+	echo "mountfsopt: $MDS_MOUNT_FS_OPTS"
+
+	#reformat/remount the MDT to apply the MDT_MOUNT_FS_OPT options
+	formatall
+	if [ -z "$MDS_MOUNT_OPTS" ]; then
+		MDS_MOUNT_OPTS="-o noacl"
+	else
+		MDS_MOUNT_OPTS="${MDS_MOUNT_OPTS},noacl"
+	fi
+
+	combined_mgs_mds || start_mgs
+	for num in $(seq $MDSCOUNT); do
+		start mds$num $(mdsdevname $num) $MDS_MOUNT_OPTS ||
+			error "Failed to start MDS"
+	done
+
+	for num in $(seq $OSTCOUNT); do
+		start ost$num $(ostdevname $num) $OST_MOUNT_OPTS ||
+			error "Failed to start OST"
+	done
+
+	mount_client $MOUNT
+	setfacl -m "d:$RUNAS_ID:rwx" $MOUNT &&
+		error "ACL is applied when FS is mounted with noacl."
+
+	MDS_MOUNT_OPTS=$mds_mountopts
+	OST_MOUNT_OPTS=$ost_mountopts
+	MDS_MOUNT_FS_OPTS=$mds_mountfsopts
+
+        stopall
+	reformat
 }
-run_test 104 "Unknown config param should not fail target mounting"
+run_test 104 "Make sure user defined options are reflected in mount"
 
 test_105()
 {
@@ -5783,6 +5816,22 @@ test_106() {
 	cleanupall
 }
 run_test 106 "check osp llog processing when catalog is wrapped"
+
+test_107() {
+	setup
+
+	# add unknown configuration parameter.
+	local PARAM="$FSNAME-OST0000.ost.unknown_param=50"
+	do_facet mgs "$LCTL conf_param $PARAM"
+	cleanup
+	load_modules
+
+	# unknown param should be ignored while mounting.
+	setup
+
+	cleanup || error "cleanup failed with $?"
+}
+run_test 107 "Unknown config param should not fail target mounting"
 
 test_108() {
 	# a modification of test 5c

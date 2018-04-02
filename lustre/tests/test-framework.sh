@@ -3460,6 +3460,17 @@ mkfs_opts() {
 	echo -n "$opts"
 }
 
+mountfs_opts() {
+	local facet=$1
+	local type=$(facet_type $facet)
+	local var=${type}_MOUNT_FS_OPTS
+	local opts=""
+	if [ -n "${!var}" ]; then
+		opts+=" --mountfsoptions=${!var}"
+	fi
+	echo -n "$opts"
+}
+
 format_mgs() {
 	local quiet
 
@@ -3468,7 +3479,7 @@ format_mgs() {
 	fi
 	echo "Format mgs: $(mgsdevname)"
 	reformat_external_journal mgs
-	add mgs $(mkfs_opts mgs $(mgsdevname)) --reformat \
+	add mgs $(mkfs_opts mgs $(mgsdevname)) $(mountfs_opts mgs) --reformat \
 		$(mgsdevname) $(mgsvdevname) ${quiet:+>/dev/null} || exit 10
 }
 
@@ -3482,8 +3493,8 @@ format_mdt() {
 	echo "Format mds$num: $(mdsdevname $num)"
 	reformat_external_journal mds$num
 	add mds$num $(mkfs_opts mds$num $(mdsdevname ${num})) \
-		--reformat $(mdsdevname $num) $(mdsvdevname $num) \
-		${quiet:+>/dev/null} || exit 10
+		$(mountfs_opts mds$num) --reformat $(mdsdevname $num) \
+		$(mdsvdevname $num) ${quiet:+>/dev/null} || exit 10
 }
 
 format_ost() {
@@ -3495,8 +3506,8 @@ format_ost() {
 	echo "Format ost$num: $(ostdevname $num)"
 	reformat_external_journal ost$num
 	add ost$num $(mkfs_opts ost$num $(ostdevname ${num})) \
-		--reformat $(ostdevname $num) $(ostvdevname ${num}) \
-		${quiet:+>/dev/null} || exit 10
+		$(mountfs_opts ost$num) --reformat $(ostdevname $num) \
+		$(ostvdevname ${num}) ${quiet:+>/dev/null} || exit 10
 }
 
 formatall() {
