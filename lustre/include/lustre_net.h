@@ -1772,6 +1772,8 @@ struct ptlrpc_service_part {
 	 * threads starting & stopping are also protected by this lock.
 	 */
 	spinlock_t			scp_lock  __cfs_cacheline_aligned;
+	/** userland serialization */
+	struct mutex			scp_mutex;
 	/** total # req buffer descs allocated */
 	int				scp_nrqbds_total;
 	/** # posted request buffers for receiving */
