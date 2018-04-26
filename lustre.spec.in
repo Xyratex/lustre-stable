@@ -147,7 +147,7 @@ Requires: %{requires_kmod_name} = %{requires_kmod_version} zlib
 Requires: %{requires_yaml_name}
 BuildRequires: libtool libyaml-devel zlib-devel
 %if %{with servers}
-Requires: lustre-osd
+Requires: %{name}-osd
 Requires: lustre-osd-mount
 Obsoletes: lustre-client < %{version}
 Provides: lustre-client = %{version}-%{release}
