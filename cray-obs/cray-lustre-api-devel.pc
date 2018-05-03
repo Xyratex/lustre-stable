@@ -1,0 +1,10 @@
+
+includedir=@includedir@
+libdir=@libdir@
+
+Cflags: -I${includedir}
+Libs: -L${libdir} -llustreapi
+
+Name: cray-lustreapi
+Description: To provide the paths for compiling and linking program to Lustre library liblustreapi.
+Version: @PACKAGE_VERSION@

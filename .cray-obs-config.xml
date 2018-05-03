@@ -1,0 +1,132 @@
+<?xml version="1.0" ?>
+<configuration xmlns="http://svndownstream.us.cray.com" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <stream type="obs" xsi:type="obsStreamType">
+        <project>
+            cray-lustre:
+            <extracted refer="full-branch"/>
+        </project>
+        <sources>
+            <environment>
+                <variable>
+                    RELEASE_EXTRA
+                </variable>
+                <name>
+                    _release_extra
+                </name>
+            </environment>
+            <gitcmd>
+                <command>
+                    branch | sed -e 's/(HEAD detached at //' -e 's/)//'
+                </command>
+                <name>
+                    _branch
+                </name>
+                <extract group="1" name="full-branch" pattern="\*\s+(.*$)"/>
+            </gitcmd>
+            <gitcmd>
+                <command>
+                    rev-parse --short
+                    <extracted refer="full-branch"/>
+                </command>
+                <name>
+                    _last_changed_rev
+                </name>
+            </gitcmd>
+            <gitcmd>
+                <command>
+                    config --get remote.origin.url
+                </command>
+                <name>
+                    _url
+                </name>
+            </gitcmd>
+            <gitcmd>
+                <command>
+                    describe --match='[0-9]*' --abbrev=7 | sed -e 's/-/_/g'
+                </command>
+                <name>
+                    _tag
+                </name>
+            </gitcmd>
+            <gitcmd>
+                <command>
+                    describe --match='[0-9]*' --abbrev=7 | sed -e 's/-/_/g'
+                </command>
+                <name>
+                    _version
+                </name>
+                <extract group="1" name="version" pattern="(.*)"/>
+            </gitcmd>
+            <file>
+                <name>
+                    rpm/kmp-lustre.preamble
+                </name>
+            </file>
+            <file>
+                <name>
+                    rpm/kmp-lustre.files
+                </name>
+            </file>
+            <file>
+                <name>
+                    cray-obs/cray-lustre.spec
+                </name>
+            </file>
+            <file>
+                <name>
+                    cray-obs/cray-lustre-client.spec
+                </name>
+            </file>
+            <file>
+                <name>
+                    cray-obs/cray-lustre-ari_s-rhine.spec
+                </name>
+            </file>
+            <file>
+                <name>
+                    cray-obs/cray-lustre-ari_c-rhine.spec
+                </name>
+            </file>
+            <file>
+                <name>
+                    cray-obs/cray-lustre-ari_s-cos.spec
+                </name>
+            </file>
+            <file>
+                <name>
+                    cray-obs/cray-lustre-dmp_c.spec
+                </name>
+            </file>
+            <file>
+                <name>
+                    cray-obs/cray-lustre-default.spec
+                </name>
+            </file>
+            <file>
+                <name>
+                    cray-obs/cray-lustre-rpmlintrc
+                </name>
+            </file>
+            <tarfile compression="bz2">
+                <name>
+                    cray-lustre-
+                    <extracted refer="version"/>
+                </name>
+                <exclusion pattern=".*\.spec$"/>
+                <exclusion pattern="^Makefile\.obs$"/>
+                <tarinfo recursive="true">
+                    <name>
+                        .
+                    </name>
+                    <arcname>
+                        cray-lustre-
+                        <extracted refer="version"/>
+                    </arcname>
+                </tarinfo>
+            </tarfile>
+        </sources>
+        <package>
+            cray-lustre
+        </package>
+    </stream>
+</configuration>

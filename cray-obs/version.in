@@ -1,0 +1,4 @@
+#%Module
+# Module version file for Lustre api
+# Copyright 2016 Cray Inc. All Rights Reserved.
+set ModulesVersion "@VERSION@"

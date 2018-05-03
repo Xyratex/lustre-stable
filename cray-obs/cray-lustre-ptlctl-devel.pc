@@ -1,0 +1,10 @@
+
+includedir=@includedir@
+libdir=@libdir@
+
+Cflags: -I${includedir}
+Libs: -L${libdir} -lptlctl
+
+Name: cray-lustre-ptlctl
+Description: To provide the paths for compiling and linking program to lustre library libptlctl.a.
+Version: @PACKAGE_VERSION@
