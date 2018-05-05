@@ -45,6 +45,7 @@
 #include <libcfs/libcfs_hash.h>
 #include <libcfs/libcfs_heap.h>
 #include <libcfs/libcfs_fail.h>
+#include <libcfs/range_lock.h>
 #include "curproc.h"
 
 #define LIBCFS_VERSION	"0.5.0"
