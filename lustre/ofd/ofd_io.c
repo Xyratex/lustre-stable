@@ -599,6 +599,7 @@ static int ofd_preprw_write(const struct lu_env *env, struct obd_export *exp,
 	struct ofd_object *fo;
 	int i, j, k, rc = 0, tot_bytes = 0;
 	enum dt_bufs_type dbt = DT_BUFS_TYPE_WRITE;
+	struct range_lock *range = &ofd_info(env)->fti_write_range;
 
 	ENTRY;
 	LASSERT(env != NULL);
@@ -702,6 +703,12 @@ static int ofd_preprw_write(const struct lu_env *env, struct obd_export *exp,
 	if (ptlrpc_connection_is_local(exp->exp_connection))
 		dbt |= DT_BUFS_TYPE_LOCAL;
 
+	range_lock_init(range,
+			rnb[0].rnb_offset,
+			rnb[obj->ioo_bufcnt - 1].rnb_offset +
+			rnb[obj->ioo_bufcnt - 1].rnb_len - 1);
+	range_lock(&fo->ofo_write_tree, range);
+
 	/* parse remote buffers to local buffers and prepare the latter */
 	for (*nr_local = 0, i = 0, j = 0; i < obj->ioo_bufcnt; i++) {
 		rc = dt_bufs_get(env, ofd_object_child(fo),
@@ -731,6 +738,7 @@ static int ofd_preprw_write(const struct lu_env *env, struct obd_export *exp,
 	RETURN(0);
 err:
 	dt_bufs_put(env, ofd_object_child(fo), lnb, *nr_local);
+	range_unlock(&fo->ofo_write_tree, range);
 	ofd_read_unlock(env, fo);
 	ofd_object_put(env, fo);
 	/* tgt_grant_prepare_write() was called, so we must commit */
@@ -1096,6 +1104,7 @@ ofd_commitrw_write(const struct lu_env *env, struct obd_export *exp,
 	bool soft_sync = false;
 	bool cb_registered = false;
 	bool fake_write = false;
+	struct range_lock *range = &ofd_info(env)->fti_write_range;
 
 	ENTRY;
 
@@ -1232,6 +1241,7 @@ out_stop:
 
 out:
 	dt_bufs_put(env, o, lnb, niocount);
+	range_unlock(&fo->ofo_write_tree, range);
 	ofd_read_unlock(env, fo);
 	ofd_object_put(env, fo);
 	/* second put is pair to object_get in ofd_preprw_write */
