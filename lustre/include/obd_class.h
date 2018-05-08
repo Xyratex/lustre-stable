@@ -1892,6 +1892,21 @@ int class_check_uuid(struct obd_uuid *uuid, __u64 nid);
 /* class_obd.c */
 extern char obd_jobid_node[];
 
+extern unsigned int obd_lbug_on_eviction;
+extern unsigned int obd_dump_on_eviction;
+
+static inline bool do_dump_on_eviction(struct obd_device *exp_obd)
+{
+	if (obd_lbug_on_eviction &&
+	    strncmp(exp_obd->obd_type->typ_name, LUSTRE_MGC_NAME,
+		    strlen(LUSTRE_MGC_NAME))) {
+		CERROR("LBUG upon eviction\n");
+		LBUG();
+	}
+
+	return obd_dump_on_eviction;
+}
+
 /* prng.c */
 #define ll_generate_random_uuid(uuid_out) cfs_get_random_bytes(uuid_out, sizeof(class_uuid_t))
 

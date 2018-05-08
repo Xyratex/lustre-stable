@@ -230,7 +230,8 @@ static int expired_lock_main(void *arg)
 			list_del_init(&lock->l_exp_list);
 			spin_unlock_bh(&export->exp_bl_list_lock);
 
-			do_dump++;
+			if (do_dump_on_eviction(export->exp_obd))
+				do_dump++;
 			class_fail_export(export);
 			class_export_lock_put(export, lock);
 
@@ -242,12 +243,7 @@ static int expired_lock_main(void *arg)
 		}
 		spin_unlock_bh(&waiting_locks_spinlock);
 
-		if (do_dump && obd_lbug_on_eviction) {
-			CERROR("LBUG upon eviction\n");
-			LBUG();
-		}
-
-		if (do_dump && obd_dump_on_eviction) {
+		if (do_dump) {
 			CERROR("dump the log upon eviction\n");
 			libcfs_debug_dumplog();
 		}
