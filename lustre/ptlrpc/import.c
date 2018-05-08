@@ -1408,12 +1408,12 @@ static int ptlrpc_invalidate_import_thread(void *data)
                imp->imp_obd->obd_name, obd2cli_tgt(imp->imp_obd),
                imp->imp_connection->c_remote_uuid.uuid);
 
-        ptlrpc_invalidate_import(imp);
+	if (do_dump_on_eviction(imp->imp_obd)) {
+		CERROR("dump the log upon eviction\n");
+		libcfs_debug_dumplog();
+	}
 
-        if (obd_dump_on_eviction) {
-                CERROR("dump the log upon eviction\n");
-                libcfs_debug_dumplog();
-        }
+        ptlrpc_invalidate_import(imp);
 
         IMPORT_SET_STATE(imp, LUSTRE_IMP_RECOVER);
         ptlrpc_import_recovery_state_machine(imp);
