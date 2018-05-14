@@ -37,7 +37,7 @@
 #include <linux/ktime.h>
 #include <linux/moduleparam.h>
 #include <linux/uaccess.h>
-
+#include <linux/fs.h>
 #include <lnet/lib-lnet.h>
 
 #define D_LNI D_CONSOLE
@@ -111,6 +111,75 @@ static int lnet_ping(struct lnet_process_id id, signed long timeout,
 
 static int lnet_discover(struct lnet_process_id id, __u32 force,
 			 struct lnet_process_id __user *ids, int n_ids);
+static ssize_t
+filp_user_read(struct file *filp, char *buf, size_t count, loff_t *offset)
+{
+	mm_segment_t    fs;
+	ssize_t         ret_size = 0, size = 0;
+
+	fs = get_fs();
+	set_fs(KERNEL_DS);
+	while ((ssize_t)count > 0) {
+		size = vfs_read(filp, (char __user *)buf, count, offset);
+		if (size <= 0)
+	                break;
+	        count -= size;
+	        buf += size;
+	        ret_size += size;
+	        size = 0;
+	}
+	set_fs(fs);
+
+	return (size < 0 ? size : ret_size);
+}
+
+static int lnet_read_file(const char *name, char *config, size_t size)
+{
+	struct file    *filp;
+	int             rc;
+	loff_t          pos = 0;
+
+	filp = filp_open(name, O_RDONLY, 0600);
+	if (IS_ERR(filp)) {
+	        rc = PTR_ERR(filp);
+	        CERROR("Can't open file %s: rc %d\n", name, rc);
+	        return rc;
+	}
+
+	rc = filp_user_read(filp, config, size, &pos);
+	filp_close(filp, NULL);
+	if (rc < 0)
+	        CERROR("Can't read file %s: rc %d\n", name, rc);
+
+	return rc;
+}
+
+static char *lnet_read_file_mem(const char *name, size_t max_size)
+{
+	char            *file;
+	int             rc;
+
+	file = vmalloc(max_size);
+	if (file == NULL) {
+	        CERROR("Failed to allocate memory for "
+	               "file, size = %lu\n", (long unsigned)max_size);
+	        return ERR_PTR(-ENOMEM);
+	}
+
+	memset(file, 0, max_size);
+
+	rc = lnet_read_file(name, file, max_size);
+	if (rc < 0) {
+	        vfree(file);
+	        return ERR_PTR(rc);
+	}
+
+	return file;
+}
+
+#define CFS_CONF_FILE_SIZE      (1024 * 1024)
+/* Caller should free memory */
+
 
 static int
 discovery_set(const char *val, struct kernel_param *kp)
@@ -185,15 +254,26 @@ intf_max_set(const char *val, struct kernel_param *kp)
 }
 
 static char *
-lnet_get_routes(void)
+lnet_get_routes(int *should_free)
 {
-	return routes;
+	char            *config = ERR_PTR(-ENOENT);
+
+	*should_free = 0;
+	if (*routes == '/') {
+	        /* Read routes config file to memory */
+	        config = lnet_read_file_mem(routes, CFS_CONF_FILE_SIZE);
+	        if (!IS_ERR(config))
+	                *should_free = 1;
+	        return config;
+	} else {
+	        return routes;
+	}
 }
 
 static char *
 lnet_get_networks(void)
 {
-	char   *nets;
+	char   *nets, *config;
 	int	rc;
 
 	if (*networks != 0 && *ip2nets != 0) {
@@ -202,7 +282,16 @@ lnet_get_networks(void)
 		return NULL;
 	}
 
-	if (*ip2nets != 0) {
+	if (*ip2nets == '/') {
+		config = lnet_read_file_mem(ip2nets, CFS_CONF_FILE_SIZE);
+		if (!IS_ERR(config)) {
+			rc = lnet_parse_ip2nets(&nets, config);
+			vfree(config);
+			return (rc == 0) ? nets : NULL;
+		} else {
+			return NULL;
+		}
+	} else if (*ip2nets != 0) {
 		rc = lnet_parse_ip2nets(&nets, ip2nets);
 		return (rc == 0) ? nets : NULL;
 	}
@@ -2136,12 +2225,13 @@ int
 LNetNIInit(lnet_pid_t requested_pid)
 {
 	int			im_a_router = 0;
-	int			rc;
+	int			rc, should_free;
 	int			ni_count;
 	struct lnet_ping_buffer	*pbuf;
 	struct lnet_handle_md	ping_mdh;
 	struct list_head	net_head;
 	struct lnet_net		*net;
+	char			*routes_cfg;
 
 	INIT_LIST_HEAD(&net_head);
 
@@ -2194,8 +2284,16 @@ LNetNIInit(lnet_pid_t requested_pid)
 	}
 
 	if (!the_lnet.ln_nis_from_mod_params) {
-		rc = lnet_parse_routes(lnet_get_routes(), &im_a_router);
-		if (rc != 0)
+		routes_cfg = lnet_get_routes(&should_free);
+		if (IS_ERR(routes_cfg)) {
+			rc = PTR_ERR(routes_cfg);
+			goto err_shutdown_lndnis;
+		}
+
+		rc = lnet_parse_routes(routes_cfg, &im_a_router);
+		if (should_free == 1)
+			vfree(routes_cfg);
+	 	if (rc != 0)
 			goto err_shutdown_lndnis;
 
 		rc = lnet_check_routes();
