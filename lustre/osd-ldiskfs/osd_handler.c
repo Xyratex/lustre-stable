@@ -2015,7 +2015,7 @@ static int osd_trans_stop(const struct lu_env *env, struct dt_device *dt,
 		if (rc2 != 0)
 			CERROR("%s: failed to stop transaction: rc = %d\n",
 			       osd_name(osd), rc2);
-		if (!rc)
+		if (!rc || OBD_FAIL_CHECK(OBD_FAIL_DT_TXN_STOP))
 			rc = rc2;
 
 		osd_process_truncates(&truncates);
