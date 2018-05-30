@@ -34,7 +34,7 @@ do_tar() {
 CONTINUE=true
 while [ ! -e "$END_RUN_FILE" ] && $CONTINUE; do
 	echoerr "$(date +'%F %H:%M:%S'): tar run starting"
-	mkdir -p $TESTDIR
+	client_load_mkdir $TESTDIR
 	cd $TESTDIR
 	sync
 

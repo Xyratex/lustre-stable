@@ -49,6 +49,9 @@ FAILOVER_PERIOD=${FAILOVER_PERIOD:-$((60 * 5))} # 5 minutes
 END_RUN_FILE=${END_RUN_FILE:-$SHARED_DIRECTORY/end_run_file}
 LOAD_PID_FILE=${LOAD_PID_FILE:-$TMP/client-load.pid}
 
+init_stripe_dir_params RECOVERY_SCALE_ENABLE_REMOTE_DIRS \
+	RECOVERY_SCALE_ENABLE_STRIPED_DIRS
+
 reboot_recover_node () {
     # item var contains a pair of clients if nodetype=clients
     # I would prefer to have a list here
