@@ -735,6 +735,7 @@ kiblnd_setup_rd_iov(struct lnet_ni *ni, kib_tx_t *tx, kib_rdma_desc_t *rd,
         unsigned long       vaddr;
         int                 fragnob;
         int                 page_offset;
+	unsigned int	    max_niov;
 
         LASSERT (nob > 0);
         LASSERT (niov > 0);
@@ -746,6 +747,8 @@ kiblnd_setup_rd_iov(struct lnet_ni *ni, kib_tx_t *tx, kib_rdma_desc_t *rd,
                 iov++;
                 LASSERT (niov > 0);
         }
+
+	max_niov = niov;
 
 	sg = tx->tx_frags;
 	do {
@@ -762,10 +765,17 @@ kiblnd_setup_rd_iov(struct lnet_ni *ni, kib_tx_t *tx, kib_rdma_desc_t *rd,
 		fragnob = min((int)(iov->iov_len - offset), nob);
 		fragnob = min(fragnob, (int)PAGE_SIZE - page_offset);
 
-		if ((fragnob < (int)PAGE_SIZE - page_offset) && (niov > 1)) {
+		/*
+		 * We're allowed to start at a non-aligned page offset in
+		 * the first fragment and end at a non-aligned page offset
+		 * in the last fragment.
+		 */
+		if ((fragnob < (int)PAGE_SIZE - page_offset) &&
+		    (niov < max_niov) && nob > fragnob) {
 			CDEBUG(D_NET, "fragnob %d < available page %d: with"
-				      " remaining %d iovs\n",
-			       fragnob, (int)PAGE_SIZE - page_offset, niov);
+				      " remaining %d iovs with %d nob left\n",
+			       fragnob, (int)PAGE_SIZE - page_offset, niov,
+			       nob);
 			tx->tx_gaps = true;
 		}
 
@@ -796,6 +806,7 @@ kiblnd_setup_rd_kiov(struct lnet_ni *ni, kib_tx_t *tx, kib_rdma_desc_t *rd,
 	kib_net_t          *net = ni->ni_data;
 	struct scatterlist *sg;
 	int                 fragnob;
+	int		    max_nkiov;
 
 	CDEBUG(D_NET, "niov %d offset %d nob %d\n", nkiov, offset, nob);
 
@@ -810,16 +821,25 @@ kiblnd_setup_rd_kiov(struct lnet_ni *ni, kib_tx_t *tx, kib_rdma_desc_t *rd,
 		LASSERT(nkiov > 0);
 	}
 
+	max_nkiov = nkiov;
+
 	sg = tx->tx_frags;
 	do {
 		LASSERT(nkiov > 0);
 
 		fragnob = min((int)(kiov->kiov_len - offset), nob);
 
-		if ((fragnob < (int)(kiov->kiov_len - offset)) && nkiov > 1) {
+		/*
+		 * We're allowed to start at a non-aligned page offset in
+		 * the first fragment and end at a non-aligned page offset
+		 * in the last fragment.
+		 */
+		if ((fragnob < (int)(kiov->kiov_len - offset)) &&
+		    nkiov < max_nkiov && nob > fragnob) {
 			CDEBUG(D_NET, "fragnob %d < available page %d: with"
-				      " remaining %d kiovs\n",
-			       fragnob, (int)(kiov->kiov_len - offset), nkiov);
+				      " remaining %d kiovs with %d nob left\n",
+			       fragnob, (int)(kiov->kiov_len - offset),
+			       nkiov, nob);
 			tx->tx_gaps = true;
 		}
 
