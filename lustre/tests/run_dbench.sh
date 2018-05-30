@@ -31,7 +31,7 @@ CONTINUE=true
 while [ ! -e "$END_RUN_FILE" ] && $CONTINUE; do
 	echoerr "$(date +'%F %H:%M:%S'): dbench run starting"
 
-	mkdir -p $TESTDIR
+	client_load_mkdir $TESTDIR
 
 	sync
 	rundbench -D $TESTDIR 2 1>$LOG &

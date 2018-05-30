@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Simple function used by run_*.sh scripts
+# functions used by other scripts
 
 assert_env() {
     local failed=""
@@ -1324,4 +1324,27 @@ run_xdd() {
 	[ $rc = 0 ] || error "xdd failed: $rc"
 
 	rm -rf $testdir
+}
+
+client_load_mkdir () {
+	local dir=$1
+	local parent=$(dirname $dir)
+
+	local mdtcount=${MDSCOUNT:-$($LFS df $parent 2> /dev/null | grep -c MDT)}
+
+	mdt_idx=$((RANDOM % mdtcount))
+	if $RECOVERY_SCALE_ENABLE_STRIPED_DIRS; then
+		# stripe_count in range [1,mdtcount]
+		# $LFS mkdir treats stripe_count 0 and 1 the same
+		stripe_count_opt="-c$((RANDOM % mdtcount + 1))"
+	else
+		stripe_count_opt=""
+	fi
+
+	if $RECOVERY_SCALE_ENABLE_REMOTE_DIRS; then
+		$LFS mkdir -i$mdt_idx $stripe_count_opt $dir 2> /dev/null
+	else
+		mkdir -p $dir
+	fi
+	$LFS getdirstripe $dir
 }

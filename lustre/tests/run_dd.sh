@@ -29,7 +29,7 @@ TESTDIR=$MOUNT/d0.dd-$(hostname)
 CONTINUE=true
 while [ ! -e "$END_RUN_FILE" ] && $CONTINUE; do
 	echoerr "$(date +'%F %H:%M:%S'): dd run starting"
-	mkdir -p $TESTDIR
+	client_load_mkdir $TESTDIR
 	$LFS setstripe -c -1 $TESTDIR
 	cd $TESTDIR
 	sync

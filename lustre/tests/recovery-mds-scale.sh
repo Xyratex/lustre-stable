@@ -51,6 +51,9 @@ END_RUN_FILE=${END_RUN_FILE:-$SHARED_DIRECTORY/end_run_file}
 LOAD_PID_FILE=${LOAD_PID_FILE:-$TMP/client-load.pid}
 VMSTAT_PID_FILE=${VMSTAT_PID_FILE:-$TMP/vmstat.pid}
 
+init_stripe_dir_params RECOVERY_SCALE_ENABLE_REMOTE_DIRS \
+	RECOVERY_SCALE_ENABLE_STRIPED_DIRS
+
 server_numfailovers () {
     local facet=$1
     local var=${facet}_numfailovers
