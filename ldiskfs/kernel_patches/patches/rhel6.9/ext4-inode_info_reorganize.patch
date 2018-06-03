@@ -1,0 +1,34 @@
+Index: linux-stage/fs/ext4/ext4.h
+===================================================================
+--- linux-stage.orig/fs/ext4/ext4.h	2012-08-07 14:16:06.331203480 -0700
++++ linux-stage/fs/ext4/ext4.h	2012-08-10 10:08:47.854206335 -0700
+@@ -713,6 +713,7 @@
+ 	/* following fields for parallel directory operations -bzzz */
+ 	struct semaphore i_append_sem;
+ 
++	ext4_lblk_t		i_dir_start_lookup;
+ 	/*
+ 	 * i_block_group is the number of the block group which contains
+ 	 * this file's inode.  Constant across the lifetime of the inode,
+@@ -724,7 +725,6 @@
+ 	unsigned long	i_state_flags;		/* Dynamic state flags */
+ 	unsigned long	i_flags;
+ 
+-	ext4_lblk_t		i_dir_start_lookup;
+ #ifdef CONFIG_EXT4_FS_XATTR
+ 	/*
+ 	 * Extended attributes can be read independently of the main file
+@@ -788,10 +788,12 @@
+ 	unsigned int i_reserved_data_blocks;
+ 	unsigned int i_reserved_meta_blocks;
+ 	unsigned int i_allocated_meta_blocks;
+-	unsigned short i_delalloc_reserved_flag;
+ 	sector_t i_da_metadata_calc_last_lblock;
+ 	int i_da_metadata_calc_len;
+ 
++	/* allocation reservation info for delalloc */
++	unsigned short i_delalloc_reserved_flag;
++
+ 	/* on-disk additional length */
+ 	__u16 i_extra_isize;
+ 
