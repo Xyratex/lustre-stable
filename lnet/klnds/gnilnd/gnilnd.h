@@ -64,7 +64,6 @@
 #include <lnet/lib-lnet.h>
 
 #include <gni_pub.h>
-#include "gnilnd_version.h"
 
 #ifdef CONFIG_SLAB
 #define GNILND_MBOX_SIZE	KMALLOC_MAX_SIZE
