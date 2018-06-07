@@ -282,6 +282,18 @@ print_opts () {
     [ -e $MACHINEFILE ] && cat $MACHINEFILE
 }
 
+setstripe_getstripe () {
+	local file=$1
+	shift
+	local params=$@
+
+	if [ -n "$params" ]; then
+		$LFS setstripe $params $file ||
+			error "setstripe $params failed"
+	fi
+	$LFS getstripe $file
+}
+
 run_compilebench() {
 	local dir=${1:-$DIR}
 	local cbench_DIR=${cbench_DIR:-""}
@@ -316,6 +328,7 @@ run_compilebench() {
 	# local testdir=$DIR/$tdir
 	local testdir=$dir/d0.compilebench.$$
 	mkdir -p $testdir
+	setstripe_getstripe $testdir $cbench_SETSTRIPEPARAMS
 
     local savePWD=$PWD
     cd $cbench_DIR
@@ -350,6 +363,8 @@ run_metabench() {
 
 	local testdir=$dir/d0.metabench
 	mkdir -p $testdir
+	setstripe_getstripe $testdir $mbench_SETSTRIPEPARAMS
+
 	# mpi_run uses mpiuser
 	chmod 0777 $testdir
 
@@ -404,6 +419,8 @@ run_simul() {
 
     local testdir=$DIR/d0.simul
     mkdir -p $testdir
+	setstripe_getstripe $testdir $simul_SETSTRIPEPARAMS
+
     # mpi_run uses mpiuser
     chmod 0777 $testdir
 
@@ -458,6 +475,8 @@ run_mdtest() {
 
     local testdir=$DIR/d0.mdtest
     mkdir -p $testdir
+	setstripe_getstripe $testdir $mdtest_SETSTRIPEPARAMS
+
     # mpi_run uses mpiuser
     chmod 0777 $testdir
 
@@ -514,6 +533,7 @@ run_connectathon() {
 
 	local testdir=$dir/d0.connectathon
 	mkdir -p $testdir
+	setstripe_getstripe $testdir $cnt_SETSTRIPEPARAMS
 
 	local savePWD=$PWD
 	cd $cnt_DIR
@@ -616,12 +636,12 @@ run_ior() {
 	print_opts IOR ior_THREADS ior_DURATION MACHINEFILE
 
 	mkdir -p $testdir
+
 	# mpi_run uses mpiuser
 	chmod 0777 $testdir
 	if [ -z "$NFSCLIENT" ]; then
 		ior_stripe_params=${ior_stripe_params:-"-c -1"}
-		$LFS setstripe $testdir $ior_stripe_params ||
-			{ error "setstripe failed" && return 2; }
+		setstripe_getstripe $testdir $ior_stripe_params
 	fi
 
 	#
@@ -674,6 +694,7 @@ run_mib() {
     mib_xferSize=${mib_xferSize:-1m}
     mib_xferLimit=${mib_xferLimit:-5000}
     mib_timeLimit=${mib_timeLimit:-300}
+	mib_SETSTRIPEPARAMS=${mib_SETSTRIPEPARAMS:-"-c -1"}
 
     if [ "$NFSCLIENT" ]; then
         skip "skipped for NFSCLIENT mode"
@@ -688,10 +709,11 @@ run_mib() {
 
     local testdir=$DIR/d0.mib
     mkdir -p $testdir
+	setstripe_getstripe $testdir $mib_SETSTRIPEPARAMS
+
     # mpi_run uses mpiuser
     chmod 0777 $testdir
-    $LFS setstripe $testdir -c -1 ||
-        { error "setstripe failed" && return 2; }
+
     #
     # -I    Show intermediate values in output
     # -H    Show headers in output
@@ -742,6 +764,8 @@ run_cascading_rw() {
 
     local testdir=$DIR/d0.cascading_rw
     mkdir -p $testdir
+	setstripe_getstripe $testdir $casc_SETSTRIPEPARAMS
+
     # mpi_run uses mpiuser
     chmod 0777 $testdir
 
@@ -787,6 +811,8 @@ run_write_append_truncate() {
     print_opts clients write_REP write_THREADS MACHINEFILE
 
     mkdir -p $testdir
+	setstripe_getstripe $testdir $write_SETSTRIPEPARAMS
+
     # mpi_run uses mpiuser
     chmod 0777 $testdir
 
@@ -828,6 +854,7 @@ run_write_disjoint() {
         MACHINEFILE
     local testdir=$DIR/d0.write_disjoint
     mkdir -p $testdir
+	setstripe_getstripe $testdir $wdisjoint_SETSTRIPEPARAMS
     # mpi_run uses mpiuser
     chmod 0777 $testdir
 
@@ -863,6 +890,7 @@ run_parallel_grouplock() {
 
     local testdir=$DIR/d0.parallel_grouplock
     mkdir -p $testdir
+	setstripe_getstripe $testdir $parallel_grouplock_SETSTRIPEPARAMS
     # mpi_run uses mpiuser
     chmod 0777 $testdir
 
@@ -934,6 +962,8 @@ run_statahead () {
             $statahead_NUMFILES $testdir 'f%%d' --ignore
 
     mkdir -p $testdir
+	setstripe_getstripe $testdir $statahead_SETSTRIPEPARAMS
+
     # mpi_run uses mpiuser
     chmod 0777 $testdir
 
@@ -1021,8 +1051,9 @@ run_rr_alloc() {
 	else
 		[ -e $DIR/$tdir ] || $LFS mkdir -i 0 $DIR/$tdir
 	fi
+	setstripe_getstripe $DIR/$tdir $rr_alloc_SETSTRIPEPARAMS
+
 	chmod 0777 $DIR/$tdir
-	$SETSTRIPE -c 1 /$DIR/$tdir
 
 	trap "cleanup_rr_alloc $clients $mntpt_root $rr_alloc_MNTPTS" EXIT ERR
 	for i in $(seq 0 $((rr_alloc_MNTPTS - 1))); do
@@ -1153,6 +1184,8 @@ run_fs_test() {
 	print_opts FS_TEST clients fs_test_threads fs_test_objsize MACHINEFILE
 
 	mkdir -p $testdir
+	setstripe_getstripe $testdir $fs_test_SETSTRIPEPARAMS
+
 	# mpi_run uses mpiuser
 	chmod 0777 $testdir
 
@@ -1224,6 +1257,7 @@ run_fio() {
 		{ skip_env "FIO not found" && return; }
 
 	mkdir -p $testdir
+	setstripe_getstripe $testdir $fio_SETSTRIPEPARAMS
 
 	# use fio job file if exists,
 	# create a simple one if missing
@@ -1294,6 +1328,7 @@ run_xdd() {
 		xdd_mbytes xdd_passes xdd_rwratio
 
 	mkdir -p $testdir
+	setstripe_getstripe $testdir $xdd_SETSTRIPEPARAMS
 
 	local files=""
 	# Target files creates based on the given number of targets
