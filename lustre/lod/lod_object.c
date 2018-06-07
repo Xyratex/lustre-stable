@@ -949,7 +949,7 @@ static int lod_index_try(const struct lu_env *env, struct dt_object *dt,
 	LASSERT(next->do_ops);
 	LASSERT(next->do_ops->do_index_try);
 
-	rc = lod_load_striping_locked(env, lo);
+	rc = lod_striping_load(env, lo);
 	if (rc != 0)
 		RETURN(rc);
 
@@ -1219,7 +1219,7 @@ static int lod_declare_attr_set(const struct lu_env *env,
 	 * is being initialized as we don't need this information till
 	 * few specific cases like destroy, chown
 	 */
-	rc = lod_load_striping(env, lo);
+	rc = lod_striping_load(env, lo);
 	if (rc)
 		RETURN(rc);
 
@@ -1316,7 +1316,7 @@ static int lod_attr_set(const struct lu_env *env,
 	 * the in-memory striping information has been freed in lod_xattr_set()
 	 * due to layout change. It has to load stripe here again. It only
 	 * changes flags of layout so declare_attr_set() is still accurate */
-	rc = lod_load_striping_locked(env, lo);
+	rc = lod_striping_load(env, lo);
 	if (rc)
 		RETURN(rc);
 
@@ -1647,6 +1647,8 @@ int lod_parse_dir_striping(const struct lu_env *env, struct lod_object *lo,
 	int			rc = 0;
 	ENTRY;
 
+	LASSERT(mutex_is_locked(&lo->ldo_layout_mutex));
+
 	if (le32_to_cpu(lmv1->lmv_hash_type) & LMV_HASH_FLAG_MIGRATION)
 		RETURN(0);
 
@@ -1705,7 +1707,7 @@ out:
 	lo->ldo_dir_stripe_count = le32_to_cpu(lmv1->lmv_stripe_count);
 	lo->ldo_dir_stripes_allocated = le32_to_cpu(lmv1->lmv_stripe_count);
 	if (rc != 0)
-		lod_object_free_striping(env, lo);
+		lod_striping_free_nolock(env, lo);
 
 	RETURN(rc);
 }
@@ -1998,11 +2000,12 @@ static int lod_prep_md_striped_create(const struct lu_env *env,
 		stripe[i] = dto;
 	}
 
-	lo->ldo_dir_stripe_loaded = 1;
 	lo->ldo_dir_striped = 1;
 	lo->ldo_stripe = stripe;
 	lo->ldo_dir_stripe_count = i;
 	lo->ldo_dir_stripes_allocated = stripe_count;
+	smp_mb();
+	lo->ldo_dir_stripe_loaded = 1;
 
 	if (lo->ldo_dir_stripe_count == 0)
 		GOTO(out_put, rc = -ENOSPC);
@@ -2073,7 +2076,7 @@ static int lod_declare_xattr_set_lmv(const struct lu_env *env,
 	if (rc != 0) {
 		/* failed to create striping, let's reset
 		 * config so that others don't get confused */
-		lod_object_free_striping(env, lo);
+		lod_striping_free(env, lo);
 		GOTO(out, rc);
 	}
 out:
@@ -2129,7 +2132,7 @@ static int lod_dir_declare_xattr_set(const struct lu_env *env,
 		RETURN(0);
 
 	/* set xattr to each stripes, if needed */
-	rc = lod_load_striping(env, lo);
+	rc = lod_striping_load(env, lo);
 	if (rc != 0)
 		RETURN(rc);
 
@@ -2226,7 +2229,7 @@ static int lod_replace_parent_fid(const struct lu_env *env,
 	LASSERT(S_ISREG(dt->do_lu.lo_header->loh_attr));
 
 	/* set xattr to each stripes, if needed */
-	rc = lod_load_striping(env, lo);
+	rc = lod_striping_load(env, lo);
 	if (rc != 0)
 		RETURN(rc);
 
@@ -2487,7 +2490,7 @@ static int lod_declare_layout_set(const struct lu_env *env,
 
 		if (flags & LCME_FL_INIT) {
 			if (changed)
-				lod_object_free_striping(env, lo);
+				lod_striping_free(env, lo);
 			RETURN(-EINVAL);
 		}
 
@@ -2677,7 +2680,6 @@ static int lod_declare_modify_layout(const struct lu_env *env,
 {
 	struct lod_device *d = lu2lod_dev(dt->do_lu.lo_dev);
 	struct lod_object *lo = lod_dt_obj(dt);
-	struct dt_object *next = dt_object_child(&lo->ldo_obj);
 	char *op;
 	int rc, len = strlen(XATTR_LUSTRE_LOV);
 	ENTRY;
@@ -2691,8 +2693,7 @@ static int lod_declare_modify_layout(const struct lu_env *env,
 	}
 	len++;
 
-	dt_write_lock(env, next, 0);
-	rc = lod_load_striping_locked(env, lo);
+	rc = lod_striping_load(env, lo);
 	if (rc)
 		GOTO(unlock, rc);
 
@@ -2717,8 +2718,7 @@ static int lod_declare_modify_layout(const struct lu_env *env,
 	}
 unlock:
 	if (rc)
-		lod_object_free_striping(env, lo);
-	dt_write_unlock(env, next);
+		lod_striping_free(env, lo);
 
 	RETURN(rc);
 }
@@ -2916,9 +2916,7 @@ static int lod_declare_layout_merge(const struct lu_env *env,
 	if ((le16_to_cpu(lcm->lcm_flags) & LCM_FL_FLR_MASK) == LCM_FL_NONE)
 		lcm->lcm_flags = cpu_to_le32(LCM_FL_RDONLY);
 
-	LASSERT(dt_write_locked(env, dt_object_child(dt)));
-	lod_object_free_striping(env, lo);
-	rc = lod_parse_striping(env, lo, buf);
+	rc = lod_striping_reload(env, lo, buf);
 	if (rc)
 		GOTO(out, rc);
 
@@ -2945,8 +2943,7 @@ static int lod_declare_layout_split(const struct lu_env *env,
 	lod_obj_inc_layout_gen(lo);
 	lcm->lcm_layout_gen = cpu_to_le32(lo->ldo_layout_gen);
 
-	lod_object_free_striping(env, lo);
-	rc = lod_parse_striping(env, lo, mbuf);
+	rc = lod_striping_reload(env, lo, mbuf);
 	if (rc)
 		RETURN(rc);
 
@@ -3601,7 +3598,7 @@ static int lod_generate_and_set_lovea(const struct lu_env *env,
 	LASSERT(lo);
 
 	if (lo->ldo_comp_cnt == 0) {
-		lod_object_free_striping(env, lo);
+		lod_striping_free(env, lo);
 		rc = lod_sub_xattr_del(env, next, XATTR_NAME_LOV, th);
 		RETURN(rc);
 	}
@@ -3725,7 +3722,7 @@ static int lod_layout_del(const struct lu_env *env, struct dt_object *dt,
 	EXIT;
 out:
 	if (rc)
-		lod_object_free_striping(env, lo);
+		lod_striping_free(env, lo);
 	return rc;
 }
 
@@ -3844,7 +3841,7 @@ static int lod_xattr_set(const struct lu_env *env,
 		 * defines striping, then create() does the work */
 		if (fl & LU_XATTR_REPLACE) {
 			/* free stripes, then update disk */
-			lod_object_free_striping(env, lod_dt_obj(dt));
+			lod_striping_free(env, lod_dt_obj(dt));
 
 			rc = lod_sub_xattr_set(env, next, buf, name, fl, th);
 		} else if (dt_object_remote(dt)) {
@@ -3912,7 +3909,7 @@ static int lod_declare_xattr_del(const struct lu_env *env,
 		RETURN(0);
 
 	/* set xattr to each stripes, if needed */
-	rc = lod_load_striping(env, lo);
+	rc = lod_striping_load(env, lo);
 	if (rc != 0)
 		RETURN(rc);
 
@@ -3948,7 +3945,7 @@ static int lod_xattr_del(const struct lu_env *env, struct dt_object *dt,
 	ENTRY;
 
 	if (!strcmp(name, XATTR_NAME_LOV))
-		lod_object_free_striping(env, lod_dt_obj(dt));
+		lod_striping_free(env, lod_dt_obj(dt));
 
 	rc = lod_sub_xattr_del(env, next, name, th);
 	if (rc != 0 || !S_ISDIR(dt->do_lu.lo_header->loh_attr))
@@ -4623,7 +4620,7 @@ out:
 	/* failed to create striping or to set initial size, let's reset
 	 * config so that others don't get confused */
 	if (rc)
-		lod_object_free_striping(env, lo);
+		lod_striping_free(env, lo);
 
 	RETURN(rc);
 }
@@ -4737,7 +4734,7 @@ out:
 	/* failed to create striping or to set initial size, let's reset
 	 * config so that others don't get confused */
 	if (rc)
-		lod_object_free_striping(env, lo);
+		lod_striping_free(env, lo);
 	RETURN(rc);
 }
 
@@ -4870,7 +4867,7 @@ int lod_striped_create(const struct lu_env *env, struct dt_object *dt,
 	RETURN(0);
 
 out:
-	lod_object_free_striping(env, lo);
+	lod_striping_free(env, lo);
 	RETURN(rc);
 }
 
@@ -4945,7 +4942,7 @@ static int lod_declare_destroy(const struct lu_env *env, struct dt_object *dt,
 	 * is being initialized as we don't need this information till
 	 * few specific cases like destroy, chown
 	 */
-	rc = lod_load_striping(env, lo);
+	rc = lod_striping_load(env, lo);
 	if (rc)
 		RETURN(rc);
 
@@ -5266,7 +5263,7 @@ static int lod_object_lock(const struct lu_env *env,
 	if (!S_ISDIR(dt->do_lu.lo_header->loh_attr))
 		GOTO(out, rc = -ENOTDIR);
 
-	rc = lod_load_striping(env, lo);
+	rc = lod_striping_load(env, lo);
 	if (rc != 0)
 		GOTO(out, rc);
 
@@ -5442,7 +5439,6 @@ static int lod_declare_update_plain(const struct lu_env *env,
 			GOTO(out, rc = -EINVAL);
 		}
 
-		lod_object_free_striping(env, lo);
 		rc = lod_use_defined_striping(env, lo, buf);
 		if (rc)
 			GOTO(out, rc);
@@ -5455,7 +5451,7 @@ static int lod_declare_update_plain(const struct lu_env *env,
 		replay = true;
 	} else {
 		/* non replay path */
-		rc = lod_load_striping_locked(env, lo);
+		rc = lod_striping_load(env, lo);
 		if (rc)
 			GOTO(out, rc);
 	}
@@ -5521,7 +5517,7 @@ static int lod_declare_update_plain(const struct lu_env *env,
 	rc = lod_declare_instantiate_components(env, lo, th);
 out:
 	if (rc)
-		lod_object_free_striping(env, lo);
+		lod_striping_free(env, lo);
 	RETURN(rc);
 }
 
@@ -5885,7 +5881,7 @@ static int lod_declare_update_rdonly(const struct lu_env *env,
 
 out:
 	if (rc)
-		lod_object_free_striping(env, lo);
+		lod_striping_free(env, lo);
 	RETURN(rc);
 }
 
@@ -6013,7 +6009,7 @@ static int lod_declare_update_write_pending(const struct lu_env *env,
 	lod_obj_inc_layout_gen(lo);
 out:
 	if (rc)
-		lod_object_free_striping(env, lo);
+		lod_striping_free(env, lo);
 	RETURN(rc);
 }
 
@@ -6101,7 +6097,7 @@ static int lod_declare_update_sync_pending(const struct lu_env *env,
 
 out:
 	if (rc)
-		lod_object_free_striping(env, lo);
+		lod_striping_free(env, lo);
 	RETURN(rc);
 }
 
@@ -6118,8 +6114,7 @@ static int lod_declare_layout_change(const struct lu_env *env,
 	    dt_object_remote(dt_object_child(dt)))
 		RETURN(-EINVAL);
 
-	lod_write_lock(env, dt, 0);
-	rc = lod_load_striping_locked(env, lo);
+	rc = lod_striping_load(env, lo);
 	if (rc)
 		GOTO(out, rc);
 
@@ -6148,7 +6143,6 @@ static int lod_declare_layout_change(const struct lu_env *env,
 		break;
 	}
 out:
-	dt_write_unlock(env, dt);
 	RETURN(rc);
 }
 
@@ -6367,7 +6361,7 @@ static int lod_object_init(const struct lu_env *env, struct lu_object *lo,
  * \param[in] env	execution environment
  * \param[in] lo	object
  */
-void lod_object_free_striping(const struct lu_env *env, struct lod_object *lo)
+void lod_striping_free_nolock(const struct lu_env *env, struct lod_object *lo)
 {
 	struct lod_layout_component *lod_comp;
 	int i, j;
@@ -6411,6 +6405,13 @@ void lod_object_free_striping(const struct lu_env *env, struct lod_object *lo)
 	}
 }
 
+void lod_striping_free(const struct lu_env *env, struct lod_object *lo)
+{
+	mutex_lock(&lo->ldo_layout_mutex);
+	lod_striping_free_nolock(env, lo);
+	mutex_unlock(&lo->ldo_layout_mutex);
+}
+
 /**
  * Implementation of lu_object_operations::loo_object_free.
  *
@@ -6422,7 +6423,7 @@ static void lod_object_free(const struct lu_env *env, struct lu_object *o)
 	struct lod_object *lo = lu2lod_obj(o);
 
 	/* release all underlying object pinned */
-	lod_object_free_striping(env, lo);
+	lod_striping_free(env, lo);
 	lu_object_fini(o);
 	OBD_SLAB_FREE_PTR(lo, lod_object_kmem);
 }
