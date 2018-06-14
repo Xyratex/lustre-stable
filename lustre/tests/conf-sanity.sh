@@ -8141,7 +8141,7 @@ test_116() {
 }
 run_test 116 "big size MDT support"
 
-test_117() {
+test_119() {
 	local had_config
 	local size_mb
 
@@ -8149,7 +8149,7 @@ test_117() {
 
 	had_config=$(do_facet mds1 "$LCTL get_param debug|grep config")
 	do_facet mds1 "$LCTL set_param debug=+config"
-	do_facet mds1 "$LCTL dk > /dev/null"
+	do_facet mds1 "$LCTL clear"
 
 	setup
 	do_facet mds2 "$TUNEFS --writeconf $(mdsdevname 2)" > /dev/null 2>&1
@@ -8163,26 +8163,18 @@ test_117() {
 	debug_size_save
 	# using larger debug_mb size to avoid lctl dk log truncation
 	size_mb=$((DEBUG_SIZE_SAVED * 4))
-	for i in `seq 1 3`; do
+	for i in {1..3}; do
 		stop_mdt 2
 		# though config processing stops after failed attach and setup
 		# it will proceed after the failed command after each writeconf
 		# this is the original scenario of the issue
-		do_facet mds2 "$TUNEFS --writeconf $(mdsdevname 2)" \
-			> /dev/null 2>&1
+		do_facet mds2 "$TUNEFS --writeconf $(mdsdevname 2)" &> /dev/null
 		do_facet mds1 "$LCTL set_param debug_mb=$size_mb"
 		start_mdt 2
-		local wait=0
-		local max_wait=300
-		local RC=1
-		while [ $wait -lt $max_wait ]; do
-			[ ! -z "$(do_facet mds1 $LCTL dk |
-				grep Processed\ log\ $FSNAME-MDT0000)" ] &&
-				RC=0; break;
-			sleep 1
-			wait=$(( wait + sleep))
-		done
-		[[ $RC -ne 0 ]] && error "Failed to process log for MDT0"
+		wait_update_facet mds1 \
+			"$LCTL dk | grep Processed.log.$FSNAME-MDT0000 | cut -f4 -d ' '" \
+			"$FSNAME-MDT0000" 300 ||
+				error "Failed to process log for MDT0"
 	done
 	debug_size_restore
 
@@ -8190,7 +8182,7 @@ test_117() {
 
 	reformat
 }
-run_test 117 "writeconf on mdt>0 shouldn't duplicate mdc/osp and crash"
+run_test 119 "writeconf on mdt>0 shouldn't duplicate mdc/osp and crash"
 
 if ! combined_mgs_mds ; then
 	stop mgs
