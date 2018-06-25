@@ -1229,11 +1229,17 @@ start() {
     eval export ${facet}_dev=${device}
     eval export ${facet}_opt=\"$@\"
 
+    combined_mgs_mds && [[ ${dev_alias} == mds1 ]] &&
+        eval export mgs_dev=${device}
+
     local varname=${facet}failover_dev
     if [ -n "${!varname}" ] ; then
         eval export ${facet}failover_dev=${!varname}
     else
         eval export ${facet}failover_dev=$device
+        combined_mgs_mds && [[ ${dev_alias} == mds1 ]] &&
+            eval export mgsfailover_dev=${device}
+
     fi
 
     local mntpt=$(facet_mntpt $facet)
@@ -2200,8 +2206,11 @@ wait_recovery_complete () {
     fi
     echo affected facets: $facets
 
-	# we can use "for" here because we are waiting the slowest
-	for facet in ${facets//,/ }; do
+	facets=${facets//,/ }
+	# We can use "for" here because we are waiting the slowest.
+	# The mgs not having the recovery_status proc entry, exclude it
+	# from the facet list.
+	for facet in ${facets//mgs/ }; do
 		local var_svc=${facet}_svc
 		local param="*.${!var_svc}.recovery_status"
 
@@ -2448,7 +2457,7 @@ facet_failover() {
 			list_member ${affecteds[index]} mgs; then
 			mount_facet mgs || error "Restart of mgs failed"
 			affecteds[index]=$(exclude_items_from_list \
-			    ${affecteds[index]} mgs)
+				${affecteds[index]} mgs)
 		fi
 		# FIXME; has to be changed to mount all facets concurrently
 		if [ -n "${affecteds[index]}" ]; then
@@ -2731,7 +2740,14 @@ facet_host() {
 		elif [ "${facet:0:3}" == "mdt" -o \
 			"${facet:0:3}" == "mds" -o \
 			"${facet:0:3}" == "mgs" ]; then
-			eval export ${facet}_HOST=${mds_HOST}
+			local temp
+			if [ "${facet}" == "mgsfailover" ] &&
+			   [ -n "$mds1failover_HOST" ]; then
+				temp=$mds1failover_HOST
+			else
+				temp=${mds_HOST}
+			fi
+			eval export ${facet}_HOST=$temp
 		fi
 	fi
 	echo -n ${!varname}
@@ -2740,7 +2756,6 @@ facet_host() {
 facet_failover_host() {
 	local facet=$1
 	local varname
-	local temp
 
 	var=${facet}failover_HOST
 	if [ -n "${!var}" ]; then
@@ -2748,9 +2763,9 @@ facet_failover_host() {
 		return
 	fi
 
-	if combined_mgs_mds && [ $facet == "mgs" ]; then
-		temp=mds1failover_HOST
-		echo ${!temp}
+	if combined_mgs_mds && [ $facet == "mgs" ] &&
+	   [ -n "$mds1failover_HOST" ]; then
+		echo $mds1failover_HOST
 		return
 	fi
 
@@ -3728,7 +3743,14 @@ init_facet_vars () {
 
 	local varname=${facet}failover_HOST
 	if [ -z "${!varname}" ]; then
-		eval export $varname=$(facet_host $facet)
+		local temp
+		if combined_mgs_mds && [ $facet == "mgs" ] &&
+		   [ -n "$mds1failover_HOST" ]; then
+			temp=$mds1failover_HOST
+		else
+			temp=$(facet_host $facet)
+		fi
+		eval export $varname=$temp
 	fi
 
 	varname=${facet}_HOST
