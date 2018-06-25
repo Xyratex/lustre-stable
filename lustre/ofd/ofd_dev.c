@@ -1540,7 +1540,7 @@ static int ofd_create_hdl(struct tgt_session_info *tsi)
 	u64			 oid = ostid_id(&oa->o_oi);
 	struct ofd_seq		*oseq;
 	s64 diff;
-	int rc = 0;
+	int rc = 0, rc2;
 	int			 sync_trans = 0;
 	long			 granted = 0;
 
@@ -1770,7 +1770,9 @@ static int ofd_create_hdl(struct tgt_session_info *tsi)
 			granted = 0;
 		}
 
-		rc = ostid_set_id(&rep_oa->o_oi, ofd_seq_last_oid(oseq));
+		rc2 = ostid_set_id(&rep_oa->o_oi, ofd_seq_last_oid(oseq));
+		/* rewrite rc only when ostid_set_id returns error */
+		rc = rc2 != 0 ? rc2 : rc;
 	}
 	EXIT;
 	ofd_counter_incr(exp, LPROC_OFD_STATS_CREATE,
