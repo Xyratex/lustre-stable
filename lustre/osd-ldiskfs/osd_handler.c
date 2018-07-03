@@ -3580,6 +3580,14 @@ static struct inode *osd_create_local_agent_inode(const struct lu_env *env,
 	 * correct gid on remote file, not agent here */
 	local->i_gid = current_fsgid();
 	ldiskfs_set_inode_state(local, LDISKFS_STATE_LUSTRE_NOSCRUB);
+
+	/* e2fsck doesn't like empty symlink inodes */
+#define OSD_DUMMY_SLINK "*local*"
+	if (S_ISLNK(type)) {
+		i_size_write(local, sizeof(OSD_DUMMY_SLINK) - 1);
+		LDISKFS_I(local)->i_disksize = sizeof(OSD_DUMMY_SLINK) - 1;
+		memcpy((char*)LDISKFS_I(local)->i_data, OSD_DUMMY_SLINK, sizeof(OSD_DUMMY_SLINK));
+	}
 	unlock_new_inode(local);
 
 	/* Agent inode should not have project ID */
