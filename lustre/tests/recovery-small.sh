@@ -1737,7 +1737,7 @@ test_100()
 }
 run_test 100 "IR: Make sure normal recovery still works w/o IR"
 
-test_101()
+test_101a()
 {
         do_facet mgs $LCTL list_param mgs.*.ir_timeout ||
                 { skip "MGS without IR support"; return 0; }
@@ -1756,7 +1756,28 @@ test_101()
 
         lctl set_param -n osc.$OST1_IMP.pinger_recov=1
 }
-run_test 101 "IR: Make sure IR works w/o normal recovery"
+run_test 101a "IR: Make sure IR works w/o normal recovery"
+
+test_101b()
+{
+        do_facet mgs $LCTL list_param mgs.*.ir_timeout ||
+                { skip "MGS without IR support"; return 0; }
+
+        set_ir_status full
+
+        local OST1_IMP=$(get_osc_import_name client ost1)
+
+#define OBD_FAIL_OST_PREPARE_DELAY	 0x245
+	do_facet ost1 "$LCTL set_param fail_loc=0x245"
+        # disable pinger recovery
+        $LCTL set_param -n osc.$OST1_IMP.pinger_recov=0
+
+#OST may return EAGAIN if it is not configured yet
+        fail ost1
+
+        $LCTL set_param -n osc.$OST1_IMP.pinger_recov=1
+}
+run_test 101b "IR: Make sure IR works w/o normal recovery and proceed EAGAIN"
 
 test_102()
 {
