@@ -8184,6 +8184,30 @@ test_119() {
 }
 run_test 119 "writeconf on mdt>0 shouldn't duplicate mdc/osp and crash"
 
+test_120() {
+	[ "$MDSCOUNT" -lt 2 ] && { skip "mdt count < 2"; return 0; }
+	[ $(facet_fstype $SINGLEMDS) != "ldiskfs" ] &&
+		skip "ldiskfs only test" && return
+	[ $(lustre_version_code $SINGLEMDS) -lt $(version_code 2.8.0) ] &&
+		skip "Need DNE2 capable MD target" && return
+
+	setup
+
+	local mds1host=$(facet_active_host mds1)
+	local mds1dev=$(mdsdevname 1)
+
+	$LFS mkdir -i 1 $DIR/$tdir
+	$LFS mkdir -i 0 $DIR/$tdir/mds1dir
+
+	ln -s foo $DIR/$tdir/bar
+	mv $DIR/$tdir/bar $DIR/$tdir/mds1dir/bar2 || error "cross-target rename failed"
+
+	stopall
+
+	FSCK_MAX_ERR=0 run_e2fsck $mds1host $mds1dev "-n"
+}
+run_test 120 "cross-target rename should not create bad symlink inodes"
+
 if ! combined_mgs_mds ; then
 	stop mgs
 fi
