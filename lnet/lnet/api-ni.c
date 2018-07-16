@@ -85,7 +85,7 @@ module_param_call(lnet_interfaces_max, intf_max_set, param_get_int,
 MODULE_PARM_DESC(lnet_interfaces_max,
 		"Maximum number of interfaces in a node.");
 
-unsigned lnet_peer_discovery_disabled = 0;
+unsigned lnet_peer_discovery_disabled = 1;
 static int discovery_set(const char *val, struct kernel_param *kp);
 module_param_call(lnet_peer_discovery_disabled, discovery_set, param_get_int,
 		  &lnet_peer_discovery_disabled, S_IRUGO|S_IWUSR);
