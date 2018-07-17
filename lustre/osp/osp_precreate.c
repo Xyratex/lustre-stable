@@ -377,6 +377,7 @@ int osp_write_last_oid_seq_files(struct lu_env *env, struct osp_device *osp,
 	struct lu_buf	   *lb_oid = &oti->osi_lb;
 	struct lu_buf	   *lb_oseq = &oti->osi_lb2;
 	loff_t		   oid_off;
+	u64		   oid;
 	loff_t		   oseq_off;
 	struct thandle	  *th;
 	int		      rc;
@@ -387,13 +388,12 @@ int osp_write_last_oid_seq_files(struct lu_env *env, struct osp_device *osp,
 
 	/* Note: through f_oid is only 32 bits, it will also write 64 bits
 	 * for oid to keep compatibility with the previous version. */
-	lb_oid->lb_buf = &fid->f_oid;
-	lb_oid->lb_len = sizeof(u64);
-	oid_off = sizeof(u64) * osp->opd_index;
+	oid = fid->f_oid;
+	osp_objid_buf_prep(lb_oid, &oid_off,
+			   &oid, osp->opd_index);
 
-	lb_oseq->lb_buf = &fid->f_seq;
-	lb_oseq->lb_len = sizeof(u64);
-	oseq_off = sizeof(u64) * osp->opd_index;
+	osp_objseq_buf_prep(lb_oseq, &oseq_off,
+			    &fid->f_seq, osp->opd_index);
 
 	th = dt_trans_create(env, osp->opd_storage);
 	if (IS_ERR(th))
@@ -485,7 +485,7 @@ static int osp_precreate_rollover_new_seq(struct lu_env *env,
 		      fid_seq(fid));
 	/* Update last_xxx to the new seq */
 	spin_lock(&osp->opd_pre_lock);
-	osp->opd_last_used_fid = *fid;
+	osp_update_last_fid(osp, fid);
 	osp->opd_gap_start_fid = *fid;
 	osp->opd_pre_used_fid = *fid;
 	osp->opd_pre_last_created_fid = *fid;
