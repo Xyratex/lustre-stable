@@ -485,7 +485,8 @@ static int osp_precreate_rollover_new_seq(struct lu_env *env,
 		      fid_seq(fid));
 	/* Update last_xxx to the new seq */
 	spin_lock(&osp->opd_pre_lock);
-	osp_update_last_fid(osp, fid);
+	osp->opd_last_used_fid = *fid;
+	osp_fid_to_obdid(fid, &osp->opd_last_id);
 	osp->opd_gap_start_fid = *fid;
 	osp->opd_pre_used_fid = *fid;
 	osp->opd_pre_last_created_fid = *fid;
