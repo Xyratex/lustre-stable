@@ -1989,7 +1989,10 @@ int ptlrpc_check_set(const struct lu_env *env, struct ptlrpc_request_set *set)
 			 * up!  Dead weird since the server told us the RPC
 			 * was good after getting the REPLY for her GET or
 			 * the ACK for her PUT. */
-			DEBUG_REQ(D_ERROR, req, "bulk transfer failed");
+			DEBUG_REQ(D_ERROR, req, "bulk transfer failed %d/%d/%d :",
+				 req->rq_status,
+				 req->rq_bulk->bd_nob,
+				 req->rq_bulk->bd_nob_transferred);
 			req->rq_status = -EIO;
 		}
 
