@@ -2220,11 +2220,9 @@ static void osd_conf_get(const struct lu_env *env,
 static int osd_sync(const struct lu_env *env, struct dt_device *d)
 {
 	int rc;
+	struct super_block *s = osd_sb(osd_dt_dev(d));
 
-	CDEBUG(D_CACHE, "%s: syncing OSD\n", osd_dt_dev(d)->od_svname);
-
-	rc = ldiskfs_force_commit(osd_sb(osd_dt_dev(d)));
-
+	rc = s->s_op->sync_fs(s, 1);
 	CDEBUG(D_CACHE, "%s: synced OSD: rc = %d\n", osd_dt_dev(d)->od_svname,
 	       rc);
 
