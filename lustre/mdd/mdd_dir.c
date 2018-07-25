@@ -3933,8 +3933,6 @@ static int mdd_migrate_entries(const struct lu_env *env,
 		 * get type from loh_attr directly */
 		is_dir = S_ISDIR(child->mod_obj.mo_lu.lo_header->loh_attr);
 
-		mdd_write_lock(env, child, MOR_SRC_CHILD);
-
 		snprintf(name, ent->lde_namelen + 1, "%s", ent->lde_name);
 
 		/* Check whether the name has been inserted to the target */
@@ -4006,37 +4004,40 @@ static int mdd_migrate_entries(const struct lu_env *env,
 			GOTO(out_put, rc);
 		}
 
+		mdd_write_lock(env, child, MOR_SRC_CHILD);
+
 		if (likely(!target_exist)) {
 			rc = __mdd_index_insert(env, mdd_tobj, &ent->lde_fid,
 				child->mod_obj.mo_lu.lo_header->loh_attr, name,
 				handle);
 			if (rc != 0)
-				GOTO(out_put, rc);
+				GOTO(out_unlock, rc);
 		}
 
 		rc = __mdd_index_delete(env, mdd_sobj, name, is_dir, handle);
 		if (rc != 0)
-			GOTO(out_put, rc);
+			GOTO(out_unlock, rc);
 
 		if (is_dir) {
 			rc = __mdd_index_delete_only(env, child, dotdot,
 						     handle);
 			if (rc != 0)
-				GOTO(out_put, rc);
+				GOTO(out_unlock, rc);
 
 			rc = __mdd_index_insert_only(env, child,
 					 mdd_object_fid(mdd_tobj), S_IFDIR,
 					 dotdot, handle);
 			if (rc != 0)
-				GOTO(out_put, rc);
+				GOTO(out_unlock, rc);
 		}
 
 		rc = mdd_linkea_update_child(env, mdd_sobj, mdd_tobj,
 					     child, name,
 					     strlen(name), handle);
 
-out_put:
+out_unlock:
 		mdd_write_unlock(env, child);
+out_put:
 		mdd_object_put(env, child);
 		rc = mdd_trans_stop(env, mdd, rc, handle);
 		if (rc != 0)
