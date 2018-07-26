@@ -42,6 +42,8 @@
 
 #include <libcfs/libcfs.h>   /* LASSERT. */
 
+#define LUSTRE_EOF 0xffffffffffffffffULL
+
 struct interval_node {
         struct interval_node   *in_left;
         struct interval_node   *in_right;
@@ -75,6 +77,11 @@ static inline __u64 interval_low(struct interval_node *node)
 static inline __u64 interval_high(struct interval_node *node)
 {
         return node->in_extent.end;
+}
+
+static inline void interval_init(struct interval_node *node)
+{
+	memset(node, 0, sizeof(*node));
 }
 
 static inline void interval_set(struct interval_node *node,

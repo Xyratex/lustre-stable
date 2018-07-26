@@ -44,7 +44,7 @@
 #include <sys/time.h>
 
 #include <libcfs/libcfs.h>
-#include <../ldlm/interval_tree.c>
+#include <../../libcfs/libcfs/linux/interval_tree.c>
 
 #define dprintf(fmt, args...) //printf(fmt, ##args)
 #define error(fmt, args...) do {                        \

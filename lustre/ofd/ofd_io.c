@@ -133,6 +133,7 @@ static int ofd_preprw_write(const struct lu_env *env, struct obd_export *exp,
 	struct ofd_thread_info	*info = ofd_info(env);
 	struct ofd_object	*fo;
 	int			 i, j, k, rc = 0, tot_bytes = 0;
+	struct range_lock *range = &ofd_info(env)->fti_write_range;
 
 	ENTRY;
 	LASSERT(env != NULL);
@@ -175,6 +176,12 @@ static int ofd_preprw_write(const struct lu_env *env, struct obd_export *exp,
 	 * space back if possible */
 	ofd_grant_prepare_write(env, exp, oa, rnb, obj->ioo_bufcnt);
 
+	range_lock_init(range,
+			rnb[0].rnb_offset,
+			rnb[obj->ioo_bufcnt - 1].rnb_offset +
+			rnb[obj->ioo_bufcnt - 1].rnb_len - 1);
+	range_lock(&fo->ofo_write_tree, range);
+
 	/* parse remote buffers to local buffers and prepare the latter */
 	*nr_local = 0;
 	for (i = 0, j = 0; i < obj->ioo_bufcnt; i++) {
@@ -210,6 +217,7 @@ static int ofd_preprw_write(const struct lu_env *env, struct obd_export *exp,
 	RETURN(0);
 err:
 	dt_bufs_put(env, ofd_object_child(fo), lnb, *nr_local);
+	range_unlock(&fo->ofo_write_tree, range);
 	ofd_read_unlock(env, fo);
 	/* ofd_grant_prepare_write() was called, so we must commit */
 	ofd_grant_commit(env, exp, rc);
@@ -574,6 +582,7 @@ ofd_commitrw_write(const struct lu_env *env, struct obd_export *exp,
 	struct filter_export_data *fed = &exp->exp_filter_data;
 	bool			 soft_sync = false;
 	bool			 cb_registered = false;
+	struct range_lock *range = &ofd_info(env)->fti_write_range;
 
 	ENTRY;
 
@@ -681,6 +690,7 @@ out_stop:
 
 out:
 	dt_bufs_put(env, o, lnb, niocount);
+	range_unlock(&fo->ofo_write_tree, range);
 	ofd_read_unlock(env, fo);
 	/* put is pair to object_get in ofd_preprw_write */
 	ofd_object_put(env, fo);

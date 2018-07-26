@@ -43,6 +43,7 @@
 #include <md_object.h>
 #include <lustre_fid.h>
 #include <lustre_capa.h>
+#include <libcfs/range_lock.h>
 
 #define OFD_INIT_OBJID	0
 #define OFD_PRECREATE_BATCH_DEFAULT (OBJ_SUBDIR_COUNT * 4)
@@ -207,6 +208,7 @@ struct ofd_object {
 	struct lu_object_header	ofo_header;
 	struct dt_object	ofo_obj;
 	int			ofo_ff_exists;
+	struct range_lock_tree	ofo_write_tree;
 };
 
 static inline struct ofd_object *ofd_obj(struct lu_object *o)
@@ -310,6 +312,8 @@ struct ofd_thread_info {
 	/* Space used by the I/O, used by grant code */
 	unsigned long			 fti_used;
 	struct ost_lvb			 fti_lvb;
+
+	struct range_lock		 fti_write_range;
 };
 
 extern void target_recovery_fini(struct obd_device *obd);

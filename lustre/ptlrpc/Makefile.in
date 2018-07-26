@@ -8,7 +8,6 @@ ldlm_objs += $(LDLM)ldlm_plain.o $(LDLM)ldlm_extent.o
 ldlm_objs += $(LDLM)ldlm_request.o $(LDLM)ldlm_lockd.o
 ldlm_objs += $(LDLM)ldlm_flock.o $(LDLM)ldlm_inodebits.o
 ldlm_objs += $(LDLM)ldlm_pool.o
-ldlm_objs += $(LDLM)interval_tree.o
 ldlm_objs += $(LDLM)ldlm_reclaim.o
 
 ptlrpc_objs := client.o recover.o connection.o niobuf.o pack_generic.o
@@ -33,9 +32,6 @@ ldlm_%.c: @LUSTRE@/ldlm/ldlm_%.c
 	ln -sf $< $@
 
 l_lock.c: @LUSTRE@/ldlm/l_lock.c
-	ln -sf $< $@
-
-interval_tree.c: @LUSTRE@/ldlm/interval_tree.c
 	ln -sf $< $@
 
 tgt_%.c: @LUSTRE@/target/tgt_%.c
