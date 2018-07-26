@@ -2574,6 +2574,52 @@ test_134() {
 }
 run_test 134 "mount timeout due to lock callback timeout on mgs_revoke_lock"
 
+test_135() {
+	local wce_param="obdfilter.$FSNAME-OST0000.writethrough_cache_enable"
+	local p="$TMP/$TESTSUITE-$TESTNAME.parameters"
+	local amc=$(at_max_get client)
+	local amo=$(at_max_get ost1)
+	local timeout
+
+	at_max_set 0 client
+	at_max_set 0 ost1
+	timeout=$(request_timeout client)
+
+	[ "$(facet_fstype ost1)" = "ldiskfs" ] && {
+		# save old r/o cache settings
+		save_lustre_params ost1 $wce_param > $p
+
+		# disable r/o cache
+		do_facet ost1 "$LCTL set_param -n $wce_param=0"
+	}
+
+	$LFS setstripe -i 0 -c 1 $DIR/$tfile
+	dd if=/dev/zero of=$DIR/$tfile bs=4096 count=1 oflag=direct
+	cp $DIR/$tfile $TMP/$tfile
+	# make sure there are no pending writes from other tests
+	sync
+	#define OBD_FAIL_OST_BRW_PAUSE_BULK2     0x227
+	do_facet ost1 $LCTL set_param fail_loc=0x80000227
+	do_facet ost1 $LCTL set_param fail_val=$((timeout+5))
+	dd if=/dev/urandom of=$DIR/$tfile bs=4096 count=1 conv=notrunc,fdatasync
+	dd if=/dev/zero of=$DIR/$tfile bs=4096 count=1 conv=notrunc,fdatasync
+	sleep 10
+	cancel_lru_locks osc
+	cmp -b $DIR/$tfile $TMP/$tfile || error "wrong data"
+	rm -f $DIR/$tfile $TMP/$tfile
+
+	at_max_set $amc client
+	at_max_set $amo ost1
+
+	[ "$(facet_fstype ost1)" = "ldiskfs" ] && {
+		# restore initial r/o cache settings
+		restore_lustre_params < $p
+	}
+
+	return 0
+}
+run_test 135 "data corruption through resend"
+
 complete $SECONDS
 check_and_cleanup_lustre
 exit_status
