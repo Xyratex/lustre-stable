@@ -2126,8 +2126,12 @@ int tgt_brw_read(struct tgt_session_info *tsi)
 						   &RMF_SHORT_IO, rc,
 						   RCL_SERVER);
 			rc = rc > 0 ? 0 : rc;
-		} else if (!CFS_FAIL_PRECHECK(OBD_FAIL_PTLRPC_CLIENT_BULK_CB2)) {
+		} else {
+			if (!CFS_FAIL_PRECHECK(OBD_FAIL_PTLRPC_CLIENT_BULK_CB2)) {
 			rc = target_bulk_io(exp, desc, &lwi);
+			} else {
+			rc = 0;
+			}
 		}
 		no_reply = rc != 0;
 	} else {
@@ -2163,16 +2167,14 @@ out_lock:
 	/* send a bulk after reply to simulate a network delay or reordering
 	 * by a router - Note that !desc implies short io, so there is no bulk
 	 * to reorder. */
-	if (unlikely(CFS_FAIL_PRECHECK(OBD_FAIL_PTLRPC_CLIENT_BULK_CB2)) &&
-	    desc) {
-		wait_queue_head_t	 waitq;
-		struct l_wait_info	 lwi1;
+	if (unlikely(CFS_FAIL_PRECHECK(OBD_FAIL_PTLRPC_CLIENT_BULK_CB2) && desc)) {
+		req->rq_status = rc;
+		target_committed_to_req(req);
+		target_send_reply(req, 0, 0);
 
 		CDEBUG(D_INFO, "reorder BULK\n");
-		init_waitqueue_head(&waitq);
+		CFS_FAIL_TIMEOUT(OBD_FAIL_PTLRPC_CLIENT_BULK_CB2, cfs_fail_val);
 
-		lwi1 = LWI_TIMEOUT_INTR(cfs_time_seconds(3), NULL, NULL, NULL);
-		l_wait_event(waitq, 0, &lwi1);
 		target_bulk_io(exp, desc, &lwi);
 		ptlrpc_free_bulk(desc);
 	}
