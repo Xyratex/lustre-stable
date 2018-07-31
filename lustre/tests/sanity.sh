@@ -18585,6 +18585,33 @@ test_805() {
 }
 run_test 805 "ZFS can remove from full fs"
 
+test_806()
+{
+	[ $MDSCOUNT -lt 2 ] && skip "needs >= 2 MDTs" && return
+	mkdir $DIR/$tdir
+	test_mkdir -i 0 -c 2 $DIR/$tdir/dir
+
+	mkdir $DIR/$tdir/tgt1
+	test_mkdir -i 1 -c 1 $DIR/$tdir/tgt2
+
+	mkdir $DIR/$tdir/aux1
+	mkdir $DIR/$tdir/aux2
+
+	mv $DIR/$tdir/aux1 $DIR/$tdir/dir/ || error "rename aux1 failed"
+	mv $DIR/$tdir/aux2 $DIR/$tdir/dir/ || error "rename aux2 failed"
+
+	mv $DIR/$tdir/dir $DIR/$tdir/tgt1 || error "rename to tgt1 failed"
+	mv $DIR/$tdir/tgt1/dir $DIR/$tdir/tgt2 || error "rename to tgt2 failed"
+
+	local fid=$($LFS path2fid $DIR/$tdir/tgt2/dir | sed -e 's/[][]//g')
+	local pathnr=$($LFS fid2path $FSNAME $fid | wc -l)
+	[ $pathnr -eq 1 ] || {
+	    $LFS fid2path $FSNAME $fid
+	    error "more than one path to dir"
+	}
+}
+run_test 806 "rename striped directory"
+
 #
 # tests that do cleanup/setup should be run at the end
 #
