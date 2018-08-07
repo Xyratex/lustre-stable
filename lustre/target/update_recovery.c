@@ -502,6 +502,8 @@ void dtrq_destroy(struct distribute_txn_replay_req *dtrq)
 	struct distribute_txn_replay_req_sub	*tmp;
 
 	LASSERT(list_empty(&dtrq->dtrq_list));
+	CDEBUG(D_HA, "destroy x%llu t%llu\n", dtrq->dtrq_xid,
+	       dtrq->dtrq_master_transno);
 	spin_lock(&dtrq->dtrq_sub_list_lock);
 	list_for_each_entry_safe(dtrqs, tmp, &dtrq->dtrq_sub_list, dtrqs_list) {
 		struct sub_thandle_cookie *stc;
@@ -1093,6 +1095,7 @@ static void update_recovery_update_ses(struct lu_env *env,
 	lrd->lrd_result          = le32_to_cpu(lrd->lrd_result);
 	lrd->lrd_client_gen      = le32_to_cpu(lrd->lrd_client_gen);
 
+	CDEBUG(D_HA, "xid=%llu transno=%llu\n", lrd->lrd_xid, lrd->lrd_transno);
 	if (lrd->lrd_transno != tgt_th_info(env)->tti_transno)
 		return;
 

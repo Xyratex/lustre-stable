@@ -2361,8 +2361,8 @@ static void replay_request_or_update(struct lu_env *env,
 			}
 
 			LASSERT(trd->trd_processing_task == current_pid());
-			DEBUG_REQ(D_HA, req, "processing t%lld from %s",
-				  lustre_msg_get_transno(req->rq_reqmsg),
+			DEBUG_REQ(D_HA, req, "processing 0x%llu t%lld from %s",
+				  req->rq_xid, lustre_msg_get_transno(req->rq_reqmsg),
 				  libcfs_nid2str(req->rq_peer.nid));
 
 			handle_recovery_req(thread, req,
