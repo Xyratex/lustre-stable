@@ -2348,7 +2348,7 @@ static void replay_request_or_update(struct lu_env *env,
 				struct distribute_txn_replay_req *dtrq;
 
 				dtrq = distribute_txn_lookup_finish_list(tdtd,
-								   req->rq_xid);
+								      transno);
 				LASSERT(dtrq != NULL);
 				spin_lock(&tdtd->tdtd_replay_list_lock);
 				list_del_init(&dtrq->dtrq_list);

@@ -609,14 +609,14 @@ EXPORT_SYMBOL(distribute_txn_get_next_transno);
 
 struct distribute_txn_replay_req *
 distribute_txn_lookup_finish_list(struct target_distribute_txn_data *tdtd,
-				  __u64 xid)
+				  __u64 transno)
 {
 	struct distribute_txn_replay_req *dtrq = NULL;
 	struct distribute_txn_replay_req *iter;
 
 	spin_lock(&tdtd->tdtd_replay_list_lock);
 	list_for_each_entry(iter, &tdtd->tdtd_replay_finish_list, dtrq_list) {
-		if (iter->dtrq_xid == xid) {
+		if (iter->dtrq_master_transno == transno) {
 			dtrq = iter;
 			break;
 		}
@@ -633,7 +633,8 @@ bool is_req_replayed_by_update(struct ptlrpc_request *req)
 	if (tgt->lut_tdtd == NULL)
 		return false;
 
-	dtrq = distribute_txn_lookup_finish_list(tgt->lut_tdtd, req->rq_xid);
+	dtrq = distribute_txn_lookup_finish_list(tgt->lut_tdtd,
+					lustre_msg_get_transno(req->rq_reqmsg));
 	if (dtrq == NULL)
 		return false;
 
