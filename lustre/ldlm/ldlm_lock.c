@@ -1739,6 +1739,9 @@ enum ldlm_error ldlm_lock_enqueue(struct ldlm_namespace *ns,
 	int local = ns_is_client(ldlm_res_to_ns(res));
 	enum ldlm_error rc = ELDLM_OK;
 	struct ldlm_interval *node = NULL;
+#ifdef HAVE_SERVER_SUPPORT
+	bool reconstruct = false;
+#endif
 	ENTRY;
 
         /* policies are not executed on the client or during replay */
@@ -1855,7 +1858,25 @@ enum ldlm_error ldlm_lock_enqueue(struct ldlm_namespace *ns,
 		/* If no flags, fall through to normal enqueue path. */
 	}
 
+	reconstruct = !local && res->lr_type == LDLM_FLOCK &&
+		      !(*flags & LDLM_FL_TEST_LOCK);
+	if (reconstruct) {
+		rc = req_can_reconstruct(cookie, NULL);
+		if (rc != 0) {
+			if (rc == 1)
+				rc = 0;
+		        GOTO(out, rc);
+		}
+	}
+
 	rc = ldlm_lock_enqueue_helper(lock, flags);
+	if (reconstruct) {
+		struct ptlrpc_request *req = cookie;
+
+		tgt_mk_reply_data(NULL, NULL,
+				  &req->rq_export->exp_target_data,
+				  req, 0, NULL, false, 0);
+	}
         GOTO(out, rc);
 #else
         } else {

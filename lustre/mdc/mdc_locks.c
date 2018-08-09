@@ -762,7 +762,7 @@ static int mdc_enqueue_base(struct obd_export *exp,
 			    __u64 extra_lock_flags)
 {
 	struct obd_device *obddev = class_exp2obd(exp);
-	struct ptlrpc_request *req = NULL;
+	struct ptlrpc_request *req;
 	__u64 flags, saved_flags = extra_lock_flags;
 	struct ldlm_res_id res_id;
 	static const union ldlm_policy_data lookup_policy = {
@@ -812,6 +812,7 @@ resend:
 		LASSERTF(einfo->ei_type == LDLM_FLOCK, "lock type %d\n",
 			 einfo->ei_type);
 		res_id.name[3] = LDLM_FLOCK;
+		req = ldlm_enqueue_pack(exp, 0);
 	} else if (it->it_op & IT_OPEN) {
 		req = mdc_intent_open_pack(exp, it, op_data, acl_bufsize);
 	} else if (it->it_op & IT_UNLINK) {
@@ -845,15 +846,13 @@ resend:
 	 * that threads that are waiting for a modify RPC slot are not polluting
 	 * our rpcs in flight counter.
 	 * We do not do flock request limiting, though */
-	if (it) {
-		mdc_get_mod_rpc_slot(req, it);
-		rc = obd_get_request_slot(&obddev->u.cli);
-		if (rc != 0) {
-			mdc_put_mod_rpc_slot(req, it);
-			mdc_clear_replay_flag(req, 0);
-			ptlrpc_req_finished(req);
-			RETURN(rc);
-		}
+	mdc_get_mod_rpc_slot(req, it);
+	rc = obd_get_request_slot(&obddev->u.cli);
+	if (rc != 0) {
+		mdc_put_mod_rpc_slot(req, it);
+		mdc_clear_replay_flag(req, 0);
+		ptlrpc_req_finished(req);
+		RETURN(rc);
 	}
 
 	/* With Data-on-MDT the glimpse callback is needed too.
@@ -865,6 +864,10 @@ resend:
 
 	rc = ldlm_cli_enqueue(exp, &req, einfo, &res_id, policy, &flags, NULL,
 			      0, lvb_type, lockh, 0);
+
+	obd_put_request_slot(&obddev->u.cli);
+	mdc_put_mod_rpc_slot(req, it);
+
 	if (!it) {
 		/* For flock requests we immediatelly return without further
 		   delay and let caller deal with the rest, since rest of
@@ -878,11 +881,9 @@ resend:
 		    (einfo->ei_type == LDLM_FLOCK) &&
 		    (einfo->ei_mode == LCK_NL))
 			goto resend;
+		ptlrpc_req_finished(req);
 		RETURN(rc);
 	}
-
-	obd_put_request_slot(&obddev->u.cli);
-	mdc_put_mod_rpc_slot(req, it);
 
 	if (rc < 0) {
 		CDEBUG(D_INFO,
@@ -965,9 +966,14 @@ static int mdc_enqueue_async_interpret(const struct lu_env *env,
 	struct obd_export	*exp = mea->mea_exp;
 	struct ldlm_lock	*lock = mea->mea_lock;
 	struct lustre_handle	lockh;
+	struct obd_device       *obddev = class_exp2obd(exp);
+	ENTRY;
 
 	ENTRY;
 	CDEBUG(D_INFO, "req=%p rc=%d\n", req, rc);
+
+	obd_put_request_slot(&obddev->u.cli);
+	mdc_put_mod_rpc_slot(req, NULL);
 
 	ldlm_lock2handle(lock, &lockh);
 	rc = ldlm_cli_enqueue_fini(exp, req, LDLM_FLOCK, 1, mea->mea_mode,
@@ -991,8 +997,9 @@ int mdc_enqueue_async(struct obd_export *exp, struct ldlm_enqueue_info *einfo,
 		      obd_enqueue_update_f upcall, struct md_op_data *op_data,
 		      const union ldlm_policy_data *policy, __u64 flags)
 {
+	struct obd_device *obddev = class_exp2obd(exp);
 	struct mdc_enqueue_args *mea;
-	struct ptlrpc_request *req = NULL;
+	struct ptlrpc_request *req;
 	int                    rc;
 	struct ldlm_res_id res_id;
 	struct lustre_handle lockh;
@@ -1004,9 +1011,23 @@ int mdc_enqueue_async(struct obd_export *exp, struct ldlm_enqueue_info *einfo,
 		 einfo->ei_type);
 	res_id.name[3] = LDLM_FLOCK;
 
+	req = ldlm_enqueue_pack(exp, 0);
+	if (IS_ERR(req))
+		RETURN(PTR_ERR(req));
+
+	mdc_get_mod_rpc_slot(req, NULL);
+	rc = obd_get_request_slot(&obddev->u.cli);
+	if (rc != 0) {
+		mdc_put_mod_rpc_slot(req, NULL);
+		ptlrpc_req_finished(req);
+		RETURN(rc);
+	}
+
 	rc = ldlm_cli_enqueue(exp, &req, einfo, &res_id, policy, &flags, NULL,
 			      0, 0, &lockh, 1);
 	if (rc) {
+		obd_put_request_slot(&obddev->u.cli);
+		mdc_put_mod_rpc_slot(req, NULL);
 		ptlrpc_req_finished(req);
 		RETURN(rc);
 	}
