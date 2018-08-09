@@ -1591,11 +1591,17 @@ again:
 		lfsck_namespace_filter_linkea_entry(&ldata_new, cname, pfid,
 						    true);
 
-	if (buflen < ldata_new.ld_leh->leh_len) {
+	if (buflen && buflen < ldata_new.ld_leh->leh_len) {
 		dt_write_unlock(env, obj);
 		dt_trans_stop(env, dev, th);
-		lfsck_buf_init(&linkea_buf, ldata_new.ld_buf->lb_buf,
-			       ldata_new.ld_leh->leh_len);
+		if (ldata_new.ld_leh->leh_reccount > 0 ||
+		    unlikely(ldata_new.ld_leh->leh_overflow_time)) {
+			lfsck_buf_init(&linkea_buf, ldata_new.ld_buf->lb_buf,
+				       ldata_new.ld_leh->leh_len);
+			buflen = linkea_buf.lb_len;
+		} else {
+			buflen = 0;
+		}
 		goto again;
 	}
 
