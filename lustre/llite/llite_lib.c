@@ -224,7 +224,7 @@ static int client_common_fill_super(struct super_block *sb, char *md, char *dt,
 				  OBD_CONNECT_GRANT_PARAM |
 				  OBD_CONNECT_SHORTIO | OBD_CONNECT_FLAGS2;
 
-	data->ocd_connect_flags2 = OBD_CONNECT2_FLR;
+	data->ocd_connect_flags2 = OBD_CONNECT2_FLR | OBD_CONNECT2_INC_XID;
 
 #ifdef HAVE_LRU_RESIZE_SUPPORT
         if (sbi->ll_flags & LL_SBI_LRU_RESIZE)
@@ -428,7 +428,8 @@ static int client_common_fill_super(struct super_block *sb, char *md, char *dt,
 	data->ocd_connect_flags |= OBD_CONNECT_LOCKAHEAD_OLD;
 #endif
 
-	data->ocd_connect_flags2 = OBD_CONNECT2_LOCKAHEAD;
+	data->ocd_connect_flags2 = OBD_CONNECT2_LOCKAHEAD |
+				   OBD_CONNECT2_INC_XID;
 
 	if (!OBD_FAIL_CHECK(OBD_FAIL_OSC_CONNECT_GRANT_PARAM))
 		data->ocd_connect_flags |= OBD_CONNECT_GRANT_PARAM;
