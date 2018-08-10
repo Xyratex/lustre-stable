@@ -14785,6 +14785,29 @@ test_230i() {
 }
 run_test 230i "lfs migrate -m tolerates trailing slashes"
 
+test_230j() {
+	[ $PARALLEL == "yes" ] && skip "skip parallel run" && return
+	[ $MDSCOUNT -lt 2 ] && skip "needs >= 2 MDTs" && return
+	local mdt_dev
+	local oldnr
+	local nr
+
+	mdt_dev=$(mdsdevname 1)
+	oldnr=$(do_facet $SINGLEMDS "sync; \
+		$DEBUGFS -c -R 'ls PENDING -l' $mdt_dev | wc -l")
+
+	mkdir -p $DIR/$tdir/migrate_dir
+	touch $DIR/$tdir/migrate_dir/$tfile
+
+	$LFS migrate -m 1 $DIR/$tdir/migrate_dir || error "migrate dir fails"
+
+	nr=$(do_facet $SINGLEMDS "sync; \
+		$DEBUGFS -c -R 'ls PENDING -l' $mdt_dev | wc -l")
+	[ $nr -eq $oldnr ] ||
+		error "$((nr - oldnr)) objects added to PENDING by migrate"
+}
+run_test 230j "check PENDING dir after migrate"
+
 test_231a()
 {
 	# For simplicity this test assumes that max_pages_per_rpc
