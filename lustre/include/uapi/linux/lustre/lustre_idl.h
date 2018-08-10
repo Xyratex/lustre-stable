@@ -833,6 +833,7 @@ struct ptlrpc_body_v2 {
 #define OBD_CONNECT2_WBC_INTENTS	0x40ULL /* create/unlink/... intents for wbc, also operations under client-held parent locks */
 #define OBD_CONNECT2_LOCK_CONVERT	0x80ULL /* IBITS lock convert support */
 #define OBD_CONNECT2_ARCHIVE_ID_ARRAY	0x100ULL /* store HSM archive_id in array */
+#define OBD_CONNECT2_INC_XID		0x200ULL /* Increasing xid */
 
 /* XXX README XXX:
  * Please DO NOT add flag values here before first ensuring that this same
@@ -887,7 +888,8 @@ struct ptlrpc_body_v2 {
                                 OBD_CONNECT2_SUM_STATFS | \
 				OBD_CONNECT2_LOCK_CONVERT | \
 				OBD_CONNECT2_DIR_MIGRATE | \
-				OBD_CONNECT2_ARCHIVE_ID_ARRAY)
+				OBD_CONNECT2_ARCHIVE_ID_ARRAY | \
+				OBD_CONNECT2_INC_XID)
 
 #define OST_CONNECT_SUPPORTED  (OBD_CONNECT_SRVLOCK | OBD_CONNECT_GRANT | \
 				OBD_CONNECT_REQPORTAL | OBD_CONNECT_VERSION | \
@@ -908,7 +910,7 @@ struct ptlrpc_body_v2 {
 				OBD_CONNECT_GRANT_PARAM | \
 				OBD_CONNECT_SHORTIO | OBD_CONNECT_FLAGS2)
 
-#define OST_CONNECT_SUPPORTED2 OBD_CONNECT2_LOCKAHEAD
+#define OST_CONNECT_SUPPORTED2 (OBD_CONNECT2_LOCKAHEAD | OBD_CONNECT2_INC_XID)
 
 #define ECHO_CONNECT_SUPPORTED (OBD_CONNECT_FID)
 #define ECHO_CONNECT_SUPPORTED2 0

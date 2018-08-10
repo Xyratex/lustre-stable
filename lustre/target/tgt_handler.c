@@ -553,7 +553,7 @@ static int tgt_handle_recovery(struct ptlrpc_request *req, int reply_fail_id)
 
 	/* sanity check: if the xid matches, the request must be marked as a
 	 * resent or replayed */
-	if (req_can_reconstruct(req, NULL)) {
+	if (req_can_reconstruct(req, NULL) == 1) {
 		if (!(lustre_msg_get_flags(req->rq_reqmsg) &
 		      (MSG_RESENT | MSG_REPLAY))) {
 			DEBUG_REQ(D_WARNING, req, "rq_xid %llu matches "
@@ -630,18 +630,21 @@ static struct tgt_handler *tgt_handler_find_check(struct ptlrpc_request *req)
 static int process_req_last_xid(struct ptlrpc_request *req)
 {
 	__u64	last_xid;
+	int rc = 0;
+	struct obd_export *exp = req->rq_export;
+	struct tg_export_data *ted = &exp->exp_target_data;
 	ENTRY;
 
+	if (tgt_is_multimodrpcs_client(exp))
+		mutex_lock(&ted->ted_lcd_lock);
 	/* check request's xid is consistent with export's last_xid */
 	last_xid = lustre_msg_get_last_xid(req->rq_reqmsg);
-	if (last_xid > req->rq_export->exp_last_xid)
-		req->rq_export->exp_last_xid = last_xid;
+	if (last_xid > exp->exp_last_xid)
+		exp->exp_last_xid = last_xid;
 
-	if (req->rq_xid == 0 ||
-	    (req->rq_xid <= req->rq_export->exp_last_xid)) {
-		DEBUG_REQ(D_ERROR, req, "Unexpected xid %llx vs. "
-			  "last_xid %llx\n", req->rq_xid,
-			  req->rq_export->exp_last_xid);
+	if (req->rq_xid == 0 || req->rq_xid <= exp->exp_last_xid) {
+		DEBUG_REQ(D_ERROR, req, "Unexpected xid %llu vs. "
+			  "last_xid %llu\n", req->rq_xid, exp->exp_last_xid);
 		/* Some request is allowed to be sent during replay,
 		 * such as OUT update requests, FLD requests, so it
 		 * is possible that replay requests has smaller XID
@@ -657,8 +660,12 @@ static int process_req_last_xid(struct ptlrpc_request *req)
 		 *   exp_last_xid on server;
 		 * - The former RPC got chance to be processed;
 		 */
-		if (!(lustre_msg_get_flags(req->rq_reqmsg) & MSG_REPLAY))
+		if (!(lustre_msg_get_flags(req->rq_reqmsg) & MSG_REPLAY)) {
+			if (tgt_is_multimodrpcs_client(exp))
+				mutex_unlock(&ted->ted_lcd_lock);
+
 			RETURN(-EPROTO);
+		}
 	}
 
 	/* The "last_xid" is the minimum xid among unreplied requests,
@@ -675,15 +682,13 @@ static int process_req_last_xid(struct ptlrpc_request *req)
 		RETURN(-ESTALE);
 
 	/* try to release in-memory reply data */
-	if (tgt_is_multimodrpcs_client(req->rq_export)) {
-		tgt_handle_received_xid(req->rq_export,
-				lustre_msg_get_last_xid(req->rq_reqmsg));
-		if (!(lustre_msg_get_flags(req->rq_reqmsg) &
-		      (MSG_RESENT | MSG_REPLAY)))
-			tgt_handle_tag(req->rq_export,
-				       lustre_msg_get_tag(req->rq_reqmsg));
+	if (tgt_is_multimodrpcs_client(exp)) {
+		tgt_handle_received_xid(exp, last_xid);
+		rc = tgt_handle_tag(req);
+		mutex_unlock(&ted->ted_lcd_lock);
 	}
-	RETURN(0);
+
+	RETURN(rc);
 }
 
 int tgt_request_handle(struct ptlrpc_request *req)
@@ -2716,12 +2721,12 @@ EXPORT_SYMBOL(tgt_brw_write);
 /* Check if request can be reconstructed from saved reply data
  * A copy of the reply data is returned in @trd if the pointer is not NULL
  */
-bool req_can_reconstruct(struct ptlrpc_request *req,
+int req_can_reconstruct(struct ptlrpc_request *req,
 			 struct tg_reply_data *trd)
 {
 	struct tg_export_data *ted = &req->rq_export->exp_target_data;
 	struct lsd_client_data *lcd = ted->ted_lcd;
-	bool found;
+	int found;
 
 	if (tgt_is_multimodrpcs_client(req->rq_export))
 		return tgt_lookup_reply(req, trd);
