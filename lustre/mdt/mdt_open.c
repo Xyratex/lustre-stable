@@ -900,6 +900,8 @@ static int mdt_object_open_lock(struct mdt_thread_info *info,
 	/* one problem to return layout lock on open is that it may result
 	 * in too many layout locks cached on the client side. */
 	if (!OBD_FAIL_CHECK(OBD_FAIL_MDS_NO_LL_OPEN) && try_layout) {
+		if (!(*ibits & MDS_INODELOCK_LOOKUP))
+			trybits |= MDS_INODELOCK_LOOKUP;
 		trybits |= MDS_INODELOCK_LAYOUT;
 	}
 
