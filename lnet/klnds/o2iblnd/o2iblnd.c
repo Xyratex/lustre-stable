@@ -822,6 +822,7 @@ kiblnd_create_conn(kib_peer_ni_t *peer_ni, struct rdma_cm_id *cmid,
 	INIT_LIST_HEAD(&conn->ibc_tx_queue_rsrvd);
 	INIT_LIST_HEAD(&conn->ibc_tx_queue_nocred);
 	INIT_LIST_HEAD(&conn->ibc_active_txs);
+	INIT_LIST_HEAD(&conn->ibc_zombie_txs);
 	spin_lock_init(&conn->ibc_lock);
 
 	LIBCFS_CPT_ALLOC(conn->ibc_connvars, lnet_cpt_table(), cpt,
@@ -1038,6 +1039,8 @@ kiblnd_destroy_conn(kib_conn_t *conn)
 		if (rc != 0)
 			CWARN("Error destroying CQ: %d\n", rc);
 	}
+
+	kiblnd_txlist_done(&conn->ibc_zombie_txs, -ECONNABORTED);
 
 	if (conn->ibc_rx_pages != NULL)
 		kiblnd_unmap_rx_descs(conn);

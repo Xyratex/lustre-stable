@@ -1281,6 +1281,21 @@ kiblnd_queue_tx_locked(kib_tx_t *tx, kib_conn_t *conn)
 	LASSERT(!tx->tx_queued);	/* not queued for sending already */
 	LASSERT(conn->ibc_state >= IBLND_CONN_ESTABLISHED);
 
+	if (conn->ibc_state >= IBLND_CONN_DISCONNECTED) {
+		tx->tx_status = -ECONNABORTED;
+		tx->tx_waiting = 0;
+	        if (tx->tx_conn != NULL) {
+			/* PUT_DONE first attached to conn as a PUT_REQ */
+			LASSERT (tx->tx_conn == conn);
+			LASSERT (tx->tx_msg->ibm_type == IBLND_MSG_PUT_DONE);
+			tx->tx_conn = NULL;
+			kiblnd_conn_decref(conn);
+		}
+		list_move(&tx->tx_list, &conn->ibc_zombie_txs);
+
+		return;
+	}
+
 	timeout_ns = *kiblnd_tunables.kib_timeout * NSEC_PER_SEC;
 	tx->tx_queued = 1;
 	tx->tx_deadline = ktime_add_ns(ktime_get(), timeout_ns);
@@ -2114,7 +2129,7 @@ kiblnd_handle_early_rxs(kib_conn_t *conn)
 	write_unlock_irqrestore(&kiblnd_data.kib_global_lock, flags);
 }
 
-static void
+void
 kiblnd_abort_txs(kib_conn_t *conn, struct list_head *txs)
 {
 	struct list_head	 zombies = LIST_HEAD_INIT(zombies);
@@ -2156,12 +2171,12 @@ kiblnd_finalise_conn (kib_conn_t *conn)
 	LASSERT (!in_interrupt());
 	LASSERT (conn->ibc_state > IBLND_CONN_INIT);
 
-	kiblnd_set_conn_state(conn, IBLND_CONN_DISCONNECTED);
-
 	/* abort_receives moves QP state to IB_QPS_ERR.  This is only required
 	 * for connections that didn't get as far as being connected, because
 	 * rdma_disconnect() does this for free. */
 	kiblnd_abort_receives(conn);
+
+	kiblnd_set_conn_state(conn, IBLND_CONN_DISCONNECTED);
 
 	/* Complete all tx descs not waiting for sends to complete.
 	 * NB we should be safe from RDMA now that the QP has changed state */
