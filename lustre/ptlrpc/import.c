@@ -673,6 +673,7 @@ int ptlrpc_connect_import(struct obd_import *imp)
 		CERROR("already connected\n");
 		RETURN(0);
 	} else if (imp->imp_state == LUSTRE_IMP_CONNECTING ||
+		   imp->imp_state == LUSTRE_IMP_EVICTED ||
 		   imp->imp_connected) {
 		spin_unlock(&imp->imp_lock);
 		CERROR("already connecting\n");
