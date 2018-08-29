@@ -960,8 +960,15 @@ static int lfsck_master_oit_engine(const struct lu_env *env,
 				goto checkpoint;
 		}
 
-		if (dt_object_exists(target))
-			rc = lfsck_exec_oit(env, lfsck, target);
+		if (dt_object_exists(target)) {
+			struct lu_attr la;
+
+			rc = dt_attr_get(env, target, &la);
+			if (likely((rc == 0) &&
+			    ((la.la_valid & LA_FLAGS) &&
+			     ((la.la_flags & LUSTRE_ORPHAN_FL) == 0))))
+				rc = lfsck_exec_oit(env, lfsck, target);
+		}
 
 		lfsck_object_put(env, target);
 		if (rc != 0 && bk->lb_param & LPF_FAILOUT)
