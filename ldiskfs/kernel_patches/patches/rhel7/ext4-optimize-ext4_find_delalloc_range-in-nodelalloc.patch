@@ -28,11 +28,11 @@ Signed-off-by: "Theodore Ts'o" <tytso@mit.edu>
  fs/ext4/extents.c |    3 +++
  1 file changed, 3 insertions(+)
 
-diff --git a/fs/ext4/extents.c b/fs/ext4/extents.c
-index 331e8e8..7a09d8c 100644
---- a/fs/ext4/extents.c
-+++ b/fs/ext4/extents.c
-@@ -3896,6 +3896,9 @@ int ext4_find_delalloc_range(struct inode *inode,
+Index: linux-stage/fs/ext4/extents.c
+===================================================================
+--- linux-stage.orig/fs/ext4/extents.c
++++ linux-stage/fs/ext4/extents.c
+@@ -3909,6 +3909,9 @@ int ext4_find_delalloc_range(struct inod
  {
  	struct extent_status es;
  
@@ -42,3 +42,13 @@ index 331e8e8..7a09d8c 100644
  	ext4_es_find_delayed_extent_range(inode, lblk_start, lblk_end, &es);
  	if (es.es_len == 0)
  		return 0; /* there is no delay extent in this tree */
+@@ -5115,6 +5118,9 @@ static int ext4_find_delayed_extent(stru
+ 	struct extent_status es;
+ 	ext4_lblk_t block, next_del;
+ 
++	if (!test_opt(inode->i_sb, DELALLOC))
++		return 0;
++
+ 	if (newes->es_pblk == 0) {
+ 		ext4_es_find_delayed_extent_range(inode, newes->es_lblk,
+ 				newes->es_lblk + newes->es_len - 1, &es);
