@@ -4286,16 +4286,12 @@ static int mdd_migrate_update_name(const struct lu_env *env,
 		GOTO(stop_trans, rc);
 
 	mdd_write_lock(env, mdd_sobj, MOR_TGT_CHILD);
-
 	mdd_sobj->mod_flags |= DEAD_OBJ;
-	rc = mdd_mark_orphan_object(env, mdd_sobj, handle, false);
-	if (rc != 0)
-		GOTO(out_unlock, rc);
 
-	rc = mdd_orphan_insert(env, mdd_sobj, handle);
-	if (rc != 0)
-		GOTO(out_unlock, rc);
-
+	/*
+	 * like mdd_unlink but without need to handle orphan as the
+	 * object can not be open
+	 */
 	mdo_ref_del(env, mdd_sobj, handle);
 	if (is_dir)
 		mdo_ref_del(env, mdd_sobj, handle);
@@ -4325,6 +4321,13 @@ static int mdd_migrate_update_name(const struct lu_env *env,
 		 * let's reset the result to 0 for now XXX */
 		rc = 0;
 	}
+	/* no orphan - delete old object */
+	rc = mdo_destroy(env, mdd_sobj, handle);
+	if (rc)
+		CERROR("%s: can't destroy old object "DFID". lfsck is needed\n",
+		       mdd2obd_dev(mdd)->obd_name,
+		       PFID(mdd_object_fid(mdd_sobj)));
+
 out_unlock:
 	mdd_write_unlock(env, mdd_sobj);
 
