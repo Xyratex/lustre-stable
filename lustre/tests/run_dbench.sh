@@ -32,6 +32,11 @@ while [ ! -e "$END_RUN_FILE" ] && $CONTINUE; do
 	echoerr "$(date +'%F %H:%M:%S'): dbench run starting"
 
 	client_load_mkdir $TESTDIR
+	if [ $? -ne 0 ]; then
+		echoerr "$(date +'%F %H:%M:%S'): failed to create $TESTDIR"
+		echo $(hostname) >> $END_RUN_FILE
+		break
+	fi
 
 	sync
 	rundbench -D $TESTDIR 2 1>$LOG &

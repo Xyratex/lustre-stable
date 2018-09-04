@@ -1366,6 +1366,7 @@ client_load_mkdir () {
 	local parent=$(dirname $dir)
 
 	local mdtcount=${MDSCOUNT:-$($LFS df $parent 2> /dev/null | grep -c MDT)}
+	[[ $mdtcount -ne 0 ]] || return 1
 
 	mdt_idx=$((RANDOM % mdtcount))
 	if $RECOVERY_SCALE_ENABLE_STRIPED_DIRS; then
