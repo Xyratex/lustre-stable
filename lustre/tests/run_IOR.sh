@@ -40,7 +40,13 @@ TESTDIR=${TESTDIR:-$MOUNT/d0.ior-$(hostname)}
 CONTINUE=true
 while [ ! -e "$END_RUN_FILE" ] && $CONTINUE; do
 	echoerr "$(date +'%F %H:%M:%S'): IOR run starting"
-	mkdir -p $TESTDIR
+	client_load_mkdir $TESTDIR
+	if [ $? -ne 0 ]; then
+		echoerr "$(date +'%F %H:%M:%S'): failed to create $TESTDIR"
+		echo $(hostname) >> $END_RUN_FILE
+		break
+	fi
+
 	# need this only if TESTDIR is not default
 	chmod -R 777 $TESTDIR
 
