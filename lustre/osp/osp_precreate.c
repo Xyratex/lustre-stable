@@ -1684,6 +1684,7 @@ int osp_init_precreate(struct osp_device *d)
 	d->opd_pre_used_fid.f_oid = 1;
 	fid_zero(&d->opd_pre_last_created_fid);
 	d->opd_pre_last_created_fid.f_oid = 1;
+	d->opd_last_id = 0;
 	d->opd_pre_reserved = 0;
 	d->opd_got_disconnected = 1;
 	d->opd_pre_create_slow = 0;

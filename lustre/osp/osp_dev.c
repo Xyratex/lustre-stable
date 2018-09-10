@@ -327,7 +327,7 @@ static int osp_init_last_seq(const struct lu_env *env, struct osp_device *osp)
 		if (rc != 0 && rc != -EFAULT)
 			GOTO(out, rc);
 		if (fid_is_idif(fid))
-			fid->f_seq = fid_idif_seq(fid->f_seq, osp->opd_index);
+			fid->f_seq = fid_idif_seq(osp->opd_last_id, osp->opd_index);
 	}
 
 	if (rc == -EFAULT) { /* fresh OSP */
