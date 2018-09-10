@@ -3350,12 +3350,16 @@ static int __osd_create(struct osd_thread_info *info, struct osd_object *obj,
 	iattr.ia_gid = attr->la_valid & LA_GID ?
 			make_kgid(&init_user_ns, attr->la_gid) :
 			current_fsgid();
+
 	iattr.ia_atime = attr->la_valid & LA_ATIME ?
-			 sec_to_ts(attr->la_atime) : CURRENT_TIME_SEC;
+			 sec_to_ts(attr->la_atime) :
+			 ((struct timespec) { .tv_nsec = UTIME_OMIT });
 	iattr.ia_ctime = attr->la_valid & LA_CTIME ?
-			 sec_to_ts(attr->la_ctime) : CURRENT_TIME_SEC;
+			 sec_to_ts(attr->la_ctime) :
+			 ((struct timespec) { .tv_nsec = UTIME_OMIT });
 	iattr.ia_mtime = attr->la_valid & LA_MTIME ?
-			 sec_to_ts(attr->la_mtime) : CURRENT_TIME_SEC;
+			 sec_to_ts(attr->la_mtime) :
+			 ((struct timespec) { .tv_nsec = UTIME_OMIT });
 
 	result = osd_create_type_f(dof->dof_type)(info, obj, attr, hint, dof,
 						  th, &iattr);
@@ -3793,9 +3797,9 @@ static struct inode *osd_create_local_agent_inode(const struct lu_env *env,
 				 ATTR_ATIME | ATTR_CTIME | ATTR_MTIME;
 		iattr.ia_uid = current_fsuid();
 		iattr.ia_gid = current_fsgid();
-		iattr.ia_atime = CURRENT_TIME_SEC;
-		iattr.ia_ctime = CURRENT_TIME_SEC;
-		iattr.ia_mtime = CURRENT_TIME_SEC;
+		iattr.ia_atime = ((struct timespec) { .tv_nsec = UTIME_OMIT });
+		iattr.ia_ctime = ((struct timespec) { .tv_nsec = UTIME_OMIT });
+		iattr.ia_mtime = ((struct timespec) { .tv_nsec = UTIME_OMIT });
 		piattr = &iattr;
 	}
 

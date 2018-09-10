@@ -1,6 +1,8 @@
---- linux1/fs/ext4/ialloc.c
-+++ linux2/fs/ext4/ialloc.c
-@@ -708,7 +708,8 @@ next:
+Index: linux-4.12.14-23/fs/ext4/ialloc.c
+===================================================================
+--- linux-4.12.14-23.orig/fs/ext4/ialloc.c
++++ linux-4.12.14-23/fs/ext4/ialloc.c
+@@ -748,7 +748,8 @@ next:
  struct inode *__ext4_new_inode(handle_t *handle, struct inode *dir,
  			       umode_t mode, const struct qstr *qstr,
  			       __u32 goal, uid_t *owner, int handle_type,
@@ -10,14 +12,14 @@
  {
  	struct super_block *sb;
  	struct buffer_head *inode_bitmap_bh = NULL;
-@@ -980,8 +981,14 @@ got:
+@@ -1046,8 +1047,14 @@ got:
  	inode->i_ino = ino + group * EXT4_INODES_PER_GROUP(sb);
  	/* This is the optimal IO size (for stat), not the fs block size */
  	inode->i_blocks = 0;
 -	inode->i_mtime = inode->i_atime = inode->i_ctime = ei->i_crtime =
--						       ext4_current_time(inode);
+-						       current_time(inode);
 +
-+	ei->i_crtime = ext4_current_time(inode);
++	ei->i_crtime = current_time(inode);
 +	inode->i_mtime = iattr && iattr->ia_mtime.tv_nsec != UTIME_OMIT ?
 +			 iattr->ia_mtime : ei->i_crtime;
 +	inode->i_atime = iattr && iattr->ia_atime.tv_nsec != UTIME_OMIT ?
@@ -27,9 +29,11 @@
  
  	memset(ei->i_data, 0, sizeof(ei->i_data));
  	ei->i_dir_start_lookup = 0;
---- linux1/fs/ext4/ext4.h
-+++ linux2/fs/ext4/ext4.h
-@@ -2335,15 +2335,16 @@ extern int ext4fs_dirhash(const char *na
+Index: linux-4.12.14-23/fs/ext4/ext4.h
+===================================================================
+--- linux-4.12.14-23.orig/fs/ext4/ext4.h
++++ linux-4.12.14-23/fs/ext4/ext4.h
+@@ -2585,15 +2585,16 @@ extern int ext4fs_dirhash(const char *na
  extern struct inode *__ext4_new_inode(handle_t *, struct inode *, umode_t,
  				      const struct qstr *qstr, __u32 goal,
  				      uid_t *owner, int handle_type,
@@ -49,9 +53,9 @@
  
  
  extern void ext4_free_inode(handle_t *, struct inode *);
-@@ -2470,7 +2471,8 @@ extern int ext4_orphan_del(handle_t *, s
- extern int ext4_htree_fill_tree(struct file *dir_file, __u32 start_hash,
- 				__u32 start_minor_hash, __u32 *next_hash);
+@@ -2715,7 +2716,8 @@ extern int ext4_dirent_csum_verify(struc
+ extern int ext4_orphan_add(handle_t *, struct inode *);
+ extern int ext4_orphan_del(handle_t *, struct inode *);
  extern struct inode *ext4_create_inode(handle_t *handle,
 -				       struct inode *dir, int mode);
 +				       struct inode *dir, int mode,
@@ -59,9 +63,11 @@
  extern int ext4_delete_entry(handle_t *handle, struct inode * dir,
  			     struct ext4_dir_entry_2 *de_del,
  			     struct buffer_head *bh);
---- linux1/fs/ext4/namei.c
-+++ linux2/fs/ext4/namei.c
-@@ -2880,11 +2880,19 @@ static int ext4_add_nondir(handle_t *han
+Index: linux-4.12.14-23/fs/ext4/namei.c
+===================================================================
+--- linux-4.12.14-23.orig/fs/ext4/namei.c
++++ linux-4.12.14-23/fs/ext4/namei.c
+@@ -3040,11 +3040,19 @@ static int ext4_add_nondir(handle_t *han
  
   /* Return locked inode, then the caller can modify the inode's states/flags
    * before others finding it. The caller should unlock the inode by itself. */
