@@ -786,15 +786,15 @@ static int target_handle_reconnect(struct lustre_handle *conn,
 		GOTO(out_already, rc);
 	}
 
-	now = ktime_get_seconds();
+	now = cfs_duration_sec(jiffies);
 	deadline = cfs_duration_sec(target->obd_recovery_timer.expires);
-	if (now < deadline) {
+	if (now > deadline) {
 		struct target_distribute_txn_data *tdtd;
 		int size = 0;
 		int count = 0;
 		char *buf = NULL;
 
-		timeout = deadline - now;
+		timeout = now - deadline;
 		tdtd = class_exp2tgt(exp)->lut_tdtd;
 		if (tdtd && tdtd->tdtd_show_update_logs_retrievers)
 			buf = tdtd->tdtd_show_update_logs_retrievers(
@@ -819,13 +819,6 @@ static int target_handle_reconnect(struct lustre_handle *conn,
 
 		if (buf != NULL)
 			OBD_FREE(buf, size);
-	} else {
-		timeout = now - deadline;
-		LCONSOLE_WARN("%s: Recovery already passed deadline"
-			" %lld:%.02lld, It is most likely due to DNE"
-			" recovery is failed or stuck, please wait a"
-			" few more minutes or abort the recovery.\n",
-			target->obd_name, timeout / 60, timeout % 60);
 	}
 
 out_already:
@@ -1253,9 +1246,8 @@ no_export:
 			i = atomic_read(&target->obd_lock_replay_clients);
 			k = target->obd_max_recoverable_clients;
 			s = target->obd_stale_clients;
-			t = target->obd_recovery_timer.expires;
 			t = cfs_duration_sec(target->obd_recovery_timer.expires);
-			t -= ktime_get_seconds();
+			t -= cfs_duration_sec(jiffies);
 			LCONSOLE_WARN("%s: Denying connection for new client %s"
 				      "(at %s), waiting for %d known clients "
 				      "(%d recovered, %d in progress, and %d "
