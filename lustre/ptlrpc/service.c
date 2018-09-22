@@ -39,6 +39,7 @@
 #include <lu_object.h>
 #include <uapi/linux/lnet/lnet-types.h>
 #include "ptlrpc_internal.h"
+#include <linux/delay.h>
 
 /* The following are visible and mutable through /sys/module/ptlrpc */
 int test_req_buffer_pressure = 0;
@@ -1700,13 +1701,22 @@ static int ptlrpc_server_request_add(struct ptlrpc_service_part *svcpt,
 	hp = rc > 0;
 	ptlrpc_nrs_req_initialize(svcpt, req, hp);
 
-	if (req->rq_export != NULL) {
+	while (req->rq_export != NULL) {
 		struct obd_export *exp = req->rq_export;
 
 		/* do search for duplicated xid and the adding to the list
+
 		 * atomically */
 		spin_lock_bh(&exp->exp_rpc_lock);
 		orig = ptlrpc_server_check_resend_in_progress(req);
+		if (orig && OBD_FAIL_PRECHECK(OBD_FAIL_PTLRPC_RESEND_RACE)) {
+			spin_unlock_bh(&exp->exp_rpc_lock);
+
+			OBD_RACE(OBD_FAIL_PTLRPC_RESEND_RACE);
+			msleep(4 * MSEC_PER_SEC);
+			continue;
+		}
+
 		if (orig && likely(atomic_inc_not_zero(&orig->rq_refcount))) {
 			int linked;
 
@@ -1735,6 +1745,7 @@ static int ptlrpc_server_request_add(struct ptlrpc_service_part *svcpt,
 		else
 			list_add(&req->rq_exp_list, &exp->exp_reg_rpcs);
 		spin_unlock_bh(&exp->exp_rpc_lock);
+		break;
 	}
 
 	/* the current thread is not the processing thread for this request
