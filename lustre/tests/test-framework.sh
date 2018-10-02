@@ -2361,7 +2361,7 @@ zconf_mount_clients() {
 	fi
 
 	echo "Starting client $clients: $flags $opts $device $mnt"
-	if [ -n "$FILESET" -a ! -n "$SKIP_FILESET" ]; then
+	if [ -n "$FILESET" -a -z "$SKIP_FILESET" ]; then
 		if $GSS_SK && ($SK_UNIQUE_NM || $SK_S2S); then
 			# Mount with own nodemap key
 			local i=0
@@ -2399,6 +2399,7 @@ zconf_mount_clients() {
 		else
 			do_nodes $clients "! grep -q $mnt' ' /proc/mounts ||
 					umount $mnt"
+			do_nodes $clients mkdir -p $mnt
 			do_nodes $clients $MOUNT_CMD $flags $opts \
 					$MGSNID:/$FSNAME $mnt || return 1
 		fi
