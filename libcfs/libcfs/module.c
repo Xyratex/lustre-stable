@@ -466,6 +466,14 @@ static struct ctl_table lnet_table[] = {
 		.proc_handler	= &proc_dointvec,
 	},
 	{
+		INIT_CTL_NAME
+		.procname	= "enable_experimental_features",
+		.data		= &libcfs_experimental_flag,
+		.maxlen		= sizeof(libcfs_experimental_flag),
+		.mode		= 0644,
+		.proc_handler	= &proc_dointvec,
+	},
+	{
 	}
 };
 

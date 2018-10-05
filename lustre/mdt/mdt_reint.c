@@ -1064,6 +1064,36 @@ put_parent:
         return rc;
 }
 
+static int check_cross_target_op(
+		struct mdt_thread_info *mti,
+		const struct lu_fid *fid1, const struct lu_fid *fid2)
+{
+		struct seq_server_site	*ss = mdt_seq_site(mti->mti_mdt);
+		struct lu_seq_range      range = { 0 };
+		int rc;
+		u32 node1;
+
+		if (libcfs_experimental_flag)
+			return 0;
+
+		fld_range_set_type(&range, LU_SEQ_RANGE_MDT);
+		rc = fld_server_lookup(mti->mti_env, ss->ss_server_fld,
+				fid_seq(fid1), &range);
+
+		if (rc != 0)
+			return rc;
+		node1 = range.lsr_index;
+		rc = fld_server_lookup(mti->mti_env, ss->ss_server_fld,
+				fid_seq(fid2), &range);
+		if (rc != 0)
+			return rc;
+
+		if (node1 != range.lsr_index)
+			return -EXDEV;
+		return 0;
+}
+
+
 /*
  * VBR: save versions in reply: 0 - parent; 1 - child by fid; 2 - target by
  * name.
@@ -1119,6 +1149,11 @@ static int mdt_reint_link(struct mdt_thread_info *info,
 		       mdt_obd_name(info->mti_mdt), PFID(rr->rr_fid1));
 		GOTO(put_source, rc = -ENOENT);
 	}
+
+	/* cross links disabled */
+	rc = check_cross_target_op(info, rr->rr_fid1, rr->rr_fid2);
+	if (rc != 0)
+		GOTO(put_source, rc);
 
 	cos_incompat = (mdt_object_remote(mp) || mdt_object_remote(ms));
 
@@ -2591,6 +2626,10 @@ static int mdt_reint_rename_or_migrate(struct mdt_thread_info *info,
 	if (!fid_is_md_operative(rr->rr_fid1) ||
 	    !fid_is_md_operative(rr->rr_fid2))
 		RETURN(-EPERM);
+
+	rc = check_cross_target_op(info, rr->rr_fid1, rr->rr_fid2);
+	if (rc != 0)
+		RETURN(rc);
 
 	/* Note: do not enqueue rename lock for replay request, because
 	 * if other MDT holds rename lock, but being blocked to wait for
