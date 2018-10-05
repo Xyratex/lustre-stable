@@ -4650,6 +4650,11 @@ static int lod_declare_create(const struct lu_env *env, struct dt_object *dt,
 	LASSERT(attr);
 	LASSERT(th);
 
+	if (!libcfs_experimental_flag && dof->dof_type == DFT_DIR &&
+		lo->ldo_dir_stripe_count > 0) {
+		RETURN(-ENOSYS);
+	}
+
 	/*
 	 * first of all, we declare creation of local object
 	 */
