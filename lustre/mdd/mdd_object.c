@@ -1282,6 +1282,10 @@ mdd_xattr_changelog_type(const struct lu_env *env, struct mdd_device *mdd,
 	if (strcmp(XATTR_NAME_HSM, xattr_name) == 0)
 		return CL_HSM;
 
+	/* Avoid logging SOM xattr for every file */
+	if (strcmp(XATTR_NAME_SOM, xattr_name) == 0)
+		return CL_NONE;
+
 	if (has_prefix(xattr_name, XATTR_USER_PREFIX) ||
 	    has_prefix(xattr_name, XATTR_NAME_POSIX_ACL_ACCESS) ||
 	    has_prefix(xattr_name, XATTR_NAME_POSIX_ACL_DEFAULT) ||
@@ -1289,7 +1293,7 @@ mdd_xattr_changelog_type(const struct lu_env *env, struct mdd_device *mdd,
 	    has_prefix(xattr_name, XATTR_SECURITY_PREFIX))
 		return CL_SETXATTR;
 
-	return -1;
+	return CL_NONE;
 }
 
 static int mdd_declare_xattr_set(const struct lu_env *env,
