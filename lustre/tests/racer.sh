@@ -78,6 +78,7 @@ test_1() {
 			RACER_ENABLE_MIGRATION=$RACER_ENABLE_MIGRATION \
 			RACER_ENABLE_DOM=$RACER_ENABLE_DOM \
 			LFS=$LFS \
+			LCTL=$LCTL \
 			$racer $rdir $NUM_RACER_THREADS" &
 		pid=$!
 		rpids="$rpids $pid"

@@ -6,6 +6,7 @@ MAX=$2
 MAX_MB=${RACER_MAX_MB:-8}
 
 . $LUSTRE/tests/test-framework.sh
+trap - ERR
 
 OSTCOUNT=${OSTCOUNT:-$($LFS df $DIR 2> /dev/null | grep -c OST)}
 
