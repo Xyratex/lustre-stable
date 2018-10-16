@@ -1652,6 +1652,9 @@ static void osd_trans_commit_cb(struct super_block *sb,
 
         dt_txn_hook_commit(th);
 
+	if (OBD_FAIL_PRECHECK(OBD_FAIL_OST_DELAY_TRANS) &&
+	    !strncmp(lud->ld_obd->obd_name, "-OST", strlen("-OST")))
+		OBD_FAIL_TIMEOUT(OBD_FAIL_OST_DELAY_TRANS, 40);
 	/* call per-transaction callbacks if any */
 	list_for_each_entry_safe(dcb, tmp, &oh->ot_commit_dcb_list,
 				 dcb_linkage) {
