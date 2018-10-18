@@ -49,15 +49,6 @@ MDSDEV1_2=$fs2mds_DEV
 OSTDEV1_2=$fs2ost_DEV
 OSTDEV2_2=$fs3ost_DEV
 
-if ! combined_mgs_mds; then
-	# bug number for skipped test: LU-9860 LU-9860 LU-9860
-	ALWAYS_EXCEPT="$ALWAYS_EXCEPT  43b     53b     54b"
-	# bug number for skipped test: LU-9875 LU-9879 LU-9879 LU-9879 LU-9879
-	ALWAYS_EXCEPT="$ALWAYS_EXCEPT  70e     80      84      87      100"
-	# bug number for skipped test: LU-8110 LU-9879 LU-9879 LU-9879
-	ALWAYS_EXCEPT="$ALWAYS_EXCEPT  102     104     105     107"
-fi
-
 # pass "-E lazy_itable_init" to mke2fs to speed up the formatting time
 if [[ "$LDISKFS_MKFS_OPTS" != *lazy_itable_init* ]]; then
 	LDISKFS_MKFS_OPTS=$(csa_add "$LDISKFS_MKFS_OPTS" -E lazy_itable_init)
@@ -4888,11 +4879,7 @@ test_68() {
 
 	umount_client $MOUNT || error "umount client failed"
 
-	if ! combined_mgs_mds; then
-		start_mgs || error "start mgs failed"
-	fi
-
-	start_mdt 1 || error "MDT start failed"
+	start_mgsmds || error "MDT start failed"
 	start_ost || error "Unable to start OST1"
 
 	# START-END - the sequences we'll be reserving
@@ -5111,7 +5098,9 @@ test_70e() {
 	[ $(lustre_version_code $SINGLEMDS) -ge $(version_code 2.7.62) ] ||
 		{ skip "Need MDS version at least 2.7.62"; return 0; }
 
-	cleanup || error "cleanup failed with $?"
+	reformat || error "reformat failed with $?"
+
+	load_modules
 
 	local mdsdev=$(mdsdevname 1)
 	local ostdev=$(ostdevname 1)
@@ -5119,6 +5108,10 @@ test_70e() {
 	local ostvdev=$(ostvdevname 1)
 	local opts_mds="$(mkfs_opts mds1 $mdsdev) --reformat $mdsdev $mdsvdev"
 	local opts_ost="$(mkfs_opts ost1 $ostdev) --reformat $ostdev $ostvdev"
+
+	if ! combined_mgs_mds ; then
+		start_mgs
+	fi
 
 	add mds1 $opts_mds || error "add mds1 failed"
 	start_mdt 1 || error "start mdt1 failed"
@@ -5414,9 +5407,6 @@ test_76a() {
 	[[ $(lustre_version_code mgs) -ge $(version_code 2.4.52) ]] ||
 		{ skip "Need MDS version at least 2.4.52" && return 0; }
 
-	if ! combined_mgs_mds; then
-		start_mgs || error "start mgs failed"
-	fi
 	setup
 	local MDMB_PARAM="osc.*.max_dirty_mb"
 	echo "Change MGS params"
@@ -6324,6 +6314,10 @@ test_87() { #LU-6544
 
 	unload_modules
 	reformat
+
+	if ! combined_mgs_mds ; then
+		start_mgs
+	fi
 
 	add mds1 $(mkfs_opts mds1 ${mdsdev}) --stripe-count-hint=$stripe_cnt \
 		--reformat $mdsdev $mdsvdev || error "add mds1 failed"
@@ -7303,7 +7297,8 @@ run_test 99 "Adding meta_bg option"
 
 test_100() {
 	reformat
-	start_mds || error "MDS start failed"
+
+	start_mgsmds || error "MDS start failed"
 	start_ost || error "unable to start OST"
 	mount_client $MOUNT || error "client start failed"
 	check_mount || error "check_mount failed"
@@ -7360,6 +7355,11 @@ run_test 101 "Race MDT->OST reconnection with create"
 test_102() {
 	[[ $(lustre_version_code $SINGLEMDS) -gt $(version_code 2.9.53) ]] ||
 		skip "Need server version greater than 2.9.53"
+
+	[[ “$(mdsdevname 1)” != “$(mgsdevname)” ]] &&
+		[[ “$(facet_host mds1)” = “$(facet_host mgs)” ]] &&
+		{ skip "MGS must be on different node or combined" && return 0; }
+
 	cleanup || error "cleanup failed with $?"
 
 	local mds1dev=$(mdsdevname 1)
@@ -7561,6 +7561,10 @@ test_104() { # LU-6952
 
 	#reformat/remount the MDT to apply the MDT_MOUNT_FS_OPT options
 	formatall
+	if ! combined_mgs_mds ; then
+		start_mgs
+	fi
+
 	if [ -z "$MDS_MOUNT_OPTS" ]; then
 		MDS_MOUNT_OPTS="-o noacl"
 	else
@@ -7599,7 +7603,7 @@ error_and_umount() {
 test_105() {
 	cleanup -f
 	reformat
-	setup
+	setup_noconfig
 	mkdir -p $TMP/$tdir
 	mount --bind $DIR $TMP/$tdir || error "mount bind mnt pt failed"
 	rm -f $TMP/$tdir/$tfile
