@@ -779,6 +779,16 @@ ptlrpc_register_service(struct ptlrpc_service_conf *conf,
 	service->srv_rep_portal		= conf->psc_buf.bc_rep_portal;
 	service->srv_req_portal		= conf->psc_buf.bc_req_portal;
 
+	/* With slab/alloc_pages buffer size will be rounded up to 2^n */
+	if (service->srv_buf_size & (service->srv_buf_size - 1)) {
+		int round = size_roundup_power2(service->srv_buf_size);
+
+		CWARN("service '%s' requested suboptimal buffer size %d, "
+		      "rounding up to %d\n",
+		      service->srv_name, service->srv_buf_size, round);
+		service->srv_buf_size = round;
+	}
+
 	/* Increase max reply size to next power of two */
 	service->srv_max_reply_size = 1;
 	while (service->srv_max_reply_size <
