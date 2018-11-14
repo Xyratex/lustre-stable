@@ -5,10 +5,10 @@ was a CONFIG_MBCACHE option that would allow it to be disabled,
 but this was removed in newer kernels, so we will need to patch
 ldiskfs to fix this.
 
-Index: linux-4.12.14-16.4.1/fs/ext4/ext4.h
+Index: b/fs/ext4/ext4.h
 ===================================================================
---- linux-4.12.14-16.4.1.orig/fs/ext4/ext4.h
-+++ linux-4.12.14-16.4.1/fs/ext4/ext4.h
+--- a/fs/ext4/ext4.h
++++ b/fs/ext4/ext4.h
 @@ -1119,6 +1119,7 @@ struct ext4_inode_info {
  /*
   * Mount flags set via mount options or defaults
@@ -17,10 +17,10 @@ Index: linux-4.12.14-16.4.1/fs/ext4/ext4.h
  #define EXT4_MOUNT_GRPID		0x00004	/* Create files with directory's group */
  #define EXT4_MOUNT_DEBUG		0x00008	/* Some debugging messages */
  #define EXT4_MOUNT_ERRORS_CONT		0x00010	/* Continue on errors */
-Index: linux-4.12.14-16.4.1/fs/ext4/super.c
+Index: b/fs/ext4/super.c
 ===================================================================
---- linux-4.12.14-16.4.1.orig/fs/ext4/super.c
-+++ linux-4.12.14-16.4.1/fs/ext4/super.c
+--- a/fs/ext4/super.c
++++ b/fs/ext4/super.c
 @@ -1335,6 +1335,7 @@ enum {
  	Opt_nomblk_io_submit, Opt_block_validity, Opt_noblock_validity,
  	Opt_inode_readahead_blks, Opt_journal_ioprio,
@@ -45,10 +45,10 @@ Index: linux-4.12.14-16.4.1/fs/ext4/super.c
  	{Opt_commit, 0, MOPT_GTE0},
  	{Opt_max_batch_time, 0, MOPT_GTE0},
  	{Opt_min_batch_time, 0, MOPT_GTE0},
-Index: linux-4.12.14-16.4.1/fs/ext4/xattr.c
+Index: b/fs/ext4/xattr.c
 ===================================================================
---- linux-4.12.14-16.4.1.orig/fs/ext4/xattr.c
-+++ linux-4.12.14-16.4.1/fs/ext4/xattr.c
+--- a/fs/ext4/xattr.c
++++ b/fs/ext4/xattr.c
 @@ -73,7 +73,7 @@
  # define ea_bdebug(bh, fmt, ...)	no_printk(fmt, ##__VA_ARGS__)
  #endif
@@ -58,27 +58,27 @@ Index: linux-4.12.14-16.4.1/fs/ext4/xattr.c
  static struct buffer_head *ext4_xattr_cache_find(struct inode *,
  						 struct ext4_xattr_header *,
  						 struct mb_cache_entry **);
-@@ -400,7 +400,8 @@ ext4_xattr_block_get(struct inode *inode
- 		error = -EFSCORRUPTED;
+@@ -413,7 +413,8 @@ ext4_xattr_block_get(struct inode *inode
+ 	error = ext4_xattr_check_block(inode, bh);
+ 	if (error)
  		goto cleanup;
- 	}
 -	ext4_xattr_cache_insert(ext4_mb_cache, bh);
 +	if (!test_opt(inode->i_sb, NO_MBCACHE))
 +		_ext4_xattr_cache_insert(ext4_mb_cache, bh);
  	entry = BFIRST(bh);
- 	error = ext4_xattr_find_entry(&entry, name_index, name, 1);
+ 	end = bh->b_data + bh->b_size;
+ 	error = xattr_find_entry(inode, &entry, end, name_index, name, 1);
+@@ -579,7 +580,8 @@ ext4_xattr_block_list(struct dentry *den
+ 	error = ext4_xattr_check_block(inode, bh);
  	if (error)
-@@ -568,7 +569,8 @@ ext4_xattr_block_list(struct dentry *den
- 		error = -EFSCORRUPTED;
  		goto cleanup;
- 	}
 -	ext4_xattr_cache_insert(ext4_mb_cache, bh);
 +	if (!test_opt(inode->i_sb, NO_MBCACHE))
 +		_ext4_xattr_cache_insert(ext4_mb_cache, bh);
  	error = ext4_xattr_list_entries(dentry, BFIRST(bh), buffer, buffer_size);
  
  cleanup:
-@@ -683,7 +685,9 @@ ext4_xattr_release_block(handle_t *handl
+@@ -694,7 +696,9 @@ ext4_xattr_release_block(handle_t *handl
  		 * This must happen under buffer lock for
  		 * ext4_xattr_block_set() to reliably detect freed block
  		 */
@@ -89,7 +89,7 @@ Index: linux-4.12.14-16.4.1/fs/ext4/xattr.c
  		get_bh(bh);
  		unlock_buffer(bh);
  		ext4_free_blocks(handle, inode, bh, 0, 1,
-@@ -693,9 +697,10 @@ ext4_xattr_release_block(handle_t *handl
+@@ -704,9 +708,10 @@ ext4_xattr_release_block(handle_t *handl
  		ref--;
  		BHDR(bh)->h_refcount = cpu_to_le32(ref);
  		if (ref == EXT4_XATTR_REFCOUNT_MAX - 1) {
@@ -102,7 +102,7 @@ Index: linux-4.12.14-16.4.1/fs/ext4/xattr.c
  						bh->b_blocknr);
  			if (ce) {
  				ce->e_reusable = 1;
-@@ -1137,7 +1142,8 @@ ext4_xattr_block_set(handle_t *handle, s
+@@ -1147,7 +1152,8 @@ ext4_xattr_block_set(handle_t *handle, s
  			 * ext4_xattr_block_set() to reliably detect modified
  			 * block
  			 */
@@ -112,7 +112,7 @@ Index: linux-4.12.14-16.4.1/fs/ext4/xattr.c
  						    bs->bh->b_blocknr);
  			ea_bdebug(bs->bh, "modifying in-place");
  			error = ext4_xattr_set_entry(i, s, handle, inode);
-@@ -1145,8 +1151,9 @@ ext4_xattr_block_set(handle_t *handle, s
+@@ -1155,8 +1161,9 @@ ext4_xattr_block_set(handle_t *handle, s
  				if (!IS_LAST_ENTRY(s->first))
  					ext4_xattr_rehash(header(s->base),
  							  s->here);
@@ -124,7 +124,7 @@ Index: linux-4.12.14-16.4.1/fs/ext4/xattr.c
  			}
  			ext4_xattr_block_csum_set(inode, bs->bh);
  			unlock_buffer(bs->bh);
-@@ -1314,7 +1321,8 @@ getblk_failed:
+@@ -1324,7 +1331,8 @@ getblk_failed:
  			ext4_xattr_block_csum_set(inode, new_bh);
  			set_buffer_uptodate(new_bh);
  			unlock_buffer(new_bh);
@@ -134,7 +134,7 @@ Index: linux-4.12.14-16.4.1/fs/ext4/xattr.c
  			error = ext4_handle_dirty_metadata(handle, inode,
  							   new_bh);
  			if (error)
-@@ -2129,7 +2137,7 @@ ext4_xattr_inode_array_free(struct inode
+@@ -2127,7 +2135,7 @@ ext4_xattr_inode_array_free(struct inode
   * Returns 0, or a negative error number on failure.
   */
  static void
@@ -143,7 +143,7 @@ Index: linux-4.12.14-16.4.1/fs/ext4/xattr.c
  {
  	struct ext4_xattr_header *header = BHDR(bh);
  	__u32 hash = le32_to_cpu(header->h_hash);
-@@ -2201,6 +2209,8 @@ ext4_xattr_cache_find(struct inode *inod
+@@ -2199,6 +2207,8 @@ ext4_xattr_cache_find(struct inode *inod
  	struct mb_cache_entry *ce;
  	struct mb_cache *ext4_mb_cache = EXT4_GET_MB_CACHE(inode);
  

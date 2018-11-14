@@ -14,13 +14,13 @@ sles15/ext4-disable-mb-cache.patch
 sles15/ext4-nocmtime.patch
 sles15/ext4-large-dir.patch
 sles15/ext4-pdirop.patch
-sles12sp2/ext4-max-dir-size.patch
+sles15/ext4-max-dir-size.patch
 sles15/ext4-remove-truncate-warning.patch
 sles15/ext4-corrupted-inode-block-bitmaps-handling-patches.patch
 sles12sp2/ext4-give-warning-with-dir-htree-growing.patch
 sles15/ext4-jcb-optimization.patch
 sles15/ext4-attach-jinode-in-writepages.patch
-sles12sp2/ext4-dont-check-before-replay.patch
+sles15/ext4-dont-check-before-replay.patch
 rhel7.2/ext4-dont-check-in-ro.patch
 rhel7/ext4-use-GFP_NOFS-in-ext4_inode_attach_jinode.patch
 sles15/ext4-ialloc-uid-gid.patch
