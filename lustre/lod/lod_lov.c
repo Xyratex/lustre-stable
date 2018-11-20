@@ -1768,6 +1768,8 @@ int lod_verify_striping(struct lod_device *d, struct lod_object *lo,
 		lum = tmp.lb_buf;
 		if (lov_pattern(le32_to_cpu(lum->lmm_pattern)) ==
 		    LOV_PATTERN_MDT) {
+			if (!libcfs_experimental_flag)
+				RETURN(-ENOSYS);
 			/* DoM component can be only the first entry */
 			if (i > 0) {
 				CDEBUG(D_LAYOUT, "invalid DoM layout "
