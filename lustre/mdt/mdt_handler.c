@@ -4723,9 +4723,12 @@ static int mdt_quota_init(const struct lu_env *env, struct mdt_device *mdt,
 	mdt->mdt_qmt_dev = obd->obd_lu_dev;
 
 	/* configure local quota objects */
-	rc = mdt->mdt_qmt_dev->ld_ops->ldo_prepare(env,
-						   &mdt->mdt_lu_dev,
-						   mdt->mdt_qmt_dev);
+	if (OBD_FAIL_CHECK(OBD_FAIL_QUOTA_INIT))
+		rc = -EBADF;
+	else
+		rc = mdt->mdt_qmt_dev->ld_ops->ldo_prepare(env,
+							   &mdt->mdt_lu_dev,
+							   mdt->mdt_qmt_dev);
 	if (rc)
 		GOTO(class_cleanup, rc);
 
