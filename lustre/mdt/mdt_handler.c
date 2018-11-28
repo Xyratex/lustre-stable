@@ -4748,6 +4748,7 @@ class_cleanup:
 	if (rc) {
 		class_manual_cleanup(obd);
 		mdt->mdt_qmt_dev = NULL;
+		GOTO(lcfg_cleanup, rc);
 	}
 class_detach:
 	if (rc)
@@ -5241,7 +5242,6 @@ static int mdt_init0(const struct lu_env *env, struct mdt_device *m,
 err_procfs:
 	mdt_procfs_fini(m);
 err_recovery:
-	target_recovery_fini(obd);
 	upcall_cache_cleanup(m->mdt_identity_cache);
 	m->mdt_identity_cache = NULL;
 err_free_hsm:
@@ -5252,6 +5252,11 @@ err_los_fini:
 err_fs_cleanup:
 	mdt_fs_cleanup(env, m);
 err_tgt:
+	/* keep recoverable clients */
+	obd->obd_fail = 1;
+	target_recovery_fini(obd);
+	obd_exports_barrier(obd);
+	obd_zombie_barrier();
 	tgt_fini(env, &m->mdt_lut);
 err_free_ns:
 	ldlm_namespace_free(m->mdt_namespace, NULL, 0);
