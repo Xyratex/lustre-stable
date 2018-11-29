@@ -16656,14 +16656,14 @@ test_255b() {
 run_test 255b "check 'lfs ladvise -a dontneed'"
 
 test_255c() {
-	[ $(lustre_version_code ost1) -lt $(version_code 2.10.50) ] &&
-		skip "lustre < 2.10.53 does not support lockahead"
-
 	local count
 	local new_count
 	local difference
 	local i
 	local rc
+
+	[ $(lustre_version_code ost1) -lt $(version_code 2.7.22) ] &&
+		skip "lustre < 2.7.22 does not support lockahead" && return
 
 	test_mkdir -p $DIR/$tdir
 	$SETSTRIPE -i 0 $DIR/$tdir
