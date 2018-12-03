@@ -17249,6 +17249,34 @@ test_300q() {
 }
 run_test 300q "create remote directory under orphan directory"
 
+test_300r() {
+	[ $(lustre_version_code $SINGLEMDS) -lt $(version_code 2.7.55) ] &&
+		skip "Need MDS version at least 2.7.55" && return
+	[ $PARALLEL == "yes" ] && skip "skip parallel run" && return
+	[ $MDSCOUNT -lt 2 ] && skip "needs >= 2 MDTs" && return
+
+	mkdir $DIR/$tdir
+
+	$LFS setdirstripe -i 0 -c -1 $DIR/$tdir/striped_dir ||
+		error "set striped dir error"
+
+	$LFS getdirstripe $DIR/$tdir/striped_dir ||
+		error "getstripeddir fails"
+
+	local stripe_count
+	stripe_count=$($LFS getdirstripe $DIR/$tdir/striped_dir |
+		      awk '/lmv_stripe_count:/ { print $2 }')
+
+	[ $MDSCOUNT -ne $stripe_count ] &&
+		error "wrong stripe count $stripe_count expected $MDSCOUNT"
+
+	rm -rf $DIR/$tdir/striped_dir ||
+		error "unlink striped dir fails"
+
+	return 0
+}
+run_test 300r "test -1 striped directory"
+
 prepare_remote_file() {
 	mkdir $DIR/$tdir/src_dir ||
 		error "create remote source failed"
