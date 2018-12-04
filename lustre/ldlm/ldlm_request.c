@@ -1336,6 +1336,10 @@ int ldlm_cli_cancel(const struct lustre_handle *lockh,
 	ldlm_set_canceling(lock);
 	unlock_res_and_lock(lock);
 
+	if (cancel_flags & LCF_LOCAL)
+		OBD_FAIL_TIMEOUT(OBD_FAIL_LDLM_LOCAL_CANCEL_PAUSE,
+				 cfs_fail_val);
+
 	rc = ldlm_cli_cancel_local(lock);
 	if (rc == LDLM_FL_LOCAL_ONLY || cancel_flags & LCF_LOCAL) {
 		LDLM_LOCK_RELEASE(lock);
