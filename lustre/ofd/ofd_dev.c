@@ -1542,7 +1542,7 @@ static int ofd_create_hdl(struct tgt_session_info *tsi)
 	u64			 oid = ostid_id(&oa->o_oi);
 	struct ofd_seq		*oseq;
 	s64 diff;
-	int rc = 0, rc2;
+	int rc = 0;
 	int			 sync_trans = 0;
 	long			 granted = 0;
 
@@ -1685,6 +1685,7 @@ static int ofd_create_hdl(struct tgt_session_info *tsi)
 		u64 next_id;
 		int created = 0;
 		int count;
+		int rc2;
 
 		if (!(oa->o_valid & OBD_MD_FLFLAGS) ||
 		    !(oa->o_flags & OBD_FL_DELORPHAN)) {
@@ -1777,8 +1778,7 @@ static int ofd_create_hdl(struct tgt_session_info *tsi)
 		}
 
 		rc2 = ostid_set_id(&rep_oa->o_oi, ofd_seq_last_oid(oseq));
-		/* rewrite rc only when ostid_set_id returns error */
-		rc = rc2 != 0 ? rc2 : rc;
+		rc = rc ? : rc2;
 	}
 	EXIT;
 	ofd_counter_incr(exp, LPROC_OFD_STATS_CREATE,
