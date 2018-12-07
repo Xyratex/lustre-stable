@@ -477,6 +477,9 @@ int ldlm_cli_enqueue_local(struct ldlm_namespace *ns,
         if (*flags & LDLM_FL_ATOMIC_CB)
 		ldlm_set_atomic_cb(lock);
 
+        if (*flags & LDLM_FL_CANCEL_ON_BLOCK)
+		ldlm_set_cancel_on_block(lock);
+
         if (policy != NULL)
                 lock->l_policy_data = *policy;
         if (client_cookie != NULL)

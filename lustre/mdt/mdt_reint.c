@@ -1663,6 +1663,7 @@ static int mdt_reint_migrate_internal(struct mdt_thread_info *info,
 	if (info->mti_spec.sp_migrate_close) {
 		struct close_data *data;
 		struct mdt_body	 *repbody;
+		int rc2;
 		bool lease_broken = false;
 
 		if (!req_capsule_field_present(info->mti_pill, &RMF_MDT_EPOCH,
@@ -1702,9 +1703,14 @@ static int mdt_reint_migrate_internal(struct mdt_thread_info *info,
 		if (lease_broken)
 			GOTO(out_lease, rc = -EAGAIN);
 out_lease:
-		rc = mdt_close_internal(info, mdt_info_req(info), NULL);
-		repbody = req_capsule_server_get(info->mti_pill, &RMF_MDT_BODY);
-		repbody->mbo_valid |= OBD_MD_CLOSE_INTENT_EXECED;
+		rc2 = mdt_close_internal(info, mdt_info_req(info), NULL);
+		if (rc2 == 0) {
+			repbody = req_capsule_server_get(info->mti_pill,
+							 &RMF_MDT_BODY);
+			repbody->mbo_valid |= OBD_MD_CLOSE_INTENT_EXECED;
+		} else {
+			rc = rc2;
+		}
 		if (rc != 0)
 			GOTO(out_unlock_list, rc);
 	}
