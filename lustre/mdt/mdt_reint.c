@@ -1424,12 +1424,13 @@ static void mdt_unlock_list(struct mdt_thread_info *info,
 static int mdt_lock_objects_in_linkea(struct mdt_thread_info *info,
 				      struct mdt_object *obj,
 				      struct mdt_object *pobj,
+				      struct mdt_lock_handle *lhp,
 				      struct list_head *lock_list)
 {
 	struct lu_buf		*buf = &info->mti_big_buf;
 	struct linkea_data	ldata = { NULL };
+	bool			blocked = false;
 	int			count;
-	int			retry_count;
 	int			rc;
 	ENTRY;
 
@@ -1448,10 +1449,6 @@ static int mdt_lock_objects_in_linkea(struct mdt_thread_info *info,
 		RETURN(rc);
 	}
 
-	/* ignore the migrating parent(@pobj) */
-	retry_count = ldata.ld_leh->leh_reccount - 1;
-
-again:
 	LASSERT(ldata.ld_leh != NULL);
 	ldata.ld_lee = (struct link_ea_entry *)(ldata.ld_leh + 1);
 	for (count = 0; count < ldata.ld_leh->leh_reccount; count++) {
@@ -1513,18 +1510,16 @@ again:
 		rc = mdt_object_lock_try(info, mdt_pobj, &mll->mll_lh, &ibits,
 					 MDS_INODELOCK_UPDATE, true);
 		if (!(ibits & MDS_INODELOCK_UPDATE)) {
-			mdt_unlock_list(info, lock_list, 0);
+			mdt_unlock_list(info, lock_list, 1);
 
-			CDEBUG(D_INFO, "%s: busy lock on "DFID" %s retry %d\n",
-			       mdt_obd_name(mdt), PFID(&fid), name.ln_name,
-			       retry_count);
+			CDEBUG(D_INFO, "%s: busy lock on "DFID" %s\n",
+			       mdt_obd_name(mdt), PFID(&fid), name.ln_name);
 
-			if (retry_count == 0) {
-				mdt_object_put(info->mti_env, mdt_pobj);
-				OBD_FREE_PTR(mll);
-				GOTO(out, rc = -EBUSY);
-			}
+                       /* also unlock parent locks to avoid deadlock */
+			if (!blocked)
+				mdt_object_unlock(info, pobj, lhp, 1);
 
+			blocked = true;
 			mdt_lock_pdo_init(&mll->mll_lh, LCK_PW, &name);
 			rc = mdt_object_lock(info, mdt_pobj, &mll->mll_lh,
 					     MDS_INODELOCK_UPDATE);
@@ -1549,10 +1544,9 @@ again:
 				unlock_res_and_lock(lock);
 				LDLM_LOCK_PUT(lock);
 			}
-			mdt_object_unlock_put(info, mdt_pobj, &mll->mll_lh, rc);
+			mdt_object_unlock_put(info, mdt_pobj, &mll->mll_lh, 1);
 			OBD_FREE_PTR(mll);
-			retry_count--;
-			goto again;
+			continue;
 		}
 		rc = 0;
 		INIT_LIST_HEAD(&mll->mll_list);
@@ -1562,6 +1556,8 @@ next:
 		ldata.ld_lee = (struct link_ea_entry *)((char *)ldata.ld_lee +
 							 ldata.ld_reclen);
 	}
+	if (blocked)
+		GOTO(out, rc = -EBUSY);
 out:
 	if (rc != 0)
 		mdt_unlock_list(info, lock_list, rc);
@@ -1585,6 +1581,7 @@ static int mdt_reint_migrate_internal(struct mdt_thread_info *info,
 	__u64			lock_ibits;
 	struct ldlm_lock	*lease = NULL;
 	bool			lock_open_sem = false;
+	int			lock_retries = 5;
 	int			rc;
 	ENTRY;
 
@@ -1600,6 +1597,7 @@ static int mdt_reint_migrate_internal(struct mdt_thread_info *info,
 		RETURN(PTR_ERR(msrcdir));
 	}
 
+lock_parent:
 	lh_dirp = &info->mti_lh[MDT_LH_PARENT];
 	mdt_lock_pdo_init(lh_dirp, LCK_PW, &rr->rr_name);
 	rc = mdt_reint_object_lock(info, msrcdir, lh_dirp, MDS_INODELOCK_UPDATE,
@@ -1660,7 +1658,13 @@ static int mdt_reint_migrate_internal(struct mdt_thread_info *info,
 
 	/* 3: iterate the linkea of the object and lock all of the objects */
 	INIT_LIST_HEAD(&lock_list);
-	rc = mdt_lock_objects_in_linkea(info, mold, msrcdir, &lock_list);
+	rc = mdt_lock_objects_in_linkea(info, mold, msrcdir, lh_dirp,
+					&lock_list);
+	if (rc == -EBUSY && lock_retries-- > 0) {
+		mdt_object_put(info->mti_env, mold);
+		goto lock_parent;
+	}
+
 	if (rc != 0)
 		GOTO(out_put_child, rc);
 
