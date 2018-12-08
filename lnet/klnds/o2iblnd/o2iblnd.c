@@ -931,8 +931,6 @@ kiblnd_create_conn(kib_peer_ni_t *peer_ni, struct rdma_cm_id *cmid,
 		      peer_ni->ibp_queue_depth,
 		      conn->ibc_queue_depth);
 
-	LIBCFS_FREE(init_qp_attr, sizeof(*init_qp_attr));
-
 	LIBCFS_CPT_ALLOC(conn->ibc_rxs, lnet_cpt_table(), cpt,
 			 IBLND_RX_MSGS(conn) * sizeof(kib_rx_t));
 	if (conn->ibc_rxs == NULL) {
@@ -946,6 +944,8 @@ kiblnd_create_conn(kib_peer_ni_t *peer_ni, struct rdma_cm_id *cmid,
 		goto failed_2;
 
 	kiblnd_map_rx_descs(conn);
+
+	LIBCFS_FREE(init_qp_attr, sizeof(*init_qp_attr));
 
 	/* 1 ref for caller and each rxmsg */
 	atomic_set(&conn->ibc_refcount, 1 + IBLND_RX_MSGS(conn));
