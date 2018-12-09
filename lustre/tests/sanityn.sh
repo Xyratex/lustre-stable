@@ -3800,6 +3800,7 @@ test_80b() {
 	local mdt_idx
 	local rc=0
 	local rc1=0
+	local duration=0
 
 	trap cleanup_80b EXIT
 	#prepare migrate directory
@@ -3815,6 +3816,7 @@ test_80b() {
 			mdt_idx=$((RANDOM % MDSCOUNT))
 			$LFS migrate -m $mdt_idx $migrate_dir1 &>/dev/null ||
 				rc=$?
+			echo "migrate rc=$rc"
 			[ $rc -ne 0 -o $rc -ne 16 ] || break
 		done
 	) &
@@ -3826,26 +3828,26 @@ test_80b() {
 	echo "accessing the migrating directory for 5 minutes..."
 	while true; do
 		ls $migrate_dir2 > /dev/null || {
-			echo "read dir fails"
+			echo "read dir fails with $?"
 			break
 		}
 		diff -u $DIR2/$tdir/file1 $migrate_dir2/file1 || {
-			echo "access file1 fails"
+			echo "access file1 fails with $?"
 			break
 		}
 
 		cat $migrate_dir2/file2 > $migrate_dir2/file3 || {
-			echo "access file2/3 fails"
+			echo "access file2/3 fails with $?"
 			break
 		}
 
 		echo "aaaaa" > $migrate_dir2/file4 > /dev/null || {
-			echo "access file4 fails"
+			echo "access file4 fails with $?"
 			break
 		}
 
 		stat $migrate_dir2/file5 > /dev/null || {
-			echo "stat file5 fails"
+			echo "stat file5 fails with $?"
 			break
 		}
 
@@ -3904,6 +3906,8 @@ test_80b() {
 	#check migration are still there
 	kill -0 $migrate_pid || error "migration stopped 2"
 	cleanup_80b
+	echo $duration
+	[ $duration -lt 300 ] && error "error during migration"
 }
 run_test 80b "Accessing directory during migration"
 
