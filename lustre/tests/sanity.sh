@@ -12460,6 +12460,7 @@ run_test 161c "check CL_RENME[UNLINK] changelog record flags"
 
 test_161d() {
 	remote_mds_nodsh && skip "remote MDS with nodsh" && return
+	[ -n "$FILESET" ] && skip "Not functional for FILESET set" && return
 
 	local pid
 	local fid
@@ -17929,6 +17930,7 @@ test_404() { # LU-6601
 run_test 404 "validate manual {de}activated works properly for OSPs"
 
 test_405() {
+	[ -n "$FILESET" ] && skip "Not functional for FILESET set" && return
 	[ $(lustre_version_code $SINGLEMDS) -lt $(version_code 2.6.92) -o \
 	[ $(lustre_version_code client) -lt $(version_code 2.6.99) ] &&
 		skip "Layout swap lock is not supported" && return

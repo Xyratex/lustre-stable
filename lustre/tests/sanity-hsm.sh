@@ -22,6 +22,8 @@ init_test_env $@
 . ${CONFIG:=$LUSTRE/tests/cfg/$NAME.sh}
 init_logging
 
+[ -n "$FILESET" ] && skip "Not functional for FILESET set" && exit
+
 MULTIOP=${MULTIOP:-multiop}
 OPENFILE=${OPENFILE:-openfile}
 MMAP_CAT=${MMAP_CAT:-mmap_cat}
@@ -42,6 +44,7 @@ fi
 if [[ $UID -eq 0 && $RUNAS_ID -eq 0 ]]; then
 	skip_env "\$RUNAS_ID set to 0, but \$UID is also 0!" && exit
 fi
+
 check_runas_id $RUNAS_ID $RUNAS_GID $RUNAS
 if getent group nobody; then
 	GROUP=nobody
