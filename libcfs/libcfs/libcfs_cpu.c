@@ -889,6 +889,10 @@ static struct cfs_cpt_table *cfs_cpt_table_create(int ncpt)
 
 	num = num_online_cpus() / ncpt;
 	rem = num_online_cpus() % ncpt;
+	if (rem > 0)
+		CWARN("Cannot scatter %d cpus evenly across %d partitions.\n",
+		      num_online_cpus(), ncpt);
+
 	for_each_online_node(node) {
 		cpumask_copy(node_mask, cpumask_of_node(node));
 
@@ -897,7 +901,7 @@ static struct cfs_cpt_table *cfs_cpt_table_create(int ncpt)
 			int ncpu = cpumask_weight(part->cpt_cpumask);
 
 			rc = cfs_cpt_choose_ncpus(cptab, cpt, node_mask,
-						  num - ncpu);
+						  (rem > 0) + num - ncpu);
 			if (rc < 0) {
 				rc = -EINVAL;
 				goto failed_mask;
