@@ -1284,14 +1284,14 @@ kiblnd_queue_tx_locked(kib_tx_t *tx, kib_conn_t *conn)
 	if (conn->ibc_state >= IBLND_CONN_DISCONNECTED) {
 		tx->tx_status = -ECONNABORTED;
 		tx->tx_waiting = 0;
-	        if (tx->tx_conn != NULL) {
+		if (tx->tx_conn != NULL) {
 			/* PUT_DONE first attached to conn as a PUT_REQ */
-			LASSERT (tx->tx_conn == conn);
-			LASSERT (tx->tx_msg->ibm_type == IBLND_MSG_PUT_DONE);
+			LASSERT(tx->tx_conn == conn);
+			LASSERT(tx->tx_msg->ibm_type == IBLND_MSG_PUT_DONE);
 			tx->tx_conn = NULL;
 			kiblnd_conn_decref(conn);
 		}
-		list_move(&tx->tx_list, &conn->ibc_zombie_txs);
+		list_add(&tx->tx_list, &conn->ibc_zombie_txs);
 
 		return;
 	}
