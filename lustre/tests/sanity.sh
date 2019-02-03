@@ -18446,7 +18446,7 @@ test_802() {
 
 	[[ $(lustre_version_code mds1) -lt $(version_code 2.9.55) ]] ||
 	[[ $(lustre_version_code ost1) -lt $(version_code 2.9.55) ]] &&
-		skip "Need server version at least 2.9.55" & exit 0
+		skip "Need server version at least 2.9.55" && exit 0
 
 	mkdir $DIR/$tdir || error "(1) fail to mkdir"
 
