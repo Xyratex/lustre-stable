@@ -192,14 +192,14 @@ out_trans:
 EXPORT_SYMBOL(llog_destroy);
 
 /* returns negative on error; 0 if success; 1 if success & log destroyed */
-int llog_cancel_rec(const struct lu_env *env, struct llog_handle *loghandle,
-		    int index)
+int llog_cancel_arr_rec(const struct lu_env *env, struct llog_handle *loghandle,
+			int num, int *index)
 {
 	struct llog_thread_info *lgi = llog_info(env);
 	struct dt_device	*dt;
 	struct llog_log_hdr	*llh;
 	struct thandle		*th;
-	int			 rc;
+	int			 rc, i = 0;
 	int rc1;
 	bool subtract_count = false;
 
@@ -211,13 +211,8 @@ int llog_cancel_rec(const struct lu_env *env, struct llog_handle *loghandle,
 
 	llh = loghandle->lgh_hdr;
 
-	CDEBUG(D_RPCTRACE, "Canceling %d in log "DFID"\n", index,
-	       PFID(&loghandle->lgh_id.lgl_oi.oi_fid));
-
-	if (index == 0) {
-		CERROR("Can't cancel index 0 which is header\n");
-		RETURN(-EINVAL);
-	}
+	CDEBUG(D_RPCTRACE, "Canceling %d records, first %d in log "DFID"\n",
+	       num, index[0], PFID(&loghandle->lgh_id.lgl_oi.oi_fid));
 
 	dt = lu2dt_dev(loghandle->lgh_obj->do_lu.lo_dev);
 
@@ -225,7 +220,7 @@ int llog_cancel_rec(const struct lu_env *env, struct llog_handle *loghandle,
 	if (IS_ERR(th))
 		RETURN(PTR_ERR(th));
 
-	rc = llog_declare_write_rec(env, loghandle, &llh->llh_hdr, index, th);
+	rc = llog_declare_write_rec(env, loghandle, &llh->llh_hdr, 0, th);
 	if (rc < 0)
 		GOTO(out_trans, rc);
 
@@ -243,19 +238,25 @@ int llog_cancel_rec(const struct lu_env *env, struct llog_handle *loghandle,
 	down_write(&loghandle->lgh_lock);
 	/* clear bitmap */
 	mutex_lock(&loghandle->lgh_hdr_mutex);
-	if (!ext2_clear_bit(index, LLOG_HDR_BITMAP(llh))) {
-		CDEBUG(D_RPCTRACE, "Catalog index %u already clear?\n", index);
-		GOTO(out_unlock, rc);
+	for (i = 0; i < num; ++i) {
+		if (index[i] == 0) {
+			CERROR("Can't cancel index 0 which is header\n");
+			GOTO(out_unlock, rc = -EINVAL);
+		}
+		if (!ext2_clear_bit(index[i], LLOG_HDR_BITMAP(llh))) {
+			CDEBUG(D_RPCTRACE, "Catalog index %u already clear?\n",
+			       index[i]);
+			GOTO(out_unlock, rc = -ENOENT);
+		}
 	}
-
-	loghandle->lgh_hdr->llh_count--;
+	loghandle->lgh_hdr->llh_count -= num;
 	subtract_count = true;
 	/* Pass this index to llog_osd_write_rec(), which will use the index
 	 * to only update the necesary bitmap. */
-	lgi->lgi_cookie.lgc_index = index;
+	lgi->lgi_cookie.lgc_index = index[0];
 	/* update header */
-	rc = llog_write_rec(env, loghandle, &llh->llh_hdr, &lgi->lgi_cookie,
-			    LLOG_HEADER_IDX, th);
+	rc = llog_write_rec(env, loghandle, &llh->llh_hdr, (num != 1 ? NULL :
+			    &lgi->lgi_cookie), LLOG_HEADER_IDX, th);
 	if (rc != 0)
 		GOTO(out_unlock, rc);
 
@@ -288,13 +289,21 @@ out_trans:
 	rc1 = dt_trans_stop(env, dt, th);
 	if (rc == 0)
 		rc = rc1;
-	if (rc < 0 && subtract_count) {
+	if (rc < 0) {
 		mutex_lock(&loghandle->lgh_hdr_mutex);
-		loghandle->lgh_hdr->llh_count++;
-		ext2_set_bit(index, LLOG_HDR_BITMAP(llh));
+		if (subtract_count)
+			loghandle->lgh_hdr->llh_count += num;
+		for (i = i - 1; i >= 0; i--)
+			ext2_set_bit(index[i], LLOG_HDR_BITMAP(llh));
 		mutex_unlock(&loghandle->lgh_hdr_mutex);
 	}
 	RETURN(rc);
+}
+
+int llog_cancel_rec(const struct lu_env *env, struct llog_handle *loghandle,
+		    int index)
+{
+	return llog_cancel_arr_rec(env, loghandle, 1, &index);
 }
 
 int llog_read_header(const struct lu_env *env, struct llog_handle *handle,
