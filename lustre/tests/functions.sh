@@ -287,11 +287,17 @@ setstripe_getstripe () {
 	shift
 	local params=$@
 
+	if [ $(stat -f $file | grep "Type" |
+		awk '{print $6}') != "lustre" ]; then
+		return 0
+	fi
+
 	if [ -n "$params" ]; then
 		$LFS setstripe $params $file ||
 			error "setstripe $params failed"
 	fi
-	$LFS getstripe $file
+	$LFS getstripe $file ||
+		error "getstripe $file failed"
 }
 
 run_compilebench() {
@@ -639,10 +645,8 @@ run_ior() {
 
 	# mpi_run uses mpiuser
 	chmod 0777 $testdir
-	if [ -z "$NFSCLIENT" ]; then
-		ior_stripe_params=${ior_stripe_params:-"-c -1"}
-		setstripe_getstripe $testdir $ior_stripe_params
-	fi
+	ior_stripe_params=${ior_stripe_params:-"-c -1"}
+	setstripe_getstripe $testdir $ior_stripe_params
 
 	#
 	# -b N  blockSize --
