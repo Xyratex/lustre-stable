@@ -2815,7 +2815,7 @@ int mdt_remote_object_lock_try(struct mdt_thread_info *mti,
 
 	rc = mo_object_lock(mti->mti_env, mdt_object_child(o), lh, einfo,
 			    policy);
-	if (rc < 0 && einfo->ei_cbdata != NULL) {
+	if (rc < 0 && cache) {
 		mdt_object_put(mti->mti_env, o);
 		einfo->ei_cbdata = NULL;
 	}
