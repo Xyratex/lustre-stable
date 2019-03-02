@@ -4769,6 +4769,25 @@ test_121() {
 }
 run_test 121 "check resend of ongoing requests for lwp during failover"
 
+test_122() {
+	[ $OSTCOUNT -lt 2 ] && skip "needs >= 2 OSTs" && return 0
+
+	pool_add pool_122
+	pool_add_targets pool_122 1 1
+
+	mkdir $DIR/$tdir
+	$LFS setstripe -p pool_122 $DIR/$tdir
+
+	replay_barrier mds1
+
+	touch $DIR/$tdir/$tfile
+
+	fail mds1
+
+	[ -f $DIR/$tdir/$tfile ] || error "file does not exist"
+}
+run_test 122 "replay creation of a file created in a pool"
+
 complete $SECONDS
 check_and_cleanup_lustre
 exit_status
