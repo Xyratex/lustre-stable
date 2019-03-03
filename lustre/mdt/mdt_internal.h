@@ -344,7 +344,8 @@ struct mdt_reint_record {
 };
 
 enum mdt_reint_flag {
-        MRF_OPEN_TRUNC = 1 << 0,
+	MRF_OPEN_TRUNC = 1 << 0,
+	MRF_OPEN_RESEND = 1 << 1,
 };
 
 /*

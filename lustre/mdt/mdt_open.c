@@ -44,6 +44,8 @@
 #include "mdt_internal.h"
 #include <lustre_nodemap.h>
 
+static int mdt_open_by_fid(struct mdt_thread_info *info, struct ldlm_reply *rep);
+
 /* we do nothing because we do not have refcount now */
 static void mdt_mfd_get(void *mfdp)
 {
@@ -499,7 +501,7 @@ err_out:
 
 static int mdt_finish_open(struct mdt_thread_info *info,
 			   struct mdt_object *p, struct mdt_object *o,
-			   __u64 flags, int created, struct ldlm_reply *rep)
+			   __u64 flags, struct ldlm_reply *rep)
 {
 	struct ptlrpc_request	*req = mdt_info_req(info);
 	struct obd_export	*exp = req->rq_export;
@@ -508,12 +510,14 @@ static int mdt_finish_open(struct mdt_thread_info *info,
 	struct lu_attr		*la  = &ma->ma_attr;
 	struct mdt_file_data	*mfd;
 	struct mdt_body		*repbody;
+	int			 created;
 	int			 rc = 0;
 	int			 isreg, isdir, islnk;
 	struct list_head	*t;
 	ENTRY;
 
         LASSERT(ma->ma_valid & MA_INODE);
+	created = mdt_get_disposition(rep, DISP_OPEN_CREATE);
 
         repbody = req_capsule_server_get(info->mti_pill, &RMF_MDT_BODY);
 
@@ -597,18 +601,20 @@ static int mdt_finish_open(struct mdt_thread_info *info,
         }
 
 	mfd = NULL;
-	if (lustre_msg_get_flags(req->rq_reqmsg) & MSG_RESENT) {
+	if (info->mti_rr.rr_flags & MRF_OPEN_RESEND) {
 		spin_lock(&med->med_open_lock);
 		list_for_each(t, &med->med_open_head) {
 			mfd = list_entry(t, struct mdt_file_data, mfd_list);
-			if (mfd->mfd_xid == req->rq_xid)
+			if (mfd->mfd_xid == req->rq_xid) {
+				repbody->mbo_handle.cookie =
+						mfd->mfd_handle.h_cookie;
 				break;
+			}
 			mfd = NULL;
 		}
 		spin_unlock(&med->med_open_lock);
 
                 if (mfd != NULL) {
-			repbody->mbo_handle.cookie = mfd->mfd_handle.h_cookie;
 			/* set repbody->ea_size for resent case */
 			if (ma->ma_valid & MA_LOV) {
 				LASSERT(ma->ma_lmm_size != 0);
@@ -621,6 +627,9 @@ static int mdt_finish_open(struct mdt_thread_info *info,
 			mdt_set_disposition(info, rep, DISP_OPEN_OPEN);
 			RETURN(0);
 		}
+		/* if we have a real resend (not a resend afrer failover), it
+		 * mean close is already happend, so lets return error and exit */
+		RETURN(-ESTALE);
 	}
 
 	rc = mdt_mfd_open(info, p, o, flags, created, rep);
@@ -633,102 +642,39 @@ static int mdt_finish_open(struct mdt_thread_info *info,
 void mdt_reconstruct_open(struct mdt_thread_info *info,
                           struct mdt_lock_handle *lhc)
 {
-        const struct lu_env *env = info->mti_env;
-        struct mdt_device       *mdt  = info->mti_mdt;
         struct req_capsule      *pill = info->mti_pill;
         struct ptlrpc_request   *req  = mdt_info_req(info);
-        struct md_attr          *ma   = &info->mti_attr;
         struct mdt_reint_record *rr   = &info->mti_rr;
-	__u64                   flags = info->mti_spec.sp_cr_flags;
+	struct md_attr          *ma   = &info->mti_attr;
         struct ldlm_reply       *ldlm_rep;
-        struct mdt_object       *parent;
-        struct mdt_object       *child;
-        struct mdt_body         *repbody;
         int                      rc;
 	__u64			 opdata;
 	ENTRY;
 
         LASSERT(pill->rc_fmt == &RQF_LDLM_INTENT_OPEN);
         ldlm_rep = req_capsule_server_get(pill, &RMF_DLM_REP);
-        repbody = req_capsule_server_get(pill, &RMF_MDT_BODY);
 
 	ma->ma_need = MA_INODE | MA_HSM;
 	ma->ma_valid = 0;
-
 	opdata = mdt_req_from_lrd(req, info->mti_reply_data);
 	mdt_set_disposition(info, ldlm_rep, opdata);
 
 	CDEBUG(D_INODE, "This is reconstruct open: disp=%#llx, result=%d\n",
                ldlm_rep->lock_policy_res1, req->rq_status);
-
-        if (mdt_get_disposition(ldlm_rep, DISP_OPEN_CREATE) &&
-            req->rq_status != 0)
+	if (req->rq_status)
                 /* We did not create successfully, return error to client. */
                 GOTO(out, rc = req->rq_status);
 
-        if (mdt_get_disposition(ldlm_rep, DISP_OPEN_CREATE)) {
-                struct obd_export *exp = req->rq_export;
-                /*
-                 * We failed after creation, but we do not know in which step
-                 * we failed. So try to check the child object.
-                 */
-                parent = mdt_object_find(env, mdt, rr->rr_fid1);
-                if (IS_ERR(parent)) {
-                        rc = PTR_ERR(parent);
-                        LCONSOLE_WARN("Parent "DFID" lookup error %d."
-                                      " Evicting client %s with export %s.\n",
-                                      PFID(rr->rr_fid1), rc,
-                                      obd_uuid2str(&exp->exp_client_uuid),
-                                      obd_export_nid2str(exp));
-                        mdt_export_evict(exp);
-                        RETURN_EXIT;
-                }
-
-		child = mdt_object_find(env, mdt, rr->rr_fid2);
-		if (IS_ERR(child)) {
-			rc = PTR_ERR(child);
-			LCONSOLE_WARN("cannot lookup child "DFID": rc = %d; "
-				      "evicting client %s with export %s\n",
-				      PFID(rr->rr_fid2), rc,
-				      obd_uuid2str(&exp->exp_client_uuid),
-				      obd_export_nid2str(exp));
-			mdt_object_put(env, parent);
-			mdt_export_evict(exp);
-			RETURN_EXIT;
-		}
-
-		if (unlikely(mdt_object_remote(child))) {
-			/* the child object was created on remote server */
-			if (!mdt_is_dne_client(exp)) {
-				/* Return -EIO for old client */
-				mdt_object_put(env, parent);
-				mdt_object_put(env, child);
-				GOTO(out, rc = -EIO);
-			}
-			repbody->mbo_fid1 = *rr->rr_fid2;
-			repbody->mbo_valid |= (OBD_MD_FLID | OBD_MD_MDS);
-			rc = 0;
-		} else {
-			if (mdt_object_exists(child)) {
-				mdt_prep_ma_buf_from_rep(info, child, ma);
-				rc = mdt_attr_get_complex(info, child, ma);
-				if (rc == 0)
-					rc = mdt_finish_open(info, parent,
-							     child, flags,
-							     1, ldlm_rep);
-			} else {
-				/* the child does not exist, we should do
-				 * regular open */
-				mdt_object_put(env, parent);
-				mdt_object_put(env, child);
-				GOTO(regular_open, 0);
-			}
-		}
-                mdt_object_put(env, parent);
-                mdt_object_put(env, child);
-                GOTO(out, rc);
+	/* tg_reply_data is just memory only  structure, so any non zero fid
+	 * means a real resend not a resend after recovery which needd to be
+	 * handled as regular open */
+	if (likely(!fid_is_zero(&info->mti_reply_data->trd_object))) {
+		rr->rr_fid2 = &info->mti_reply_data->trd_object;
+		rr->rr_flags |= MRF_OPEN_RESEND;
+		rc = mdt_open_by_fid(info, ldlm_rep);
+		if (rc)
+			lustre_msg_set_transno(req->rq_repmsg, 0);
         } else {
-regular_open:
                 /* We did not try to create, so we are a pure open */
                 rc = mdt_reint_open(info, lhc);
         }
@@ -766,13 +712,14 @@ static int mdt_open_by_fid(struct mdt_thread_info *info, struct ldlm_reply *rep)
                 rc = 0;
 	} else {
 		if (mdt_object_exists(o)) {
+			tgt_open_obj_set(info->mti_env, mdt_obj2dt(o));
 			mdt_set_disposition(info, rep, (DISP_IT_EXECD |
 							DISP_LOOKUP_EXECD |
 							DISP_LOOKUP_POS));
 			mdt_prep_ma_buf_from_rep(info, o, ma);
 			rc = mdt_attr_get_complex(info, o, ma);
 			if (rc == 0)
-				rc = mdt_finish_open(info, NULL, o, flags, 0,
+				rc = mdt_finish_open(info, NULL, o, flags,
 						     rep);
 		} else {
 			rc = -ENOENT;
@@ -1135,7 +1082,8 @@ static int mdt_open_by_fid_lock(struct mdt_thread_info *info,
                 }
         }
 
-        rc = mdt_finish_open(info, parent, o, flags, 0, rep);
+	tgt_open_obj_set(info->mti_env, mdt_obj2dt(o));
+        rc = mdt_finish_open(info, parent, o, flags, rep);
 	if (!rc) {
 		mdt_set_disposition(info, rep, DISP_LOOKUP_POS);
 		if (flags & MDS_OPEN_LOCK)
@@ -1196,7 +1144,7 @@ static int mdt_cross_open(struct mdt_thread_info *info,
 			if (rc != 0)
 				GOTO(out, rc);
 
-			rc = mdt_finish_open(info, NULL, o, flags, 0, rep);
+			rc = mdt_finish_open(info, NULL, o, flags, rep);
 		} else {
 			/*
 			 * Something is wrong here. lookup was positive but
@@ -1465,6 +1413,8 @@ again:
         if (rc)
                 GOTO(out_child, result = rc);
 
+	tgt_open_obj_set(info->mti_env, mdt_obj2dt(child));
+
         if (result == -ENOENT) {
 		/* Create under OBF and .lustre is not permitted */
 		if (!fid_is_md_operative(rr->rr_fid1))
@@ -1573,8 +1523,7 @@ again:
 		}
 	}
 	/* Try to open it now. */
-	rc = mdt_finish_open(info, parent, child, create_flags,
-			     created, ldlm_rep);
+	rc = mdt_finish_open(info, parent, child, create_flags, ldlm_rep);
 	if (rc) {
 		result = rc;
 		/* openlock will be released if mdt_finish_open failed */

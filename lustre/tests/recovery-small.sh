@@ -1286,12 +1286,28 @@ test_52() {
 run_test 52 "failover OST under load"
 
 # test of open reconstruct
-test_53() {
+test_53a() {
 	touch $DIR/$tfile
-	drop_ldlm_reply "openfile -f O_RDWR:O_CREAT -m 0755 $DIR/$tfile" ||\
+	drop_mds_ldlm_reply "openfile -f O_RDWR:O_CREAT -m 0755 $DIR/$tfile" ||
 		return 2
 }
-run_test 53 "touch: drop rep"
+run_test 53a "touch: drop rep"
+
+test_53b() {
+	touch $DIR/$tfile
+	sync
+	drop_mds_ldlm_reply "openfile -f O_RDWR:O_CREAT -m 0755 $DIR/$tfile" ||
+		return 2
+}
+run_test 53b "touch: drop rep"
+
+test_53c() {
+	rm -rf $DIR/$tfile
+	sync
+	drop_mds_ldlm_reply "openfile -f O_RDWR:O_CREAT -m 0755 $DIR/$tfile" ||
+		return 2
+}
+run_test 53c "touch: drop rep"
 
 test_54() {
 	zconf_mount `hostname` $MOUNT2
@@ -1532,7 +1548,7 @@ test_66()
 
 	# drop 1 reply with UPDATE lock
 	mcreate $DIR/$tfile || error "mcreate failed: $?"
-	drop_ldlm_reply_once "stat $DIR/$tfile" &
+	drop_mds_ldlm_reply_once "stat $DIR/$tfile" &
 	sleep 2
 
 	# make the re-sent lock to sleep
@@ -2544,7 +2560,7 @@ test_113() {
 	# drop 1 reply with UPDATE lock,
 	# resend should not create 2nd lock on server
 	mcreate $DIR/$tfile || error "mcreate failed: $?"
-	drop_ldlm_reply_once "stat $DIR/$tfile" || error "stat failed: $?"
+	drop_mds_ldlm_reply_once "stat $DIR/$tfile" || error "stat failed: $?"
 
 	# 2 BL AST will be sent to client, both must find the same lock,
 	# race them to not get EINVAL for 2nd BL AST
