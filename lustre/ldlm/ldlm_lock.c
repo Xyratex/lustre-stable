@@ -1797,6 +1797,19 @@ enum ldlm_error ldlm_lock_enqueue(struct ldlm_namespace *ns,
 	if (!local && (*flags & LDLM_FL_REPLAY) && res->lr_type == LDLM_EXTENT)
 		OBD_SLAB_ALLOC_PTR_GFP(node, ldlm_interval_slab, GFP_NOFS);
 
+#ifdef HAVE_SERVER_SUPPORT
+	reconstruct = !local && res->lr_type == LDLM_FLOCK &&
+		      !(*flags & LDLM_FL_TEST_LOCK);
+	if (reconstruct) {
+		rc = req_can_reconstruct(cookie, NULL);
+		if (rc != 0) {
+			if (rc == 1)
+				rc = 0;
+		        RETURN(rc);
+		}
+	}
+#endif
+
         lock_res_and_lock(lock);
         if (local && lock->l_req_mode == lock->l_granted_mode) {
                 /* The server returned a blocked lock, but it was granted
@@ -1858,25 +1871,7 @@ enum ldlm_error ldlm_lock_enqueue(struct ldlm_namespace *ns,
 		/* If no flags, fall through to normal enqueue path. */
 	}
 
-	reconstruct = !local && res->lr_type == LDLM_FLOCK &&
-		      !(*flags & LDLM_FL_TEST_LOCK);
-	if (reconstruct) {
-		rc = req_can_reconstruct(cookie, NULL);
-		if (rc != 0) {
-			if (rc == 1)
-				rc = 0;
-		        GOTO(out, rc);
-		}
-	}
-
 	rc = ldlm_lock_enqueue_helper(lock, flags);
-	if (reconstruct) {
-		struct ptlrpc_request *req = cookie;
-
-		tgt_mk_reply_data(NULL, NULL,
-				  &req->rq_export->exp_target_data,
-				  req, 0, NULL, false, 0);
-	}
         GOTO(out, rc);
 #else
         } else {
@@ -1888,6 +1883,16 @@ enum ldlm_error ldlm_lock_enqueue(struct ldlm_namespace *ns,
 
 out:
         unlock_res_and_lock(lock);
+
+#ifdef HAVE_SERVER_SUPPORT
+	if (reconstruct) {
+		struct ptlrpc_request *req = cookie;
+
+		tgt_mk_reply_data(NULL, NULL,
+				  &req->rq_export->exp_target_data,
+				  req, 0, NULL, false, 0);
+	}
+#endif
         if (node)
                 OBD_SLAB_FREE(node, ldlm_interval_slab, sizeof(*node));
         return rc;
