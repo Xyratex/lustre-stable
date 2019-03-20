@@ -755,6 +755,16 @@ out_lock:
 	RETURN(rc);
 }
 
+static inline bool mdc_skip_mod_rpc_slot(const struct lookup_intent *it)
+{
+	if (it != NULL &&
+	    (it->it_op == IT_GETATTR || it->it_op == IT_LOOKUP ||
+	     it->it_op == IT_READDIR ||
+	     (it->it_op == IT_LAYOUT && !(it->it_flags & MDS_FMODE_WRITE))))
+		return true;
+	return false;
+}
+
 /* We always reserve enough space in the reply packet for a stripe MD, because
  * we don't know in advance the file type. */
 static int mdc_enqueue_base(struct obd_export *exp,
@@ -846,18 +856,7 @@ resend:
 		req->rq_sent = ktime_get_real_seconds() + resends;
         }
 
-	/* It is important to obtain modify RPC slot first (if applicable), so
-	 * that threads that are waiting for a modify RPC slot are not polluting
-	 * our rpcs in flight counter.
-	 * We do not do flock request limiting, though */
-	mdc_get_mod_rpc_slot(req, it);
-	rc = obd_get_request_slot(&obddev->u.cli);
-	if (rc != 0) {
-		mdc_put_mod_rpc_slot(req, it);
-		mdc_clear_replay_flag(req, 0);
-		ptlrpc_req_finished(req);
-		RETURN(rc);
-	}
+	einfo->ei_enq_slot = !mdc_skip_mod_rpc_slot(it);
 
 	/* With Data-on-MDT the glimpse callback is needed too.
 	 * It is set here in advance but not in mdc_finish_enqueue()
@@ -868,9 +867,6 @@ resend:
 
 	rc = ldlm_cli_enqueue(exp, &req, einfo, &res_id, policy, &flags, NULL,
 			      0, lvb_type, lockh, 0);
-
-	obd_put_request_slot(&obddev->u.cli);
-	mdc_put_mod_rpc_slot(req, it);
 
 	if (!it) {
 		/* For flock requests we immediatelly return without further
@@ -970,14 +966,10 @@ static int mdc_enqueue_async_interpret(const struct lu_env *env,
 	struct obd_export	*exp = mea->mea_exp;
 	struct ldlm_lock	*lock = mea->mea_lock;
 	struct lustre_handle	lockh;
-	struct obd_device       *obddev = class_exp2obd(exp);
 	ENTRY;
 
 	ENTRY;
 	CDEBUG(D_INFO, "req=%p rc=%d\n", req, rc);
-
-	obd_put_request_slot(&obddev->u.cli);
-	mdc_put_mod_rpc_slot(req, NULL);
 
 	ldlm_lock2handle(lock, &lockh);
 	rc = ldlm_cli_enqueue_fini(exp, req, LDLM_FLOCK, 1, mea->mea_mode,
@@ -1001,7 +993,6 @@ int mdc_enqueue_async(struct obd_export *exp, struct ldlm_enqueue_info *einfo,
 		      obd_enqueue_update_f upcall, struct md_op_data *op_data,
 		      const union ldlm_policy_data *policy, __u64 flags)
 {
-	struct obd_device *obddev = class_exp2obd(exp);
 	struct mdc_enqueue_args *mea;
 	struct ptlrpc_request *req;
 	int                    rc;
@@ -1019,19 +1010,11 @@ int mdc_enqueue_async(struct obd_export *exp, struct ldlm_enqueue_info *einfo,
 	if (IS_ERR(req))
 		RETURN(PTR_ERR(req));
 
-	mdc_get_mod_rpc_slot(req, NULL);
-	rc = obd_get_request_slot(&obddev->u.cli);
-	if (rc != 0) {
-		mdc_put_mod_rpc_slot(req, NULL);
-		ptlrpc_req_finished(req);
-		RETURN(rc);
-	}
+	einfo->ei_enq_slot = 1;
 
 	rc = ldlm_cli_enqueue(exp, &req, einfo, &res_id, policy, &flags, NULL,
 			      0, 0, &lockh, 1);
 	if (rc) {
-		obd_put_request_slot(&obddev->u.cli);
-		mdc_put_mod_rpc_slot(req, NULL);
 		ptlrpc_req_finished(req);
 		RETURN(rc);
 	}
@@ -1323,7 +1306,6 @@ static int mdc_intent_getattr_async_interpret(const struct lu_env *env,
 	struct ldlm_enqueue_info *einfo = &minfo->mi_einfo;
 	struct lookup_intent     *it;
 	struct lustre_handle     *lockh;
-	struct obd_device        *obddev;
 	struct ldlm_reply	 *lockrep;
 	__u64                     flags = LDLM_FL_HAS_INTENT;
 	ENTRY;
@@ -1331,9 +1313,6 @@ static int mdc_intent_getattr_async_interpret(const struct lu_env *env,
         it    = &minfo->mi_it;
         lockh = &minfo->mi_lockh;
 
-        obddev = class_exp2obd(exp);
-
-	obd_put_request_slot(&obddev->u.cli);
         if (OBD_FAIL_CHECK(OBD_FAIL_MDC_GETATTR_ENQUEUE))
                 rc = -ETIMEDOUT;
 
@@ -1370,7 +1349,6 @@ int mdc_intent_getattr_async(struct obd_export *exp,
 	struct lookup_intent    *it = &minfo->mi_it;
 	struct ptlrpc_request   *req;
 	struct mdc_getattr_args *ga;
-	struct obd_device       *obddev = class_exp2obd(exp);
 	struct ldlm_res_id       res_id;
 	union ldlm_policy_data policy = {
 				.l_inodebits = { MDS_INODELOCK_LOOKUP |
@@ -1391,12 +1369,6 @@ int mdc_intent_getattr_async(struct obd_export *exp,
 	if (IS_ERR(req))
 		RETURN(PTR_ERR(req));
 
-	rc = obd_get_request_slot(&obddev->u.cli);
-	if (rc != 0) {
-		ptlrpc_req_finished(req);
-		RETURN(rc);
-	}
-
 	/* With Data-on-MDT the glimpse callback is needed too.
 	 * It is set here in advance but not in mdc_finish_enqueue()
 	 * to avoid possible races. It is safe to have glimpse handler
@@ -1407,7 +1379,6 @@ int mdc_intent_getattr_async(struct obd_export *exp,
 	rc = ldlm_cli_enqueue(exp, &req, &minfo->mi_einfo, &res_id, &policy,
 			      &flags, NULL, 0, LVB_T_NONE, &minfo->mi_lockh, 1);
 	if (rc < 0) {
-		obd_put_request_slot(&obddev->u.cli);
 		ptlrpc_req_finished(req);
 		RETURN(rc);
 	}

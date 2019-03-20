@@ -556,6 +556,11 @@ static void failed_lock_cleanup(struct ldlm_namespace *ns,
 	}
 }
 
+static bool ldlm_request_slot_needed(enum ldlm_type type)
+{
+	return type == LDLM_FLOCK || type == LDLM_IBITS;
+}
+
 /**
  * Finishing portion of client lock enqueue code.
  *
@@ -573,6 +578,11 @@ int ldlm_cli_enqueue_fini(struct obd_export *exp, struct ptlrpc_request *req,
         struct ldlm_reply *reply;
         int cleanup_phase = 1;
         ENTRY;
+
+	if (ldlm_request_slot_needed(type))
+		obd_put_request_slot(&req->rq_import->imp_obd->u.cli);
+
+	ptlrpc_put_mod_rpc_slot(req);
 
         lock = ldlm_handle2lock(lockh);
         /* ldlm_cli_enqueue is holding a reference on this lock. */
@@ -1027,6 +1037,24 @@ int ldlm_cli_enqueue(struct obd_export *exp, struct ptlrpc_request **reqp,
 			lprocfs_counter_incr(exp->exp_obd->obd_svc_stats,
 					     PTLRPC_LAST_CNTR +
 					     LDLM_GLIMPSE_ENQUEUE);
+	}
+
+	/* It is important to obtain modify RPC slot first (if applicable), so
+	 * that threads that are waiting for a modify RPC slot are not polluting
+	 * our rpcs in flight counter. */
+
+	if (einfo->ei_enq_slot)
+		ptlrpc_get_mod_rpc_slot(req);
+
+	if (ldlm_request_slot_needed(einfo->ei_type)) {
+		rc = obd_get_request_slot(&req->rq_import->imp_obd->u.cli);
+		if (rc) {
+			if (einfo->ei_enq_slot)
+				ptlrpc_put_mod_rpc_slot(req);
+			failed_lock_cleanup(ns, lock, einfo->ei_mode);
+			LDLM_LOCK_RELEASE(lock);
+			RETURN(rc);
+		}
 	}
 
 	if (async) {
