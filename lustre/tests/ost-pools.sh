@@ -580,6 +580,19 @@ test_5b() {
 }
 run_test 5b "lctl pool_list from MDS"
 
+setstripe_pool_dir_file_create() {
+	local dir=$1
+	local stripe_offset=$2
+	local file=$3
+	local pool=$4
+
+	check_dir_in_pool $dir $pool
+	$SETSTRIPE -i $stripe_offset $dir || return 1
+	$MULTIOP $dir/$file OO_EXCL:c || return 2
+	check_file_in_pool $dir/$file $pool
+	return 0
+}
+
 test_6() {
 	local POOL_ROOT=${POOL_ROOT:-$DIR/$tdir}
 	local POOL_DIR=$POOL_ROOT/dir_tst
@@ -615,9 +628,16 @@ test_6() {
 	# pool is specified.
 	create_pool_nofail $POOL2
 	add_pool $POOL2 "OST0000" "$FSNAME-OST0000_UUID "
-	$SETSTRIPE -i 1 -p $POOL2 $ROOT_POOL/$tfile 2>/dev/null
+	$SETSTRIPE -i 1 -p $POOL2 $POOL_ROOT/$tfile 2>/dev/null
 	[[ $? -ne 0 ]] ||
 	error "$SETSTRIPE with start index outside the pool did not fail."
+
+	# lfs setstripe should check start index when pool is inherired
+	$SETSTRIPE -p $POOL2 $POOL_DIR
+	setstripe_pool_dir_file_create $POOL_DIR 1 $tfile $POOL2
+	[[ $? -eq 1 ]] || error "setstripe -i 1 should have failed"
+	setstripe_pool_dir_file_create $POOL_DIR 0 $tfile $POOL2
+	[[ $? -eq 0 ]] || error "setstripe -i 1 or create faied"
 }
 run_test 6 "getstripe/setstripe"
 

@@ -500,29 +500,24 @@ int main(int argc, char **argv)
                                 exit(save_errno);
                         }
                         break;
-                case 'O':
-                        fd = open(fname, O_CREAT|O_RDWR, 0644);
-                        if (fd == -1) {
-                                save_errno = errno;
-                                perror("open(O_RDWR|O_CREAT)");
-                                exit(save_errno);
-                        }
+		case 'O':
+		case 'o':
+			len = get_flags(commands + 1, &flags);
+			if (*commands == 'O')
+				flags |= (O_CREAT | O_RDWR);
+			commands += len;
+			if (flags & O_CREAT)
+				fd = open(fname, flags, 0644);
+			else
+				fd = open(fname, flags);
+			if (fd == -1) {
+				save_errno = errno;
+				fprintf(stderr, "open(%s, 0%o) failed: %s\n",
+					fname, flags, strerror(save_errno));
+				exit(save_errno);
+			}
 			rc = fd;
-                        break;
-                case 'o':
-                        len = get_flags(commands+1, &flags);
-                        commands += len;
-                        if (flags & O_CREAT)
-                                fd = open(fname, flags, 0666);
-                        else
-                                fd = open(fname, flags);
-                        if (fd == -1) {
-                                save_errno = errno;
-                                perror("open");
-                                exit(save_errno);
-                        }
-			rc = fd;
-                        break;
+			break;
 		case 'p':
 			printf("%lld\n", last_rc);
 			break;
