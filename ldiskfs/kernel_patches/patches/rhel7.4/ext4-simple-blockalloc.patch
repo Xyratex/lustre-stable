@@ -1,0 +1,348 @@
+Index: linux-stage/fs/ext4/mballoc.c
+===================================================================
+--- linux-stage.orig/fs/ext4/mballoc.c
++++ linux-stage/fs/ext4/mballoc.c
+@@ -2087,6 +2087,21 @@ static int ext4_mb_good_group(struct ext
+ 	return 0;
+ }
+ 
++static u64 available_blocks_count(struct ext4_sb_info *sbi)
++{
++	ext4_fsblk_t resv_blocks;
++	u64 bfree;
++	struct ext4_super_block *es = sbi->s_es;
++
++	resv_blocks = EXT4_C2B(sbi, atomic64_read(&sbi->s_resv_clusters));
++	bfree = percpu_counter_sum_positive(&sbi->s_freeclusters_counter) -
++		 percpu_counter_sum_positive(&sbi->s_dirtyclusters_counter);
++
++	bfree = EXT4_C2B(sbi, max_t(s64, bfree, 0));
++	return bfree - (ext4_r_blocks_count(es) + resv_blocks);
++}
++
++
+ static noinline_for_stack int
+ ext4_mb_regular_allocator(struct ext4_allocation_context *ac)
+ {
+@@ -2095,10 +2110,13 @@ ext4_mb_regular_allocator(struct ext4_al
+ 	int err = 0;
+ 	struct ext4_sb_info *sbi;
+ 	struct super_block *sb;
++	struct ext4_super_block *es;
+ 	struct ext4_buddy e4b;
++	ext4_fsblk_t avail_blocks;
+ 
+ 	sb = ac->ac_sb;
+ 	sbi = EXT4_SB(sb);
++	es = sbi->s_es;
+ 	ngroups = ext4_get_groups_count(sb);
+ 	/* non-extent files are limited to low blocks/groups */
+ 	if (!(ext4_test_inode_flag(ac->ac_inode, EXT4_INODE_EXTENTS)))
+@@ -2145,6 +2163,21 @@ ext4_mb_regular_allocator(struct ext4_al
+ 
+ 	/* Let's just scan groups to find more-less suitable blocks */
+ 	cr = ac->ac_2order ? 0 : 1;
++
++	/* Choose what loop to pass based on disk fullness */
++	avail_blocks = available_blocks_count(sbi) ;
++
++	if (avail_blocks < sbi->s_mb_c3_blocks) {
++		cr = 3;
++		atomic_inc(&sbi->s_bal_cX_skipped[2]);
++	} else if(avail_blocks < sbi->s_mb_c2_blocks) {
++		cr = 2;
++		atomic_inc(&sbi->s_bal_cX_skipped[1]);
++	} else if(avail_blocks < sbi->s_mb_c1_blocks) {
++		cr = 1;
++		atomic_inc(&sbi->s_bal_cX_skipped[0]);
++	}
++
+ 	/*
+ 	 * cr == 0 try to get exact allocation,
+ 	 * cr == 3  try to get anything
+@@ -2202,6 +2235,9 @@ repeat:
+ 			if (ac->ac_status != AC_STATUS_CONTINUE)
+ 				break;
+ 		}
++		/* Processed all groups and haven't found blocks */
++		if (i == ngroups)
++			atomic_inc(&sbi->s_bal_cX_failed[cr]);
+ 	}
+ 
+ 	if (ac->ac_b_ex.fe_len > 0 && ac->ac_status != AC_STATUS_FOUND &&
+@@ -2325,6 +2361,87 @@ static const struct seq_operations ext4_
+ 	.show   = ext4_mb_seq_groups_show,
+ };
+ 
++static int mb_seq_alloc_show(struct seq_file *seq, void *v)
++{
++	struct super_block *sb = seq->private;
++	struct ext4_sb_info *sbi = EXT4_SB(sb);
++	struct ext4_super_block *es;
++
++	es = sbi->s_es;
++
++	seq_printf(seq, "mballoc: %u blocks %u reqs (%u success)\n",
++		   atomic_read(&sbi->s_bal_allocated),
++		   atomic_read(&sbi->s_bal_reqs),
++		   atomic_read(&sbi->s_bal_success));
++	seq_printf(seq, "mballoc: %u extents scanned, %u goal hits, "
++		   "%u 2^N hits, %u breaks, %u lost\n",
++		   atomic_read(&sbi->s_bal_ex_scanned),
++		   atomic_read(&sbi->s_bal_goals),
++		   atomic_read(&sbi->s_bal_2orders),
++		   atomic_read(&sbi->s_bal_breaks),
++		   atomic_read(&sbi->s_mb_lost_chunks));
++	seq_printf(seq, "mballoc: (%u, %u, %u) useless c(0,1,2) loops\n",
++		   atomic_read(&sbi->s_bal_cX_failed[0]),
++		   atomic_read(&sbi->s_bal_cX_failed[1]),
++		   atomic_read(&sbi->s_bal_cX_failed[2]));
++	seq_printf(seq, "mballoc: (%u, %u, %u) skipped c(0,1,2) loops\n",
++		   atomic_read(&sbi->s_bal_cX_skipped[0]),
++		   atomic_read(&sbi->s_bal_cX_skipped[1]),
++		   atomic_read(&sbi->s_bal_cX_skipped[2]));
++	ext4_msg(sb, KERN_INFO,
++	       "mballoc: %lu generated and it took %Lu\n",
++			sbi->s_mb_buddies_generated,
++			sbi->s_mb_generation_time);
++	ext4_msg(sb, KERN_INFO,
++	       "mballoc: %u preallocated, %u discarded\n",
++			atomic_read(&sbi->s_mb_preallocated),
++			atomic_read(&sbi->s_mb_discarded));
++	return 0;
++}
++
++static ssize_t mb_seq_alloc_write(struct file *file,
++			      const char __user *buf,
++			      size_t cnt, loff_t *pos)
++{
++	struct ext4_sb_info *sbi = EXT4_SB(PDE_DATA(file_inode(file)));
++
++	atomic_set(&sbi->s_bal_allocated, 0),
++	atomic_set(&sbi->s_bal_reqs, 0),
++	atomic_set(&sbi->s_bal_success, 0);
++
++	atomic_set(&sbi->s_bal_ex_scanned, 0),
++	atomic_set(&sbi->s_bal_goals, 0),
++	atomic_set(&sbi->s_bal_2orders, 0),
++	atomic_set(&sbi->s_bal_breaks, 0),
++	atomic_set(&sbi->s_mb_lost_chunks, 0);
++
++	atomic_set(&sbi->s_bal_cX_failed[0], 0),
++	atomic_set(&sbi->s_bal_cX_failed[1], 0),
++	atomic_set(&sbi->s_bal_cX_failed[2], 0);
++
++	sbi->s_mb_buddies_generated = 0;
++	sbi->s_mb_generation_time = 0;
++
++	atomic_set(&sbi->s_mb_preallocated, 0),
++	atomic_set(&sbi->s_mb_discarded, 0);
++
++	return cnt;
++}
++
++static int mb_seq_alloc_open(struct inode *inode, struct file *file)
++{
++	return single_open(file, mb_seq_alloc_show, PDE_DATA(inode));
++}
++
++static const struct file_operations ext4_mb_seq_alloc_fops = {
++	.owner		= THIS_MODULE,
++	.open		= mb_seq_alloc_open,
++	.read		= seq_read,
++	.llseek		= seq_lseek,
++	.release	= single_release,
++	.write		= mb_seq_alloc_write,
++};
++
+ #define EXT4_MB_PREALLOC_TABLE          "prealloc_table"
+ 
+ static ssize_t ext4_mb_prealloc_table_proc_write(struct file *file,
+@@ -2653,6 +2770,7 @@ static int ext4_groupinfo_create_slab(si
+ 	return 0;
+ }
+ 
++#define THRESHOLD_BLOCKS(ts) (ext4_blocks_count(sbi->s_es) / 100 * ts)
+ int ext4_mb_init(struct super_block *sb)
+ {
+ 	struct ext4_sb_info *sbi = EXT4_SB(sb);
+@@ -2702,6 +2820,9 @@ int ext4_mb_init(struct super_block *sb)
+ 	sbi->s_mb_min_to_scan = MB_DEFAULT_MIN_TO_SCAN;
+ 	sbi->s_mb_stats = MB_DEFAULT_STATS;
+ 	sbi->s_mb_order2_reqs = MB_DEFAULT_ORDER2_REQS;
++	sbi->s_mb_c1_blocks = THRESHOLD_BLOCKS(MB_DEFAULT_C1_THRESHOLD);
++	sbi->s_mb_c2_blocks = THRESHOLD_BLOCKS(MB_DEFAULT_C2_THRESHOLD);
++	sbi->s_mb_c3_blocks = THRESHOLD_BLOCKS(MB_DEFAULT_C3_THRESHOLD);
+ 	/*
+ 	 * The default group preallocation is 512, which for 4k block
+ 	 * sizes translates to 2 megabytes.  However for bigalloc file
+@@ -2792,6 +2913,8 @@ int ext4_mb_init(struct super_block *sb)
+ 		proc_create_data(EXT4_MB_PREALLOC_TABLE, S_IFREG | S_IRUGO |
+ 				 S_IWUSR, sbi->s_proc,
+ 				 &ext4_mb_prealloc_seq_fops, sb);
++		proc_create_data("mb_alloc", S_IFREG | S_IRUGO | S_IWUSR,
++				 sbi->s_proc, &ext4_mb_seq_alloc_fops, sb);
+ 	}
+ 
+ 	return 0;
+@@ -2838,6 +2961,7 @@ int ext4_mb_release(struct super_block *
+ 	if (sbi->s_proc) {
+ 		remove_proc_entry("mb_groups", sbi->s_proc);
+ 		remove_proc_entry(EXT4_MB_PREALLOC_TABLE, sbi->s_proc);
++		remove_proc_entry("mb_alloc", sbi->s_proc);
+ 	}
+ 
+ 	if (sbi->s_group_info) {
+@@ -2876,6 +3000,16 @@ int ext4_mb_release(struct super_block *
+ 				atomic_read(&sbi->s_bal_breaks),
+ 				atomic_read(&sbi->s_mb_lost_chunks));
+ 		ext4_msg(sb, KERN_INFO,
++			"mballoc: (%u, %u, %u) useless c(0,1,2) loops",
++				atomic_read(&sbi->s_bal_cX_failed[0]),
++				atomic_read(&sbi->s_bal_cX_failed[1]),
++				atomic_read(&sbi->s_bal_cX_failed[2]));
++		ext4_msg(sb, KERN_INFO,
++			"mballoc: (%u, %u, %u) skipped c(0,1,2) loops",
++				atomic_read(&sbi->s_bal_cX_skipped[0]),
++				atomic_read(&sbi->s_bal_cX_skipped[1]),
++				atomic_read(&sbi->s_bal_cX_skipped[2]));
++		ext4_msg(sb, KERN_INFO,
+ 		       "mballoc: %lu generated and it took %Lu",
+ 				sbi->s_mb_buddies_generated,
+ 				sbi->s_mb_generation_time);
+Index: linux-stage/fs/ext4/ext4.h
+===================================================================
+--- linux-stage.orig/fs/ext4/ext4.h
++++ linux-stage/fs/ext4/ext4.h
+@@ -1274,6 +1274,9 @@ struct ext4_sb_info {
+ 	unsigned int s_mb_min_to_scan;
+ 	unsigned int s_mb_stats;
+ 	unsigned int s_mb_order2_reqs;
++	ext4_fsblk_t s_mb_c1_blocks;
++	ext4_fsblk_t s_mb_c2_blocks;
++	ext4_fsblk_t s_mb_c3_blocks;
+ 	unsigned long *s_mb_prealloc_table;
+ 	unsigned long s_mb_prealloc_table_size;
+ 	unsigned int s_mb_group_prealloc;
+@@ -1290,6 +1293,9 @@ struct ext4_sb_info {
+ 	atomic_t s_bal_goals;	/* goal hits */
+ 	atomic_t s_bal_breaks;	/* too long searches */
+ 	atomic_t s_bal_2orders;	/* 2^order hits */
++	/* cX loop didn't find blocks */
++	atomic_t s_bal_cX_failed[3];
++	atomic_t s_bal_cX_skipped[3];
+ 	spinlock_t s_bal_lock;
+ 	unsigned long s_mb_buddies_generated;
+ 	unsigned long long s_mb_generation_time;
+Index: linux-stage/fs/ext4/super.c
+===================================================================
+--- linux-stage.orig/fs/ext4/super.c
++++ linux-stage/fs/ext4/super.c
+@@ -2615,6 +2615,73 @@ static ssize_t sbi_deprecated_show(struc
+ 	return snprintf(buf, PAGE_SIZE, "%d\n", a->u.deprecated_val);
+ }
+ 
++static int save_threshold(struct ext4_sb_info *sbi, const char *buf,
++			 ext4_fsblk_t *blocks) {
++	unsigned long long val;
++
++	if (!parse_strtoull(buf, 100, &val)) {
++		*blocks = val * ext4_blocks_count(sbi->s_es) / 100;
++		return 0;
++	}
++
++	return -EINVAL;
++}
++
++#define THRESHOLD_PERCENT(ts) (ts * 100 / ext4_blocks_count(sbi->s_es))
++static ssize_t mb_c1_threshold_store(struct ext4_attr *a,
++				    struct ext4_sb_info *sbi,
++				    const char *buf, size_t count)
++{
++	int ret;
++
++	ret = save_threshold(sbi, buf, &sbi->s_mb_c1_blocks);
++
++	return ret ? ret : count;
++}
++
++static ssize_t mb_c1_threshold_show(struct ext4_attr *a,
++				   struct ext4_sb_info *sbi, char *buf)
++{
++	return snprintf(buf, PAGE_SIZE, "%llu\n",
++			THRESHOLD_PERCENT(sbi->s_mb_c1_blocks));
++}
++
++static ssize_t mb_c2_threshold_store(struct ext4_attr *a,
++				    struct ext4_sb_info *sbi,
++				    const char *buf, size_t count)
++{
++	int ret;
++
++	ret = save_threshold(sbi, buf, &sbi->s_mb_c2_blocks);
++	return ret ? ret : count;
++}
++
++static ssize_t mb_c2_threshold_show(struct ext4_attr *a,
++				   struct ext4_sb_info *sbi, char *buf)
++{
++	        return snprintf(buf, PAGE_SIZE, "%llu\n",
++				THRESHOLD_PERCENT(sbi->s_mb_c2_blocks));
++}
++
++static ssize_t mb_c3_threshold_store(struct ext4_attr *a,
++				    struct ext4_sb_info *sbi,
++				    const char *buf, size_t count)
++{
++	int ret;
++
++	ret = save_threshold(sbi, buf, &sbi->s_mb_c3_blocks);
++
++	return ret ? ret : count;
++}
++
++static ssize_t mb_c3_threshold_show(struct ext4_attr *a,
++				   struct ext4_sb_info *sbi, char *buf)
++{
++	        return snprintf(buf, PAGE_SIZE, "%llu\n",
++				THRESHOLD_PERCENT(sbi->s_mb_c3_blocks));
++}
++
++
+ #define EXT4_ATTR_OFFSET(_name,_mode,_show,_store,_elname) \
+ static struct ext4_attr ext4_attr_##_name = {			\
+ 	.attr = {.name = __stringify(_name), .mode = _mode },	\
+@@ -2670,6 +2737,9 @@ EXT4_RW_ATTR_SBI_UI(mb_stats, s_mb_stats
+ EXT4_RW_ATTR_SBI_UI(mb_max_to_scan, s_mb_max_to_scan);
+ EXT4_RW_ATTR_SBI_UI(mb_min_to_scan, s_mb_min_to_scan);
+ EXT4_RW_ATTR_SBI_UI(mb_order2_req, s_mb_order2_reqs);
++EXT4_RW_ATTR(mb_c1_threshold);
++EXT4_RW_ATTR(mb_c2_threshold);
++EXT4_RW_ATTR(mb_c3_threshold);
+ EXT4_RW_ATTR_SBI_UI(mb_small_req, s_mb_small_req);
+ EXT4_RW_ATTR_SBI_UI(mb_large_req, s_mb_large_req);
+ EXT4_RW_ATTR_SBI_UI(mb_group_prealloc, s_mb_group_prealloc);
+@@ -2699,6 +2769,9 @@ static struct attribute *ext4_attrs[] =
+ 	ATTR_LIST(mb_max_to_scan),
+ 	ATTR_LIST(mb_min_to_scan),
+ 	ATTR_LIST(mb_order2_req),
++	ATTR_LIST(mb_c1_threshold),
++	ATTR_LIST(mb_c2_threshold),
++	ATTR_LIST(mb_c3_threshold),
+ 	ATTR_LIST(mb_small_req),
+ 	ATTR_LIST(mb_large_req),
+ 	ATTR_LIST(mb_group_prealloc),
+Index: linux-stage/fs/ext4/mballoc.h
+===================================================================
+--- linux-stage.orig/fs/ext4/mballoc.h
++++ linux-stage/fs/ext4/mballoc.h
+@@ -84,6 +84,9 @@ extern ushort ext4_mballoc_debug;
+  * for which requests use 2^N search using buddies
+  */
+ #define MB_DEFAULT_ORDER2_REQS		8
++#define MB_DEFAULT_C1_THRESHOLD		25
++#define MB_DEFAULT_C2_THRESHOLD		15
++#define MB_DEFAULT_C3_THRESHOLD		5
+ 
+ /*
+  * default group prealloc size 512 blocks
