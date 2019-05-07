@@ -1,8 +1,8 @@
-diff --git a/fs/ext4/inode.c b/fs/ext4/inode.c
-index 153dda7..63339a2 100644
---- a/fs/ext4/inode.c
-+++ b/fs/ext4/inode.c
-@@ -3775,7 +3775,7 @@ int ext4_inode_attach_jinode(struct inode *inode)
+Index: linux-stage/fs/ext4/inode.c
+===================================================================
+--- linux-stage.orig/fs/ext4/inode.c
++++ linux-stage/fs/ext4/inode.c
+@@ -3827,7 +3827,7 @@ int ext4_inode_attach_jinode(struct inod
  	if (ei->jinode || !EXT4_SB(inode->i_sb)->s_journal)
  		return 0;
  
