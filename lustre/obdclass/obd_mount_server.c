@@ -1061,10 +1061,9 @@ out:
 static DEFINE_MUTEX(server_start_lock);
 
 /* Stop MDS/OSS if nobody is using them */
-static int server_stop_servers(int lsiflags)
+static int server_stop_servers(int lsiflags, struct obd_type *type)
 {
 	struct obd_device *obd = NULL;
-	struct obd_type *type = NULL;
 	int rc = 0;
 	ENTRY;
 
@@ -1072,18 +1071,14 @@ static int server_stop_servers(int lsiflags)
 
 	/* Either an MDT or an OST or neither  */
 	/* if this was an MDT, and there are no more MDT's, clean up the MDS */
-	if (lsiflags & LDD_F_SV_TYPE_MDT) {
+	if (lsiflags & LDD_F_SV_TYPE_MDT)
 		obd = class_name2obd(LUSTRE_MDS_OBDNAME);
-		if (obd != NULL)
-			type = class_search_type(LUSTRE_MDT_NAME);
-	}
-
 	/* if this was an OST, and there are no more OST's, clean up the OSS */
-	if (lsiflags & LDD_F_SV_TYPE_OST) {
+	else if (lsiflags & LDD_F_SV_TYPE_OST)
 		obd = class_name2obd(LUSTRE_OSS_OBDNAME);
-		if (obd != NULL)
-			type = class_search_type(LUSTRE_OST_NAME);
-	}
+
+	if (type)
+		class_put_type(type);
 
 	if (obd != NULL && (type == NULL || type->typ_refcnt == 0)) {
 		obd->obd_force = 1;
@@ -1443,8 +1438,12 @@ out_mgc:
 out_env:
 	lu_env_fini(&mgc_env);
 out_stop_service:
-	if (rc != 0)
-		server_stop_servers(lsi->lsi_flags);
+	if (rc != 0) {
+		struct obd_type *type = NULL;
+		type = class_get_type(IS_MDT(lsi) ?
+				      LUSTRE_MDT_NAME : LUSTRE_OST_NAME);
+		server_stop_servers(lsi->lsi_flags, type);
+	}
 
 	RETURN(rc);
 }
@@ -1527,6 +1526,7 @@ static void server_put_super(struct super_block *sb)
 {
 	struct lustre_sb_info *lsi = s2lsi(sb);
 	struct obd_device     *obd;
+	struct obd_type      *type = NULL;
 	char *tmpname, *extraname = NULL;
 	int tmpname_sz;
 	int lsiflags = lsi->lsi_flags;
@@ -1575,6 +1575,8 @@ static void server_put_super(struct super_block *sb)
 
 		obd = class_name2obd(lsi->lsi_svname);
 		if (obd) {
+			type = class_get_type(IS_MDT(lsi) ?
+				      LUSTRE_MDT_NAME : LUSTRE_OST_NAME);
 			CDEBUG(D_MOUNT, "stopping %s\n", obd->obd_name);
 			if (lsiflags & LSI_UMOUNT_FAILOVER)
 				obd->obd_fail = 1;
@@ -1612,7 +1614,7 @@ static void server_put_super(struct super_block *sb)
 	/* Stop the servers (MDS, OSS) if no longer needed.  We must wait
 	   until the target is really gone so that our type refcount check
 	   is right. */
-	server_stop_servers(lsiflags);
+	server_stop_servers(lsiflags, type);
 
 	/* In case of startup or cleanup err, stop related obds */
 	if (extraname) {
