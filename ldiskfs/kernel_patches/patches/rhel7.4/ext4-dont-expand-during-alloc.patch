@@ -1,0 +1,50 @@
+--- a/fs/ext4/inode.c	2019-06-21 15:13:07.534201682 +0300
++++ b/fs/ext4/inode.c	2019-06-21 15:18:36.421468982 +0300
+@@ -502,6 +502,7 @@ int ext4_map_blocks(handle_t *handle,
+ 	struct extent_status es;
+ 	int retval;
+ 	int ret = 0;
++	unsigned long no_expand;
+ #ifdef ES_AGGRESSIVE_TEST
+ 	struct ext4_map_blocks orig_map;
+ 
+@@ -630,6 +631,9 @@ found:
+ 	 */
+ 	down_write(&EXT4_I(inode)->i_data_sem);
+ 
++	no_expand = ext4_test_inode_state(inode, EXT4_STATE_NO_EXPAND2);
++	ext4_set_inode_state(inode, EXT4_STATE_NO_EXPAND2);
++
+ 	/*
+ 	 * if the caller is from delayed allocation writeout path
+ 	 * we have already reserved fs blocks for allocation
+@@ -729,6 +733,9 @@ found:
+ 	}
+ 
+ out_sem:
++	if (no_expand == 0)
++		ext4_clear_inode_state(inode, EXT4_STATE_NO_EXPAND2);
++
+ 	up_write((&EXT4_I(inode)->i_data_sem));
+ 	if (retval > 0 && map->m_flags & EXT4_MAP_MAPPED) {
+ 		ret = check_block_validity(inode, map);
+@@ -5183,7 +5183,8 @@ int ext4_mark_inode_dirty(handle_t *h
+ 		return err;
+ 	if (ext4_handle_valid(handle) &&
+ 	    EXT4_I(inode)->i_extra_isize < sbi->s_want_extra_isize &&
+-	    !ext4_test_inode_state(inode, EXT4_STATE_NO_EXPAND)) {
++	    !ext4_test_inode_state(inode, EXT4_STATE_NO_EXPAND) &&
++	    !ext4_test_inode_state(inode, EXT4_STATE_NO_EXPAND2)) {
+ 		/*
+ 		 * We need extra buffer credits since we may write into EA block
+ 		 * with this same handle. If journal_extend fails, then it will
+--- a/fs/ext4/ext4.h	2019-06-21 16:59:22.151442223 +0300
++++ b/fs/ext4/ext4.h	2019-06-21 16:58:28.864062222 +0300
+@@ -1550,6 +1550,7 @@ enum {
+ 	EXT4_STATE_NEW,			/* inode is newly created */
+ 	EXT4_STATE_XATTR,		/* has in-inode xattrs */
+ 	EXT4_STATE_NO_EXPAND,		/* No space for expansion */
++	EXT4_STATE_NO_EXPAND2,		/* No space for expansion */
+ 	EXT4_STATE_DA_ALLOC_CLOSE,	/* Alloc DA blks on close */
+ 	EXT4_STATE_EXT_MIGRATE,		/* Inode is migrating */
+ 	EXT4_STATE_DIO_UNWRITTEN,	/* need convert on dio done*/
