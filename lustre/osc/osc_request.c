@@ -803,6 +803,11 @@ int osc_shrink_grant_to_target(struct client_obd *cli, __u64 target_bytes)
 	osc_announce_cached(cli, &body->oa, 0);
 
 	spin_lock(&cli->cl_loi_list_lock);
+	if (target_bytes >= cli->cl_avail_grant) {
+		/* available grant has changed since target calculation */
+		spin_unlock(&cli->cl_loi_list_lock);
+		GOTO(out_free, rc = 0);
+	}
 	body->oa.o_grant = cli->cl_avail_grant - target_bytes;
 	cli->cl_avail_grant = target_bytes;
 	spin_unlock(&cli->cl_loi_list_lock);
@@ -818,6 +823,7 @@ int osc_shrink_grant_to_target(struct client_obd *cli, __u64 target_bytes)
                                 sizeof(*body), body, NULL);
         if (rc != 0)
                 __osc_update_grant(cli, body->oa.o_grant);
+out_free:
         OBD_FREE_PTR(body);
         RETURN(rc);
 }
