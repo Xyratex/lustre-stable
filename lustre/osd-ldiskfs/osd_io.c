@@ -1726,6 +1726,7 @@ int osd_ldiskfs_write_record(struct inode *inode, void *buf, int bufsize,
         int                 size;
         int                 boffs;
         int                 dirty_inode = 0;
+	bool		    create, sparse;
 
 	if (write_NUL) {
 		/*
@@ -1737,8 +1738,15 @@ int osd_ldiskfs_write_record(struct inode *inode, void *buf, int bufsize,
 		++bufsize;
 	}
 
+	/* sparse checking is racy, but sparse is very rare case, leave as is */
+	sparse = (new_size > 0 && inode->i_blocks <
+		  ((new_size - 1) >> inode->i_blkbits) + 1);
+
 	while (bufsize > 0) {
 		int credits = handle->h_buffer_credits;
+		bool sync;
+		unsigned long last_block = (new_size == 0) ? 0 :
+					   (new_size - 1) >> inode->i_blkbits;
 
 		if (bh)
 			brelse(bh);
@@ -1746,7 +1754,22 @@ int osd_ldiskfs_write_record(struct inode *inode, void *buf, int bufsize,
 		block = offset >> inode->i_blkbits;
 		boffs = offset & (blocksize - 1);
 		size = min(blocksize - boffs, bufsize);
-		bh = __ldiskfs_bread(handle, inode, block, 1);
+		sync = (block > last_block || new_size == 0 || sparse);
+
+		if (sync)
+			inode_lock(inode);
+
+		bh = __ldiskfs_bread(handle, inode, block, 0);
+
+		if (IS_ERR_OR_NULL(bh)) {
+			LASSERTF(sync, "Sparse file detected %lu!\n", block);
+			bh = __ldiskfs_bread(handle, inode, block, 1);
+			create = true;
+		} else {
+			if (sync)
+				inode_unlock(inode);
+			create = false;
+		}
 		if (IS_ERR_OR_NULL(bh)) {
 			if (bh == NULL) {
 				err = -EIO;
@@ -1771,7 +1794,11 @@ int osd_ldiskfs_write_record(struct inode *inode, void *buf, int bufsize,
 		LASSERTF(boffs + size <= bh->b_size,
 			 "boffs %d size %d bh->b_size %lu\n",
 			 boffs, size, (unsigned long)bh->b_size);
-                memcpy(bh->b_data + boffs, buf, size);
+		if (create) {
+			memset(bh->b_data, 0, bh->b_size);
+			inode_unlock(inode);
+		}
+		memcpy(bh->b_data + boffs, buf, size);
 		err = ldiskfs_handle_dirty_metadata(handle, NULL, bh);
                 if (err)
                         break;
