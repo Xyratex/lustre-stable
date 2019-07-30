@@ -1739,7 +1739,7 @@ int osd_ldiskfs_write_record(struct inode *inode, void *buf, int bufsize,
 	}
 
 	/* sparse checking is racy, but sparse is very rare case, leave as is */
-	sparse = (new_size > 0 && inode->i_blocks <
+	sparse = (new_size > 0 && (inode->i_blocks >> (inode->i_blkbits - 9)) <
 		  ((new_size - 1) >> inode->i_blkbits) + 1);
 
 	while (bufsize > 0) {
