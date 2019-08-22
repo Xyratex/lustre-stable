@@ -963,6 +963,7 @@ int mdd_changelog_store(const struct lu_env *env, struct mdd_device *mdd,
 	if (IS_ERR(llog_th))
 		GOTO(out_put, rc = PTR_ERR(llog_th));
 
+	OBD_FAIL_TIMEOUT(OBD_FAIL_MDS_CHANGELOG_REORDER, cfs_fail_val);
 	/* nested journal transaction */
 	rc = llog_add(env, ctxt->loc_handle, &rec->cr_hdr, NULL, llog_th);
 
