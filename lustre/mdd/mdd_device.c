@@ -552,9 +552,6 @@ int mdd_changelog_write_header(const struct lu_env *env,
 					    rec->cr.cr_namelen);
 	rec->cr_hdr.lrh_type = CHANGELOG_REC;
 	rec->cr.cr_time = cl_time();
-	spin_lock(&mdd->mdd_cl.mc_lock);
-	rec->cr.cr_index = ++mdd->mdd_cl.mc_index;
-	spin_unlock(&mdd->mdd_cl.mc_lock);
 
 	ctxt = llog_get_context(obd, LLOG_CHANGELOG_ORIG_CTXT);
 	LASSERT(ctxt);
@@ -1786,6 +1783,7 @@ static int __init mdd_init(void)
 	changelog_orig_logops.lop_cancel = llog_changelog_cancel;
 	changelog_orig_logops.lop_add = llog_cat_add_rec;
 	changelog_orig_logops.lop_declare_add = llog_cat_declare_add_rec;
+	changelog_orig_logops.lop_write_rec = mdd_changelog_write_rec;
 
 	hsm_actions_logops = llog_osd_ops;
 	hsm_actions_logops.lop_add = llog_cat_add_rec;
